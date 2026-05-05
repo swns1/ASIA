@@ -40,10 +40,12 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "axes",
     "accounts",
 ]
 
 MIDDLEWARE = [
+    "axes.middleware.AxesMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -72,16 +74,38 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'identity_service.wsgi.application'
-CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-    )
+    ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10/minute",
+        "user": "30/minute",
+        "login": "5/minute",
+    },
 }
+
+SIMPLE_JWT = {
+    "USER_ID_FIELD": "user_id",
+}
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+AXES_FAILURE_LIMIT = 5
+AXES_LOCK_OUT_AT_FAILURE = True
+AXES_COOLOFF_TIME = 1
+AXES_RESET_ON_SUCCESS = True
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+
 
 DATABASES = {
     'default': {
