@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { login } from "../api/identityApi";
 import logo from "../assets/south-lakes-logo.png";
+import { useNavigate } from "react-router-dom";
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default function LoginPage() {
+  const navigate = useNavigate(); // ✅ move hook here
+
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -26,7 +29,7 @@ export default function LoginPage() {
         localStorage.removeItem("remember_login_until");
       }
 
-      window.location.href = "/dashboard";
+      navigate("/dashboard");
     } catch (err) {
       setError(
         err?.response?.data?.detail ||

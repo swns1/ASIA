@@ -1,5 +1,5 @@
-from django.contrib.auth.hashers import check_password
 from accounts.models import User
+from django.contrib.auth.hashers import check_password
 
 def find_user(identifier, password):
     identifier = identifier.strip()
