@@ -22,10 +22,13 @@ class HouseholdSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def validate(self, attrs):
+        if attrs.get("four_ps_id") == "":
+            attrs["four_ps_id"] = None
+
         is_4ps = attrs.get("is_4ps_beneficiary", getattr(self.instance, "is_4ps_beneficiary", False))
         four_ps_id = attrs.get("four_ps_id", getattr(self.instance, "four_ps_id", None))
 
-        if is_4ps and (not four_ps_id or not four_ps_id.strip()):
+        if is_4ps and (not four_ps_id or not str(four_ps_id).strip()):
             raise serializers.ValidationError("four_ps_id is required when is_4ps_beneficiary is True.")
         if not is_4ps and four_ps_id:
             raise serializers.ValidationError("four_ps_id must be empty when is_4ps_beneficiary is False.")
