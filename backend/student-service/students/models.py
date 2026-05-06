@@ -83,9 +83,17 @@ class Student(models.Model):
         Household, null=True, blank=True, on_delete=models.SET_NULL
     )
 
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         db_table = "students"
         managed = False
+        indexes = [
+            models.Index(fields=["lrn"]),
+            models.Index(fields=["student_number"]),
+            models.Index(fields=["last_name"]),
+            models.Index(fields=["status"]),
+        ]
 
     def _generate_student_number(self):
         last_student = Student.objects.order_by("-student_id").first()
@@ -100,6 +108,8 @@ class Student(models.Model):
     def save(self, *args, **kwargs):
         if not self.student_number:
             self.student_number = self._generate_student_number()
+            while Student.objects.filter(student_number=self.student_number).exists():
+                self.student_number = self._generate_student_number()
         super().save(*args, **kwargs)
 
 

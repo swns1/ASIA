@@ -40,6 +40,15 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = "__all__"
 
+    def validate(self, attrs):
+        if self.instance:
+            client_updated_at = self.initial_data.get("updated_at")
+            if client_updated_at and str(self.instance.updated_at) != client_updated_at:
+                raise serializers.ValidationError(
+                    "This record was updated by another user. Please refresh and try again."
+                )
+        return attrs
+
 
 class GuardianSerializer(serializers.ModelSerializer):
     class Meta:
