@@ -2,6 +2,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Q
 from .models import (
@@ -65,17 +66,30 @@ class StudentViewSet(viewsets.ModelViewSet):
         data = serializer.validated_data
 
         with transaction.atomic():
+            # 1. Create household (optional)
             household_data = data.get("household")
             household = Household.objects.create(**household_data) if household_data else None
 
+            # 2. Create student, link household if present
             student_data = data["student"]
             if household:
                 student_data["household"] = household
             student = Student.objects.create(**student_data)
 
+            # 3. Create guardians — inject student FK here, validate primary contact
             guardians = []
+            primary_assigned = False
             for guardian_data in data.get("guardians", []):
-                guardians.append(Guardian.objects.create(student=student, **guardian_data))
+                is_primary = guardian_data.get("is_primary_contact", False)
+                if is_primary:
+                    if primary_assigned:
+                        raise serializers.ValidationError(
+                            {"guardians": "Only one primary guardian is allowed per student."}
+                        )
+                    primary_assigned = True
+                guardians.append(
+                    Guardian.objects.create(student=student, **guardian_data)
+                )
 
         response_data = {
             "student": student,

@@ -68,6 +68,18 @@ class GuardianSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class BulkGuardianSerializer(serializers.ModelSerializer):
+    """Used only inside bulk-create — student is injected server-side after creation."""
+    class Meta:
+        model = Guardian
+        exclude = ["student"]
+
+    def validate(self, attrs):
+        # Primary-contact uniqueness check is deferred to the view
+        # since the student doesn't exist yet at this point
+        return attrs
+
+
 class StudentSiblingSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentSibling
@@ -143,12 +155,12 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
 
 
 class StudentBulkCreateSerializer(serializers.Serializer):
-    student = StudentSerializer()
+    student   = StudentSerializer()
     household = HouseholdSerializer(required=False, allow_null=True)
-    guardians = GuardianSerializer(many=True, required=False)
+    guardians = BulkGuardianSerializer(many=True, required=False, default=list)
 
 
 class StudentBulkCreateResponseSerializer(serializers.Serializer):
-    student = StudentSerializer()
+    student   = StudentSerializer()
     household = HouseholdSerializer(allow_null=True)
     guardians = GuardianSerializer(many=True)
