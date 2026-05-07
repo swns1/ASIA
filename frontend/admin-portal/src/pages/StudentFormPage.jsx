@@ -4,6 +4,7 @@ import { createStudent, getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
   updateGuardian,
+  deleteGuardian,
   getGuardiansByStudent,
 } from "../api/guardianApi";
 import {
@@ -16,6 +17,11 @@ import {
   deletePreviousSchool,
   getPreviousSchoolsByStudent,
 } from "../api/previousSchoolApi";
+import {
+  getHouseholdByStudent,
+  createHousehold,
+  updateHousehold,
+} from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -340,7 +346,9 @@ function GuardiansStep({ data, onChange }) {
       {data.map((g, i) => (
         <div key={i} style={{ ...cardStyle, position: "relative" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>Guardian {i + 1}</span>
+            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>
+              Guardian {i + 1}{g.guardian_id ? " (existing)" : " (new)"}
+            </span>
             <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
@@ -402,7 +410,7 @@ function SiblingsStep({ data, onChange }) {
       )}
       {data.map((s, i) => (
         <div key={i} style={{ ...cardStyle, display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 16, alignItems: "end" }}>
-          <Field label={`Sibling ${i + 1} Full Name *`}>
+          <Field label={`Sibling ${i + 1} Full Name *${s.sibling_id ? " (existing)" : " (new)"}`}>
             <Input value={s.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
           </Field>
           <Field label="Age">
@@ -440,7 +448,9 @@ function SchoolsStep({ data, onChange }) {
       {data.map((s, i) => (
         <div key={i} style={{ ...cardStyle }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>School {i + 1}</span>
+            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>
+              School {i + 1}{s.previous_school_id ? " (existing)" : " (new)"}
+            </span>
             <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
           </div>
           <Field label="School Name *">
@@ -552,45 +562,213 @@ export default function StudentFormPage() {
   const [siblings, setSiblings] = useState([]);
   const [schools, setSchools] = useState([]);
 
-  // Load existing data for edit mode
+  // Track which existing records were removed in edit mode (so we can DELETE them on submit)
+  const [removedGuardianIds, setRemovedGuardianIds] = useState([]);
+  const [removedSiblingIds, setRemovedSiblingIds] = useState([]);
+  const [removedSchoolIds, setRemovedSchoolIds] = useState([]);
+
+  // Track the original household id (if any) so we know whether to PUT or POST
+  const [householdId, setHouseholdId] = useState(null);
+
+  // ── Load existing data for edit mode ──
   useEffect(() => {
     if (!id) return;
-    getStudent(id).then((data) => setStudent({ ...emptyStudent, ...data }));
+
+    (async () => {
+      try {
+        // Student (keep updated_at so optimistic-locking check passes on update)
+        const studentData = await getStudent(id);
+        setStudent({ ...emptyStudent, ...studentData });
+
+        // Household
+        try {
+          const hh = await getHouseholdByStudent(id);
+          if (hh) {
+            setHousehold({
+              ...emptyHousehold,
+              parent_marital_status: hh.parent_marital_status || "",
+              living_arrangement: hh.living_arrangement || "",
+              is_4ps_beneficiary: !!hh.is_4ps_beneficiary,
+              four_ps_id: hh.four_ps_id || "",
+            });
+            setHouseholdId(hh.household_id || hh.id || null);
+          }
+        } catch (e) {
+          // Household may not exist yet — that's fine
+        }
+
+        // Guardians
+        try {
+          const gs = await getGuardiansByStudent(id);
+          setGuardians(Array.isArray(gs) ? gs : (gs?.results || []));
+        } catch (e) { /* none */ }
+
+        // Siblings
+        try {
+          const ss = await getSiblingsByStudent(id);
+          setSiblings(Array.isArray(ss) ? ss : (ss?.results || []));
+        } catch (e) { /* none */ }
+
+        // Previous Schools
+        try {
+          const ps = await getPreviousSchoolsByStudent(id);
+          setSchools(Array.isArray(ps) ? ps : (ps?.results || []));
+        } catch (e) { /* none */ }
+      } catch (err) {
+        setError("Failed to load student data.");
+      }
+    })();
   }, [id]);
+
+  // ── Wrapped setters that track removed items in edit mode ──
+  const handleGuardiansChange = (next) => {
+    if (id) {
+      const removed = guardians.filter(
+        (g) => g.guardian_id && !next.find((n) => n.guardian_id === g.guardian_id)
+      );
+      if (removed.length) {
+        setRemovedGuardianIds((prev) => [
+          ...prev,
+          ...removed.map((g) => g.guardian_id),
+        ]);
+      }
+    }
+    setGuardians(next);
+  };
+
+  const handleSiblingsChange = (next) => {
+    if (id) {
+      const removed = siblings.filter(
+        (s) => s.sibling_id && !next.find((n) => n.sibling_id === s.sibling_id)
+      );
+      if (removed.length) {
+        setRemovedSiblingIds((prev) => [
+          ...prev,
+          ...removed.map((s) => s.sibling_id),
+        ]);
+      }
+    }
+    setSiblings(next);
+  };
+
+  const handleSchoolsChange = (next) => {
+    if (id) {
+      const removed = schools.filter(
+        (s) =>
+          s.previous_school_id &&
+          !next.find((n) => n.previous_school_id === s.previous_school_id)
+      );
+      if (removed.length) {
+        setRemovedSchoolIds((prev) => [
+          ...prev,
+          ...removed.map((s) => s.previous_school_id),
+        ]);
+      }
+    }
+    setSchools(next);
+  };
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
+
+  // Detect whether the household section has any meaningful content
+  const householdHasContent = (h) =>
+    !!(h.parent_marital_status || h.living_arrangement || h.is_4ps_beneficiary);
 
   const handleSubmit = async () => {
     setLoading(true);
     setError("");
     try {
-      const nullableStudentFields = ["middle_name","suffix","religion","email","mobile_number","age"];
+      const nullableStudentFields = ["middle_name", "suffix", "religion", "email", "mobile_number"];
+      const nullableGuardianFields = ["occupation", "email_address", "mobile_number"];
+      const nullableHouseholdFields = ["parent_marital_status", "living_arrangement", "four_ps_id"];
+
+      // student payload — KEEP updated_at so the optimistic-lock check passes
       const studentPayload = nullify(student, nullableStudentFields);
 
-      const nullableGuardianFields = ["occupation","email_address","mobile_number"];
-      const nullableHouseholdFields = ["parent_marital_status","living_arrangement","four_ps_id"];
-
       if (id) {
-        // ── Edit mode: update student only (simplified) ──
-        await updateStudent(id, studentPayload);
-      } else {
-        // ── Create mode: bulk-create student + household + guardians ──
-        const hasHousehold =
-          household.parent_marital_status ||
-          household.living_arrangement ||
-          household.is_4ps_beneficiary;
+        // ════════════════════════════════════════════════════════
+        // EDIT MODE
+        // ════════════════════════════════════════════════════════
 
+        // 1) Update student (updated_at is included in studentPayload from getStudent)
+        await updateStudent(id, studentPayload);
+
+        // 2) Household — create or update depending on whether one already exists
+        if (householdHasContent(household)) {
+          const hhPayload = nullify(
+            { ...household, student: id },
+            nullableHouseholdFields
+          );
+          if (householdId) {
+            await updateHousehold(householdId, hhPayload);
+          } else {
+            const created = await createHousehold(hhPayload);
+            setHouseholdId(created.household_id || created.id || null);
+          }
+        }
+
+        // 3) Guardians — update existing, create new, delete removed
+        for (const g of guardians) {
+          const payload = nullify({ ...g, student: id }, nullableGuardianFields);
+          if (g.guardian_id) {
+            await updateGuardian(g.guardian_id, payload);
+          } else if (g.full_name?.trim()) {
+            await createGuardian(payload);
+          }
+        }
+        for (const gid of removedGuardianIds) {
+          try { await deleteGuardian(gid); } catch (e) { /* ignore */ }
+        }
+
+        // 4) Siblings — for new ones create; removed ones delete
+        // (Sibling model in your codebase doesn't seem to have an update endpoint,
+        //  so for existing ones we leave them as-is. If full_name was edited, we
+        //  delete + recreate.)
+        for (const s of siblings) {
+          if (!s.full_name?.trim()) continue;
+          if (!s.sibling_id) {
+            await createSibling({
+              student: id,
+              full_name: s.full_name,
+              age: s.age ? parseInt(s.age) : null,
+            });
+          }
+        }
+        for (const sid of removedSiblingIds) {
+          try { await deleteSibling(sid); } catch (e) { /* ignore */ }
+        }
+
+        // 5) Previous schools — same pattern
+        for (const s of schools) {
+          if (!s.school_name?.trim()) continue;
+          if (!s.previous_school_id) {
+            await createPreviousSchool({
+              student: id,
+              school_name: s.school_name,
+              school_address: s.school_address,
+            });
+          }
+        }
+        for (const psid of removedSchoolIds) {
+          try { await deletePreviousSchool(psid); } catch (e) { /* ignore */ }
+        }
+      } else {
+        // ════════════════════════════════════════════════════════
+        // CREATE MODE — use the bulk endpoint
+        // ════════════════════════════════════════════════════════
         const bulkPayload = {
           student: studentPayload,
-          household: hasHousehold ? nullify(household, nullableHouseholdFields) : null,
+          household: householdHasContent(household)
+            ? nullify(household, nullableHouseholdFields)
+            : null,
           guardians: guardians.map((g) => nullify(g, nullableGuardianFields)),
         };
 
         const result = await bulkCreateStudent(bulkPayload);
         const newStudentId = result.student.student_id;
 
-        // ── Then create siblings ──
+        // siblings
         for (const s of siblings) {
           if (s.full_name.trim()) {
             await createSibling({
@@ -601,7 +779,7 @@ export default function StudentFormPage() {
           }
         }
 
-        // ── Then create previous schools ──
+        // previous schools
         for (const s of schools) {
           if (s.school_name.trim()) {
             await createPreviousSchool({
@@ -663,9 +841,9 @@ export default function StudentFormPage() {
         <div style={{ ...cardStyle, minHeight: 320 }}>
           {step === 0 && <StudentStep data={student} onChange={setStudent} />}
           {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
-          {step === 2 && <GuardiansStep data={guardians} onChange={setGuardians} />}
-          {step === 3 && <SiblingsStep data={siblings} onChange={setSiblings} />}
-          {step === 4 && <SchoolsStep data={schools} onChange={setSchools} />}
+          {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+          {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+          {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
           {step === 5 && (
             <ReviewStep
               student={student} household={household}

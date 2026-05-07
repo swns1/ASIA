@@ -3,6 +3,7 @@ from django.db.models import Q
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 import os
 from .models import (
     Student,
@@ -39,14 +40,40 @@ class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
+        # updated_at is managed by the DB / auto_now — clients shouldn't be
+        # able to write it. We still READ it from initial_data for the
+        # optimistic-locking check below.
+        read_only_fields = ("updated_at",)
 
     def validate(self, attrs):
         if self.instance:
-            client_updated_at = self.initial_data.get("updated_at")
-            if client_updated_at and str(self.instance.updated_at) != client_updated_at:
-                raise serializers.ValidationError(
-                    "This record was updated by another user. Please refresh and try again."
-                )
+            client_updated_at_raw = self.initial_data.get("updated_at")
+            # If the client didn't send updated_at, skip the optimistic-lock
+            # check rather than failing — otherwise legitimate updates from
+            # clients that don't track this field will always fail.
+            if client_updated_at_raw:
+                client_dt = parse_datetime(str(client_updated_at_raw))
+                if client_dt is None:
+                    raise serializers.ValidationError(
+                        "Invalid updated_at format."
+                    )
+
+                instance_dt = self.instance.updated_at
+
+                # Both datetimes must be timezone-aware to subtract safely.
+                # If either is naive, fall back to a string compare.
+                try:
+                    delta = abs((instance_dt - client_dt).total_seconds())
+                except TypeError:
+                    delta = None
+
+                # Allow up to 1 second of drift to absorb microsecond
+                # truncation differences between DB backends and JSON
+                # round-tripping.
+                if delta is None or delta > 1:
+                    raise serializers.ValidationError(
+                        "This record was updated by another user. Please refresh and try again."
+                    )
         return attrs
 
 
