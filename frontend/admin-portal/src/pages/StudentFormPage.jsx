@@ -1,97 +1,699 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { createStudent, getStudent, updateStudent } from "../api/studentApi";
+import {
+  createGuardian,
+  updateGuardian,
+  getGuardiansByStudent,
+} from "../api/guardianApi";
+import {
+  createSibling,
+  deleteSibling,
+  getSiblingsByStudent,
+} from "../api/siblingApi";
+import {
+  createPreviousSchool,
+  deletePreviousSchool,
+  getPreviousSchoolsByStudent,
+} from "../api/previousSchoolApi";
+import { bulkCreateStudent } from "../api/studentApi";
 
-const emptyForm = {
-  lrn: "",
-  first_name: "",
-  middle_name: "",
-  last_name: "",
-  suffix: "",
-  sex: "male",
-  birth_date: "",
-  current_address: "",
-  permanent_address: "",
-  email: "",
-  mobile_number: "",
-  status: "active",
+// ─── helpers ────────────────────────────────────────────────────────────────
+const nullify = (obj, fields) => {
+  const out = { ...obj };
+  fields.forEach((f) => {
+    if (out[f] === "" || out[f] === undefined) out[f] = null;
+  });
+  return out;
 };
+
+// ─── initial shapes ─────────────────────────────────────────────────────────
+const emptyStudent = {
+  lrn: "", first_name: "", middle_name: "", last_name: "", suffix: "",
+  sex: "male", birth_date: "", religion: "", email: "", mobile_number: "",
+  current_address: "", permanent_address: "", status: "active",
+};
+
+const emptyHousehold = {
+  parent_marital_status: "", living_arrangement: "",
+  is_4ps_beneficiary: false, four_ps_id: "",
+};
+
+const emptyGuardian = {
+  relationship: "mother", full_name: "", occupation: "",
+  email_address: "", mobile_number: "", is_primary_contact: false,
+};
+
+const emptySibling = { full_name: "", age: "" };
+
+const emptySchool = { school_name: "", school_address: "" };
+
+// ─── step config ─────────────────────────────────────────────────────────────
+const STEPS = [
+  { id: "student",   label: "Student",        icon: "👤" },
+  { id: "household", label: "Household",       icon: "🏠" },
+  { id: "guardians", label: "Guardians",       icon: "👨‍👩‍👧" },
+  { id: "siblings",  label: "Siblings",        icon: "👫" },
+  { id: "schools",   label: "Prev. Schools",   icon: "🏫" },
+  { id: "review",    label: "Review",          icon: "✅" },
+];
+
+// ─── style tokens ────────────────────────────────────────────────────────────
+const C = {
+  red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
+  redMid: "#fde2de", dark: "#1a0a0a", muted: "#7a5050",
+  bg: "#fff8f6", white: "#ffffff", shadow: "0 4px 24px rgba(224,49,49,0.10)",
+};
+
+const inputStyle = {
+  width: "100%", border: `1.5px solid ${C.redMid}`, borderRadius: 10,
+  padding: "10px 14px", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
+  color: C.dark, background: "#fffbfb", outline: "none",
+  boxSizing: "border-box", transition: "border-color .15s, box-shadow .15s",
+};
+
+const labelStyle = {
+  display: "block", fontSize: 11, fontWeight: 700, color: C.muted,
+  letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5,
+};
+
+const cardStyle = {
+  background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`,
+  padding: "24px 28px", boxShadow: C.shadow, marginBottom: 18,
+};
+
+const btnPrimary = {
+  background: C.red, color: "#fff", border: "none", borderRadius: 50,
+  padding: "11px 28px", fontSize: 14, fontWeight: 700,
+  fontFamily: "'DM Sans', sans-serif", cursor: "pointer", letterSpacing: ".02em",
+};
+
+const btnSecondary = {
+  background: "transparent", color: C.red, border: `1.5px solid ${C.red}`,
+  borderRadius: 50, padding: "10px 24px", fontSize: 14, fontWeight: 600,
+  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
+};
+
+const btnGhost = {
+  background: C.redLight, color: C.red, border: "none", borderRadius: 8,
+  padding: "7px 16px", fontSize: 13, fontWeight: 600,
+  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
+};
+
+const btnDanger = {
+  background: "transparent", color: "#b91c1c", border: "1px solid #fca5a5",
+  borderRadius: 8, padding: "5px 12px", fontSize: 12,
+  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
+};
+
+// ─── reusable field ──────────────────────────────────────────────────────────
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Input({ style, onFocus, onBlur, ...props }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      {...props}
+      style={{
+        ...inputStyle,
+        ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}),
+        ...style,
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
+  );
+}
+
+function Select({ children, style, ...props }) {
+  return (
+    <select {...props} style={{ ...inputStyle, ...style }}>
+      {children}
+    </select>
+  );
+}
+
+function Textarea({ style, ...props }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <textarea
+      {...props}
+      style={{
+        ...inputStyle, minHeight: 72, resize: "vertical",
+        ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}),
+        ...style,
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
+  );
+}
+
+// ─── step indicator ──────────────────────────────────────────────────────────
+function StepBar({ current }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 32, gap: 0 }}>
+      {STEPS.map((s, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%",
+                background: done ? C.red : active ? C.redLight : "#f3e8e8",
+                border: `2px solid ${done || active ? C.red : C.redMid}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: done ? 14 : 16,
+                color: done ? "#fff" : active ? C.red : C.muted,
+                fontWeight: 700, transition: "all .2s",
+              }}>
+                {done ? "✓" : s.icon}
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: active ? 700 : 500,
+                color: active ? C.red : done ? C.muted : "#c4a4a0",
+                letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap",
+              }}>
+                {s.label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div style={{
+                flex: 1, height: 2, margin: "0 6px", marginBottom: 20,
+                background: done ? C.red : C.redMid, transition: "background .3s",
+              }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STEP COMPONENTS
+// ════════════════════════════════════════════════════════════════════════════
+
+function StudentStep({ data, onChange }) {
+  const h = (e) => onChange({ ...data, [e.target.name]: e.target.value });
+  return (
+    <div>
+      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>
+        Student Information
+      </h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+        <Field label="LRN *">
+          <Input name="lrn" value={data.lrn} onChange={h} required placeholder="e.g. 123456789012" />
+        </Field>
+        <Field label="Status">
+          <Select name="status" value={data.status} onChange={h}>
+            {["active","inactive","transferred","graduated","dropped"].map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="First Name *">
+          <Input name="first_name" value={data.first_name} onChange={h} required placeholder="Juan" />
+        </Field>
+        <Field label="Middle Name">
+          <Input name="middle_name" value={data.middle_name || ""} onChange={h} placeholder="Optional" />
+        </Field>
+        <Field label="Last Name *">
+          <Input name="last_name" value={data.last_name} onChange={h} required placeholder="Dela Cruz" />
+        </Field>
+        <Field label="Suffix">
+          <Input name="suffix" value={data.suffix || ""} onChange={h} placeholder="Jr., Sr., III" />
+        </Field>
+        <Field label="Sex *">
+          <Select name="sex" value={data.sex} onChange={h}>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </Select>
+        </Field>
+        <Field label="Birth Date *">
+          <Input type="date" name="birth_date" value={data.birth_date || ""} onChange={h} required />
+        </Field>
+        <Field label="Religion">
+          <Input name="religion" value={data.religion || ""} onChange={h} placeholder="Optional" />
+        </Field>
+        <Field label="Email">
+          <Input type="email" name="email" value={data.email || ""} onChange={h} placeholder="Optional" />
+        </Field>
+        <Field label="Mobile Number">
+          <Input name="mobile_number" value={data.mobile_number || ""} onChange={h} placeholder="09XXXXXXXXX" />
+        </Field>
+      </div>
+      <Field label="Current Address *">
+        <Textarea name="current_address" value={data.current_address} onChange={h} required placeholder="House No., Street, Barangay, City" />
+      </Field>
+      <Field label="Permanent Address *">
+        <Textarea name="permanent_address" value={data.permanent_address} onChange={h} required placeholder="Same as current or different" />
+      </Field>
+    </div>
+  );
+}
+
+function HouseholdStep({ data, onChange }) {
+  const h = (e) => {
+    const val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    onChange({ ...data, [e.target.name]: val });
+  };
+  return (
+    <div>
+      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>
+        Household Information
+      </h3>
+      <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
+        All fields are optional. Fill in what's applicable.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+        <Field label="Parent Marital Status">
+          <Select name="parent_marital_status" value={data.parent_marital_status || ""} onChange={h}>
+            <option value="">— Select —</option>
+            {["married","separated","annulled","single_parent","widowed"].map(s => (
+              <option key={s} value={s}>{s.replace("_", " ")}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Living Arrangement">
+          <Select name="living_arrangement" value={data.living_arrangement || ""} onChange={h}>
+            <option value="">— Select —</option>
+            {["both_parents","mother_only","father_only","guardian","relative","independent","others"].map(s => (
+              <option key={s} value={s}>{s.replace("_", " ")}</option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <input
+          type="checkbox" id="is4ps" name="is_4ps_beneficiary"
+          checked={data.is_4ps_beneficiary} onChange={h}
+          style={{ width: 16, height: 16, accentColor: C.red, cursor: "pointer" }}
+        />
+        <label htmlFor="is4ps" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>
+          4Ps Beneficiary
+        </label>
+      </div>
+      {data.is_4ps_beneficiary && (
+        <Field label="4Ps ID *">
+          <Input name="four_ps_id" value={data.four_ps_id || ""} onChange={h} placeholder="Required for 4Ps beneficiaries" required />
+        </Field>
+      )}
+    </div>
+  );
+}
+
+function GuardiansStep({ data, onChange }) {
+  const add = () => onChange([...data, { ...emptyGuardian }]);
+  const remove = (i) => onChange(data.filter((_, idx) => idx !== i));
+  const update = (i, field, val) => {
+    const next = [...data];
+    next[i] = { ...next[i], [field]: val };
+    // Only one primary contact
+    if (field === "is_primary_contact" && val) {
+      next.forEach((g, idx) => { if (idx !== i) next[idx] = { ...next[idx], is_primary_contact: false }; });
+    }
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Guardians</h3>
+        <button style={btnGhost} onClick={add} type="button">+ Add Guardian</button>
+      </div>
+      {data.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
+          No guardians added yet. Click "Add Guardian" to start.
+        </div>
+      )}
+      {data.map((g, i) => (
+        <div key={i} style={{ ...cardStyle, position: "relative" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>Guardian {i + 1}</span>
+            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+            <Field label="Full Name *">
+              <Input value={g.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
+            </Field>
+            <Field label="Relationship *">
+              <Select value={g.relationship} onChange={e => update(i, "relationship", e.target.value)}>
+                <option value="mother">Mother</option>
+                <option value="father">Father</option>
+                <option value="guardian">Guardian</option>
+              </Select>
+            </Field>
+            <Field label="Occupation">
+              <Input value={g.occupation || ""} onChange={e => update(i, "occupation", e.target.value)} placeholder="Optional" />
+            </Field>
+            <Field label="Mobile Number">
+              <Input value={g.mobile_number || ""} onChange={e => update(i, "mobile_number", e.target.value)} placeholder="09XXXXXXXXX" />
+            </Field>
+            <Field label="Email Address">
+              <Input type="email" value={g.email_address || ""} onChange={e => update(i, "email_address", e.target.value)} placeholder="Optional" />
+            </Field>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox" id={`primary-${i}`} checked={g.is_primary_contact}
+              onChange={e => update(i, "is_primary_contact", e.target.checked)}
+              style={{ width: 15, height: 15, accentColor: C.red, cursor: "pointer" }}
+            />
+            <label htmlFor={`primary-${i}`} style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>
+              Primary Contact
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SiblingsStep({ data, onChange }) {
+  const add = () => onChange([...data, { ...emptySibling }]);
+  const remove = (i) => onChange(data.filter((_, idx) => idx !== i));
+  const update = (i, field, val) => {
+    const next = [...data];
+    next[i] = { ...next[i], [field]: val };
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Siblings</h3>
+        <button style={btnGhost} onClick={add} type="button">+ Add Sibling</button>
+      </div>
+      {data.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
+          No siblings added. Click "Add Sibling" if applicable.
+        </div>
+      )}
+      {data.map((s, i) => (
+        <div key={i} style={{ ...cardStyle, display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 16, alignItems: "end" }}>
+          <Field label={`Sibling ${i + 1} Full Name *`}>
+            <Input value={s.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
+          </Field>
+          <Field label="Age">
+            <Input type="number" min="0" max="100" value={s.age || ""} onChange={e => update(i, "age", e.target.value)} placeholder="Age" />
+          </Field>
+          <div style={{ paddingBottom: 14 }}>
+            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SchoolsStep({ data, onChange }) {
+  const add = () => onChange([...data, { ...emptySchool }]);
+  const remove = (i) => onChange(data.filter((_, idx) => idx !== i));
+  const update = (i, field, val) => {
+    const next = [...data];
+    next[i] = { ...next[i], [field]: val };
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Previous Schools</h3>
+        <button style={btnGhost} onClick={add} type="button">+ Add School</button>
+      </div>
+      {data.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
+          No previous schools added.
+        </div>
+      )}
+      {data.map((s, i) => (
+        <div key={i} style={{ ...cardStyle }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>School {i + 1}</span>
+            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
+          </div>
+          <Field label="School Name *">
+            <Input value={s.school_name} onChange={e => update(i, "school_name", e.target.value)} required placeholder="School name" />
+          </Field>
+          <Field label="School Address *">
+            <Textarea value={s.school_address} onChange={e => update(i, "school_address", e.target.value)} required placeholder="Full address" />
+          </Field>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReviewStep({ student, household, guardians, siblings, schools }) {
+  const Row = ({ label, value }) => value ? (
+    <div style={{ display: "flex", gap: 12, padding: "6px 0", borderBottom: `1px solid ${C.redMid}` }}>
+      <span style={{ width: 160, fontSize: 12, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, color: C.dark }}>{value}</span>
+    </div>
+  ) : null;
+
+  const Section = ({ title, children }) => (
+    <div style={{ ...cardStyle, marginBottom: 16 }}>
+      <h4 style={{ fontFamily: "'DM Serif Display', serif", color: C.red, margin: "0 0 14px", fontSize: 16 }}>{title}</h4>
+      {children}
+    </div>
+  );
+
+  return (
+    <div>
+      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>Review & Submit</h3>
+      <Section title="👤 Student">
+        <Row label="LRN" value={student.lrn} />
+        <Row label="Full Name" value={`${student.first_name} ${student.middle_name || ""} ${student.last_name} ${student.suffix || ""}`.trim()} />
+        <Row label="Sex" value={student.sex} />
+        <Row label="Birth Date" value={student.birth_date} />
+        <Row label="Religion" value={student.religion} />
+        <Row label="Email" value={student.email} />
+        <Row label="Mobile" value={student.mobile_number} />
+        <Row label="Status" value={student.status} />
+        <Row label="Current Address" value={student.current_address} />
+        <Row label="Permanent Address" value={student.permanent_address} />
+      </Section>
+
+      {(household.parent_marital_status || household.living_arrangement || household.is_4ps_beneficiary) && (
+        <Section title="🏠 Household">
+          <Row label="Marital Status" value={household.parent_marital_status} />
+          <Row label="Living Arrangement" value={household.living_arrangement} />
+          <Row label="4Ps Beneficiary" value={household.is_4ps_beneficiary ? "Yes" : "No"} />
+          <Row label="4Ps ID" value={household.four_ps_id} />
+        </Section>
+      )}
+
+      {guardians.length > 0 && (
+        <Section title="👨‍👩‍👧 Guardians">
+          {guardians.map((g, i) => (
+            <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < guardians.length - 1 ? `1px dashed ${C.redMid}` : "none" }}>
+              <Row label="Name" value={g.full_name} />
+              <Row label="Relationship" value={g.relationship} />
+              <Row label="Occupation" value={g.occupation} />
+              <Row label="Mobile" value={g.mobile_number} />
+              <Row label="Email" value={g.email_address} />
+              <Row label="Primary Contact" value={g.is_primary_contact ? "Yes" : null} />
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {siblings.length > 0 && (
+        <Section title="👫 Siblings">
+          {siblings.map((s, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <Row label={`Sibling ${i + 1}`} value={`${s.full_name}${s.age ? `, age ${s.age}` : ""}`} />
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {schools.length > 0 && (
+        <Section title="🏫 Previous Schools">
+          {schools.map((s, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <Row label={`School ${i + 1}`} value={s.school_name} />
+              <Row label="Address" value={s.school_address} />
+            </div>
+          ))}
+        </Section>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════════════════════════════
 
 export default function StudentFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [form, setForm] = useState(emptyForm);
 
+  const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [student, setStudent] = useState(emptyStudent);
+  const [household, setHousehold] = useState(emptyHousehold);
+  const [guardians, setGuardians] = useState([]);
+  const [siblings, setSiblings] = useState([]);
+  const [schools, setSchools] = useState([]);
+
+  // Load existing data for edit mode
   useEffect(() => {
-    if (id) {
-      getStudent(id).then((data) => setForm({ ...emptyForm, ...data }));
-    }
+    if (!id) return;
+    getStudent(id).then((data) => setStudent({ ...emptyStudent, ...data }));
   }, [id]);
 
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  const prev = () => setStep((s) => Math.max(s - 1, 0));
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const nullableStudentFields = ["middle_name","suffix","religion","email","mobile_number","age"];
+      const studentPayload = nullify(student, nullableStudentFields);
+
+      const nullableGuardianFields = ["occupation","email_address","mobile_number"];
+      const nullableHouseholdFields = ["parent_marital_status","living_arrangement","four_ps_id"];
+
+      if (id) {
+        // ── Edit mode: update student only (simplified) ──
+        await updateStudent(id, studentPayload);
+      } else {
+        // ── Create mode: bulk-create student + household + guardians ──
+        const hasHousehold =
+          household.parent_marital_status ||
+          household.living_arrangement ||
+          household.is_4ps_beneficiary;
+
+        const bulkPayload = {
+          student: studentPayload,
+          household: hasHousehold ? nullify(household, nullableHouseholdFields) : null,
+          guardians: guardians.map((g) => nullify(g, nullableGuardianFields)),
+        };
+
+        const result = await bulkCreateStudent(bulkPayload);
+        const newStudentId = result.student.student_id;
+
+        // ── Then create siblings ──
+        for (const s of siblings) {
+          if (s.full_name.trim()) {
+            await createSibling({
+              student: newStudentId,
+              full_name: s.full_name,
+              age: s.age ? parseInt(s.age) : null,
+            });
+          }
+        }
+
+        // ── Then create previous schools ──
+        for (const s of schools) {
+          if (s.school_name.trim()) {
+            await createPreviousSchool({
+              student: newStudentId,
+              school_name: s.school_name,
+              school_address: s.school_address,
+            });
+          }
+        }
+      }
+
+      navigate("/students");
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = typeof data === "string"
+        ? data
+        : JSON.stringify(data) || "Something went wrong. Please check your inputs.";
+      setError(msg);
+      setStep(0); // go back to start so user can fix
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (id) {
-      await updateStudent(id, form);
-    } else {
-      await createStudent(form);
-    }
-    navigate("/students");
-  };
+  const isLastStep = step === STEPS.length - 1;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fff8f6", padding: 28, fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ maxWidth: 800, margin: "0 auto" }}>
-        <h2 style={{ fontFamily: "'DM Serif Display', serif" }}>
-          {id ? "Edit Student" : "Create Student"}
-        </h2>
+    <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');`}</style>
 
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            background: "white",
-            borderRadius: 16,
-            border: "1px solid #fde2de",
-            padding: 20,
-            boxShadow: "0 6px 18px rgba(224,49,49,0.08)",
-            display: "grid",
-            gap: 10,
-          }}
-        >
-          <input name="lrn" placeholder="LRN" value={form.lrn} onChange={handleChange} required />
-          <input name="first_name" placeholder="First Name" value={form.first_name} onChange={handleChange} required />
-          <input name="middle_name" placeholder="Middle Name" value={form.middle_name} onChange={handleChange} />
-          <input name="last_name" placeholder="Last Name" value={form.last_name} onChange={handleChange} required />
-          <input name="suffix" placeholder="Suffix" value={form.suffix} onChange={handleChange} />
+      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <button
+            onClick={() => navigate("/students")}
+            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
+          >
+            ← Back to Students
+          </button>
+          <h2 style={{ fontFamily: "'DM Serif Display', serif", margin: 0, fontSize: 28, color: C.dark }}>
+            {id ? "Edit Student" : "New Student Registration"}
+          </h2>
+        </div>
 
-          <select name="sex" value={form.sex} onChange={handleChange}>
-            <option value="male">male</option>
-            <option value="female">female</option>
-          </select>
+        {/* Step bar */}
+        <StepBar current={step} />
 
-          <input type="date" name="birth_date" value={form.birth_date || ""} onChange={handleChange} required />
-          <input name="email" placeholder="Email" value={form.email || ""} onChange={handleChange} />
-          <input name="mobile_number" placeholder="Mobile Number" value={form.mobile_number || ""} onChange={handleChange} />
-
-          <textarea name="current_address" placeholder="Current Address" value={form.current_address} onChange={handleChange} required />
-          <textarea name="permanent_address" placeholder="Permanent Address" value={form.permanent_address} onChange={handleChange} required />
-
-          <select name="status" value={form.status} onChange={handleChange}>
-            <option value="active">active</option>
-            <option value="inactive">inactive</option>
-            <option value="transferred">transferred</option>
-            <option value="graduated">graduated</option>
-            <option value="dropped">dropped</option>
-          </select>
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="submit">{id ? "Update" : "Create"}</button>
-            <button type="button" onClick={() => navigate("/students")}>Cancel</button>
+        {/* Error */}
+        {error && (
+          <div style={{
+            background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
+            padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20,
+          }}>
+            {error}
           </div>
-        </form>
+        )}
+
+        {/* Step content */}
+        <div style={{ ...cardStyle, minHeight: 320 }}>
+          {step === 0 && <StudentStep data={student} onChange={setStudent} />}
+          {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
+          {step === 2 && <GuardiansStep data={guardians} onChange={setGuardians} />}
+          {step === 3 && <SiblingsStep data={siblings} onChange={setSiblings} />}
+          {step === 4 && <SchoolsStep data={schools} onChange={setSchools} />}
+          {step === 5 && (
+            <ReviewStep
+              student={student} household={household}
+              guardians={guardians} siblings={siblings} schools={schools}
+            />
+          )}
+        </div>
+
+        {/* Navigation */}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
+          <button style={btnSecondary} onClick={prev} disabled={step === 0} type="button">
+            ← Previous
+          </button>
+          {isLastStep ? (
+            <button
+              style={{ ...btnPrimary, opacity: loading ? .7 : 1 }}
+              onClick={handleSubmit}
+              disabled={loading}
+              type="button"
+            >
+              {loading ? "Saving..." : id ? "Update Student" : "✓ Submit Registration"}
+            </button>
+          ) : (
+            <button style={btnPrimary} onClick={next} type="button">
+              Next →
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
