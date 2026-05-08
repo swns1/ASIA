@@ -9,7 +9,7 @@ const NAV = [
     items: [
       { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
       { label: "Students",    icon: "ti-users",             path: "/Students" },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollment" },
+      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
       { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
     ],
   },
@@ -314,86 +314,82 @@ export default function StudentsPage() {
 
         {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <aside style={{
-          width: 224, flexShrink: 0, background: "white",
-          borderRight: "1px solid #f5eaea",
-          display: "flex", flexDirection: "column",
-          boxShadow: "2px 0 12px rgba(224,49,49,0.04)",
+  width: 224, flexShrink: 0, background: "white",
+  borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column",
+  boxShadow: "2px 0 12px rgba(224,49,49,0.04)",
+}}>
+  {/* Brand */}
+  <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10,
+        background: "linear-gradient(135deg, #e03131, #c92a2a)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 12px rgba(224,49,49,0.3)",
+      }}>
+        <i className="ti ti-school" style={{ fontSize: 17, color: "white" }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>South Lakes IS</div>
+        <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
+      </div>
+    </div>
+  </div>
+
+  {/* Nav */}
+  <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+    {NAV.map((group) => (
+      <div key={group.section} style={{ marginBottom: 6 }}>
+        <div style={{
+          fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em",
+          textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600,
         }}>
-          {/* Brand */}
-          <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: "linear-gradient(135deg, #e03131, #c92a2a)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 12px rgba(224,49,49,0.3)",
-              }}>
-                <i className="ti ti-school" style={{ fontSize: 17, color: "white" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>South Lakes IS</div>
-                <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
-              </div>
+          {group.section}
+        </div>
+        {group.items.map((item) => {
+          const active = location.pathname === item.path;
+          return (
+            <div
+              key={item.path}
+              className={`nav-item${active ? " nav-active" : ""}`}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 10px", borderRadius: 9,
+                fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer",
+              }}
+              onClick={() => navigate(item.path)}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
+            >
+              <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
+              {item.label}
             </div>
-          </div>
+          );
+        })}
+      </div>
+    ))}
+  </nav>
 
-          {/* Nav */}
-          <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
-            {NAV.map((group) => (
-              <div key={group.section} style={{ marginBottom: 6 }}>
-                <div style={{
-                  fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em",
-                  textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600,
-                }}>
-                  {group.section}
-                </div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div
-                      key={item.path}
-                      className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "9px 10px", borderRadius: 9,
-                        fontSize: 13, color: active ? "#e03131" : "#7a5a5a",
-                        cursor: "pointer",
-                      }}
-                      onClick={() => navigate(item.path)}
-                      role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
-                    >
-                      <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          {/* User */}
-          <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 10px", borderRadius: 10,
-              background: "#fff8f6", cursor: "pointer",
-            }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: "linear-gradient(135deg, #fde8e8, #fca5a5)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0,
-              }}>SA</div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>Super Admin</div>
-                <div style={{ fontSize: 11, color: "#b09090" }}>super_admin</div>
-              </div>
-              <i className="ti ti-chevron-right" style={{ fontSize: 13, color: "#c0a0a0", marginLeft: "auto" }} />
-            </div>
-          </div>
-        </aside>
-
+  {/* User footer */}
+  <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "10px 10px", borderRadius: 10, background: "#fff8f6", cursor: "pointer",
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: "50%",
+        background: "linear-gradient(135deg, #fde8e8, #fca5a5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0,
+      }}>SA</div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>Super Admin</div>
+        <div style={{ fontSize: 11, color: "#b09090" }}>super_admin</div>
+      </div>
+      <i className="ti ti-chevron-right" style={{ fontSize: 13, color: "#c0a0a0", marginLeft: "auto" }} />
+    </div>
+  </div>
+</aside>
         {/* ── Main ────────────────────────────────────────────────────────── */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 

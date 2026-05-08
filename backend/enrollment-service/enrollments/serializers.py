@@ -2,7 +2,6 @@ from rest_framework import serializers
 from .models import Enrollment, Student
 
 
-# ─── Lightweight student summary ────────────────────────────────────────────
 class StudentSummarySerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
 
@@ -26,16 +25,11 @@ class StudentSummarySerializer(serializers.ModelSerializer):
         return " ".join(p for p in parts if p)
 
 
-# ─── Enrollment ─────────────────────────────────────────────────────────────
 class EnrollmentSerializer(serializers.ModelSerializer):
-    """
-    On read: returns nested `student_detail` plus a `student_id` shortcut.
-    On write: clients send `"student": 12` (the FK PK).
-    """
-
     student_detail = StudentSummarySerializer(source="student", read_only=True)
     student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
     student_id = serializers.IntegerField(source="student.student_id", read_only=True)
+    student_name = serializers.SerializerMethodField()  
 
     class Meta:
         model = Enrollment
@@ -43,6 +37,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             "enrollment_id",
             "student",
             "student_id",
+            "student_name",       
             "student_detail",
             "school_year",
             "school_level",
@@ -54,12 +49,17 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("enrollment_id",)
 
-    # ── Cross-field validation mirroring schema CHECK constraints ───────────
+    def get_student_name(self, obj):   
+        s = obj.student
+        if not s:
+            return None
+        parts = [s.first_name, s.middle_name, s.last_name, s.suffix]
+        return " ".join(p for p in parts if p)
+
     def validate(self, attrs):
         school_level = attrs.get("school_level", getattr(self.instance, "school_level", None))
         semester = attrs.get("semester", getattr(self.instance, "semester", None))
 
-        # Treat "" as None (frontend nulls empty strings, but be defensive)
         if semester == "":
             semester = None
             attrs["semester"] = None
@@ -77,7 +77,6 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             if attrs.get("strand") == "":
                 attrs["strand"] = None
 
-        # Mirrors uq_enrollments_student_sy partial unique index
         student = attrs.get("student", getattr(self.instance, "student", None))
         school_year = attrs.get("school_year", getattr(self.instance, "school_year", None))
         new_status = attrs.get(

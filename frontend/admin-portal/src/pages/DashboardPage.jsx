@@ -8,10 +8,10 @@ const NAV = [
   {
     section: "Main",
     items: [
-      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
-      { label: "Students",    icon: "ti-users",             path: "/Students" },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollment" },
-      { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
+      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard" },
+      { label: "Students",    icon: "ti-users",             path: "/students" },
+      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments"},
+      { label: "Grades",      icon: "ti-chart-bar",         path: "/grades" },
     ],
   },
   {
@@ -196,6 +196,7 @@ export default function DashboardPage() {
     <>
       {/* Inject pulse keyframe */}
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
         --sk: var(--color-background-secondary, #e8e6e0);
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -211,51 +212,84 @@ export default function DashboardPage() {
 
       <div style={s.shell}>
         {/* ── Sidebar ── */}
-        <aside style={s.sidebar}>
-          <div style={s.brand}>
-            <div style={s.brandIcon}>
-              <i className="ti ti-school" aria-hidden="true" style={{ fontSize: 16, color: "white" }} />
-            </div>
-            <div>
-              <div style={s.brandText}>South Lakes IS</div>
-              <div style={s.brandSub}>Admin Portal</div>
-            </div>
-          </div>
+        {/* ── Sidebar ── */}
+<aside style={{
+  width: 224, flexShrink: 0, background: "white",
+  borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column",
+  boxShadow: "2px 0 12px rgba(224,49,49,0.04)",
+}}>
+  {/* Brand */}
+  <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10,
+        background: "linear-gradient(135deg, #e03131, #c92a2a)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 12px rgba(224,49,49,0.3)",
+      }}>
+        <i className="ti ti-school" style={{ fontSize: 17, color: "white" }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>South Lakes IS</div>
+        <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
+      </div>
+    </div>
+  </div>
 
-          <nav style={s.nav}>
-            {NAV.map((group) => (
-              <div key={group.section}>
-                <div style={s.navSection}>{group.section}</div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div
-                      key={item.path}
-                      className={`nav-item${active ? " nav-item-active" : ""}`}
-                      style={{ ...s.navItem, ...(active ? s.navActive : {}) }}
-                      onClick={() => navigate(item.path)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
-                    >
-                      <i className={`ti ${item.icon}`} aria-hidden="true" style={{ fontSize: 17, width: 20, textAlign: "center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div style={s.sidebarFooter}>
-            <div className="user-row" style={s.userRow}>
-              <div style={s.avatar}>SA</div>
-              <div>
-                <div style={s.userName}>Super Admin</div>
-                <div style={s.userRole}>super_admin</div>
-              </div>
+  {/* Nav */}
+  <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+    {NAV.map((group) => (
+      <div key={group.section} style={{ marginBottom: 6 }}>
+        <div style={{
+          fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em",
+          textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600,
+        }}>
+          {group.section}
+        </div>
+        {group.items.map((item) => {
+          const active = location.pathname === item.path;
+          return (
+            <div
+              key={item.path}
+              className={`nav-item${active ? " nav-active" : ""}`}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 10px", borderRadius: 9,
+                fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer",
+              }}
+              onClick={() => navigate(item.path)}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
+            >
+              <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
+              {item.label}
             </div>
-          </div>
+          );
+        })}
+      </div>
+    ))}
+  </nav>
+
+  {/* User footer */}
+  <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "10px 10px", borderRadius: 10,
+      background: "#fff8f6", cursor: "pointer",
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: "50%",
+        background: "linear-gradient(135deg, #fde8e8, #fca5a5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0,
+      }}>SA</div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>Super Admin</div>
+        <div style={{ fontSize: 11, color: "#b09090" }}>super_admin</div>
+      </div>
+      <i className="ti ti-chevron-right" style={{ fontSize: 13, color: "#c0a0a0", marginLeft: "auto" }} />
+    </div>
+  </div>
         </aside>
 
         {/* ── Main ── */}
@@ -455,65 +489,65 @@ export default function DashboardPage() {
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 const s = {
-  shell:        { display: "flex", height: "100vh", background: "#fff8f6", fontFamily: "'DM Sans', sans-serif", overflow: "hidden" },
-  sidebar:      { width: 220, flexShrink: 0, background: "white", borderRight: "0.5px solid #f0e8e8", display: "flex", flexDirection: "column" },
-  brand:        { padding: "20px 18px 16px", borderBottom: "0.5px solid #f0e8e8", display: "flex", alignItems: "center", gap: 10 },
-  brandIcon:    { width: 32, height: 32, background: "#e03131", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  brandText:    { fontSize: 13, fontWeight: 600, color: "#1a1a1a", lineHeight: 1.3 },
-  brandSub:     { fontSize: 11, color: "#a07070" },
-  nav:          { flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
-  navSection:   { fontSize: 10, color: "#b09090", letterSpacing: "0.08em", textTransform: "uppercase", padding: "10px 8px 4px" },
-  navItem:      { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, fontSize: 13, color: "#7a5050", cursor: "pointer", transition: "background 0.1s" },
+  shell:    { display: "flex", height: "100vh", background: "#fdf8f6", fontFamily: "'DM Sans', sans-serif", overflow: "hidden" },
+  sidebar:  { width: 224, flexShrink: 0, background: "white", borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" },
+  brand:        { padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 10 },
+  brandIcon:    { width: 36, height: 36, background: "linear-gradient(135deg, #e03131, #c92a2a)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 12px rgba(224,49,49,0.3)" },
+  brandText:    { fontSize: 13, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3, letterSpacing: "-0.01em" },
+  brandSub:     { fontSize: 11, color: "#b09090", marginTop: 1 },
+  nav:          { flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
+  navSection:   { fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 },
+  navItem:      { display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: "#7a5a5a", cursor: "pointer", transition: "background 0.12s, color 0.12s" },
   navActive:    { background: "#fff0f0", color: "#e03131", fontWeight: 600 },
-  sidebarFooter:{ padding: "14px 10px", borderTop: "0.5px solid #f0e8e8" },
-  userRow:      { display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 8, cursor: "pointer", transition: "background 0.1s" },
-  avatar:       { width: 30, height: 30, borderRadius: "50%", background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: "#e03131", flexShrink: 0 },
-  userName:     { fontSize: 13, fontWeight: 500, color: "#1a1a1a" },
-  userRole:     { fontSize: 11, color: "#a07070" },
+  sidebarFooter:{ padding: "14px 10px", borderTop: "1px solid #f5eaea" },
+  userRow:      { display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", borderRadius: 10, background: "#fff8f6", cursor: "pointer" },
+  avatar:       { width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #fde8e8, #fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0 },
+  userName:     { fontSize: 13, fontWeight: 600, color: "#1a0a0a" },
+  userRole:     { fontSize: 11, color: "#b09090" },
 
   main:         { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topbar:       { background: "white", borderBottom: "0.5px solid #f0e8e8", padding: "0 24px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
-  topbarTitle:  { fontSize: 15, fontWeight: 600, color: "#1a1a1a" },
-  topbarSub:    { fontSize: 12, color: "#a07070" },
-  iconBtn:      { width: 32, height: 32, border: "0.5px solid #f0e8e8", borderRadius: 8, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#7a5050", position: "relative" },
-  badgeDot:     { width: 7, height: 7, background: "#e03131", borderRadius: "50%", position: "absolute", top: 5, right: 5 },
+  topbar:       { background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
+  topbarTitle:  { fontSize: 15, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif", letterSpacing: "-0.01em" },
+  topbarSub:    { fontSize: 11.5, color: "#b09090", marginTop: 1 },
+  iconBtn:      { width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", position: "relative" },
+  badgeDot:     { width: 8, height: 8, background: "#e03131", borderRadius: "50%", position: "absolute", top: 6, right: 6, border: "2px solid white" },
 
-  content:      { flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 },
+  content:      { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 },
 
   statGrid:     { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 },
-  statCard:     { background: "white", border: "0.5px solid #f0e8e8", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 },
+  statCard:     { background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" },
   statTop:      { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  statLabel:    { fontSize: 12, color: "#a07070" },
+  statLabel:    { fontSize: 12, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" },
   statIcon:     { width: 30, height: 30, borderRadius: 8, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" },
-  statValue:    { fontSize: 26, fontWeight: 500, color: "#1a1a1a", lineHeight: 1 },
+  statValue:    { fontSize: 26, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 },
   statFooter:   { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#a07070" },
   chip:         { fontSize: 11, padding: "2px 7px", borderRadius: 99, fontWeight: 500 },
 
   twoCol:       { display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 1fr)", gap: 12 },
   threeCol:     { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
 
-  panel:        { background: "white", border: "0.5px solid #f0e8e8", borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden" },
-  panelHeader:  { padding: "14px 16px", borderBottom: "0.5px solid #f0e8e8", display: "flex", alignItems: "center", justifyContent: "space-between" },
-  panelTitle:   { fontSize: 13, fontWeight: 600, color: "#1a1a1a" },
-  panelAction:  { fontSize: 12, color: "#e03131", cursor: "pointer", border: "none", background: "none", fontFamily: "'DM Sans', sans-serif" },
+  panel:        { background: "white", border: "1px solid #f5eaea", borderRadius: 16, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" },
+  panelHeader:  { padding: "14px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between" },
+  panelTitle:   { fontSize: 13, fontWeight: 700, color: "#1a0a0a" },
+  panelAction:  { fontSize: 12, color: "#e03131", cursor: "pointer", border: "none", background: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 },
 
   table:        { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th:           { textAlign: "left", fontSize: 11, fontWeight: 500, color: "#a07070", padding: "10px 16px", borderBottom: "0.5px solid #f0e8e8", textTransform: "uppercase", letterSpacing: "0.05em" },
-  td:           { padding: "10px 16px", borderBottom: "0.5px solid #f0e8e8", color: "#1a1a1a", verticalAlign: "middle" },
-  pill:         { display: "inline-block", fontSize: 11, padding: "2px 8px", borderRadius: 99, fontWeight: 500 },
+  th:           { textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" },
+  td:           { padding: "10px 18px", borderBottom: "1px solid #f9f0f0", color: "#1a0a0a", verticalAlign: "middle" },
+  pill:         { display: "inline-block", fontSize: 11, padding: "4px 10px", borderRadius: 99, fontWeight: 600 },
 
-  levelRow:     { display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: "0.5px solid #f0e8e8" },
+  levelRow:     { display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderBottom: "1px solid #f9f0f0" },
   levelIcon:    { width: 28, height: 28, borderRadius: 8, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  levelName:    { fontSize: 13, color: "#1a1a1a", flex: 1 },
-  levelCount:   { fontSize: 13, fontWeight: 500, color: "#1a1a1a" },
+  levelName:    { fontSize: 13, color: "#1a0a0a", flex: 1 },
+  levelCount:   { fontSize: 13, fontWeight: 600, color: "#1a0a0a" },
   barWrap:      { width: 60, height: 4, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" },
   bar:          { height: "100%", borderRadius: 99, background: "#e03131" },
 
   qaGrid:       { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, padding: 14 },
-  qaBtn:        { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "0.5px solid #f0e8e8", borderRadius: 8, background: "#fff8f6", cursor: "pointer", fontSize: 13, color: "#1a1a1a", fontFamily: "'DM Sans', sans-serif", transition: "background 0.1s" },
+  qaBtn:        { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid #f5eaea", borderRadius: 8, background: "#fff8f6", cursor: "pointer", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans', sans-serif", transition: "background 0.1s" },
 
-  reqRow:       { display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderBottom: "0.5px solid #f0e8e8", fontSize: 13 },
+  reqRow:       { display: "flex", alignItems: "center", gap: 10, padding: "9px 18px", borderBottom: "1px solid #f9f0f0", fontSize: 13 },
   reqDot:       { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-  reqName:      { flex: 1, color: "#1a1a1a" },
+  reqName:      { flex: 1, color: "#1a0a0a" },
   reqCount:     { color: "#a07070", fontSize: 12 },
 };
