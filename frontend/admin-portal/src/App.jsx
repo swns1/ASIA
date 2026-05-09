@@ -6,6 +6,10 @@ import StudentFormPage from "./pages/StudentFormPage";
 import StudentDetailPage from "./pages/StudentDetailPage";
 import EnrollmentFormPage from "./pages/EnrollmentFormPage";
 import EnrollmentsPage from "./pages/EnrollmentsPage";
+import SubjectsPage from "./pages/SubjectsPage";
+import GradingTemplatesPage from "./pages/GradingTemplatesPage";
+import GradeEntryPage from "./pages/GradeEntryPage";
+import GradeSummaryPage from "./pages/GradeSummaryPage";
 
 export default function App() {
   return (
@@ -20,6 +24,11 @@ export default function App() {
         <Route path="/enrollments" element={<EnrollmentsPage />} />
         <Route path="/enrollments/new" element={<EnrollmentFormPage />} />
         <Route path="/enrollments/:id/edit" element={<EnrollmentFormPage />} />
+        <Route path="/subjects" element={<SubjectsPage />} />
+        <Route path="/grading-templates" element={<GradingTemplatesPage />} />
+        <Route path="/grades/entry" element={<GradeEntryPage />} />
+        <Route path="/grades"         element={<GradeSummaryPage />} />
+        <Route path="/grades/summary" element={<GradeSummaryPage />} />
       </Routes>
     </BrowserRouter>
   );

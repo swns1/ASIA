@@ -40,7 +40,7 @@ class Grade(models.Model):
     grading_period = models.CharField(max_length=20, choices=GRADING_PERIOD_CHOICES)
     numeric_grade  = models.DecimalField(max_digits=5, decimal_places=2)
     remarks        = models.CharField(max_length=20, null=True, blank=True, choices=REMARKS_CHOICES)
-    recorded_at    = models.DateTimeField(auto_now_add=False, null=True, blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False

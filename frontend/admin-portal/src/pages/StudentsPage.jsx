@@ -10,7 +10,8 @@ const NAV = [
       { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
       { label: "Students",    icon: "ti-users",             path: "/Students" },
       { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-      { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
+      { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
+      { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
     ],
   },
   {
@@ -26,6 +27,7 @@ const NAV = [
     items: [
       { label: "Users",           icon: "ti-user-cog", path: "/users" },
       { label: "School Settings", icon: "ti-settings", path: "/settings" },
+      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
     ],
   },
 ];
