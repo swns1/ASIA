@@ -12,7 +12,7 @@ const NAV = [
     items: [
       { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
       { label: "Students",    icon: "ti-users",             path: "/Students" },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments/n" },
+      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
       { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
     ],
   },
