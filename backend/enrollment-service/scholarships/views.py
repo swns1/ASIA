@@ -33,7 +33,7 @@ class EnrollmentScholarshipViewSet(viewsets.ModelViewSet):
     """
     queryset = (
         EnrollmentScholarship.objects
-        .select_related("scholarship_type", "enrollment")
+        .select_related("scholarship_type", "enrollment", "enrollment__student")
         .all()
     )
     serializer_class = EnrollmentScholarshipSerializer

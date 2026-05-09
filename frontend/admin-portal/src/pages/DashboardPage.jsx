@@ -20,7 +20,7 @@ const NAV = [
     items: [
       { label: "Invoices",     icon: "ti-receipt",   path: "/invoices" },
       { label: "Payments",     icon: "ti-cash",      path: "/payments" },
-      { label: "Scholarships", icon: "ti-discount",  path: "/scholarships" },
+      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
     ],
   },
   {
