@@ -8,16 +8,9 @@ from .serializers import SubjectSerializer
 
 
 class SubjectViewSet(viewsets.ModelViewSet):
-    """
-    /api/subjects/
-
-    Reads: any authenticated user.
-    Writes: only super_admin / admin / registrar.
-
-    Filters: ?school_level=, ?grade_level=, ?strand=, ?semester=, ?search=
-    """
-
-    queryset = Subject.objects.all()
+    queryset = Subject.objects.select_related("grading_template").prefetch_related(
+        "grading_template__components"
+    ).all()
     serializer_class = SubjectSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
 

@@ -170,7 +170,7 @@ function StudentPicker({ value, onChange, disabled }) {
     setLoading(true);
     const t = setTimeout(async () => {
       try {
-        const data = await getStudents({ search: query, status: "active" });
+        const data = await getStudents({ search: query, status: "active", page_size: 100 });
         setResults(data.results || []);
       } catch (e) { console.error(e); setResults([]); }
       finally { setLoading(false); }

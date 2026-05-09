@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "subjects",
     "grades",
     "scholarships",
+    "grading",
 ]
 
 MIDDLEWARE = [

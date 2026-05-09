@@ -24,10 +24,19 @@ class Subject(models.Model):
     strand        = models.CharField(max_length=50, null=True, blank=True)
     semester      = models.CharField(max_length=20, null=True, blank=True, choices=SEMESTER_CHOICES)
 
+    grading_template = models.ForeignKey(
+        "grading.GradingTemplate",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="subjects",
+        db_column="grading_template_id",
+    )
+
     class Meta:
         managed = False
         db_table = "subjects"
         ordering = ("school_level", "grade_level", "subject_name")
 
-    def __str__(self):  # pragma: no cover
+    def __str__(self):
         return f"{self.subject_code} — {self.subject_name}"
