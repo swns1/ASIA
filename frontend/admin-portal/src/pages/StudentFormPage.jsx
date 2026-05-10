@@ -214,7 +214,7 @@ function StudentStep({ data, onChange }) {
   const h = (e) => onChange({ ...data, [e.target.name]: e.target.value });
   return (
     <div>
-      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>
+      <h3 style={{ marginBottom: 20, color: C.dark }}>
         Student Information
       </h3>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
@@ -276,7 +276,7 @@ function HouseholdStep({ data, onChange }) {
   };
   return (
     <div>
-      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>
+      <h3 style={{ marginBottom: 20, color: C.dark }}>
         Household Information
       </h3>
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
@@ -335,7 +335,7 @@ function GuardiansStep({ data, onChange }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Guardians</h3>
+        <h3 style={{ color: C.dark, margin: 0 }}>Guardians</h3>
         <button style={btnGhost} onClick={add} type="button">+ Add Guardian</button>
       </div>
       {data.length === 0 && (
@@ -400,7 +400,7 @@ function SiblingsStep({ data, onChange }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Siblings</h3>
+        <h3 style={{color: C.dark, margin: 0 }}>Siblings</h3>
         <button style={btnGhost} onClick={add} type="button">+ Add Sibling</button>
       </div>
       {data.length === 0 && (
@@ -437,7 +437,7 @@ function SchoolsStep({ data, onChange }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{ fontFamily: "'DM Serif Display', serif", color: C.dark, margin: 0 }}>Previous Schools</h3>
+        <h3 style={{ color: C.dark, margin: 0 }}>Previous Schools</h3>
         <button style={btnGhost} onClick={add} type="button">+ Add School</button>
       </div>
       {data.length === 0 && (
@@ -475,14 +475,14 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
 
   const Section = ({ title, children }) => (
     <div style={{ ...cardStyle, marginBottom: 16 }}>
-      <h4 style={{ fontFamily: "'DM Serif Display', serif", color: C.red, margin: "0 0 14px", fontSize: 16 }}>{title}</h4>
+      <h4 style={{color: C.red, margin: "0 0 14px", fontSize: 16 }}>{title}</h4>
       {children}
     </div>
   );
 
   return (
     <div>
-      <h3 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: 20, color: C.dark }}>Review & Submit</h3>
+      <h3 style={{ marginBottom: 20, color: C.dark }}>Review & Submit</h3>
       <Section title="👤 Student">
         <Row label="LRN" value={student.lrn} />
         <Row label="Full Name" value={`${student.first_name} ${student.middle_name || ""} ${student.last_name} ${student.suffix || ""}`.trim()} />
@@ -819,7 +819,7 @@ export default function StudentFormPage() {
           >
             ← Back to Students
           </button>
-          <h2 style={{ fontFamily: "'DM Serif Display', serif", margin: 0, fontSize: 28, color: C.dark }}>
+          <h2 style={{ margin: 0, fontSize: 28, color: C.dark }}>
             {id ? "Edit Student" : "New Student Registration"}
           </h2>
         </div>
