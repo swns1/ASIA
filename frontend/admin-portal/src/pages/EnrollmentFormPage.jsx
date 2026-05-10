@@ -30,6 +30,7 @@ const getEnrollment           = (id)     => apiCall("GET",   `${API_BASE}/enroll
 const updateEnrollment        = (id, p)  => apiCall("PATCH", `${API_BASE}/enrollments/${id}/`, p);
 const getScholarshipTypes     = ()       => apiCall("GET",   `${API_BASE}/scholarship-types/?is_active=true`);
 const createEnrollmentScholarship = (p)  => apiCall("POST",  `${API_BASE}/enrollment-scholarships/`, p);
+const sendEnrollmentEmail = (p) => apiCall("POST", `http://localhost:8003/api/send-enrollment-email/`, p);
 
 // ─── Style tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -325,33 +326,49 @@ export default function EnrollmentFormPage() {
     return "";
   }, [student, form, isSHS, isEdit]);
 
-  const handleSubmit = async () => {
-    setError("");
-    if (validationError) { setError(validationError); return; }
-    setSaving(true);
-    try {
-      const payload = nullify({ ...form, student: student.student_id }, ["strand", "semester"]);
-      if (isEdit) {
-        await updateEnrollment(id, payload);
-      } else {
-        const created = await createEnrollment(payload);
-        for (const stId of selectedScholarships) {
-          await createEnrollmentScholarship({
-            enrollment: created.enrollment_id,
-            scholarship_type: stId,
-            notes: scholarshipNotes || null,
-          }).catch((e) => console.error("scholarship attach failed", e));
+    const handleSubmit = async () => {
+      setError("");
+      if (validationError) { setError(validationError); return; }
+      setSaving(true);
+      console.log("Student object:", student);
+      try {
+        const payload = nullify({ ...form, student: student.student_id }, ["strand", "semester"]);
+        if (isEdit) { 
+          await updateEnrollment(id, payload);
+        } else {
+          const created = await createEnrollment(payload);
+
+          for (const stId of selectedScholarships) {
+            await createEnrollmentScholarship({
+              enrollment: created.enrollment_id,
+              scholarship_type: stId,
+              notes: scholarshipNotes || null,
+            }).catch((e) => console.error("scholarship attach failed", e));
+          }
+
+          // Send enrollment confirmation email (non-blocking)
+          if (student?.email) {
+            const fullName = [student.first_name, student.middle_name, student.last_name]
+              .filter(Boolean).join(" ");
+            sendEnrollmentEmail({
+              student_name: fullName,
+              student_email: student.email,
+              grade_level: form.grade_level,
+              section: form.section,
+              school_year: form.school_year,
+              school_level: form.school_level,
+            }).catch((e) => console.warn("Enrollment email failed (non-critical):", e));
+          }
         }
+
+        navigate("/enrollments");
+      } catch (err) {
+        console.error(err);
+        setError(err?.message || "Something went wrong. Please review the form.");
+      } finally {
+        setSaving(false);
       }
-      // ✓ navigate() keeps sessionStorage intact — no logout
-      navigate("/enrollments");
-    } catch (err) {
-      console.error(err);
-      setError(err?.message || "Something went wrong. Please review the form.");
-    } finally {
-      setSaving(false);
-    }
-  };
+    };
 
   const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
 
