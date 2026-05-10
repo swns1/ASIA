@@ -403,24 +403,26 @@ export default function StudentsPage() {
             flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)",
           }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif", letterSpacing: "-0.01em" }}>
-                Students
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>
+                Student
               </div>
               <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
                 {loading ? "Loading records…" : `${pageMeta.count.toLocaleString()} students registered`}
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            
               <button style={{
                 width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10,
                 background: "white", display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", color: "#9a7070", position: "relative",
-              }}>
+              }}> 
                 <i className="ti ti-bell" style={{ fontSize: 16 }} />
                 <span style={{
                   width: 8, height: 8, background: "#e03131", borderRadius: "50%",
                   position: "absolute", top: 6, right: 6, border: "2px solid white",
                 }} />
+                
               </button>
               <button
                 className="new-btn"

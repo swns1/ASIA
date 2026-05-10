@@ -423,7 +423,7 @@ export default function SubjectsPage() {
           {/* Topbar */}
           <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif", letterSpacing:"-0.01em" }}>Subjects</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>Subjects</div>
               <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
                 {loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in curriculum`}
               </div>
