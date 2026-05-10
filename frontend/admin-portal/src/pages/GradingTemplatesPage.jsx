@@ -42,6 +42,7 @@ const NAV = [
     { label: "Users",             icon: "ti-user-cog",     path: "/users"              },
     { label: "School Settings",   icon: "ti-settings",     path: "/settings"           },
     { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
+    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
   ]},
 ];
 
@@ -445,6 +446,30 @@ function DeleteModal({ template, onConfirm, onCancel }) {
   );
 }
 
+function LogoutModal({ onConfirm, onCancel }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
+      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
+        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
+        </div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
+          You'll be returned to the login page. Any unsaved changes will be lost.
+        </div>
+        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
+          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
+            Stay
+          </button>
+          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
+            Yes, logout
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
@@ -456,6 +481,8 @@ export default function GradingTemplatesPage() {
   const [levelFilter, setLevelFilter] = useState("all");
   const [modal,       setModal]       = useState(null);
   const [toDelete,    setToDelete]    = useState(null);
+
+  const [showLogout, setShowLogout] = useState(false);
 
   const fetchTemplates = useCallback(async (level = levelFilter) => {
     setLoading(true);
@@ -544,16 +571,28 @@ export default function GradingTemplatesPage() {
               </div>
             ))}
           </nav>
-          <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6", cursor:"pointer" }}>
-              <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
+            <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
+                  <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
+                </div>
+                <button
+                  title="Logout"
+                  onClick={() => setShowLogout(true)}
+                  style={{
+                    width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
+                    background:"white", display:"flex", alignItems:"center", justifyContent:"center",
+                    cursor:"pointer", color:"#c09090", transition:"all 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
+                >
+                  <i className="ti ti-logout" style={{ fontSize:14 }} />
+                </button>
               </div>
-              <i className="ti ti-chevron-right" style={{ fontSize:13, color:"#c0a0a0", marginLeft:"auto" }} />
             </div>
-          </div>
         </aside>
 
         {/* ── Main ── */}
@@ -661,6 +700,17 @@ export default function GradingTemplatesPage() {
       )}
       {toDelete && (
         <DeleteModal template={toDelete} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
+      )}
+
+      {showLogout && (
+        <LogoutModal
+          onConfirm={() => {
+            sessionStorage.removeItem("access_token");
+            sessionStorage.removeItem("refresh_token");
+            navigate("/");
+          }}
+          onCancel={() => setShowLogout(false)}
+        />
       )}
     </>
   );
