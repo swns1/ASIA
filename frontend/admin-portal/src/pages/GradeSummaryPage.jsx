@@ -498,7 +498,7 @@ export default function GradeSummaryPage() {
 
             {/* Page title */}
             <div>
-              <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif", letterSpacing:"-0.01em" }}>Grade Summary</div>
+              <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>Grade Summary</div>
               <div style={{ fontSize:13, color:"#b09090", marginTop:4 }}>View a student's complete grade report across all subjects and periods.</div>
             </div>
 
