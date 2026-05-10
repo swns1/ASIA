@@ -13,7 +13,9 @@ const NAV = [
       { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
       { label: "Students",    icon: "ti-users",             path: "/Students" },
       { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
+      { label: "Subjects",    icon: "ti-book",              path: "/subjects" },
       { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
+  
     ],
   },
   {
@@ -136,7 +138,7 @@ function SectionCard({ title, icon, children, badge }) {
           }}>
             <i className={`ti ${icon}`} style={{ fontSize: 16, color: "#e03131" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a"}}>
             {title}
           </span>
         </div>
@@ -411,7 +413,7 @@ export default function StudentDetailPage() {
 
                     {/* Name + identifiers */}
                     <div style={{ flex:1, minWidth:200 }}>
-                      <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display', serif", lineHeight:1.2, letterSpacing:"-0.01em" }}>
+                      <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1.2, letterSpacing:"-0.01em" }}>
                         {fullName}
                       </div>
                       <div style={{ fontSize:12, color:"#b09090", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
@@ -637,7 +639,7 @@ export default function StudentDetailPage() {
                               {(g.full_name ?? "?")[0].toUpperCase()}
                             </div>
                             <div>
-                              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display', serif" }}>{g.full_name}</div>
+                              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
                               <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
                             </div>
                           </div>
@@ -734,7 +736,7 @@ export default function StudentDetailPage() {
                             <i className="ti ti-school" style={{ fontSize:17, color:"#2563eb" }} />
                           </div>
                           <div>
-                            <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display', serif" }}>
+                            <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>
                               {s.school_name}
                             </div>
                             <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>School {i + 1}</div>
