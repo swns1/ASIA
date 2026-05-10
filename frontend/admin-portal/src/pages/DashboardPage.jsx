@@ -509,7 +509,7 @@ const s = {
 
   main:         { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
   topbar:       { background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle:  { fontSize: 15, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif", letterSpacing: "-0.01em" },
+  topbarTitle:  { fontSize: 15, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" },
   topbarSub:    { fontSize: 11.5, color: "#b09090", marginTop: 1 },
   iconBtn:      { width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", position: "relative" },
   badgeDot:     { width: 8, height: 8, background: "#e03131", borderRadius: "50%", position: "absolute", top: 6, right: 6, border: "2px solid white" },
