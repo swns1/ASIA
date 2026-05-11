@@ -12,6 +12,10 @@ import GradeEntryPage from "./pages/GradeEntryPage";
 import GradeSummaryPage from "./pages/GradeSummaryPage";
 import ScholarshipTypesPage from "./pages/ScholarshipTypesPage";
 import ScholarshipsPage from "./pages/ScholarshipsPage";
+import SchoolSettingsPage from "./pages/SchoolSettingsPage";
+import FeeSchedulesPage   from "./pages/FeeSchedulesPage";
+import InvoicesPage       from "./pages/InvoicesPage";
+import PaymentsPage       from "./pages/PaymentsPage";
 
 export default function App() {
   return (
@@ -33,6 +37,10 @@ export default function App() {
         <Route path="/grades/summary" element={<GradeSummaryPage />} />
         <Route path="/scholarship-types" element={<ScholarshipTypesPage />} />
         <Route path="/scholarships" element={<ScholarshipsPage />} />
+        <Route path="/settings"      element={<SchoolSettingsPage />} />
+        <Route path="/fee-schedules" element={<FeeSchedulesPage />} />
+        <Route path="/invoices"      element={<InvoicesPage />} />
+        <Route path="/payments"      element={<PaymentsPage />} />
       </Routes>
     </BrowserRouter>
   );

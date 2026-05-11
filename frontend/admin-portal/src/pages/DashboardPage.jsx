@@ -42,6 +42,7 @@ const NAV = [
       { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
       { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
       { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
+      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
     ],
   },
 ];
