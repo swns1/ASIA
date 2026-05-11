@@ -138,7 +138,7 @@ function ConfirmModal({ student, onConfirm, onCancel }) {
         }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a"}}>
           Delete Student?
         </div>
         <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
@@ -621,7 +621,7 @@ export default function StudentsPage() {
                               }}>
                                 <i className="ti ti-users-off" style={{ fontSize: 24, color: "#e08080" }} />
                               </div>
-                              <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600, fontFamily: "'Playfair Display', serif" }}>
+                              <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>
                                 No students found
                               </div>
                               <div style={{ fontSize: 12, color: "#b09090" }}>
