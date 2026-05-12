@@ -243,7 +243,7 @@ def _fetch_enrollment(enrollment_id: int):
         cur.execute(
             """
             SELECT enrollment_id, student_id, school_level, grade_level,
-                   school_year, enrollment_status, enrollment_date
+                   school_year, enrollment_status
               FROM enrollments
              WHERE enrollment_id = %s
             """,
@@ -259,7 +259,6 @@ def _fetch_enrollment(enrollment_id: int):
             "grade_level":       row[3],
             "school_year":       row[4],
             "enrollment_status": row[5],
-            "enrollment_date":   row[6],
         }
 
 

@@ -87,19 +87,53 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
   const [error,       setError]       = useState("");
   const [open,        setOpen]        = useState(false);
 
-  // Search students
-  useEffect(() => {
-    if (!search.trim()) { setStudents([]); return; }
-    setLoadingSt(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await getStudents({ search, page_size: 100 });
-        setStudents(data.results || []);
-      } catch { setStudents([]); }
-      finally { setLoadingSt(false); }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [search]);
+// Current school year helper
+const currentSY = (() => {
+  const now = new Date();
+  const yr = now.getFullYear();
+  return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+})();
+
+// Search enrolled students directly from enrollments for current S.Y.
+useEffect(() => {
+  if (!search.trim()) { setStudents([]); return; }
+  setLoadingSt(true);
+  const t = setTimeout(async () => {
+    try {
+      const data = await getEnrollments({
+        search,
+        enrollment_status: "enrolled",
+        school_year: currentSY,
+        page_size: 100,
+      });
+      const results = Array.isArray(data) ? data : data?.results ?? [];
+      // Map enrollments to student-like objects so the rest of the modal works
+      setStudents(results.map((en) => ({
+        student_id:   en.student,
+        first_name:   en.student_name?.split(" ")[0] ?? "",
+        last_name:    en.student_name?.split(" ").slice(-1)[0] ?? "",
+        lrn:          en.lrn ?? "",
+        _enrollment:  en, // carry the enrollment so we can skip step 2
+      })));
+    } catch { setStudents([]); }
+    finally { setLoadingSt(false); }
+  }, 280);
+  return () => clearTimeout(t);
+}, [search]);
+
+// If student came from enrollment search, pre-load their enrollment
+useEffect(() => {
+  if (!student) { setEnrollments([]); setEnrollment(null); return; }
+  // If we already have the enrollment attached (from search), use it directly
+  if (student._enrollment) {
+    setEnrollments([student._enrollment]);
+    setEnrollment(student._enrollment);
+    return;
+  }
+  getEnrollments({ student: student.student_id, enrollment_status: "enrolled", school_year: currentSY, page_size: 20 })
+    .then((d) => setEnrollments(Array.isArray(d) ? d : d?.results ?? []))
+    .catch(() => setEnrollments([]));
+}, [student]);
 
   // Load enrollments when student selected
   useEffect(() => {
