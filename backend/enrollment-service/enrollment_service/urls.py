@@ -16,5 +16,6 @@ urlpatterns = [
     path("api/", include("scholarships.urls")),
     path("api/", include("grading.urls")),
     path("api/", include("grades.urls")),
+    path("api/", include("ai.urls")),
     path("api/send-enrollment-email/", send_enrollment_email, name="send_enrollment_email")
 ]

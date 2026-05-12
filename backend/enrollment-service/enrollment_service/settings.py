@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 
     # local
     "accounts",
+    "ai",
     "enrollments",
     "subjects",
     "grades",
