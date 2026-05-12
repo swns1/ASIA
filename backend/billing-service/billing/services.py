@@ -261,7 +261,6 @@ def _fetch_enrollment(enrollment_id: int):
             "enrollment_status": row[5],
         }
 
-
 def _fetch_enrollment_scholarships(enrollment_id: int):
     """Returns list of {discount_mode, discount_value, scholarship_name}."""
     from django.db import connection

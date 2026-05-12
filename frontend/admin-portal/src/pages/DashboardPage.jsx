@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const STUDENT_API    = "http://localhost:8000";
@@ -39,6 +40,7 @@ const NAV = [
     section: "Settings",
     items: [
       { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
+      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
       { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
       { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
       { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
@@ -163,6 +165,11 @@ function LogoutModal({ onConfirm, onCancel }) {
 export default function DashboardPage() {
   const navigate  = useNavigate();
   const schoolYear = currentSchoolYear();
+  const currentUser = getCurrentUser();
+  const navGroups = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.adminOnly || canViewAuditTrail(currentUser)),
+  }));
 
   // ── state ──
   const [loading,    setLoading]    = useState(true);
@@ -204,7 +211,7 @@ export default function DashboardPage() {
       ]);
     } catch (e) {
       console.error("Dashboard fetch error:", e);
-      setError("Some data failed to load.");
+      setError("");
     } finally {
       setLoading(false);
     }
@@ -311,7 +318,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {NAV.map((group) => (
+            {navGroups.map((group) => (
               <div key={group.section} style={{ marginBottom:6 }}>
                 <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
                 {group.items.map((item) => {
@@ -331,10 +338,10 @@ export default function DashboardPage() {
           </nav>
             <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
+                  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
                 </div>
                 <button
                   title="Logout"
@@ -619,8 +626,7 @@ export default function DashboardPage() {
       {showLogout && (
         <LogoutModal
           onConfirm={() => {
-            sessionStorage.removeItem("access_token");
-            sessionStorage.removeItem("refresh_token");
+            clearAuthSession();
             navigate("/");
           }}
           onCancel={() => setShowLogout(false)}

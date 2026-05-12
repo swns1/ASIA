@@ -16,12 +16,14 @@ import SchoolSettingsPage from "./pages/SchoolSettingsPage";
 import FeeSchedulesPage   from "./pages/FeeSchedulesPage";
 import InvoicesPage       from "./pages/InvoicesPage";
 import PaymentsPage       from "./pages/PaymentsPage";
+import AuditTrailPage     from "./pages/AuditTrailPage";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/students/new" element={<StudentFormPage />} />
@@ -41,6 +43,7 @@ export default function App() {
         <Route path="/fee-schedules" element={<FeeSchedulesPage />} />
         <Route path="/invoices"      element={<InvoicesPage />} />
         <Route path="/payments"      element={<PaymentsPage />} />
+        <Route path="/audit-trail"   element={<AuditTrailPage />} />
       </Routes>
     </BrowserRouter>
   );

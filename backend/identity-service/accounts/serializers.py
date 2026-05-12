@@ -1,5 +1,8 @@
 from rest_framework import serializers
+
+from .models import AuditLog
 from .services.auth_service import find_user
+
 
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField()
@@ -19,3 +22,21 @@ class LoginSerializer(serializers.Serializer):
 
         attrs["user"] = user
         return attrs
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AuditLog
+        fields = (
+            "log_id",
+            "user_id",
+            "user_name",
+            "user_role",
+            "action",
+            "module",
+            "occurred_at",
+            "status",
+            "details",
+            "ip_address",
+            "metadata",
+        )
