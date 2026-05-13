@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -682,8 +683,47 @@ export default function GradeSummaryPage() {
                     </div>
                   </div>
                 )}
+                            {/* ── AI Insight Panel ── */}
+                {enrollment && !loading && grades.length > 0 && (
+                  <div style={{ marginTop:14 }}>
+                    <AIInsightPanel
+                      title="AI Grade Interpretation"
+                      description="Gemini-powered analysis of this student's academic performance"
+                      disabled={grades.length === 0}
+                      onFetch={() => {
+                        const subjectMap = {};
+                        subjects.forEach((s) => { subjectMap[s.subject_id] = s.subject_name; });
+
+                        const gradesBySubject = {};
+                        grades.forEach((g) => {
+                          const name = subjectMap[g.subject] ?? `Subject #${g.subject}`;
+                          if (!gradesBySubject[name]) gradesBySubject[name] = {};
+                          gradesBySubject[name][g.grading_period] = parseFloat(g.numeric_grade);
+                        });
+
+                        const overallAvg = grades.length > 0
+                          ? grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length
+                          : null;
+
+                        return callGemini("grade_report", {
+                          student_name:      fullName,
+                          grade_level:       enrollment.grade_level,
+                          school_level:      enrollment.school_level,
+                          section:           enrollment.section,
+                          school_year:       enrollment.school_year,
+                          overall_average:   overallAvg?.toFixed(2),
+                          passed_subjects:   grades.filter((g) => parseFloat(g.numeric_grade) >= 75).length,
+                          failed_subjects:   grades.filter((g) => parseFloat(g.numeric_grade) < 75).length,
+                          total_grades:      grades.length,
+                          grades_by_subject: gradesBySubject,
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
+
           </div>
         </div>
       </div>
