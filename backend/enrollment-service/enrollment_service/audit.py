@@ -32,6 +32,8 @@ MODULE_LABELS = {
     "invoices": "Invoices",
     "payments": "Payments",
     "installments": "Installments",
+    "requirement-types": "Requirements",
+    "student-requirement-submissions": "Requirements",
 }
 
 RECORD_LABELS = {
@@ -57,6 +59,8 @@ RECORD_LABELS = {
     "discount-types": "discount type",
     "invoices": "invoice",
     "payments": "payment",
+    "requirement-types": "requirement type",
+    "student-requirement-submissions": "student requirement submission",
 }
 
 PLURAL_RECORDS = {"school-settings"}

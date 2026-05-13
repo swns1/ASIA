@@ -17,7 +17,7 @@ const NAV = [
       { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
       { label: "Subjects",    icon: "ti-book",              path: "/subjects" },
       { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
-  
+      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
     ],
   },
   {
