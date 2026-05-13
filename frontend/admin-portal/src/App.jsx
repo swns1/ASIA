@@ -17,6 +17,7 @@ import FeeSchedulesPage   from "./pages/FeeSchedulesPage";
 import InvoicesPage       from "./pages/InvoicesPage";
 import PaymentsPage       from "./pages/PaymentsPage";
 import AuditTrailPage     from "./pages/AuditTrailPage";
+import RequirementsPage   from "./pages/RequirementsPage";
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/invoices"      element={<InvoicesPage />} />
         <Route path="/payments"      element={<PaymentsPage />} />
         <Route path="/audit-trail"   element={<AuditTrailPage />} />
+        <Route path="/requirements"  element={<RequirementsPage />} />
       </Routes>
     </BrowserRouter>
   );
