@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import { getVisibleNavGroups } from "../utils/navigation";
+import { clearAuthSession } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -472,7 +473,7 @@ export default function GradeSummaryPage() {
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {NAV.map((group) => (
+            {getVisibleNavGroups(NAV).map((group) => (
               <div key={group.section} style={{ marginBottom:6 }}>
                 <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
                 {group.items.map((item) => {
@@ -681,49 +682,6 @@ export default function GradeSummaryPage() {
                     </div>
                   </div>
                 )}
-
-                {/* ── AI Insight Panel ── */}
-                {enrollment && !loading && grades.length > 0 && (
-                  <div style={{ marginTop:14 }}>
-                    <AIInsightPanel
-                      title="AI Grade Interpretation"
-                      description="Gemini-powered analysis of this student's academic performance"
-                      disabled={grades.length === 0}
-                      onFetch={() => {
-                        // Build per-subject grade breakdown for Gemini
-                        const subjectMap = {};
-                        subjects.forEach((s) => { subjectMap[s.subject_id] = s.subject_name; });
-
-                        const gradesBySubject = {};
-                        grades.forEach((g) => {
-                          const name = subjectMap[g.subject] ?? `Subject #${g.subject}`;
-                          if (!gradesBySubject[name]) gradesBySubject[name] = {};
-                          gradesBySubject[name][g.grading_period] = parseFloat(g.numeric_grade);
-                        });
-
-                        const overallAvg = grades.length > 0
-                          ? grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length
-                          : null;
-
-                        const passedCount = grades.filter((g) => parseFloat(g.numeric_grade) >= 75).length;
-                        const failedCount = grades.filter((g) => parseFloat(g.numeric_grade) < 75).length;
-
-                        return callGemini("grade_report", {
-                          student_name:    fullName,
-                          grade_level:     enrollment.grade_level,
-                          school_level:    enrollment.school_level,
-                          section:         enrollment.section,
-                          school_year:     enrollment.school_year,
-                          overall_average: overallAvg?.toFixed(2),
-                          passed_subjects: passedCount,
-                          failed_subjects: failedCount,
-                          total_grades:    grades.length,
-                          grades_by_subject: gradesBySubject,
-                        });
-                      }}
-                    />
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -733,8 +691,7 @@ export default function GradeSummaryPage() {
       {showLogout && (
         <LogoutModal
           onConfirm={() => {
-            sessionStorage.removeItem("access_token");
-            sessionStorage.removeItem("refresh_token");
+            clearAuthSession();
             navigate("/");
           }}
           onCancel={() => setShowLogout(false)}

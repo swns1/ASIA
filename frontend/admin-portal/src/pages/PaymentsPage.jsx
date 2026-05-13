@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { getVisibleNavGroups } from "../utils/navigation";
+import { clearAuthSession } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const BILLING_API = "http://localhost:8002/api";
@@ -138,26 +140,36 @@ function RecordPaymentModal({ preloadedInvoiceId, onClose, onSaved }) {
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const handleSave = async () => {
-    if (!invoice)                { setError("Select an invoice."); return; }
-    if (!form.amount_paid || parseFloat(form.amount_paid) <= 0) { setError("Amount must be greater than 0."); return; }
-    const balance = parseFloat(invoice.balance ?? 0);
-    if (parseFloat(form.amount_paid) > balance + 0.01) { setError(`Amount exceeds balance of ${fmt(balance)}.`); return; }
-    setSaving(true); setError("");
-    try {
-      await createPayment({
-        invoice:          invoice.invoice_id,
-        amount_paid:      parseFloat(form.amount_paid),
-        payment_method:   form.payment_method,
-        payment_date:     form.payment_date,
-        reference_number: form.reference_number.trim() || null,
-        notes:            form.notes.trim() || null,
-      });
-      onSaved();
-      onClose();
-    } catch (e) { setError(e.message || "Failed to record payment."); }
-    finally { setSaving(false); }
-  };
+const handleSave = async () => {
+  if (!invoice)                { setError("Select an invoice."); return; }
+
+  const netAmount  = parseFloat(invoice.net_amount ?? 0);
+  const totalPaid  = parseFloat(invoice.total_paid ?? 0);
+  const balance    = parseFloat(invoice.balance ?? (netAmount - totalPaid));
+
+  if (!form.amount_paid || parseFloat(form.amount_paid) <= 0) {
+    setError("Amount must be greater than 0."); return;
+  }
+  if (parseFloat(form.amount_paid) > balance + 0.01) {
+    setError(`Amount exceeds remaining balance of ${fmt(balance)}. Maximum payable is ${fmt(balance)}.`);
+    return;
+  }
+
+  setSaving(true); setError("");
+  try {
+    await createPayment({
+      invoice:          invoice.invoice_id,
+      amount_paid:      parseFloat(form.amount_paid),
+      payment_method:   form.payment_method,
+      payment_date:     form.payment_date,
+      reference_number: form.reference_number.trim() || null,
+      notes:            form.notes.trim() || null,
+    });
+    onSaved();
+    onClose();
+  } catch (e) { setError(e.message || "Failed to record payment."); }
+  finally { setSaving(false); }
+};
 
   const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
   const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
@@ -274,7 +286,9 @@ function RecordPaymentModal({ preloadedInvoiceId, onClose, onSaved }) {
               <label style={lbl}>Amount Paid *</label>
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#b09090", fontWeight:600 }}>₱</span>
-                <input type="number" min="0.01" step="0.01" max={balance} value={form.amount_paid}
+                <input type="number" min="0.01" step="0.01"
+                  max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
+                  value={form.amount_paid}
                   onChange={(e) => setF("amount_paid", e.target.value)}
                   placeholder="0.00"
                   style={{ ...inp, paddingLeft:26, textAlign:"right" }} />
@@ -408,7 +422,7 @@ export default function PaymentsPage() {
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {NAV.map((group) => (
+            {getVisibleNavGroups(NAV).map((group) => (
               <div key={group.section} style={{ marginBottom:6 }}>
                 <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
                 {group.items.map((item) => {
@@ -582,7 +596,7 @@ export default function PaymentsPage() {
 
       {showLogout && (
         <LogoutModal
-          onConfirm={() => { sessionStorage.removeItem("access_token"); sessionStorage.removeItem("refresh_token"); navigate("/"); }}
+          onConfirm={() => { clearAuthSession(); navigate("/"); }}
           onCancel={() => setShowLogout(false)}
         />
       )}

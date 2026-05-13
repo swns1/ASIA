@@ -2,6 +2,7 @@ import { useState } from "react";
 import { login } from "../api/identityApi";
 import logo from "../assets/south-lakes-logo.png";
 import { useNavigate } from "react-router-dom";
+import { setCurrentUser } from "../utils/auth";
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -22,6 +23,7 @@ export default function LoginPage() {
     try {
       const res = await login({ identifier, password, rememberMe });
       sessionStorage.setItem("access_token", res.access);
+      setCurrentUser(res.user);
 
       if (rememberMe) {
         localStorage.setItem("remember_login_until", Date.now() + ONE_WEEK_MS);

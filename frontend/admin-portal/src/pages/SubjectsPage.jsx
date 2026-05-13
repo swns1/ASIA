@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { getVisibleNavGroups } from "../utils/navigation";
+import { clearAuthSession } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -415,7 +417,7 @@ export default function SubjectsPage() {
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {NAV.map((group) => (
+            {getVisibleNavGroups(NAV).map((group) => (
               <div key={group.section} style={{ marginBottom:6 }}>
                 <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
                 {group.items.map((item) => {
@@ -694,8 +696,7 @@ export default function SubjectsPage() {
       {showLogout && (
         <LogoutModal
           onConfirm={() => {
-            sessionStorage.removeItem("access_token");
-            sessionStorage.removeItem("refresh_token");
+            clearAuthSession();
             navigate("/");
           }}
           onCancel={() => setShowLogout(false)}

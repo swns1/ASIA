@@ -4,6 +4,8 @@ import { getStudent } from "../api/studentApi";
 import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
+import { getVisibleNavGroups } from "../utils/navigation";
+import { clearAuthSession } from "../utils/auth";
 
 // ── Nav config (shared with other pages) ─────────────────────────────────────
 const NAV = [
@@ -301,7 +303,7 @@ export default function StudentDetailPage() {
           </div>
 
           <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {NAV.map((group) => (
+            {getVisibleNavGroups(NAV).map((group) => (
               <div key={group.section} style={{ marginBottom:6 }}>
                 <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>
                   {group.section}
@@ -799,8 +801,7 @@ export default function StudentDetailPage() {
       {showLogout && (
         <LogoutModal
           onConfirm={() => {
-            sessionStorage.removeItem("access_token");
-            sessionStorage.removeItem("refresh_token");
+            clearAuthSession();
             navigate("/");
           }}
           onCancel={() => setShowLogout(false)}

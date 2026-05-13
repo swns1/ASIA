@@ -172,12 +172,26 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        # default payment_date to today if not provided
         if not serializer.validated_data.get("payment_date"):
             serializer.validated_data["payment_date"] = timezone.now().date()
-        # created_at is auto-populated by the model
+
+        # ── Guard: prevent overpayment ──
+        invoice_id = serializer.validated_data["invoice"].invoice_id
+        invoice    = StudentInvoice.objects.get(invoice_id=invoice_id)
+        from .serializers import StudentInvoiceSerializer
+        inv_data   = StudentInvoiceSerializer(invoice).data
+        net_amount = float(inv_data.get("net_amount", 0))
+        total_paid = float(inv_data.get("total_paid", 0))
+        balance    = net_amount - total_paid
+        amount     = float(serializer.validated_data["amount_paid"])
+
+        if amount > balance + 0.01:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                "amount_paid": f"Payment of ₱{amount:,.2f} exceeds remaining balance of ₱{balance:,.2f}."
+            })
+
         payment = serializer.save()
-        # Distribute across installments
         apply_payment(payment.invoice_id, payment.amount_paid)
 
 

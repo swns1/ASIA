@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const identityClient = axios.create({
-  baseURL: "http://localhost:8001/api/auth",
+  baseURL: import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth",
   withCredentials: true, // required for httpOnly refresh cookies
   timeout: 10000,
 });
