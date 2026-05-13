@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import editIcon from "../assets/edit.svg";
+import trashIcon from "../assets/trash.svg";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -408,9 +413,8 @@ export default function SubjectsPage() {
         <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
           <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" }}>
-                <i className="ti ti-school" style={{ fontSize:17, color:"white" }} />
-              </div>
+                        <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
+              
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
@@ -454,7 +458,7 @@ export default function SubjectsPage() {
                   onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
                 >
-                  <i className="ti ti-logout" style={{ fontSize:14 }} />
+                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
                 </button>
               </div>
             </div>
@@ -472,10 +476,10 @@ export default function SubjectsPage() {
               </div>
             </div>
             <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <button style={{ width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" }}>
+              {/* <button style={{ width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" }}>
                 <i className="ti ti-bell" style={{ fontSize:16 }} />
                 <span style={{ width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" }} />
-              </button>
+              </button> */}
               <button className="new-btn"
                 style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
                 onClick={() => setModal({ mode: "create" })}>
@@ -637,10 +641,10 @@ export default function SubjectsPage() {
                               <td style={{ padding:"13px 14px", borderBottom:"1px solid #f9f0f0", verticalAlign:"middle" }} onClick={(e) => e.stopPropagation()}>
                                 <div style={{ display:"flex", gap:4 }}>
                                   <button className="row-action" title="Edit" onClick={() => setModal({ mode:"edit", subject: sub })}>
-                                    <i className="ti ti-pencil" style={{ fontSize:13 }} />
+                                    <img src={editIcon} alt="Edit" style={{ width:13, height:13 }} />
                                   </button>
                                   <button className="row-action" title="Delete" style={{ color:"#c09090" }} onClick={() => setToDelete(sub)}>
-                                    <i className="ti ti-trash" style={{ fontSize:13 }} />
+                                    <img src={trashIcon} alt="Delete" style={{ width:13, height:13 }} />
                                   </button>
                                 </div>
                               </td>

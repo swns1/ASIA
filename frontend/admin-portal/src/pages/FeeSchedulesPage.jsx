@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const BILLING_API = "http://localhost:8002/api";
@@ -83,7 +86,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
         <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>You'll be returned to the login page. Any unsaved changes will be lost.</div>
         <div style={{ display:"flex", gap:10, width:"100%" }}>
           <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>Stay</button>
@@ -125,7 +128,7 @@ function NewScheduleModal({ onClose, onSaved }) {
               <i className="ti ti-cash" style={{ fontSize:18, color:"#e03131" }} />
             </div>
             <div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>New Fee Schedule</div>
+              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>New Fee Schedule</div>
               <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Select a level and grade to create a fee structure</div>
             </div>
           </div>
@@ -310,7 +313,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
             <i className={`ti ${lvl.icon}`} style={{ fontSize:20, color:lvl.color }} />
           </div>
           <div>
-            <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>{schedule.grade_level}</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>{schedule.grade_level}</div>
             <div style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:99, background:lvl.bg, color:lvl.color, marginTop:3 }}>
               <i className={`ti ${lvl.icon}`} style={{ fontSize:11 }} />{lvl.label}
             </div>
@@ -442,9 +445,7 @@ export default function FeeSchedulesPage() {
         <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
           <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" }}>
-                <i className="ti ti-school" style={{ fontSize:17, color:"white" }} />
-              </div>
+                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
@@ -481,7 +482,7 @@ export default function FeeSchedulesPage() {
                 style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#c09090", transition:"all 0.12s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}>
-                <i className="ti ti-logout" style={{ fontSize:14 }} />
+                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
               </button>
             </div>
           </div>
@@ -493,7 +494,7 @@ export default function FeeSchedulesPage() {
           {/* Topbar */}
           <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Fee Schedules</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>Fee Schedules</div>
               <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
                 {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} configured`}
               </div>
@@ -563,7 +564,7 @@ export default function FeeSchedulesPage() {
                   <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
                     <i className="ti ti-cash" style={{ fontSize:28, color:"#e08080" }} />
                   </div>
-                  <div style={{ fontSize:16, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>Select a fee schedule</div>
+                  <div style={{ fontSize:16, color:"#7a5050", fontWeight:600}}>Select a fee schedule</div>
                   <div style={{ fontSize:13, color:"#b09090" }}>Click a schedule on the left to view and edit its items</div>
                 </div>
               ) : (

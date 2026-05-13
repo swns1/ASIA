@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { login } from "../api/identityApi";
-import logo from "../assets/south-lakes-logo.png";
+import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
 import { setCurrentUser } from "../utils/auth";
+import logoutIcon from "../assets/logout.svg";
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -76,7 +77,7 @@ export default function LoginPage() {
         }}>
           <img src={logo} alt="South Lakes Integrated School" style={{ height: 200, width: 200, objectFit: "contain" }} />
         </div>
-        <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 26, color: "#1a1a1a", margin: "0 0 4px", fontWeight: 400 }}>
+        <h1 style={{ fontSize: 26, color: "#1a1a1a", margin: "0 0 4px", fontWeight: 400 }}>
           Good to see you again
         </h1>
         <p style={{ fontSize: 13, color: "#a0756e", margin: 0 }}>

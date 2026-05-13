@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchAuditLogs } from "../api/auditTrailApi";
 import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 const NAV = [
   { section: "Main", items: [
@@ -251,7 +254,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width:56, height:56, borderRadius:14, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <i className="ti ti-logout" style={{ fontSize:24, color:C.red }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:C.text, fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:17, fontWeight:700, color:C.text}}>Log out?</div>
         <div style={{ fontSize:13, color:C.muted, textAlign:"center", lineHeight:1.7 }}>You'll be returned to the login page. Any unsaved changes will be lost.</div>
         <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
           <button onClick={onCancel} style={s.secondaryBtn}>Stay</button>
@@ -270,7 +273,7 @@ function AccessDenied({ navigate }) {
         <div style={{ width:58, height:58, borderRadius:16, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
           <i className="ti ti-shield-lock" style={{ fontSize:26, color:C.red }} />
         </div>
-        <div style={{ fontSize:18, fontWeight:700, color:C.text, fontFamily:"'Playfair Display',serif" }}>Access denied</div>
+        <div style={{ fontSize:18, fontWeight:700, color:C.text}}>Access denied</div>
         <div style={{ fontSize:13, color:C.muted, lineHeight:1.7, marginTop:8 }}>Only Admin and Super Admin users can view log records.</div>
         <button onClick={() => navigate("/dashboard")} style={{ ...s.primaryBtn, marginTop:22 }}>
           <i className="ti ti-arrow-left" style={{ fontSize:14 }} />Back to Dashboard
@@ -376,7 +379,9 @@ export default function AuditTrailPage() {
         <aside style={s.sidebar}>
           <div style={s.brandWrap}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={s.brandIcon}><i className="ti ti-school" style={{ fontSize:17, color:"white" }} /></div>
+              <div style={s.brandIcon}>
+                <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
+              </div>
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:C.text }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:C.pale, marginTop:1 }}>Admin Portal</div>
@@ -414,7 +419,7 @@ export default function AuditTrailPage() {
                 <div style={s.userRole}>{currentUser?.role || "super_admin"}</div>
               </div>
               <button title="Logout" onClick={() => setShowLogout(true)} style={s.logoutBtn}>
-                <i className="ti ti-logout" style={{ fontSize:14 }} />
+                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
               </button>
             </div>
           </div>
@@ -649,7 +654,6 @@ const s = {
   centerShell: { minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", padding:24 },
   sidebar: { width:224, flexShrink:0, background:C.white, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" },
   brandWrap: { padding:"22px 18px 18px", borderBottom:`1px solid ${C.border}` },
-  brandIcon: { width:36, height:36, borderRadius:10, background:`linear-gradient(135deg,${C.red},${C.redDark})`, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" },
   nav: { flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" },
   navSection: { fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 },
   navItem: { display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, cursor:"pointer" },
@@ -660,7 +664,7 @@ const s = {
   logoutBtn: { width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:C.white, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#c09090" },
   main: { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   topbar: { background:C.white, borderBottom:`1px solid ${C.border}`, padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize:16, fontWeight:700, color:C.text, fontFamily:"'Playfair Display',serif" },
+  topbarTitle: { fontSize:16, fontWeight:700, color:C.text},
   topbarSub: { fontSize:11.5, color:C.pale, marginTop:1 },
   content: { flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 },
   primaryBtn: { display:"inline-flex", alignItems:"center", justifyContent:"center", gap:8, background:`linear-gradient(135deg,${C.red},${C.redDark})`, color:C.white, border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.24)" },
@@ -673,7 +677,7 @@ const s = {
   statValue: { fontSize:26, fontWeight:700, color:C.text, lineHeight:1 },
   panel: { background:C.white, border:`1px solid ${C.border}`, borderRadius:16, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" },
   panelHeader: { padding:"16px 18px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" },
-  panelTitle: { fontSize:14, fontWeight:700, color:C.text, fontFamily:"'Playfair Display',serif" },
+  panelTitle: { fontSize:14, fontWeight:700, color:C.text},
   filters: { display:"grid", gridTemplateColumns:"1.1fr repeat(4, minmax(110px, 0.7fr))", gap:10, padding:"14px 18px", borderBottom:`1px solid ${C.softBorder}`, background:"#fffdfd" },
   label: { fontSize:10.5, color:"#9f7777", textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700 },
   input: { width:"100%", height:36, border:"1.5px solid #f0ceca", borderRadius:10, padding:"0 10px", background:"#fffbfb", color:C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none" },

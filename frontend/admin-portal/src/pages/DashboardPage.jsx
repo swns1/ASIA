@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
+import manIcon from "../assets/man.svg";
+import trophyIcon from "../assets/trophy.svg";
+import calendarIcon from "../assets/calendar.svg";
+import bookIcon from "../assets/book.svg";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const STUDENT_API    = "http://localhost:8000";
@@ -96,7 +103,7 @@ const Sk = ({ w = "100%", h = 18, r = 6 }) => (
 );
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, chipText, chipType, loading }) {
+function StatCard({ label, value, icon, imgSrc, chipText, chipType, loading }) {
   const chips = {
     up:      { bg: "#eaf3de", color: "#3b6d11" },
     down:    { bg: "#fcebeb", color: "#a32d2d" },
@@ -109,7 +116,10 @@ function StatCard({ label, value, icon, chipText, chipType, loading }) {
       <div style={s.statTop}>
         <span style={s.statLabel}>{label}</span>
         <div style={s.statIcon}>
-          <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
+          {imgSrc
+            ? <img src={imgSrc} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />
+            : <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
+          }
         </div>
       </div>
       {loading ? <Sk h={30} w="60%" /> : <div style={s.statValue}>{value}</div>}
@@ -122,7 +132,6 @@ function StatCard({ label, value, icon, chipText, chipType, loading }) {
     </div>
   );
 }
-
 // ── Panel ─────────────────────────────────────────────────────────────────────
 function Panel({ title, action, onAction, children }) {
   return (
@@ -143,7 +152,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
         <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
           You'll be returned to the login page. Any unsaved changes will be lost.
         </div>
@@ -309,9 +318,7 @@ export default function DashboardPage() {
         <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
           <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" }}>
-                <i className="ti ti-school" style={{ fontSize:17, color:"white" }} />
-              </div>
+                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
@@ -355,7 +362,7 @@ export default function DashboardPage() {
                   onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
                 >
-                  <i className="ti ti-logout" style={{ fontSize:14 }} />
+                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
                 </button>
               </div>
             </div>
@@ -370,15 +377,18 @@ export default function DashboardPage() {
               <div style={s.topbarTitle}>Dashboard</div>
               <div style={s.topbarSub}>S.Y. {schoolYear} · {new Date().toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
             </div>
-            <div style={{ display:"flex", gap:8 }}>
+            {/* <div style={{ display:"flex", gap:8 }}>
               <button className="icon-btn" style={s.iconBtn}>
-                <i className="ti ti-bell" style={{ fontSize:17 }} />
-                <span style={s.badgeDot} />
+                <img
+                  src="/path/to/your-image.png"
+                  alt="icon"
+                  style={{ width: 20, height: 20, objectFit: "contain" }}
+                />
               </button>
               <button className="icon-btn" style={s.iconBtn} onClick={() => navigate("/students")}>
                 <i className="ti ti-search" style={{ fontSize:17 }} />
               </button>
-            </div>
+            </div> */}
           </div>
 
           {/* Content */}
@@ -394,25 +404,29 @@ export default function DashboardPage() {
             {/* ── Stat cards ── */}
             <div style={s.statGrid}>
               <StatCard
-                label="Total Students" icon="ti-users"
+                label="Total Students" 
+                imgSrc={manIcon}
                 value={totalStudents.toLocaleString()}
                 chipText={`${activeStudents.toLocaleString()} active`}
                 chipType="up" loading={loading}
               />
               <StatCard
-                label="Enrolled this S.Y." icon="ti-clipboard-check"
+                label="Enrolled this S.Y."
+                imgSrc={calendarIcon}
                 value={enrolledCount.toLocaleString()}
                 chipText={`${enrollmentRate}% of total`}
                 chipType="neutral" loading={loading}
               />
               <StatCard
-                label="Pending Enrollment" icon="ti-clock"
+                label="Pending Enrollment"
+                imgSrc={bookIcon}
                 value={pendingCount.toLocaleString()}
                 chipText={pendingCount > 0 ? "needs action" : "all clear"}
                 chipType={pendingCount > 0 ? "down" : "up"} loading={loading}
               />
               <StatCard
-                label="Scholarships Awarded" icon="ti-award"
+                label="Scholarships Awarded"
+                imgSrc={trophyIcon}
                 value={scholarshipCount.toLocaleString()}
                 chipText={`${subjectCount} subjects`}
                 chipType="info" loading={loading}
@@ -642,7 +656,7 @@ const s = {
   shell:       { display:"flex", height:"100vh", background:"#fdf8f6", fontFamily:"'DM Sans',sans-serif", overflow:"hidden" },
   main:        { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   topbar:      { background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize:15, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif", letterSpacing:"-0.01em" },
+  topbarTitle: { fontSize:15, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" },
   topbarSub:   { fontSize:11.5, color:"#b09090", marginTop:1 },
   iconBtn:     { width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" },
   badgeDot:    { width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" },

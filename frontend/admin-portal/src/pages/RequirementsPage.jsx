@@ -9,6 +9,9 @@ import {
   uploadRequirement,
 } from "../api/requirementApi";
 import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 const NAV = [
@@ -34,6 +37,7 @@ const NAV = [
   {
     section: "Settings",
     items: [
+      { label: "Users",   icon: "ti-shield-lock",       path: "/users" },
       { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
       { label: "School Settings",   icon: "ti-settings",         path: "/settings" },
       { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
@@ -101,7 +105,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-logout" style={{ fontSize: 24, color: C.red }} />
         </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.text}}>Log out?</div>
         <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.7 }}>You'll be returned to the login page. Any unsaved changes will be lost.</div>
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
           <button onClick={onCancel} style={s.secondaryBtn}>Stay</button>
@@ -188,7 +192,7 @@ function UploadModal({ requirement, studentId, onClose, onSuccess }) {
       <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
         <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text}}>
               {isReplace ? "Replace" : "Upload"} Document
             </div>
             <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{requirement?.requirement_name}</div>
@@ -499,7 +503,9 @@ export default function RequirementsPage() {
         <aside style={s.sidebar}>
           <div style={s.brandWrap}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={s.brandIcon}><i className="ti ti-school" style={{ fontSize: 17, color: "white" }} /></div>
+              <div style={s.brandIcon}>
+                <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
+              </div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>South Lakes IS</div>
                 <div style={{ fontSize: 11, color: C.pale, marginTop: 1 }}>Admin Portal</div>
@@ -539,7 +545,7 @@ export default function RequirementsPage() {
               <button title="Logout" onClick={() => setShowLogout(true)} style={s.logoutBtn}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
-                <i className="ti ti-logout" style={{ fontSize: 14 }} />
+                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
               </button>
             </div>
           </div>
@@ -565,7 +571,7 @@ export default function RequirementsPage() {
             {/* ── Student search ── */}
             <section style={{ ...s.panel, position: "relative", zIndex: 100 }}>
               <div style={{ padding: "18px 22px" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: "'Playfair Display',serif" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12}}>
                   <i className="ti ti-search" style={{ fontSize: 15, color: C.red, marginRight: 8 }} />Search Student
                 </div>
 
@@ -718,7 +724,7 @@ export default function RequirementsPage() {
                   <div style={{ width: 72, height: 72, borderRadius: 20, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
                     <i className="ti ti-users-group" style={{ fontSize: 32, color: "#e8a0a0" }} />
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.muted, fontFamily: "'Playfair Display',serif" }}>No student selected</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.muted}}>No student selected</div>
                   <div style={{ fontSize: 13, color: C.pale, marginTop: 6, maxWidth: 300, lineHeight: 1.7 }}>
                     Search for a student above to view and manage their requirement documents.
                   </div>
@@ -783,7 +789,6 @@ const s = {
   shell:       { display: "flex", height: "100vh", background: C.bg, fontFamily: "'DM Sans',sans-serif", overflow: "hidden" },
   sidebar:     { width: 224, flexShrink: 0, background: C.white, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" },
   brandWrap:   { padding: "22px 18px 18px", borderBottom: `1px solid ${C.border}` },
-  brandIcon:   { width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,#e03131,#c92a2a)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(224,49,49,0.3)" },
   nav:         { flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
   navSection:  { fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 },
   navItem:     { display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, cursor: "pointer" },
@@ -794,12 +799,12 @@ const s = {
   logoutBtn:   { width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: C.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "all 0.12s" },
   main:        { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
   topbar:      { background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" },
+  topbarTitle: { fontSize: 16, fontWeight: 700, color: C.text},
   topbarSub:   { fontSize: 11.5, color: C.pale, marginTop: 1 },
   content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 },
   panel:       { background: C.white, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "visible", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" },
   panelHeader: { padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" },
-  panelTitle:  { fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" },
+  panelTitle:  { fontSize: 14, fontWeight: 700, color: C.text},
   statCard:    { background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" },
   statLabel:   { fontSize: 11, color: "#a07878", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" },
   statIcon:    { width: 30, height: 30, borderRadius: 8, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" },

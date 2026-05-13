@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -237,9 +240,7 @@ export default function EnrollmentsPage() {
         <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
           <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" }}>
-                <i className="ti ti-school" style={{ fontSize:17, color:"white" }} />
-              </div>
+                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
@@ -283,7 +284,7 @@ export default function EnrollmentsPage() {
                   onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
                 >
-                  <i className="ti ti-logout" style={{ fontSize:14 }} />
+                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
                 </button>
               </div>
             </div>

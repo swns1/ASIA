@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -120,7 +122,7 @@ function TemplateCard({ template, onEdit, onDelete }) {
                 <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#f0ede8", color: "#7a5050" }}>Inactive</span>
               )}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif", lineHeight: 1.3 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>
               {template.template_name}
             </div>
             {template.description && (
@@ -297,7 +299,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
               <i className="ti ti-report-analytics" style={{ fontSize: 18, color: "#e03131" }} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a"}}>
                 {isEdit ? "Edit Template" : "New Grading Template"}
               </div>
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Define components and their weights</div>
@@ -437,7 +439,7 @@ function DeleteModal({ template, onConfirm, onCancel }) {
         <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a", fontFamily: "'Playfair Display', serif" }}>Delete Template?</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a"}}>Delete Template?</div>
         <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
           You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.
         </div>
@@ -457,7 +459,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
         <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
           You'll be returned to the login page. Any unsaved changes will be lost.
         </div>
@@ -547,9 +549,8 @@ export default function GradingTemplatesPage() {
         <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
           <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 12px rgba(224,49,49,0.3)" }}>
-                <i className="ti ti-school" style={{ fontSize:17, color:"white" }} />
-              </div>
+                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
+              
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
                 <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
@@ -593,7 +594,7 @@ export default function GradingTemplatesPage() {
                   onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
                 >
-                  <i className="ti ti-logout" style={{ fontSize:14 }} />
+                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
                 </button>
               </div>
             </div>
@@ -605,7 +606,7 @@ export default function GradingTemplatesPage() {
           {/* Topbar */}
           <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif", letterSpacing:"-0.01em" }}>Grading Templates</div>
+              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>Grading Templates</div>
               <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
                 {loading ? "Loading…" : `${templates.length} templates · ${activeCount} active · ${completeCount} complete`}
               </div>
@@ -674,7 +675,7 @@ export default function GradingTemplatesPage() {
                 <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
                   <i className="ti ti-report-analytics" style={{ fontSize:24, color:"#e08080" }} />
                 </div>
-                <div style={{ fontSize:15, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>No templates found</div>
+                <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>No templates found</div>
                 <div style={{ fontSize:12, color:"#b09090", marginTop:6 }}>Create your first grading template to get started</div>
                 <button onClick={() => setModal({ mode:"create" })}
                   style={{ marginTop:18, display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"10px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>

@@ -3,6 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { deleteStudent, getStudents } from "../api/studentApi";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
+import manIcon from "../assets/man.svg";
+import graduateIcon from "../assets/graduate.svg";
+import droppedIcon from "../assets/dropped.svg";
+import activeIcon from "../assets/active.svg";
+import TransferIcon from "../assets/transfer.svg";
+import logo from "../assets/logo.png";
+import logoutIcon from "../assets/logout.svg";
+
+
 
 // ── Nav config ────────────────────────────────────────────────────────────────
 const NAV = [
@@ -94,7 +103,7 @@ const Skeleton = ({ w = "100%", h = 14, r = 6 }) => (
 );
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, color, bg, loading }) {
+function StatCard({ label, value, icon, imgSrc, color, bg, loading }) {
   return (
     <div style={{
       background: "white", borderRadius: 14, padding: "16px 20px",
@@ -110,7 +119,10 @@ function StatCard({ label, value, icon, color, bg, loading }) {
         width: 42, height: 42, borderRadius: 12, background: bg,
         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
+        {imgSrc
+          ? <img src={imgSrc} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
+          : <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
+        }
       </div>
       <div>
         {loading
@@ -354,14 +366,8 @@ export default function StudentsPage() {
   {/* Brand */}
   <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10,
-        background: "linear-gradient(135deg, #e03131, #c92a2a)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: "0 4px 12px rgba(224,49,49,0.3)",
-      }}>
-        <i className="ti ti-school" style={{ fontSize: 17, color: "white" }} />
-      </div>
+                  <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
+      
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>South Lakes IS</div>
         <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
@@ -421,7 +427,7 @@ export default function StudentsPage() {
           onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
         >
-          <i className="ti ti-logout" style={{ fontSize:14 }} />
+                   <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
         </button>
       </div>
     </div>
@@ -446,7 +452,7 @@ export default function StudentsPage() {
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             
-              <button style={{
+              {/* <button style={{
                 width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10,
                 background: "white", display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", color: "#9a7070", position: "relative",
@@ -457,7 +463,7 @@ export default function StudentsPage() {
                   position: "absolute", top: 6, right: 6, border: "2px solid white",
                 }} />
                 
-              </button>
+              </button> */}
               <button
                 className="new-btn"
                 style={{
@@ -483,27 +489,30 @@ export default function StudentsPage() {
             {/* ── Stat cards ── */}
             <div style={{ display: "flex", gap: 12 }}>
               <StatCard
-                label="Total Students" icon="ti-users"
+                label="Total Students" 
+                imgSrc={manIcon}
                 value={statusCounts.all} loading={loading}
                 color="#e03131" bg="#fff0f0"
               />
               <StatCard
-                label="Active" icon="ti-circle-check"
+                label="Active" 
+                imgSrc={activeIcon}
                 value={statusCounts.active} loading={loading}
                 color="#2e6b0d" bg="#e8f5e0"
               />
               <StatCard
-                label="Graduated" icon="ti-award"
+                label="Graduated" 
+                imgSrc ={graduateIcon}
                 value={statusCounts.graduated} loading={loading}
                 color="#1455a0" bg="#e3f0fd"
               />
               <StatCard
-                label="Transferred" icon="ti-transfer"
+                label="Transferred" imgSrc={TransferIcon}
                 value={statusCounts.transferred} loading={loading}
                 color="#7a4a08" bg="#fef3e2"
               />
               <StatCard
-                label="Dropped" icon="ti-user-x"
+                label="Dropped" imgSrc={droppedIcon}f
                 value={statusCounts.dropped} loading={loading}
                 color="#9b2020" bg="#fde8e8"
               />
