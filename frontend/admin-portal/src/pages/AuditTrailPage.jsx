@@ -51,6 +51,153 @@ function normalizeRole(role) {
   return String(role || "unknown").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+const legacyDetailSubjects = {
+  "students": "student record",
+  "households": "household record",
+  "guardians": "guardian record",
+  "student_siblings": "student sibling record",
+  "siblings": "sibling record",
+  "previous_schools": "previous school record",
+  "requirement_types": "requirement type",
+  "student_requirement_submissions": "student requirement submission",
+  "enrollments": "enrollment record",
+  "subjects": "subject",
+  "grades": "grade record",
+  "grading-templates": "grading template",
+  "grading-components": "grading component",
+  "score-entries": "score entry",
+  "scholarship-types": "scholarship type",
+  "enrollment-scholarships": "scholarship award",
+  "school-settings": "school settings",
+  "fee-schedules": "fee schedule",
+  "fee-schedule-items": "fee schedule item",
+  "discount-types": "discount type",
+  "invoices": "invoice",
+  "payments": "payment",
+};
+
+const moduleSubjects = {
+  Students: "student record",
+  Households: "household record",
+  Guardians: "guardian record",
+  "Student Siblings": "student sibling record",
+  Siblings: "sibling record",
+  "Previous Schools": "previous school record",
+  Requirements: "requirement record",
+  Enrollments: "enrollment record",
+  Subjects: "subject",
+  Grades: "grade record",
+  Scholarships: "scholarship award",
+  "Scholarship Types": "scholarship type",
+  "School Settings": "school settings",
+  "Fee Schedules": "fee schedule",
+  "Fee Schedule Items": "fee schedule item",
+  "Discount Types": "discount type",
+  Invoices: "invoice",
+  Payments: "payment",
+};
+
+const legacyMethodWords = {
+  POST: ["Created", "created", "create"],
+  PUT: ["Updated", "updated", "update"],
+  PATCH: ["Updated", "updated", "update"],
+  DELETE: ["Deleted", "deleted", "delete"],
+};
+
+function sentenceCase(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+function parseTechnicalDetail(value, metadata = {}) {
+  const detail = String(value || "").trim();
+  const metadataPath = metadata?.path;
+  const metadataMethod = metadata?.method;
+  const metadataStatus = metadata?.status_code;
+
+  if (metadataPath && metadataMethod && metadataStatus !== undefined) {
+    const parts = String(metadataPath).split("/").filter(Boolean);
+    const key = parts[0] === "api" ? parts[1] : parts[0];
+    return {
+      method: String(metadataMethod).toUpperCase(),
+      key: key || "system",
+      path: String(metadataPath),
+      success: Number(metadataStatus) < 400,
+    };
+  }
+
+  const match = detail.match(/^([A-Z]+)\s+(\/api\/[^\s]+)\s+returned HTTP\s+(\d+)\.?$/i);
+  if (!match) return null;
+
+  const parts = match[2].split("/").filter(Boolean);
+  return {
+    method: match[1].toUpperCase(),
+    key: parts[0] === "api" ? parts[1] : parts[0],
+    path: match[2],
+    success: Number(match[3]) < 400,
+  };
+}
+
+function actionFromTechnicalInfo(info) {
+  if (info.key === "payments" && info.method === "POST") return "Recorded payment";
+  if (info.key === "score-entries" && info.method === "POST") return "Added score entry";
+  if (info.key === "send-enrollment-email" && info.method === "POST") return "Sent enrollment email";
+  if (info.key === "enrollment-scholarships" && info.method === "POST") return "Awarded scholarship";
+  if (info.key === "invoices" && info.path.includes("/generate")) return "Generated invoice";
+  if (info.key === "students" && info.path.includes("/bulk-create")) return "Saved student information";
+
+  const [titleVerb] = legacyMethodWords[info.method] || ["Changed", "changed", "change"];
+  const subject = legacyDetailSubjects[info.key] || `${info.key.replaceAll("-", " ").replaceAll("_", " ")} record`;
+  return `${titleVerb} ${subject}`;
+}
+
+function detailsFromTechnicalInfo(info) {
+  if (info.key === "payments" && info.method === "POST") {
+    return info.success ? "Payment was recorded successfully." : "Payment could not be recorded. Please review the payment details.";
+  }
+  if (info.key === "score-entries" && info.method === "POST") {
+    return info.success ? "Score entry was added successfully." : "Score entry could not be added. Please review the grade details.";
+  }
+  if (info.key === "send-enrollment-email" && info.method === "POST") {
+    return info.success ? "Enrollment email was sent successfully." : "Enrollment email could not be sent. Please review the student's email address.";
+  }
+  if (info.key === "enrollment-scholarships" && info.method === "POST") {
+    return info.success ? "Scholarship was awarded successfully." : "Scholarship could not be awarded. Please review the scholarship details.";
+  }
+  if (info.key === "invoices" && info.path.includes("/generate")) {
+    return info.success ? "Invoice was generated successfully." : "Invoice could not be generated. Please review the enrollment and payment plan.";
+  }
+  if (info.key === "students" && info.path.includes("/bulk-create")) {
+    return info.success ? "Student information was saved successfully." : "Student information could not be saved. Please review the student details.";
+  }
+
+  const [, pastTense, baseVerb] = legacyMethodWords[info.method] || ["Changed", "changed", "change"];
+  const subject = legacyDetailSubjects[info.key] || `${info.key.replaceAll("-", " ").replaceAll("_", " ")} record`;
+  const beWord = info.key === "school-settings" ? "were" : "was";
+
+  if (info.success) return `${sentenceCase(subject)} ${beWord} ${pastTense} successfully.`;
+  return `${sentenceCase(subject)} could not be ${baseVerb}d. Please review the submitted information.`;
+}
+
+function humanizeAuditAction(value, details, metadata, module) {
+  const info = parseTechnicalDetail(details, metadata);
+  if (info) return actionFromTechnicalInfo(info);
+
+  const action = String(value || "").trim();
+  const awkward = action.match(/^(Created|Updated|Deleted|Changed)\s+(.+?)\s+record$/i);
+  if (!awkward) return action || "System activity";
+
+  const verb = sentenceCase(awkward[1].toLowerCase());
+  if (verb === "Created" && module === "Scholarships") return "Awarded scholarship";
+  const subject = moduleSubjects[module] || awkward[2].replaceAll("_", " ").replaceAll("-", " ").toLowerCase();
+  return `${verb} ${subject}`;
+}
+
+function humanizeTechnicalDetails(value, metadata = {}) {
+  const detail = String(value || "").trim();
+  const info = parseTechnicalDetail(detail, metadata);
+  if (!info) return detail;
+  return detailsFromTechnicalInfo(info);
+}
 function normalizeLog(row, index) {
   const date = row.occurred_at ? new Date(row.occurred_at) : null;
   const invalidDate = !date || Number.isNaN(date.getTime());
@@ -58,13 +205,13 @@ function normalizeLog(row, index) {
     id: row.id ?? row.log_id ?? row.audit_log_id ?? index + 1,
     userName: row.user_name ?? row.user?.name ?? "Unknown user",
     userRole: row.user_role ?? row.user?.role ?? "unknown",
-    action: row.action ?? "Unspecified action",
+    action: humanizeAuditAction(row.action, row.details ?? row.remarks ?? "", row.metadata ?? {}, row.module ?? row.section ?? ""),
     module: row.module ?? row.section ?? "General",
     occurredAt: row.occurred_at ?? "",
     date,
     invalidDate,
     status: String(row.status ?? row.result ?? "success").toLowerCase(),
-    details: row.details ?? row.remarks ?? "",
+    details: humanizeTechnicalDetails(row.details ?? row.remarks ?? "", row.metadata ?? {}),
   };
 }
 
