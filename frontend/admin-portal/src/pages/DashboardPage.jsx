@@ -34,6 +34,7 @@ const NAV = [
       { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
       { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
       { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
+      { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
     ],
   },
   {
