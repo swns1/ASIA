@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     StudentViewSet,
@@ -9,6 +10,7 @@ from .views import (
     RequirementTypeViewSet,
     StudentRequirementSubmissionViewSet,
 )
+from .ocr_views import OCRScanView
 
 router = DefaultRouter()
 router.register(r"students", StudentViewSet)
@@ -20,4 +22,6 @@ router.register(r"previous_schools", PreviousSchoolViewSet)
 router.register(r"requirement_types", RequirementTypeViewSet)
 router.register(r"student_requirement_submissions", StudentRequirementSubmissionViewSet)
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("ocr/scan/", OCRScanView.as_view(), name="ocr-scan"),
+]

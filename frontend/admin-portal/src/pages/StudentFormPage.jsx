@@ -23,6 +23,7 @@ import {
   updateHousehold,
 } from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
+import OcrScanButton from "../components/OcrScanButton";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const nullify = (obj, fields) => {
@@ -570,6 +571,55 @@ export default function StudentFormPage() {
   // Track the original household id (if any) so we know whether to PUT or POST
   const [householdId, setHouseholdId] = useState(null);
 
+  function handleOcrExtracted(fields) {
+    const studentFields = {
+      lrn:               fields.lrn,
+      first_name:        fields.first_name,
+      middle_name:       fields.middle_name,
+      last_name:         fields.last_name,
+      suffix:            fields.suffix,
+      birth_date:        fields.birth_date,
+      sex:               fields.sex,
+      religion:          fields.religion,
+      email:             fields.email,
+      mobile_number:     fields.mobile_number,
+      current_address:   fields.current_address,
+      permanent_address: fields.permanent_address,
+    };
+    Object.keys(studentFields).forEach(
+      (k) => studentFields[k] === undefined && delete studentFields[k]
+    );
+    setStudent((prev) => ({ ...prev, ...studentFields }));
+
+    if (fields.guardian_full_name) {
+      setGuardians((prev) => {
+        const updated = [...prev];
+        if (updated.length === 0) updated.push({ ...emptyGuardian });
+        updated[0] = {
+          ...updated[0],
+          full_name:     fields.guardian_full_name,
+          relationship:  fields.guardian_relationship  || updated[0].relationship,
+          mobile_number: fields.guardian_mobile_number || updated[0].mobile_number,
+          email_address: fields.guardian_email         || updated[0].email_address,
+        };
+        return updated;
+      });
+    }
+
+    if (fields.previous_school_name) {
+      setSchools((prev) => {
+        const updated = [...prev];
+        if (updated.length === 0) updated.push({ ...emptySchool });
+        updated[0] = {
+          ...updated[0],
+          school_name:    fields.previous_school_name,
+          school_address: fields.previous_school_address || updated[0].school_address,
+        };
+        return updated;
+      });
+    }
+  }
+
   // ── Load existing data for edit mode ──
   useEffect(() => {
     if (!id) return;
@@ -839,7 +889,16 @@ export default function StudentFormPage() {
 
         {/* Step content */}
         <div style={{ ...cardStyle, minHeight: 320 }}>
-          {step === 0 && <StudentStep data={student} onChange={setStudent} />}
+          {step === 0 && (
+            <>
+              {!id && (
+                <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
+                  <OcrScanButton onExtracted={handleOcrExtracted} />
+                </div>
+              )}
+              <StudentStep data={student} onChange={setStudent} />
+            </>
+          )}
           {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
           {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
           {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
