@@ -219,7 +219,7 @@ function LogoutModal({ onConfirm, onCancel }) {
         <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
         <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
           You'll be returned to the login page. Any unsaved changes will be lost.
         </div>
@@ -282,7 +282,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
       {/* Table header info */}
       <div style={{ padding:"18px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, background:"linear-gradient(to right,#fdfafa,white)" }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>
             {enrollment.grade_level} — {enrollment.section}
           </div>
           <div style={{ fontSize:12, color:"#b09090", marginTop:3 }}>
@@ -571,7 +571,7 @@ export default function GradeSummaryPage() {
                     <div style={{ padding:"18px 18px 14px", display:"flex", alignItems:"center", gap:14 }}>
                       <div style={{ width:52, height:52, borderRadius:"50%", background:palette.bg, color:palette.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:18, flexShrink:0, border:`2px solid ${palette.color}33` }}>{initials}</div>
                       <div>
-                        <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>{fullName}</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>{fullName}</div>
                         <div style={{ fontSize:12, color:"#b09090", marginTop:3 }}>LRN {student.lrn}</div>
                         <span style={{ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:99, background: student.status==="active"?"#e8f5e0":"#f0ede8", color: student.status==="active"?"#2e6b0d":"#5c5752", marginTop:4, display:"inline-block" }}>
                           {student.status}
@@ -650,7 +650,7 @@ export default function GradeSummaryPage() {
                     <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
                       <i className="ti ti-table" style={{ fontSize:28, color:"#e08080" }} />
                     </div>
-                    <div style={{ fontSize:16, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>No student selected</div>
+                    <div style={{ fontSize:16, color:"#7a5050", fontWeight:600}}>No student selected</div>
                     <div style={{ fontSize:13, color:"#b09090", marginTop:6 }}>Search for a student on the left to view their grade report</div>
                   </div>
                 ) : !enrollment ? (
@@ -658,7 +658,7 @@ export default function GradeSummaryPage() {
                     <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
                       <i className="ti ti-clipboard-list" style={{ fontSize:28, color:"#e08080" }} />
                     </div>
-                    <div style={{ fontSize:16, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>Select a school year</div>
+                    <div style={{ fontSize:16, color:"#7a5050", fontWeight:600}}>Select a school year</div>
                     <div style={{ fontSize:13, color:"#b09090", marginTop:6 }}>Pick an enrollment from the left to see the grade table</div>
                   </div>
                 ) : (
