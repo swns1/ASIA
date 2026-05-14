@@ -2,8 +2,15 @@ import re
 
 from rest_framework import serializers
 
-from .models import AuditLog
+from .models import AuditLog, User
 from .services.auth_service import find_user
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("user_id", "name", "email", "role", "profile_picture")
+        read_only_fields = ("user_id",)
 
 
 MODULE_SUBJECTS = {

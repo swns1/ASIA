@@ -7,6 +7,7 @@ class User(models.Model):
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=30)
     password = models.CharField(max_length=255)
+    profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist
 
     class Meta:
         db_table = "users"
