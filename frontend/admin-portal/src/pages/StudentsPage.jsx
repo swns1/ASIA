@@ -10,8 +10,8 @@ import activeIcon from "../assets/active.svg";
 import TransferIcon from "../assets/transfer.svg";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
-
-
+import editIcon from "../assets/edit.svg";
+import trashIcon from "../assets/trash.svg";
 
 // ── Nav config ────────────────────────────────────────────────────────────────
 const NAV = [
@@ -779,14 +779,14 @@ export default function StudentsPage() {
                                     className="row-action" title="Edit"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/students/${st.student_id}/edit`); }}
                                   >
-                                    <i className="ti ti-pencil" style={{ fontSize: 13 }} />
+                                    <img src={editIcon} alt="Edit" style={{ width: 16, height: 16 }} />
                                   </button>
                                   <button
                                     className="row-action danger" title="Delete"
                                     style={{ color: "#c09090" }}
                                     onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
                                   >
-                                    <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                                    <img src={trashIcon} alt="Delete" style={{ width: 16, height: 16 }} />
                                   </button>
                                 </div>
                               </td>
