@@ -4,6 +4,7 @@ import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
+import editIcon from "../assets/edit.svg";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -510,7 +511,7 @@ export default function EnrollmentsPage() {
                                   style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", transition:"all .12s" }}
                                   onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
                                   onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#9a7070"; e.currentTarget.style.borderColor="#f0e4e4"; }}>
-                                  <i className="ti ti-pencil" style={{ fontSize:13 }} />
+                                  <img src={editIcon} alt="Edit" style={{ width:16, height:16 }} />
                                 </button>
                               </td>
                             </tr>
