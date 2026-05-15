@@ -72,7 +72,7 @@ REST_FRAMEWORK = {
 # ✅ Token signed with this config
 SIMPLE_JWT = {
     "USER_ID_FIELD": "user_id",
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),   # ✅ was 5 minutes
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),   # ✅ was 5 minutes
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 

@@ -51,6 +51,12 @@ import numpy as np
 import requests
 from django.db.models import Avg
 from rest_framework import permissions, status
+from rest_framework.throttling import UserRateThrottle
+
+class ClusterRateThrottle(UserRateThrottle):
+    """K-Means + PCA is CPU-heavy — cap it tighter than general endpoints."""
+    scope = "cluster"
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -159,17 +165,25 @@ class ClusterAnalyticsView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes   = [ClusterRateThrottle]
 
     def get(self, request):
         # ── Parse params ──────────────────────────────────────────────────
         school_year    = request.query_params.get("school_year")
         grading_period = request.query_params.get("grading_period")
         subject_id     = request.query_params.get("subject_id")  # None = overall
+        grade_level    = request.query_params.get("grade_level")  # None = all levels
         n_clusters     = int(request.query_params.get("n_clusters", 3))
 
-        if not school_year or not grading_period:
+        if not school_year:
             return Response(
-                {"error": "school_year and grading_period are required."},
+                {"error": "school_year is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not grading_period:
+            return Response(
+                {"error": "grading_period is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -180,9 +194,17 @@ class ClusterAnalyticsView(APIView):
             "enrollment", "enrollment__student", "subject"
         ).filter(
             enrollment__school_year=school_year,
-            grading_period=grading_period,
             enrollment__enrollment_status="enrolled",
         )
+
+        # Filter by grading period (skip if "overall" — use all periods)
+        is_overall_period = grading_period == "overall"
+        if not is_overall_period:
+            grades_qs = grades_qs.filter(grading_period=grading_period)
+
+        # Filter by grade level
+        if grade_level:
+            grades_qs = grades_qs.filter(enrollment__grade_level=grade_level)
 
         subject_name = "Overall"
         if subject_id:
@@ -325,7 +347,8 @@ class ClusterAnalyticsView(APIView):
         meta = {
             "total_students": len(student_ids),
             "school_year":    school_year,
-            "grading_period": grading_period,
+            "grading_period": "Overall (All Periods)" if is_overall_period else grading_period,
+            "grade_level":    grade_level or "All Levels",
             "subject":        subject_name,
             "n_clusters":     n_clusters,
         }

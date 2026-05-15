@@ -15,6 +15,12 @@ import os
 import requests
 from django.conf import settings
 from rest_framework import permissions, status
+from rest_framework.throttling import UserRateThrottle
+
+class OcrRateThrottle(UserRateThrottle):
+    """Tighter per-user limit for OCR — Groq has its own upstream rate limit."""
+    scope = "ocr"
+
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -73,53 +79,50 @@ def _image_to_base64(image_file) -> tuple[str, str]:
     return data, content_type
 
 
-def _call_groq(base64_data: str, mime_type: str) -> dict:
-    """Call Groq LLaMA Vision API and return parsed JSON result."""
-    api_key = settings.GROQ_API_KEY
+def _call_gemini(base64_data: str, mime_type: str) -> dict:
+    """Call Gemini 2.0 Flash API and return parsed JSON result."""
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        raise ValueError("GROQ_API_KEY is not configured in settings.")
+        raise ValueError("GEMINI_API_KEY is not configured in settings.")
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={api_key}"
+    )
 
     payload = {
-        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-        "temperature": 0.1,
-        "max_tokens": 1024,
-        "messages": [
+        "contents": [
             {
-                "role": "user",
-                "content": [
+                "parts": [
+                    {"text": EXTRACTION_PROMPT},
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_data}",
-                        },
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": base64_data,
+                        }
                     },
-                    {
-                        "type": "text",
-                        "text": EXTRACTION_PROMPT,
-                    },
-                ],
+                ]
             }
         ],
+        "generationConfig": {
+            "temperature": 0.1,       # Low temp = more deterministic/accurate
+            "maxOutputTokens": 1024,
+        },
     }
 
-    response = requests.post(
-        url,
-        json=payload,
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=30,
-    )
+    response = requests.post(url, json=payload, timeout=30)
     response.raise_for_status()
 
     result = response.json()
 
+    # Extract the text content from Gemini's response structure
     try:
-        raw_text = result["choices"][0]["message"]["content"].strip()
+        raw_text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
     except (KeyError, IndexError) as e:
-        logger.error("Unexpected Groq response structure: %s", result)
-        raise ValueError("Could not parse Groq response.") from e
+        logger.error("Unexpected Gemini response structure: %s", result)
+        raise ValueError("Could not parse Gemini response.") from e
 
+    # Strip markdown code fences if Gemini returns them anyway
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
         if raw_text.startswith("json"):
@@ -129,8 +132,8 @@ def _call_groq(base64_data: str, mime_type: str) -> dict:
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError as e:
-        logger.error("Groq returned non-JSON: %s", raw_text)
-        raise ValueError(f"Groq returned invalid JSON: {raw_text[:200]}") from e
+        logger.error("Gemini returned non-JSON: %s", raw_text)
+        raise ValueError(f"Gemini returned invalid JSON: {raw_text[:200]}") from e
 
 
 def _sanitize_result(data: dict) -> dict:
@@ -190,6 +193,7 @@ class OCRScanView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes   = [OcrRateThrottle]
     parser_classes     = [MultiPartParser, FormParser]
 
     def post(self, request, *args, **kwargs):
@@ -210,7 +214,7 @@ class OCRScanView(APIView):
 
         try:
             base64_data, mime_type = _image_to_base64(image_file)
-            raw_result = _call_groq(base64_data, mime_type)
+            raw_result = _call_gemini(base64_data, mime_type)
             confidence = raw_result.pop("confidence", "medium")
             extracted  = _sanitize_result(raw_result)
 

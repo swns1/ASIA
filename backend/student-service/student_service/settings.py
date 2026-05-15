@@ -66,6 +66,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # ── Rate Limiting ─────────────────────────────────────────────────────
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "30/minute",   # unauthenticated (should be rare — all endpoints need auth)
+        "user": "120/minute",  # authenticated users — generous for bulk lookups
+        "ocr":  "10/minute",   # tighter limit on OCR — Groq has its own limits too
+    },
+    # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }

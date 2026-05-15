@@ -46,12 +46,31 @@ const NAV = [
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
+  { value: "overall",      label: "Overall (All Periods)" },
   { value: "1st_quarter",  label: "1st Quarter"  },
   { value: "2nd_quarter",  label: "2nd Quarter"  },
   { value: "3rd_quarter",  label: "3rd Quarter"  },
   { value: "4th_quarter",  label: "4th Quarter"  },
   { value: "1st_semester", label: "1st Semester" },
   { value: "2nd_semester", label: "2nd Semester" },
+];
+
+const GRADE_LEVEL_OPTIONS = [
+  { value: "",            label: "All Grade Levels" },
+  { value: "Nursery",     label: "Nursery" },
+  { value: "Kinder",      label: "Kindergarten" },
+  { value: "Grade 1",     label: "Grade 1" },
+  { value: "Grade 2",     label: "Grade 2" },
+  { value: "Grade 3",     label: "Grade 3" },
+  { value: "Grade 4",     label: "Grade 4" },
+  { value: "Grade 5",     label: "Grade 5" },
+  { value: "Grade 6",     label: "Grade 6" },
+  { value: "Grade 7",     label: "Grade 7" },
+  { value: "Grade 8",     label: "Grade 8" },
+  { value: "Grade 9",     label: "Grade 9" },
+  { value: "Grade 10",    label: "Grade 10" },
+  { value: "Grade 11",    label: "Grade 11" },
+  { value: "Grade 12",    label: "Grade 12" },
 ];
 
 function currentSchoolYear() {
@@ -344,6 +363,7 @@ export default function AnalyticsPage() {
   const [schoolYear, setSchoolYear]       = useState(currentSchoolYear());
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [subjectId, setSubjectId]         = useState("");  // "" = overall
+  const [gradeLevel, setGradeLevel]       = useState("");  // "" = all levels
   const [nClusters, setNClusters]         = useState(3);
   const [subjects, setSubjects]           = useState([]);
 
@@ -374,6 +394,7 @@ export default function AnalyticsPage() {
       n_clusters: String(nClusters),
     });
     if (subjectId) params.set("subject_id", subjectId);
+    if (gradeLevel) params.set("grade_level", gradeLevel);
 
     try {
       const data = await apiFetch(`${ENROLLMENT_API}/ai/cluster/?${params}`);
@@ -389,7 +410,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [schoolYear, gradingPeriod, subjectId, nClusters]);
+  }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
 
   // ── Sidebar ────────────────────────────────────────────────────────────
   const navGroups = getVisibleNavGroups(NAV);
@@ -462,6 +483,15 @@ export default function AnalyticsPage() {
               <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} style={s.select}>
                 {PERIOD_OPTIONS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>Grade Level</label>
+              <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...s.select, minWidth: 150 }}>
+                {GRADE_LEVEL_OPTIONS.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
                 ))}
               </select>
             </div>
@@ -569,6 +599,7 @@ export default function AnalyticsPage() {
             }}>
               {[
                 { label: "Students", value: result.meta.total_students, icon: "ti-users" },
+                { label: "Grade Level", value: result.meta.grade_level, icon: "ti-school" },
                 { label: "Subject", value: result.meta.subject, icon: "ti-book" },
                 { label: "Period", value: PERIOD_OPTIONS.find(p => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
                 { label: "Clusters", value: result.meta.n_clusters, icon: "ti-chart-dots-3" },

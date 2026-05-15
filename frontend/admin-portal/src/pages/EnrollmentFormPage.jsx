@@ -143,7 +143,7 @@ function Textarea({ style, ...props }) {
 
 function SectionCard({ title, icon, badge, children }) {
   return (
-    <div style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden", animation: "fadeUp 0.3s ease both" }}>
+    <div style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "visible", animation: "fadeUp 0.3s ease both" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: "1px solid #f9f0f0", background: "linear-gradient(to right, #fdfafa, white)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #fff0f0, #fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -214,7 +214,7 @@ function StudentPicker({ value, onChange, disabled }) {
         {loading && <i className="ti ti-loader-2" style={{ fontSize: 14, color: C.red, animation: "spin 1s linear infinite" }} />}
       </div>
       {open && query && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 6, background: "white", borderRadius: 12, border: `1px solid ${C.redMid}`, boxShadow: "0 12px 40px rgba(224,49,49,0.14)", maxHeight: 320, overflowY: "auto", zIndex: 20 }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 6, background: "white", borderRadius: 12, border: `1px solid ${C.redMid}`, boxShadow: "0 12px 40px rgba(224,49,49,0.14)", maxHeight: 320, overflowY: "auto", zIndex: 9999 }}>
           {results.length === 0 && !loading && (
             <div style={{ padding: "20px 16px", textAlign: "center", color: C.muted, fontSize: 13 }}>No students match "{query}".</div>
           )}
@@ -375,7 +375,7 @@ export default function EnrollmentFormPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`
-        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeUp { from{opacity:0} to{opacity:1} }
         @keyframes spin   { to{transform:rotate(360deg)} }
         * { box-sizing:border-box; }
       `}</style>
