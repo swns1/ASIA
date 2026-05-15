@@ -264,10 +264,10 @@ export default function DashboardPage() {
     setLevelBreakdown(counts.filter((c) => c.count > 0));
   }
 
-  async function fetchRecentStudents() {
-    const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=5&ordering=-student_id`);
-    setRecentStudents(data.results ?? []);
-  }
+async function fetchRecentStudents() {
+  const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=5&ordering=-student_id`);
+  setRecentStudents((data.results ?? []).slice(0, 5));
+}
 
   async function fetchScholarships() {
     const data = await apiFetch(`${ENROLLMENT_API}/api/enrollment-scholarships/?page_size=100`);
@@ -531,10 +531,15 @@ export default function DashboardPage() {
               <Panel title="Quick Actions">
                 <div style={s.qaGrid}>
                   {[
-                    { label:"New Student",   icon:"ti-user-plus",     path:"/students/new"   },
-                    { label:"New Enrollment",icon:"ti-clipboard-list", path:"/enrollments/new"},
-                    { label:"Enter Grades",  icon:"ti-pencil",         path:"/grades/entry"   },
-                    { label:"Scholarships",  icon:"ti-award",          path:"/scholarships"   },
+                    { label: "New Student",    icon: "ti-user-plus",      path: "/students/new"    },
+                    { label: "New Enrollment", icon: "ti-clipboard-list", path: "/enrollments/new" },
+                    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry"    },
+                    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships"    },
+                    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices"        },
+                    { label: "Payments",       icon: "ti-cash",           path: "/payments"        },
+                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements"   },
+                    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics"       },
+                    { label: "Subjects",       icon: "ti-book",           path: "/subjects"        },
                   ].map((qa) => (
                     <button key={qa.label} className="qa-btn" style={s.qaBtn} onClick={() => navigate(qa.path)}>
                       <i className={`ti ${qa.icon}`} style={{ fontSize:16, color:"#e03131" }} />
