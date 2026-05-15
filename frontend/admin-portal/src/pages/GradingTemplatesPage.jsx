@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession, getCurrentUser } from "../utils/auth";
+import { clearAuthSession } from "../utils/auth";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
 
@@ -20,24 +20,24 @@ async function apiCall(method, url, body = null) {
   return res.json();
 }
 
-const getTemplates        = (p = {}) => apiCall("GET",    `${API_BASE}/grading-templates/?${new URLSearchParams(p)}`);
-const createTemplate      = (p)      => apiCall("POST",   `${API_BASE}/grading-templates/`, p);
-const updateTemplate      = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-templates/${id}/`, p);
-const deleteTemplate      = (id)     => apiCall("DELETE", `${API_BASE}/grading-templates/${id}/`);
-const createComponent     = (p)      => apiCall("POST",   `${API_BASE}/grading-components/`, p);
-const updateComponent     = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-components/${id}/`, p);
-const deleteComponent     = (id)     => apiCall("DELETE", `${API_BASE}/grading-components/${id}/`);
+const getTemplates    = (p = {}) => apiCall("GET",    `${API_BASE}/grading-templates/?${new URLSearchParams(p)}`);
+const createTemplate  = (p)      => apiCall("POST",   `${API_BASE}/grading-templates/`, p);
+const updateTemplate  = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-templates/${id}/`, p);
+const deleteTemplate  = (id)     => apiCall("DELETE", `${API_BASE}/grading-templates/${id}/`);
+const createComponent = (p)      => apiCall("POST",   `${API_BASE}/grading-components/`, p);
+const updateComponent = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-components/${id}/`, p);
+const deleteComponent = (id)     => apiCall("DELETE", `${API_BASE}/grading-components/${id}/`);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 const NAV = [
   { section: "Main", items: [
-    { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"          },
-    { label: "Students",    icon: "ti-users",             path: "/students"           },
-    { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments"        },
-    { label: "Subjects",    icon: "ti-book",              path: "/subjects"           },
-    { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"             },
+    { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard"    },
+    { label: "Students",     icon: "ti-users",             path: "/students"     },
+    { label: "Enrollments",  icon: "ti-clipboard-list",    path: "/enrollments"  },
+    { label: "Subjects",     icon: "ti-book",              path: "/subjects"     },
+    { label: "Grades",       icon: "ti-chart-bar",         path: "/grades"       },
     { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-    { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
+    { label: "Analytics",    icon: "ti-chart-dots-3",      path: "/analytics"    },
   ]},
   { section: "Finance", items: [
     { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
@@ -45,8 +45,8 @@ const NAV = [
     { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
   ]},
   { section: "Settings", items: [
-    { label: "Users",             icon: "ti-user-cog",     path: "/users"              },
-    { label: "School Settings",   icon: "ti-settings",     path: "/settings"           },
+    { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
+    { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
     { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
     { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
     { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
@@ -195,8 +195,8 @@ function TemplateModal({ template, onClose, onRefresh }) {
     template?.components?.map((c) => ({ ...c, _key: c.grading_component_id })) ?? []
   );
 
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
 
   const totalWeight = components.reduce((s, c) => s + (parseFloat(c.weight) || 0), 0);
   const weightOk    = Math.abs(totalWeight - 100) < 0.01;
@@ -248,10 +248,9 @@ function TemplateModal({ template, onClose, onRefresh }) {
       }
 
       // Sync components
-      const existing = components.filter((c) => c.grading_component_id);
+      const existing  = components.filter((c) => c.grading_component_id);
       const brand_new = components.filter((c) => !c.grading_component_id);
 
-      // Update existing
       for (const c of existing) {
         await updateComponent(c.grading_component_id, {
           component_name: c.component_name.trim(),
@@ -260,7 +259,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
         });
       }
 
-      // Delete removed components (ones that were in original but not in current)
       if (isEdit && template?.components) {
         const currentIds = new Set(existing.map((c) => c.grading_component_id));
         for (const orig of template.components) {
@@ -270,7 +268,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
         }
       }
 
-      // Create new
       for (const c of brand_new) {
         await createComponent({
           grading_template: tplId,
@@ -300,7 +297,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
               <i className="ti ti-report-analytics" style={{ fontSize: 18, color: "#e03131" }} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a"}}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
                 {isEdit ? "Edit Template" : "New Grading Template"}
               </div>
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Define components and their weights</div>
@@ -319,7 +316,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
             </div>
           )}
 
-          {/* Template info */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
             <input value={form.template_name} onChange={(e) => setForm((f) => ({ ...f, template_name: e.target.value }))} placeholder="e.g. DepEd K-12 Standard" style={inp} />
@@ -331,7 +327,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
               style={{ ...inp, resize: "vertical" }} />
           </div>
 
-          {/* School level */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -347,7 +342,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
             </div>
           </div>
 
-          {/* Active toggle */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10 }}>
             <input type="checkbox" id="is_active" checked={form.is_active}
               onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
@@ -375,7 +369,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
               </div>
             </div>
 
-            {/* Weight progress bar */}
             <div style={{ height: 6, borderRadius: 99, background: "#f0e8e8", overflow: "hidden", marginBottom: 16 }}>
               <div style={{ height: "100%", width: `${Math.min(totalWeight, 100)}%`, borderRadius: 99, background: weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131", transition: "width 0.3s, background 0.3s" }} />
             </div>
@@ -433,42 +426,67 @@ function TemplateModal({ template, onClose, onRefresh }) {
 }
 
 // ── Delete Modal ──────────────────────────────────────────────────────────────
-function DeleteModal({ template, onConfirm, onCancel }) {
+function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
       <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
         <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a"}}>Delete Template?</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Delete Template?</div>
         <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
           You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.
         </div>
+
+        {/* ── FIX: show error if delete fails ── */}
+        {deleteError && (
+          <div style={{ width: "100%", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
+            <i className="ti ti-alert-circle" style={{ fontSize: 14, flexShrink: 0 }} />
+            {deleteError}
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}>Yes, delete</button>
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif", opacity: deleting ? 0.5 : 1 }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: deleting ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            {deleting
+              ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Deleting…</>
+              : "Yes, delete"
+            }
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
+// ── Logout Modal ──────────────────────────────────────────────────────────────
 function LogoutModal({ onConfirm, onCancel }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
+    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
+      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <i className="ti ti-logout" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Log out?</div>
+        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
           You'll be returned to the login page. Any unsaved changes will be lost.
         </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
+        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
+          <button onClick={onCancel} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
             Stay
           </button>
-          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
+          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}>
             Yes, logout
           </button>
         </div>
@@ -482,14 +500,15 @@ function LogoutModal({ onConfirm, onCancel }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function GradingTemplatesPage() {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
-  const [templates,   setTemplates]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [levelFilter, setLevelFilter] = useState("all");
-  const [modal,       setModal]       = useState(null);
-  const [toDelete,    setToDelete]    = useState(null);
 
-  const [showLogout, setShowLogout] = useState(false);
+  const [templates,    setTemplates]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [levelFilter,  setLevelFilter]  = useState("all");
+  const [modal,        setModal]        = useState(null);
+  const [toDelete,     setToDelete]     = useState(null);
+  const [deleting,     setDeleting]     = useState(false);   // ── FIX
+  const [deleteError,  setDeleteError]  = useState("");      // ── FIX
+  const [showLogout,   setShowLogout]   = useState(false);
 
   const fetchTemplates = useCallback(async (level = levelFilter) => {
     setLoading(true);
@@ -508,11 +527,26 @@ export default function GradingTemplatesPage() {
     fetchTemplates("all");
   }, []);
 
+  // ── FIX: wrapped in try/catch with loading + error state ──────────────────
   const handleDelete = async () => {
     if (!toDelete) return;
-    await deleteTemplate(toDelete.grading_template_id);
-    setToDelete(null);
-    fetchTemplates(levelFilter);
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteTemplate(toDelete.grading_template_id);
+      setToDelete(null);
+      fetchTemplates(levelFilter);
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      try {
+        const parsed = JSON.parse(msg.split(": ").slice(1).join(": "));
+        setDeleteError(parsed.detail || parsed.error || msg);
+      } catch {
+        setDeleteError(msg);
+      }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const activeCount   = templates.filter((t) => t.is_active).length;
@@ -544,32 +578,35 @@ export default function GradingTemplatesPage() {
         .new-btn:hover { background:#c92a2a !important;box-shadow:0 8px 28px rgba(224,49,49,0.32) !important;transform:translateY(-1px); }
       `}</style>
 
-      <div style={{ display:"flex", height:"100vh", background:"#fdf8f6", fontFamily:"'DM Sans',sans-serif", overflow:"hidden" }}>
+      <div style={{ display: "flex", height: "100vh", background: "#fdf8f6", fontFamily: "'DM Sans',sans-serif", overflow: "hidden" }}>
 
         {/* ── Sidebar ── */}
-        <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
-          <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
-              
+        <aside style={{ width: 224, flexShrink: 0, background: "white", borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" }}>
+          <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
               <div>
-                <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>South Lakes IS</div>
+                <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
               </div>
             </div>
           </div>
-          <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
+
+          <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
             {getVisibleNavGroups(NAV).map((group) => (
-              <div key={group.section} style={{ marginBottom:6 }}>
-                <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
+              <div key={group.section} style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 }}>
+                  {group.section}
+                </div>
                 {group.items.map((item) => {
                   const active = location.pathname === item.path;
                   return (
-                    <div key={item.path} className={`nav-item${active?" nav-active":""}`}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, color:active?"#e03131":"#7a5a5a", cursor:"pointer" }}
+                    <div key={item.path}
+                      className={`nav-item${active ? " nav-active" : ""}`}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer" }}
                       onClick={() => navigate(item.path)} role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key==="Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize:16, width:20, textAlign:"center" }} />
+                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}>
+                      <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
                       {item.label}
                     </div>
                   );
@@ -577,118 +614,115 @@ export default function GradingTemplatesPage() {
               </div>
             ))}
           </nav>
-            <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-              <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
-                <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
+
+          <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0 }}>SA</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>Super Admin</div>
+                <div style={{ fontSize: 11, color: "#b09090" }}>super_admin</div>
               </div>
-                <button
-                  title="Logout"
-                  onClick={() => setShowLogout(true)}
-                  style={{
-                    width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
-                    background:"white", display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", color:"#c09090", transition:"all 0.12s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
-                >
-                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-                </button>
-              </div>
+              <button
+                title="Logout"
+                onClick={() => setShowLogout(true)}
+                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "all 0.12s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}
+              >
+                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
+              </button>
             </div>
+          </div>
         </aside>
 
         {/* ── Main ── */}
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           {/* Topbar */}
-          <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
+          <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>Grading Templates</div>
-              <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>Grading Templates</div>
+              <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
                 {loading ? "Loading…" : `${templates.length} templates · ${activeCount} active · ${completeCount} complete`}
               </div>
             </div>
-            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <button style={{ width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" }}>
-                <i className="ti ti-bell" style={{ fontSize:16 }} />
-                <span style={{ width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" }} />
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button style={{ width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", position: "relative" }}>
+                <i className="ti ti-bell" style={{ fontSize: 16 }} />
+                <span style={{ width: 8, height: 8, background: "#e03131", borderRadius: "50%", position: "absolute", top: 6, right: 6, border: "2px solid white" }} />
               </button>
               <button className="new-btn"
-                style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
-                onClick={() => setModal({ mode:"create" })}>
-                <i className="ti ti-plus" style={{ fontSize:15 }} />New Template
+                style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+                onClick={() => setModal({ mode: "create" })}>
+                <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
               </button>
             </div>
           </div>
 
           {/* Content */}
-          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
             {/* Stat cards */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12 }}>
               {[
-                { label:"Total Templates", value:templates.length,  icon:"ti-report-analytics", color:"#e03131", bg:"#fff0f0" },
-                { label:"Active",          value:activeCount,        icon:"ti-circle-check",     color:"#2e6b0d", bg:"#e8f5e0" },
-                { label:"Complete (100%)", value:completeCount,      icon:"ti-rosette-discount-check", color:"#1455a0", bg:"#e3f0fd" },
+                { label: "Total Templates", value: templates.length,  icon: "ti-report-analytics",       color: "#e03131", bg: "#fff0f0" },
+                { label: "Active",          value: activeCount,        icon: "ti-circle-check",           color: "#2e6b0d", bg: "#e8f5e0" },
+                { label: "Complete (100%)", value: completeCount,      icon: "ti-rosette-discount-check", color: "#1455a0", bg: "#e3f0fd" },
               ].map((s) => (
-                <div key={s.label} style={{ background:"white", borderRadius:14, padding:"16px 20px", border:"1px solid #f5eaea", display:"flex", alignItems:"center", gap:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)" }}>
-                  <div style={{ width:42, height:42, borderRadius:12, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <i className={`ti ${s.icon}`} style={{ fontSize:18, color:s.color }} />
+                <div key={s.label} style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={`ti ${s.icon}`} style={{ fontSize: 18, color: s.color }} />
                   </div>
                   <div>
-                    {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>}
-                    <div style={{ fontSize:11, color:"#a07878", marginTop:4, fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
+                    {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{s.value}</div>}
+                    <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Level filter chips */}
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              <button className={`chip-btn${levelFilter==="all"?" active":""}`} onClick={() => { setLevelFilter("all"); fetchTemplates("all"); }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button className={`chip-btn${levelFilter === "all" ? " active" : ""}`} onClick={() => { setLevelFilter("all"); fetchTemplates("all"); }}>
                 All Levels
               </button>
               {SCHOOL_LEVELS.map((lvl) => (
-                <button key={lvl.value} className={`chip-btn${levelFilter===lvl.value?" active":""}`}
+                <button key={lvl.value} className={`chip-btn${levelFilter === lvl.value ? " active" : ""}`}
                   onClick={() => { setLevelFilter(lvl.value); fetchTemplates(lvl.value); }}
-                  style={{ borderColor:levelFilter===lvl.value?lvl.color:"#f0e4e4", color:levelFilter===lvl.value?lvl.color:"#9a7070", background:levelFilter===lvl.value?lvl.bg:"white" }}>
-                  <i className={`ti ${lvl.icon}`} style={{ fontSize:12 }} />{lvl.label}
+                  style={{ borderColor: levelFilter === lvl.value ? lvl.color : "#f0e4e4", color: levelFilter === lvl.value ? lvl.color : "#9a7070", background: levelFilter === lvl.value ? lvl.bg : "white" }}>
+                  <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />{lvl.label}
                 </button>
               ))}
             </div>
 
             {/* Cards grid */}
             {loading ? (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px", display:"flex", flexDirection:"column", gap:12 }}>
+                  <div key={i} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
                     <Sk w={100} h={20} /><Sk w="80%" h={14} /><Sk w="60%" h={8} r={99} />
                     <Sk w="100%" h={1} /><Sk w={120} h={13} /><Sk w={140} h={13} />
                   </div>
                 ))}
               </div>
             ) : templates.length === 0 ? (
-              <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"64px 24px", textAlign:"center" }}>
-                <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
-                  <i className="ti ti-report-analytics" style={{ fontSize:24, color:"#e08080" }} />
+              <div style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "64px 24px", textAlign: "center" }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                  <i className="ti ti-report-analytics" style={{ fontSize: 24, color: "#e08080" }} />
                 </div>
-                <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>No templates found</div>
-                <div style={{ fontSize:12, color:"#b09090", marginTop:6 }}>Create your first grading template to get started</div>
-                <button onClick={() => setModal({ mode:"create" })}
-                  style={{ marginTop:18, display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"10px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
-                  <i className="ti ti-plus" style={{ fontSize:14 }} />Create Template
+                <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No templates found</div>
+                <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>Create your first grading template to get started</div>
+                <button onClick={() => setModal({ mode: "create" })}
+                  style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
+                  <i className="ti ti-plus" style={{ fontSize: 14 }} />Create Template
                 </button>
               </div>
             ) : (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
                 {templates.map((tpl) => (
                   <TemplateCard key={tpl.grading_template_id} template={tpl}
-                    onEdit={(t) => setModal({ mode:"edit", template: t })}
-                    onDelete={(t) => setToDelete(t)} />
+                    onEdit={(t) => setModal({ mode: "edit", template: t })}
+                    onDelete={(t) => { setToDelete(t); setDeleteError(""); }} />
                 ))}
               </div>
             )}
@@ -696,7 +730,7 @@ export default function GradingTemplatesPage() {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* ── Modals ── */}
       {modal && (
         <TemplateModal
           template={modal.mode === "edit" ? modal.template : null}
@@ -704,16 +738,20 @@ export default function GradingTemplatesPage() {
           onRefresh={() => fetchTemplates(levelFilter)}
         />
       )}
+
       {toDelete && (
-        <DeleteModal template={toDelete} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
+        <DeleteModal
+          template={toDelete}
+          onConfirm={handleDelete}
+          onCancel={() => { setToDelete(null); setDeleteError(""); }}
+          deleting={deleting}
+          deleteError={deleteError}
+        />
       )}
 
       {showLogout && (
         <LogoutModal
-          onConfirm={() => {
-            clearAuthSession();
-            navigate("/");
-          }}
+          onConfirm={() => { clearAuthSession(); navigate("/"); }}
           onCancel={() => setShowLogout(false)}
         />
       )}
