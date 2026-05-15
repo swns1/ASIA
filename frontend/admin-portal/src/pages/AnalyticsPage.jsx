@@ -147,8 +147,10 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
   const W = 700, H = 420, PAD = 50;
   const xs = allPoints.map((p) => p.x);
   const ys = allPoints.map((p) => p.y);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xMin = xs.reduce((a, b) => Math.min(a, b), Infinity);
+  const xMax = xs.reduce((a, b) => Math.max(a, b), -Infinity);
+  const yMin = ys.reduce((a, b) => Math.min(a, b), Infinity);
+  const yMax = ys.reduce((a, b) => Math.max(a, b), -Infinity);
   const xRange = xMax - xMin || 1;
   const yRange = yMax - yMin || 1;
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession } from "../utils/auth";
+import { clearAuthSession, getCurrentUser } from "../utils/auth";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
 
@@ -351,6 +351,7 @@ const handleSave = async () => {
 // ════════════════════════════════════════════════════════════════════════════
 export default function PaymentsPage() {
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
   const preloadedInvoiceId = searchParams.get("invoice") ? parseInt(searchParams.get("invoice")) : null;
 
@@ -446,11 +447,11 @@ export default function PaymentsPage() {
           </nav>
           <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-              <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
-              </div>
+<div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
+<div style={{ flex:1 }}>
+  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
+  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
+</div>
               <button title="Logout" onClick={() => setShowLogout(true)}
                 style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#c09090", transition:"all 0.12s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}

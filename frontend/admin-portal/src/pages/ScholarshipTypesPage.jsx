@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession } from "../utils/auth";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
+import { clearAuthSession, getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ function LogoutModal({ onConfirm, onCancel }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function ScholarshipTypesPage() {
   const navigate = useNavigate();
-
+  const currentUser = getCurrentUser();
   const [scholarships, setScholarships] = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState("");
@@ -397,10 +397,10 @@ export default function ScholarshipTypesPage() {
           </nav>
             <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
+                  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
                 </div>
                 <button
                   title="Logout"
