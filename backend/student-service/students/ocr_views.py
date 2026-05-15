@@ -1,7 +1,7 @@
 """
 OCR integration for student document scanning.
-Uses Google Gemini 2.0 Flash (free tier) to extract structured
-student data from uploaded images (birth certificates, school IDs, etc.)
+Uses Groq LLaMA Vision to extract structured student data
+from uploaded images (birth certificates, school IDs, etc.)
 
 Endpoint: POST /api/ocr/scan/
 Auth: JWT required (same as rest of student-service)
@@ -10,24 +10,24 @@ Auth: JWT required (same as rest of student-service)
 import base64
 import json
 import logging
-import os
 
 import requests
 from django.conf import settings
 from rest_framework import permissions, status
-from rest_framework.throttling import UserRateThrottle
-
-class OcrRateThrottle(UserRateThrottle):
-    """Tighter per-user limit for OCR — Groq has its own upstream rate limit."""
-    scope = "ocr"
-
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from student_service.throttles import StatelessUserRateThrottle
 
 logger = logging.getLogger(__name__)
 
-# ── Gemini prompt ─────────────────────────────────────────────────────────────
+
+class OcrRateThrottle(StatelessUserRateThrottle):
+    """Tighter per-user limit for OCR — Groq has its own upstream rate limit."""
+    scope = "ocr"
+
+
+# ── Prompt ────────────────────────────────────────────────────────────────────
 
 EXTRACTION_PROMPT = """
 You are an OCR assistant for a Philippine school enrollment system.
@@ -61,7 +61,7 @@ Rules:
 - Names should be in Title Case (e.g. "Juan", not "JUAN" or "juan")
 - LRN is exactly 12 digits — strip spaces/dashes if present
 - Dates must be YYYY-MM-DD; if only year is visible, use YYYY-01-01
-- For sex: map "M", "Male", "Lalaki" → "male"; "F", "Female", "Babae" → "female"
+- For sex: map "M", "Male", "Lalaki" -> "male"; "F", "Female", "Babae" -> "female"
 - If the document is not a student-related document, still extract whatever is relevant
 - Do NOT wrap the JSON in markdown code blocks — return raw JSON only
 """
@@ -72,57 +72,55 @@ Rules:
 def _image_to_base64(image_file) -> tuple[str, str]:
     """Read uploaded file and return (base64_data, mime_type)."""
     content_type = getattr(image_file, "content_type", "image/jpeg")
-    # Normalize mime type
     if content_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
         content_type = "image/jpeg"
     data = base64.b64encode(image_file.read()).decode("utf-8")
     return data, content_type
 
 
-def _call_gemini(base64_data: str, mime_type: str) -> dict:
-    """Call Gemini 2.0 Flash API and return parsed JSON result."""
-    api_key = settings.GEMINI_API_KEY
+def _call_groq(base64_data: str, mime_type: str) -> dict:
+    """Call Groq LLaMA Vision API and return parsed JSON result."""
+    api_key = settings.GROQ_API_KEY
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is not configured in settings.")
+        raise ValueError("GROQ_API_KEY is not configured in settings.")
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={api_key}"
-    )
-
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": EXTRACTION_PROMPT},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": base64_data,
-                        }
-                    },
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.1,       # Low temp = more deterministic/accurate
-            "maxOutputTokens": 1024,
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json={
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            "temperature": 0.1,
+            "max_tokens": 1024,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_data}",
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": EXTRACTION_PROMPT,
+                        },
+                    ],
+                }
+            ],
         },
-    }
-
-    response = requests.post(url, json=payload, timeout=30)
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=30,
+    )
     response.raise_for_status()
 
     result = response.json()
 
-    # Extract the text content from Gemini's response structure
     try:
-        raw_text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        raw_text = result["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError) as e:
-        logger.error("Unexpected Gemini response structure: %s", result)
-        raise ValueError("Could not parse Gemini response.") from e
+        logger.error("Unexpected Groq response structure: %s", result)
+        raise ValueError("Could not parse Groq response.") from e
 
-    # Strip markdown code fences if Gemini returns them anyway
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
         if raw_text.startswith("json"):
@@ -132,15 +130,11 @@ def _call_gemini(base64_data: str, mime_type: str) -> dict:
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError as e:
-        logger.error("Gemini returned non-JSON: %s", raw_text)
-        raise ValueError(f"Gemini returned invalid JSON: {raw_text[:200]}") from e
+        logger.error("Groq returned non-JSON: %s", raw_text)
+        raise ValueError(f"Groq returned invalid JSON: {raw_text[:200]}") from e
 
 
 def _sanitize_result(data: dict) -> dict:
-    """
-    Clean up extracted data to match the student form field expectations.
-    Removes null values and normalizes strings.
-    """
     cleaned = {}
     for key, value in data.items():
         if value is None:
@@ -151,11 +145,9 @@ def _sanitize_result(data: dict) -> dict:
                 continue
         cleaned[key] = value
 
-    # Ensure sex is valid
     if "sex" in cleaned and cleaned["sex"] not in ("male", "female"):
         del cleaned["sex"]
 
-    # Ensure LRN is exactly 12 digits
     if "lrn" in cleaned:
         lrn = "".join(filter(str.isdigit, str(cleaned["lrn"])))
         if len(lrn) == 12:
@@ -169,29 +161,6 @@ def _sanitize_result(data: dict) -> dict:
 # ── View ──────────────────────────────────────────────────────────────────────
 
 class OCRScanView(APIView):
-    """
-    POST /api/ocr/scan/
-
-    Accepts a multipart image upload and returns extracted student fields.
-
-    Request body (multipart/form-data):
-        image: <file>   — JPEG, PNG, or WEBP document scan
-
-    Response 200:
-        {
-            "success": true,
-            "confidence": "high" | "medium" | "low",
-            "extracted": {
-                "first_name": "...",
-                "last_name": "...",
-                ...                    ← only fields that were found
-            }
-        }
-
-    Response 400: { "success": false, "error": "..." }
-    Response 503: { "success": false, "error": "Gemini API error" }
-    """
-
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes   = [OcrRateThrottle]
     parser_classes     = [MultiPartParser, FormParser]
@@ -205,7 +174,6 @@ class OCRScanView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Basic size guard — 10 MB
         if image_file.size > 10 * 1024 * 1024:
             return Response(
                 {"success": False, "error": "Image too large. Maximum size is 10 MB."},
@@ -214,7 +182,7 @@ class OCRScanView(APIView):
 
         try:
             base64_data, mime_type = _image_to_base64(image_file)
-            raw_result = _call_gemini(base64_data, mime_type)
+            raw_result = _call_groq(base64_data, mime_type)
             confidence = raw_result.pop("confidence", "medium")
             extracted  = _sanitize_result(raw_result)
 
@@ -238,11 +206,17 @@ class OCRScanView(APIView):
             )
         except requests.exceptions.Timeout:
             return Response(
-                {"success": False, "error": "Gemini API timed out. Please try again."},
+                {"success": False, "error": "Groq API timed out. Please try again."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except requests.exceptions.HTTPError as e:
-            logger.error("Gemini HTTP error: %s", e.response.text if e.response else str(e))
+            status_code = e.response.status_code if e.response else 0
+            if status_code == 429:
+                return Response(
+                    {"success": False, "error": "Too many requests. Please wait a moment and try again."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            logger.error("Groq HTTP error: %s", e.response.text if e.response else str(e))
             return Response(
                 {"success": False, "error": "OCR service error. Check your API key."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,

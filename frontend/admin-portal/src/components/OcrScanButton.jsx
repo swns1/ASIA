@@ -192,7 +192,7 @@ export default function OcrScanButton({ onExtracted, className = "" }) {
                   </svg>
                   <div>
                     <p className="text-sm font-medium text-indigo-800">Scanning document…</p>
-                    <p className="text-xs text-indigo-500">Gemini AI is extracting student information</p>
+                    <p className="text-xs text-indigo-500">Groq AI is extracting student information</p>
                   </div>
                 </div>
               )}

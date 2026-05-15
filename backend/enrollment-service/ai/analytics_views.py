@@ -54,8 +54,16 @@ from rest_framework import permissions, status
 from rest_framework.throttling import UserRateThrottle
 
 class ClusterRateThrottle(UserRateThrottle):
-    """K-Means + PCA is CPU-heavy — cap it tighter than general endpoints."""
     scope = "cluster"
+
+    def get_cache_key(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return None
+        uid = getattr(user, "user_id", None) or getattr(user, "pk", None)
+        if not uid:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": uid}
 
 from rest_framework.response import Response
 from rest_framework.views import APIView

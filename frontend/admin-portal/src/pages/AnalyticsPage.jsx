@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
-import AIInsightPanel from "../components/AIInsightPanel";
+import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
 
@@ -56,21 +56,21 @@ const PERIOD_OPTIONS = [
 ];
 
 const GRADE_LEVEL_OPTIONS = [
-  { value: "",            label: "All Grade Levels" },
-  { value: "Nursery",     label: "Nursery" },
-  { value: "Kinder",      label: "Kindergarten" },
-  { value: "Grade 1",     label: "Grade 1" },
-  { value: "Grade 2",     label: "Grade 2" },
-  { value: "Grade 3",     label: "Grade 3" },
-  { value: "Grade 4",     label: "Grade 4" },
-  { value: "Grade 5",     label: "Grade 5" },
-  { value: "Grade 6",     label: "Grade 6" },
-  { value: "Grade 7",     label: "Grade 7" },
-  { value: "Grade 8",     label: "Grade 8" },
-  { value: "Grade 9",     label: "Grade 9" },
-  { value: "Grade 10",    label: "Grade 10" },
-  { value: "Grade 11",    label: "Grade 11" },
-  { value: "Grade 12",    label: "Grade 12" },
+  { value: "",         label: "All Grade Levels" },
+  { value: "Nursery",  label: "Nursery" },
+  { value: "Kinder",   label: "Kindergarten" },
+  { value: "Grade 1",  label: "Grade 1" },
+  { value: "Grade 2",  label: "Grade 2" },
+  { value: "Grade 3",  label: "Grade 3" },
+  { value: "Grade 4",  label: "Grade 4" },
+  { value: "Grade 5",  label: "Grade 5" },
+  { value: "Grade 6",  label: "Grade 6" },
+  { value: "Grade 7",  label: "Grade 7" },
+  { value: "Grade 8",  label: "Grade 8" },
+  { value: "Grade 9",  label: "Grade 9" },
+  { value: "Grade 10", label: "Grade 10" },
+  { value: "Grade 11", label: "Grade 11" },
+  { value: "Grade 12", label: "Grade 12" },
 ];
 
 function currentSchoolYear() {
@@ -141,7 +141,7 @@ const s = {
 };
 
 
-// ── Scatter Plot (pure SVG — no recharts dependency needed) ───────────────────
+// ── Scatter Plot ──────────────────────────────────────────────────────────────
 function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
   if (!clusters || clusters.length === 0) return null;
 
@@ -164,21 +164,17 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 12, border: "1px solid #f0ece4" }}>
-      {/* Grid lines */}
       {[0.25, 0.5, 0.75].map((frac) => (
         <g key={frac}>
           <line x1={PAD} x2={W - PAD} y1={scaleY(yMin + frac * yRange)} y2={scaleY(yMin + frac * yRange)} stroke="#f0ece4" strokeDasharray="4,4" />
           <line y1={PAD} y2={H - PAD} x1={scaleX(xMin + frac * xRange)} x2={scaleX(xMin + frac * xRange)} stroke="#f0ece4" strokeDasharray="4,4" />
         </g>
       ))}
-
-      {/* Axes */}
       <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#d8d4cc" />
       <line x1={PAD} x2={PAD} y1={PAD} y2={H - PAD} stroke="#d8d4cc" />
       <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans">PCA Component 1</text>
       <text x={14} y={H / 2} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans" transform={`rotate(-90, 14, ${H / 2})`}>PCA Component 2</text>
 
-      {/* Points */}
       {allPoints.map((pt) => {
         const cx = scaleX(pt.x);
         const cy = scaleY(pt.y);
@@ -202,12 +198,10 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
         );
       })}
 
-      {/* Tooltip */}
       {hovered && (() => {
         const tx = scaleX(hovered.x);
         const ty = scaleY(hovered.y);
         const tipW = 185, tipH = 52;
-        // Flip if near edge
         const flipX = tx + tipW + 10 > W - PAD;
         const flipY = ty - tipH - 10 < PAD;
         const rx = flipX ? tx - tipW - 10 : tx + 12;
@@ -226,7 +220,7 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 }
 
 
-// ── Cluster Legend Card ───────────────────────────────────────────────────────
+// ── Cluster Legend ────────────────────────────────────────────────────────────
 function ClusterLegend({ clusters }) {
   if (!clusters) return null;
   return (
@@ -254,7 +248,7 @@ function ClusterLegend({ clusters }) {
 }
 
 
-// ── Student Detail Panel ─────────────────────────────────────────────────────
+// ── Student Detail Panel ──────────────────────────────────────────────────────
 function StudentDetailPanel({ student, onClose }) {
   if (!student) return null;
   return (
@@ -291,7 +285,7 @@ function StudentDetailPanel({ student, onClose }) {
 }
 
 
-// ── Student List Table ───────────────────────────────────────────────────────
+// ── Student Table ─────────────────────────────────────────────────────────────
 function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
   if (!clusters) return null;
 
@@ -359,21 +353,18 @@ export default function AnalyticsPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ── Filters ────────────────────────────────────────────────────────────
   const [schoolYear, setSchoolYear]       = useState(currentSchoolYear());
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
-  const [subjectId, setSubjectId]         = useState("");  // "" = overall
-  const [gradeLevel, setGradeLevel]       = useState("");  // "" = all levels
+  const [subjectId, setSubjectId]         = useState("");
+  const [gradeLevel, setGradeLevel]       = useState("");
   const [nClusters, setNClusters]         = useState(3);
   const [subjects, setSubjects]           = useState([]);
 
-  // ── Data ───────────────────────────────────────────────────────────────
-  const [result, setResult]               = useState(null);  // API response
+  const [result, setResult]               = useState(null);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
 
-  // ── Load subjects for filter ───────────────────────────────────────────
   useEffect(() => {
     apiFetch(`${ENROLLMENT_API}/subjects/`).then((data) => {
       const list = Array.isArray(data) ? data : data.results || [];
@@ -381,7 +372,6 @@ export default function AnalyticsPage() {
     }).catch(() => {});
   }, []);
 
-  // ── Run clustering ─────────────────────────────────────────────────────
   const runClustering = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -412,7 +402,6 @@ export default function AnalyticsPage() {
     }
   }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
 
-  // ── Sidebar ────────────────────────────────────────────────────────────
   const navGroups = getVisibleNavGroups(NAV);
 
   function handleLogout() {
@@ -420,7 +409,26 @@ export default function AnalyticsPage() {
     navigate("/login");
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
+  // ── Build onFetch for AIInsightPanel — calls AI fresh every time ──────
+  function buildOnFetch(currentResult) {
+    return () => {
+      const clusterSummary = currentResult.clusters.map((c) =>
+        `${c.label}: ${c.student_count} students, avg=${c.avg_grade}, range=[${c.min_grade}-${c.max_grade}]`
+      ).join("\n");
+
+      return callGemini("dashboard_insights", {
+        analysis_type:  "student_performance_clustering",
+        school_year:    currentResult.meta.school_year,
+        grading_period: currentResult.meta.grading_period,
+        grade_level:    currentResult.meta.grade_level,
+        subject:        currentResult.meta.subject,
+        total_students: currentResult.meta.total_students,
+        n_clusters:     currentResult.meta.n_clusters,
+        cluster_summary: clusterSummary,
+      });
+    };
+  }
+
   return (
     <div style={s.page}>
       {/* Sidebar */}
@@ -457,14 +465,14 @@ export default function AnalyticsPage() {
         </button>
       </aside>
 
-      {/* Main content */}
+      {/* Main */}
       <main style={s.main}>
         <div style={s.header}>
           <div style={s.title}>Student Performance Analytics</div>
           <div style={s.subtitle}>K-Means clustering on student grades with AI-powered interpretation</div>
         </div>
 
-        {/* Filters card */}
+        {/* Filters */}
         <div style={s.card}>
           <div style={s.filterRow}>
             <div style={s.filterGroup}>
@@ -553,7 +561,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Loading skeleton */}
+        {/* Loading */}
         {loading && (
           <div style={s.card}>
             <div style={s.emptyState}>
@@ -594,15 +602,13 @@ export default function AnalyticsPage() {
         {result && (
           <>
             {/* Meta bar */}
-            <div style={{
-              display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16,
-            }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               {[
-                { label: "Students", value: result.meta.total_students, icon: "ti-users" },
-                { label: "Grade Level", value: result.meta.grade_level, icon: "ti-school" },
-                { label: "Subject", value: result.meta.subject, icon: "ti-book" },
-                { label: "Period", value: PERIOD_OPTIONS.find(p => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
-                { label: "Clusters", value: result.meta.n_clusters, icon: "ti-chart-dots-3" },
+                { label: "Students",    value: result.meta.total_students, icon: "ti-users" },
+                { label: "Grade Level", value: result.meta.grade_level,    icon: "ti-school" },
+                { label: "Subject",     value: result.meta.subject,        icon: "ti-book" },
+                { label: "Period",      value: PERIOD_OPTIONS.find(p => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
+                { label: "Clusters",    value: result.meta.n_clusters,     icon: "ti-chart-dots-3" },
               ].map((m) => (
                 <div key={m.label} style={{
                   flex: "1 1 140px", padding: "12px 16px", borderRadius: 12,
@@ -655,12 +661,12 @@ export default function AnalyticsPage() {
               />
             </div>
 
-            {/* AI Interpretation */}
+            {/* AI Interpretation — calls API fresh on every Analyze/Re-analyze */}
             <AIInsightPanel
               title="Cluster Interpretation"
-              description="AI analysis of the clustering results"
+              description="AI analysis of the clustering results — click Analyze to generate"
               disabled={false}
-              onFetch={async () => ({ interpretation: result.interpretation })}
+              onFetch={buildOnFetch(result)}
             />
           </>
         )}
