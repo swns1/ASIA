@@ -258,6 +258,12 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
+    const data = await getStudents({
+  page: nextPage,
+  search: term,
+  status: status === "all" ? "" : status,
+  page_size: 50,   // ← add this
+});
   };
 
   // Fetch counts for all statuses (for stat cards)
@@ -304,7 +310,7 @@ export default function StudentsPage() {
     fetchCounts();
   };
 
-  const totalPages = Math.ceil(pageMeta.count / 20);
+  const totalPages = Math.ceil(pageMeta.count / 50);
 
   return (
     <>
@@ -609,6 +615,8 @@ export default function StudentsPage() {
               background: "white", border: "1px solid #f5eaea",
               borderRadius: 16, overflow: "hidden",
               boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+              maxHeight: "calc(100vh - 340px)",   
+              overflowY: "auto", 
             }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
@@ -628,6 +636,10 @@ export default function StudentsPage() {
                         borderBottom: "1px solid #f5eaea",
                         textTransform: "uppercase", letterSpacing: "0.07em",
                         width: w,
+                        position: "sticky",   
+                        top: 0,               
+                        zIndex: 1,            
+                        background: "#fdfafa",
                       }}>
                         {label}
                       </th>

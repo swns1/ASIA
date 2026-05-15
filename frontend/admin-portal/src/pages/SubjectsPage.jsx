@@ -534,7 +534,13 @@ export default function SubjectsPage() {
             </div>
 
             {/* Table */}
-            <div style={{ background:"white", border:"1px solid #f5eaea", borderRadius:16, overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
+            <div style={{
+              background: "white", border: "1px solid #f5eaea",
+              borderRadius: 16, overflow: "hidden",
+              boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+              maxHeight: "calc(100vh - 340px)",   // ← add this
+              overflowY: "auto",                  // ← add this (overrides the hidden)
+            }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                 <thead>
                   <tr style={{ background:"#fdfafa" }}>
