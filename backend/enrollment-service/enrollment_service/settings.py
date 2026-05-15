@@ -10,6 +10,8 @@ Critical compat with identity-service:
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -127,6 +129,17 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ),
+    # ── Rate Limiting ─────────────────────────────────────────────────────
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon":    "30/minute",   # unauthenticated (should be rare)
+        "user":    "120/minute",  # authenticated — grades/enrollments need frequent reads
+        "cluster": "6/minute",    # clustering is CPU-heavy — tighter cap
+    },
+    # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }
@@ -157,5 +170,6 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# Resend
-RESEND_API_KEY = "re_BkvUAMSZ_QGb6Ju4F3VkPDW4smbSFEaC6" 
+# ─── External APIs ───────────────────────────────────────────────────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")

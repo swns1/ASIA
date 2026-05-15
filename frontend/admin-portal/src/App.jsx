@@ -19,6 +19,7 @@ import PaymentsPage       from "./pages/PaymentsPage";
 import AuditTrailPage     from "./pages/AuditTrailPage";
 import RequirementsPage   from "./pages/RequirementsPage";
 import UsersPage          from "./pages/UsersPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/audit-trail"   element={<AuditTrailPage />} />
         <Route path="/requirements"  element={<RequirementsPage />} />
         <Route path="/users"         element={<UsersPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
       </Routes>
     </BrowserRouter>
   );
