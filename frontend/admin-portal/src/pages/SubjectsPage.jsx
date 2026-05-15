@@ -579,7 +579,7 @@ export default function SubjectsPage() {
                               <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
                                 <i className="ti ti-book-off" style={{ fontSize:24, color:"#e08080" }} />
                               </div>
-                              <div style={{ fontSize:15, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>No subjects found</div>
+                              <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>No subjects found</div>
                               <div style={{ fontSize:12, color:"#b09090" }}>Try a different search or add a new subject</div>
                             </div>
                           </td>

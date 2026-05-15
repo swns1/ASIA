@@ -440,7 +440,7 @@ export default function EnrollmentsPage() {
                               <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
                                 <i className="ti ti-clipboard-off" style={{ fontSize:24, color:"#e08080" }} />
                               </div>
-                              <div style={{ fontSize:15, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>No enrollments found</div>
+                              <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>No enrollments found</div>
                               <div style={{ fontSize:12, color:"#b09090" }}>Try adjusting your filters or enroll a new student</div>
                               <button onClick={() => navigate("/enrollments/new")}
                                 style={{ marginTop:8, padding:"9px 20px", background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>

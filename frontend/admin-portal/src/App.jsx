@@ -20,6 +20,7 @@ import AuditTrailPage     from "./pages/AuditTrailPage";
 import RequirementsPage   from "./pages/RequirementsPage";
 import UsersPage          from "./pages/UsersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 export default function App() {
   return (

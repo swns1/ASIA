@@ -374,10 +374,10 @@ export default function StudentDetailPage() {
               </span>
             </div>
             <div style={{ display:"flex", gap:8 }}>
-              <button style={{ width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" }}>
+              {/* <button style={{ width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" }}>
                 <i className="ti ti-bell" style={{ fontSize:16 }} />
                 <span style={{ width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" }} />
-              </button>
+              </button> */}
               {!loading && student && (
                 <button
                   className="action-btn action-edit"
