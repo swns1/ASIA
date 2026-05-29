@@ -1,35 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs } from "../api/auditTrailApi";
-import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 
-const NAV = [
-  { section: "Main", items: [
-    { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"   },
-    { label: "Students",    icon: "ti-users",             path: "/students"    },
-    { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-    { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
-    { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
-    { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-    { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-  ]},
-  { section: "Finance", items: [
-    { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-    { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-    { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-  ]},
-  { section: "Settings", items: [
-    { label: "Users",             icon: "ti-user-cog",         path: "/users" },
-    { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
-    { label: "School Settings",   icon: "ti-settings",         path: "/settings" },
-    { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-    { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules" },
-  ]},
-];
 
 const C = {
   red: "#e03131",
@@ -248,39 +223,23 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
 );
 
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:C.red }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:C.text}}>Log out?</div>
-        <div style={{ fontSize:13, color:C.muted, textAlign:"center", lineHeight:1.7 }}>You'll be returned to the login page. Any unsaved changes will be lost.</div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={s.secondaryBtn}>Stay</button>
-          <button onClick={onConfirm} style={s.dangerBtn}>Yes, logout</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function AccessDenied({ navigate }) {
   return (
-    <div style={s.centerShell}>
-      <style>{baseCss}</style>
-      <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:18, padding:"34px 38px", width:420, boxShadow:"0 18px 50px rgba(224,49,49,0.12)", textAlign:"center" }}>
-        <div style={{ width:58, height:58, borderRadius:16, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
-          <i className="ti ti-shield-lock" style={{ fontSize:26, color:C.red }} />
+    <AppLayout>
+      <div style={s.centerShell}>
+        <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:18, padding:"34px 38px", width:420, boxShadow:"0 18px 50px rgba(224,49,49,0.12)", textAlign:"center" }}>
+          <div style={{ width:58, height:58, borderRadius:16, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+            <i className="ti ti-shield-lock" style={{ fontSize:26, color:C.red }} />
+          </div>
+          <div style={{ fontSize:18, fontWeight:700, color:C.text}}>Access denied</div>
+          <div style={{ fontSize:13, color:C.muted, lineHeight:1.7, marginTop:8 }}>Only Admin and Super Admin users can view log records.</div>
+          <button onClick={() => navigate("/dashboard")} style={{ ...s.primaryBtn, marginTop:22 }}>
+            <i className="ti ti-arrow-left" style={{ fontSize:14 }} />Back to Dashboard
+          </button>
         </div>
-        <div style={{ fontSize:18, fontWeight:700, color:C.text}}>Access denied</div>
-        <div style={{ fontSize:13, color:C.muted, lineHeight:1.7, marginTop:8 }}>Only Admin and Super Admin users can view log records.</div>
-        <button onClick={() => navigate("/dashboard")} style={{ ...s.primaryBtn, marginTop:22 }}>
-          <i className="ti ti-arrow-left" style={{ fontSize:14 }} />Back to Dashboard
-        </button>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 
@@ -300,34 +259,6 @@ export default function AuditTrailPage() {
   const [sort, setSort] = useState({ key: "date", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [showLogout, setShowLogout] = useState(false);
-
-  const navGroups = NAV.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.adminOnly || allowed),
-  }));
-
-  useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) {
-      navigate("/");
-      return;
-    }
-    if (!allowed) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    fetchAuditLogs()
-      .then((data) => {
-        setLogs((data.results || []).map(normalizeLog));
-        setSource(data.source);
-      })
-      .catch((e) => setError(e.message || "Failed to load log records."))
-      .finally(() => setLoading(false));
-  }, [allowed, navigate]);
 
   const roles = useMemo(() => {
     const unique = Array.from(new Set(logs.map((log) => log.userRole).filter(Boolean)));
@@ -352,6 +283,22 @@ export default function AuditTrailPage() {
   const invalidCount = logs.filter((log) => log.invalidDate).length;
 
   useEffect(() => {
+    const token = sessionStorage.getItem("access_token");
+    if (!token) { navigate("/"); return; }
+    if (!allowed) { setLoading(false); return; }
+
+    setLoading(true);
+    setError("");
+    fetchAuditLogs()
+      .then((data) => {
+        setLogs((data.results || []).map(normalizeLog));
+        setSource(data.source);
+      })
+      .catch((e) => setError(e.message || "Failed to load log records."))
+      .finally(() => setLoading(false));
+  }, [allowed, navigate]);
+
+  useEffect(() => {
     setPage(1);
   }, [roleFilter, dateFilter, timeFrom, timeTo, pageSize]);
 
@@ -374,59 +321,7 @@ export default function AuditTrailPage() {
   }
 
   return (
-    <>
-      <style>{baseCss}</style>
-      <div style={s.shell}>
-        <aside style={s.sidebar}>
-          <div style={s.brandWrap}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={s.brandIcon}>
-                <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
-              </div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:C.text }}>South Lakes IS</div>
-                <div style={{ fontSize:11, color:C.pale, marginTop:1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-
-          <nav style={s.nav}>
-            {navGroups.map((group) => (
-              <div key={group.section} style={{ marginBottom:6 }}>
-                <div style={s.navSection}>{group.section}</div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div key={item.path} className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{ ...s.navItem, color:active ? C.red : "#7a5a5a" }}
-                      onClick={() => navigate(item.path)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize:16, width:20, textAlign:"center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div style={{ padding:"14px 10px", borderTop:`1px solid ${C.border}` }}>
-            <div style={s.userBox}>
-              <div style={s.avatar}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={s.userName}>{currentUser?.name || "Super Admin"}</div>
-                <div style={s.userRole}>{currentUser?.role || "super_admin"}</div>
-              </div>
-              <button title="Logout" onClick={() => setShowLogout(true)} style={s.logoutBtn}>
-                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        <main style={s.main}>
+    <AppLayout>
           <div style={s.topbar}>
             <div>
               <div style={s.topbarTitle}>Audit Trail</div>
@@ -589,16 +484,7 @@ export default function AuditTrailPage() {
               </div>
             </section>
           </div>
-        </main>
-      </div>
-
-      {showLogout && (
-        <LogoutModal
-          onCancel={() => setShowLogout(false)}
-          onConfirm={() => { clearAuthSession(); navigate("/"); }}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
 

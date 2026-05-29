@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { getStudents } from "../api/studentApi";
 import {
   fetchRequirementSummary,
@@ -8,45 +10,8 @@ import {
   resolveMediaUrl,
   uploadRequirement,
 } from "../api/requirementApi";
-import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 
-// ── Navigation ────────────────────────────────────────────────────────────────
-const NAV = [
-  {
-    section: "Main",
-    items: [
-      { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard" },
-      { label: "Students",     icon: "ti-users",             path: "/students" },
-      { label: "Enrollments",  icon: "ti-clipboard-list",    path: "/enrollments" },
-      { label: "Subjects",     icon: "ti-book",              path: "/subjects" },
-      { label: "Grades",       icon: "ti-chart-bar",         path: "/grades" },
-      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-      { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices" },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments" },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-    ],
-  },
-  {
-    section: "Settings",
-    items: [
-      { label: "Users",   icon: "ti-shield-lock",       path: "/users" },
-      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
-      { label: "School Settings",   icon: "ti-settings",         path: "/settings" },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules" },
-    ],
-  },
-];
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -99,23 +64,6 @@ function StatusBadge({ submitted }) {
 }
 
 // ── Logout modal ──────────────────────────────────────────────────────────────
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-logout" style={{ fontSize: 24, color: C.red }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.text}}>Log out?</div>
-        <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.7 }}>You'll be returned to the login page. Any unsaved changes will be lost.</div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={s.secondaryBtn}>Stay</button>
-          <button onClick={onConfirm} style={s.dangerBtn}>Yes, logout</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Remove confirm modal ──────────────────────────────────────────────────────
 function RemoveModal({ req, onConfirm, onCancel }) {
@@ -388,11 +336,6 @@ export default function RequirementsPage() {
   const currentUser = getCurrentUser();
   const isAdmin = canViewAuditTrail(currentUser);
 
-  const navGroups = NAV.map((g) => ({
-    ...g,
-    items: g.items.filter((item) => !item.adminOnly || isAdmin),
-  }));
-
   // Search state
   const [searchInput,   setSearchInput]   = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -410,7 +353,6 @@ export default function RequirementsPage() {
   const [uploadModal, setUploadModal] = useState(null);
   const [viewModal,   setViewModal]   = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
-  const [showLogout,  setShowLogout]  = useState(false);
 
   // Auth guard
   useEffect(() => {
@@ -426,7 +368,7 @@ export default function RequirementsPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── Live debounced student search ──
+  // Live debounced student search
   useEffect(() => {
     if (!searchInput.trim()) { setSearchResults([]); setShowDropdown(false); return; }
     setSearchLoading(true);
@@ -496,64 +438,8 @@ export default function RequirementsPage() {
   const pending   = requirements.length - submitted;
 
   return (
-    <>
+    <AppLayout>
       <style>{baseCss}</style>
-      <div style={s.shell}>
-
-        {/* ── Sidebar ── */}
-        <aside style={s.sidebar}>
-          <div style={s.brandWrap}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={s.brandIcon}>
-                <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>South Lakes IS</div>
-                <div style={{ fontSize: 11, color: C.pale, marginTop: 1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-
-          <nav style={s.nav}>
-            {navGroups.map((group) => (
-              <div key={group.section} style={{ marginBottom: 6 }}>
-                <div style={s.navSection}>{group.section}</div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div key={item.path}
-                      className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{ ...s.navItem, color: active ? C.red : "#7a5a5a" }}
-                      onClick={() => navigate(item.path)}
-                      role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div style={{ padding: "14px 10px", borderTop: `1px solid ${C.border}` }}>
-            <div style={s.userBox}>
-              <div style={s.avatar}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={s.userName}>{currentUser?.name || "Admin"}</div>
-                <div style={s.userRole}>{currentUser?.role || "admin"}</div>
-              </div>
-              <button title="Logout" onClick={() => setShowLogout(true)} style={s.logoutBtn}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
-                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Main ── */}
-        <main style={s.main}>
           {/* Topbar */}
           <div style={s.topbar}>
             <div>
@@ -733,9 +619,6 @@ export default function RequirementsPage() {
               </div>
             )}
           </div>
-        </main>
-      </div>
-
       {/* ── Modals ── */}
       {uploadModal && (
         <UploadModal
@@ -757,14 +640,7 @@ export default function RequirementsPage() {
           onCancel={() => setRemoveModal(null)}
         />
       )}
-
-      {showLogout && (
-        <LogoutModal
-          onCancel={() => setShowLogout(false)}
-          onConfirm={() => { clearAuthSession(); navigate("/"); }}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
 

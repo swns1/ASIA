@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession, getCurrentUser } from "../utils/auth";
+import { getCurrentUser } from "../utils/auth";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -28,29 +26,6 @@ const getGrades      = (p = {}) => apiCall("GET", `${API_BASE}/grades/?${new URL
 const getSubjects    = (p = {}) => apiCall("GET", `${API_BASE}/subjects/?${new URLSearchParams(p)}`);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
-const NAV = [
-  { section: "Main", items: [
-    { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"   },
-    { label: "Students",    icon: "ti-users",             path: "/students"    },
-    { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-    { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
-    { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
-    { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-    { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-  ]},
-  { section: "Finance", items: [
-    { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-    { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-    { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-  ]},
-  { section: "Settings", items: [
-    { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-    { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-    { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-    { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-  ]},
-];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GRADING_PERIODS_BY_LEVEL = {
@@ -213,29 +188,6 @@ function StudentPicker({ value, onChange }) {
   );
 }
 
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Grade Summary Table ───────────────────────────────────────────────────────
 function SummaryTable({ enrollment, grades, subjects, loading }) {
@@ -404,8 +356,6 @@ export default function GradeSummaryPage() {
   const [loading,     setLoading]     = useState(false);
   const [loadingEnr,  setLoadingEnr]  = useState(false);
 
-  const [showLogout, setShowLogout] = useState(false);
-
   // ── Load enrollments when student changes ──
   useEffect(() => {
     if (!student) { setEnrollments([]); setEnrollment(null); setGrades([]); setSubjects([]); return; }
@@ -441,87 +391,8 @@ export default function GradeSummaryPage() {
   const overallAvg    = gradeCount > 0 ? grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / gradeCount : null;
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');        
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes rowIn   { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
-        @keyframes spin    { to{transform:rotate(360deg)} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans',sans-serif; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-        .nav-item { transition:background 0.12s,color 0.12s; }
-        .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
-        .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-        .enr-chip { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1.5px solid #f0e4e4;background:white;font-size:13px;color:#7a5050;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;transition:all 0.14s;text-align:left;width:100%; }
-        .enr-chip:hover { border-color:#fca5a5;color:#e03131;background:#fff8f6; }
-        .enr-chip.active { background:#fff0f0;border-color:#e03131;color:#e03131;font-weight:700; }
-        .new-btn { transition:all 0.16s !important; }
-        .new-btn:hover { background:#c92a2a !important;box-shadow:0 8px 28px rgba(224,49,49,0.32) !important;transform:translateY(-1px); }
-      `}</style>
+    <AppLayout>
 
-      <div style={{ display:"flex", height:"100vh", background:"#fdf8f6", fontFamily:"'DM Sans',sans-serif", overflow:"hidden" }}>
-
-        {/* ── Sidebar ── */}
-        <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
-          <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
-              
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-          <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {getVisibleNavGroups(NAV).map((group) => (
-              <div key={group.section} style={{ marginBottom:6 }}>
-                <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div key={item.path} className={`nav-item${active?" nav-active":""}`}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, color:active?"#e03131":"#7a5a5a", cursor:"pointer" }}
-                      onClick={() => navigate(item.path)} role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key==="Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize:16, width:20, textAlign:"center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-            <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
-                </div>
-                <button
-                  title="Logout"
-                  onClick={() => setShowLogout(true)}
-                  style={{
-                    width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
-                    background:"white", display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", color:"#c09090", transition:"all 0.12s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
-                >
-                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-                </button>
-              </div>
-            </div>
-        </aside>
-
-        {/* ── Main ── */}
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
           {/* Topbar */}
           <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
@@ -729,19 +600,7 @@ export default function GradeSummaryPage() {
             </div>
 
           </div>
-        </div>
-      </div>
-
-      {showLogout && (
-        <LogoutModal
-          onConfirm={() => {
-            clearAuthSession();
-            navigate("/");
-          }}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
 

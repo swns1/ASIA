@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
-import manIcon from "../assets/man.svg";
-import trophyIcon from "../assets/trophy.svg";
-import calendarIcon from "../assets/calendar.svg";
-import bookIcon from "../assets/book.svg";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
+import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -24,39 +19,6 @@ async function apiFetch(url) {
 }
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
-const NAV = [
-  {
-    section: "Main",
-    items: [
-      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"   },
-      { label: "Students",    icon: "ti-users",             path: "/students"    },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-      { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
-      { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
-      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-      { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-    ],
-  },
-  {
-    section: "Settings",
-    items: [
-      { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
-      { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-    ],
-  },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const LEVEL_LABELS = {
@@ -104,7 +66,7 @@ const Sk = ({ w = "100%", h = 18, r = 6 }) => (
 );
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, imgSrc, chipText, chipType, loading }) {
+function StatCard({ label, value, icon, chipText, chipType, loading }) {
   const chips = {
     up:      { bg: "#eaf3de", color: "#3b6d11" },
     down:    { bg: "#fcebeb", color: "#a32d2d" },
@@ -117,10 +79,7 @@ function StatCard({ label, value, icon, imgSrc, chipText, chipType, loading }) {
       <div style={s.statTop}>
         <span style={s.statLabel}>{label}</span>
         <div style={s.statIcon}>
-          {imgSrc
-            ? <img src={imgSrc} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />
-            : <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
-          }
+          <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
         </div>
       </div>
       {loading ? <Sk h={30} w="60%" /> : <div style={s.statValue}>{value}</div>}
@@ -146,29 +105,6 @@ function Panel({ title, action, onAction, children }) {
   );
 }
 
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a"}}>Log out?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -177,16 +113,11 @@ export default function DashboardPage() {
   const navigate  = useNavigate();
   const schoolYear = currentSchoolYear();
   const currentUser = getCurrentUser();
-  const navGroups = NAV.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.adminOnly || canViewAuditTrail(currentUser)),
-  }));
 
   // ── state ──
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState("");
 
-  // stat cards
   const [totalStudents,    setTotalStudents]    = useState(0);
   const [activeStudents,   setActiveStudents]   = useState(0);
   const [enrolledCount,    setEnrolledCount]    = useState(0);
@@ -194,13 +125,10 @@ export default function DashboardPage() {
   const [scholarshipCount, setScholarshipCount] = useState(0);
   const [subjectCount,     setSubjectCount]     = useState(0);
 
-  // panels
   const [recentEnrollments, setRecentEnrollments] = useState([]);
   const [levelBreakdown,    setLevelBreakdown]    = useState([]);
   const [recentStudents,    setRecentStudents]    = useState([]);
   const [scholarships,      setScholarships]      = useState([]);
-
-  const [showLogout, setShowLogout] = useState(false);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
@@ -227,8 +155,6 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }
-
-  // ── fetch helpers ──
 
   async function fetchStudentStats() {
     const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=1`);
@@ -264,10 +190,10 @@ export default function DashboardPage() {
     setLevelBreakdown(counts.filter((c) => c.count > 0));
   }
 
-async function fetchRecentStudents() {
-  const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=5&ordering=-student_id`);
-  setRecentStudents((data.results ?? []).slice(0, 5));
-}
+  async function fetchRecentStudents() {
+    const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=5&ordering=-student_id`);
+    setRecentStudents((data.results ?? []).slice(0, 5));
+  }
 
   async function fetchScholarships() {
     const data = await apiFetch(`${ENROLLMENT_API}/api/enrollment-scholarships/?page_size=100`);
@@ -285,7 +211,6 @@ async function fetchRecentStudents() {
   const maxLevel = Math.max(...levelBreakdown.map((l) => l.count), 1);
   const enrollmentRate = totalStudents > 0 ? Math.round((enrolledCount / totalStudents) * 100) : 0;
 
-  // Group scholarships by type for welfare panel
   const scholarshipsByType = scholarships.reduce((acc, s) => {
     const name = s.scholarship_type_detail?.scholarship_name ?? "Unknown";
     acc[name] = (acc[name] || 0) + 1;
@@ -296,81 +221,7 @@ async function fetchRecentStudents() {
     .slice(0, 4);
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
-        @keyframes rowIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans',sans-serif; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-        .nav-item { transition:background 0.12s,color 0.12s; }
-        .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
-        .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-        .enroll-row:hover td { background:#fff8f6 !important; cursor:pointer; }
-        .qa-btn:hover { background:#fde8e8 !important; }
-        .icon-btn:hover { background:#f5f5f3 !important; }
-      `}</style>
-
-      <div style={s.shell}>
-
-        {/* ── Sidebar ── */}
-        <aside style={{ width:224, flexShrink:0, background:"white", borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" }}>
-          <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>South Lakes IS</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-          <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {navGroups.map((group) => (
-              <div key={group.section} style={{ marginBottom:6 }}>
-                <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>{group.section}</div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div key={item.path} className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, color:active?"#e03131":"#7a5a5a", cursor:"pointer" }}
-                      onClick={() => navigate(item.path)} role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key==="Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize:16, width:20, textAlign:"center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-            <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
-                </div>
-                <button
-                  title="Logout"
-                  onClick={() => setShowLogout(true)}
-                  style={{
-                    width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
-                    background:"white", display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", color:"#c09090", transition:"all 0.12s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
-                >
-                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-                </button>
-              </div>
-            </div>
-        </aside>
-
-        {/* ── Main ── */}
-        <div style={s.main}>
+    <AppLayout>
 
           {/* Topbar */}
           <div style={s.topbar}>
@@ -405,29 +256,29 @@ async function fetchRecentStudents() {
             {/* ── Stat cards ── */}
             <div style={s.statGrid}>
               <StatCard
-                label="Total Students" 
-                imgSrc={manIcon}
+                label="Total Students"
+                icon="ti-users"
                 value={totalStudents.toLocaleString()}
                 chipText={`${activeStudents.toLocaleString()} active`}
                 chipType="up" loading={loading}
               />
               <StatCard
                 label="Enrolled this S.Y."
-                imgSrc={calendarIcon}
+                icon="ti-calendar-event"
                 value={enrolledCount.toLocaleString()}
                 chipText={`${enrollmentRate}% of total`}
                 chipType="neutral" loading={loading}
               />
               <StatCard
                 label="Pending Enrollment"
-                imgSrc={bookIcon}
+                icon="ti-clipboard-list"
                 value={pendingCount.toLocaleString()}
                 chipText={pendingCount > 0 ? "needs action" : "all clear"}
                 chipType={pendingCount > 0 ? "down" : "up"} loading={loading}
               />
               <StatCard
                 label="Scholarships Awarded"
-                imgSrc={trophyIcon}
+                icon="ti-award"
                 value={scholarshipCount.toLocaleString()}
                 chipText={`${subjectCount} subjects`}
                 chipType="info" loading={loading}
@@ -641,19 +492,7 @@ async function fetchRecentStudents() {
             </div>
 
           </div>
-        </div>
-      </div>
-
-      {showLogout && (
-        <LogoutModal
-          onConfirm={() => {
-            clearAuthSession();
-            navigate("/");
-          }}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
 

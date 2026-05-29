@@ -1,48 +1,12 @@
 import { useEffect, useState } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate, useParams } from "react-router-dom";
 import { getStudent } from "../api/studentApi";
 import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
-import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession } from "../utils/auth";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 
-// ── Nav config (shared with other pages) ─────────────────────────────────────
-const NAV = [
-  {
-    section: "Main",
-    items: [
-      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
-      { label: "Students",    icon: "ti-users",             path: "/Students" },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-      { label: "Subjects",    icon: "ti-book",              path: "/subjects" },
-      { label: "Grades",      icon: "ti-chart-bar",         path: "/Grades" },
-      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-      { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices" },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments" },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-    ],
-  },
-  {
-    section: "Settings",
-    items: [
-      { label: "Users",           icon: "ti-user-cog", path: "/users" },
-      { label: "School Settings", icon: "ti-settings", path: "/settings" },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-    ],
-  },
-];
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -176,29 +140,6 @@ function EmptySection({ message }) {
   );
 }
 
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -214,8 +155,6 @@ export default function StudentDetailPage() {
   const [schools,       setSchools]       = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
-
-  const [showLogout, setShowLogout] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -250,107 +189,7 @@ export default function StudentDetailPage() {
     : "";
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-        @keyframes shimmer  { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
-        @keyframes fadeUp   { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes heroIn   { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans', sans-serif; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-track { background:transparent; }
-        ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-
-        .nav-item { transition:background 0.12s, color 0.12s; }
-        .nav-item:hover  { background:#fff4f4 !important; color:#e03131 !important; }
-        .nav-active      { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-
-        .tab-btn { transition:all 0.14s; cursor:pointer; }
-        .tab-btn:hover:not(.tab-active) { color:#e03131 !important; border-bottom-color:#fca5a5 !important; }
-
-        .action-btn { transition:all 0.15s; cursor:pointer; }
-        .action-edit:hover  { background:#fff0f0 !important; border-color:#fca5a5 !important; color:#e03131 !important; }
-        .action-back:hover  { background:#f9f4f4 !important; }
-
-        .guardian-card:hover { box-shadow:0 6px 24px rgba(224,49,49,0.10) !important; transform:translateY(-2px); }
-        .guardian-card { transition:all 0.16s; }
-
-        .school-card:hover { box-shadow:0 6px 24px rgba(224,49,49,0.10) !important; transform:translateY(-2px); }
-        .school-card { transition:all 0.16s; }
-      `}</style>
-
-      <div style={{ display:"flex", height:"100vh", background:"#fdf8f6", fontFamily:"'DM Sans', sans-serif", overflow:"hidden" }}>
-
-        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <aside style={{
-          width:224, flexShrink:0, background:"white",
-          borderRight:"1px solid #f5eaea", display:"flex", flexDirection:"column",
-          boxShadow:"2px 0 12px rgba(224,49,49,0.04)",
-        }}>
-          <div style={{ padding:"22px 18px 18px", borderBottom:"1px solid #f5eaea" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
-              
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>South Lakes IS</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-
-          <nav style={{ flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {getVisibleNavGroups(NAV).map((group) => (
-              <div key={group.section} style={{ marginBottom:6 }}>
-                <div style={{ fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 }}>
-                  {group.section}
-                </div>
-                {group.items.map((item) => {
-                  const active = location.pathname.startsWith(item.path);
-                  return (
-                    <div
-                      key={item.path}
-                      className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, color:active ? "#e03131" : "#7a5a5a", cursor:"pointer" }}
-                      onClick={() => navigate(item.path)}
-                      role="button" tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
-                    >
-                      <i className={`ti ${item.icon}`} style={{ fontSize:16, width:20, textAlign:"center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-            <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
-                </div>
-                <button
-                  title="Logout"
-                  onClick={() => setShowLogout(true)}
-                  style={{
-                    width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
-                    background:"white", display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", color:"#c09090", transition:"all 0.12s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
-                >
-                  <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-                </button>
-              </div>
-            </div>
-        </aside>
-
-        {/* ── Main ────────────────────────────────────────────────────────── */}
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+    <AppLayout>
 
           {/* Topbar */}
           <div style={{
@@ -793,18 +632,6 @@ export default function StudentDetailPage() {
               </>
             )}
           </div>
-        </div>
-      </div>
-
-      {showLogout && (
-        <LogoutModal
-          onConfirm={() => {
-            clearAuthSession();
-            navigate("/");
-          }}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
