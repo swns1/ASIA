@@ -1,51 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { getCurrentUser } from "../utils/auth";
 import { deleteStudent, getStudents } from "../api/studentApi";
-import { getVisibleNavGroups } from "../utils/navigation";
-import manIcon from "../assets/man.svg";
-import graduateIcon from "../assets/graduate.svg";
-import droppedIcon from "../assets/dropped.svg";
-import activeIcon from "../assets/active.svg";
-import TransferIcon from "../assets/transfer.svg";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
-import editIcon from "../assets/edit.svg";
-import trashIcon from "../assets/trash.svg";
-import { clearAuthSession, getCurrentUser } from "../utils/auth";
 
-// ── Nav config ────────────────────────────────────────────────────────────────
-const NAV = [
-  {
-    section: "Main",
-    items: [
-      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/Dashboard" },
-      { label: "Students",    icon: "ti-users",             path: "/Students" },
-      { label: "Enrollments", icon: "ti-clipboard-list",    path: "/enrollments" },
-      { label: "Subjects",    icon: "ti-book",              path: "/subjects"    },
-      { label: "Grades",      icon: "ti-chart-bar",         path: "/grades"      },
-      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-      { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices" },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments" },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-    ],
-  },
-  {
-    section: "Settings",
-    items: [
-      { label: "Users",           icon: "ti-user-cog", path: "/users" },
-      { label: "School Settings", icon: "ti-settings", path: "/settings" },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-    ],
-  },
-];
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -104,7 +62,7 @@ const Skeleton = ({ w = "100%", h = 14, r = 6 }) => (
 );
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, imgSrc, color, bg, loading }) {
+function StatCard({ label, value, icon, color, bg, loading }) {
   return (
     <div style={{
       background: "white", borderRadius: 14, padding: "16px 20px",
@@ -120,10 +78,7 @@ function StatCard({ label, value, icon, imgSrc, color, bg, loading }) {
         width: 42, height: 42, borderRadius: 12, background: bg,
         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       }}>
-        {imgSrc
-          ? <img src={imgSrc} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-          : <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
-        }
+        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
       </div>
       <div>
         {loading
@@ -193,29 +148,6 @@ function ConfirmModal({ student, onConfirm, onCancel }) {
   );
 }
 
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14, animation:"slideUp 0.2s ease" }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-logout" style={{ fontSize:24, color:"#e03131" }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>Log out?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <button onClick={onCancel} style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -232,8 +164,6 @@ export default function StudentsPage() {
   const [loading, setLoading]     = useState(true);
   const [toDelete, setToDelete]   = useState(null);
   const [statusFilter, setStatus] = useState("all");
-
-  const [showLogout, setShowLogout] = useState(false);
 
   // Per-status counts for stat cards
   const [statusCounts, setStatusCounts] = useState({});
@@ -258,12 +188,6 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-    const data = await getStudents({
-  page: nextPage,
-  search: term,
-  status: status === "all" ? "" : status,
-  page_size: 50,   // ← add this
-});
   };
 
   // Fetch counts for all statuses (for stat cards)
@@ -313,134 +237,7 @@ export default function StudentsPage() {
   const totalPages = Math.ceil(pageMeta.count / 50);
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes rowIn   { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'DM Sans', sans-serif; }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #f0dada; border-radius: 99px; }
-
-        .nav-item { transition: background 0.12s, color 0.12s; }
-        .nav-item:hover { background: #fff4f4 !important; color: #e03131 !important; }
-        .nav-active { background: #fff0f0 !important; color: #e03131 !important; font-weight: 600 !important; }
-
-        .student-row { transition: background 0.12s; cursor: pointer; }
-        .student-row:hover td { background: #fff8f6 !important; }
-        .student-row:hover .row-name { color: #e03131 !important; }
-
-        .row-action {
-          width: 30px; height: 30px; border: 1px solid #f0e4e4; border-radius: 8px;
-          background: white; display: flex; align-items: center; justify-content: center;
-          cursor: pointer; color: #9a7070; transition: all 0.12s; font-family: 'DM Sans', sans-serif;
-        }
-        .row-action:hover { background: #fff0f0 !important; color: #e03131 !important; border-color: #fca5a5 !important; }
-        .row-action.danger:hover { background: #fff0f0 !important; color: #e03131 !important; }
-
-        .chip-btn {
-          display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px;
-          border-radius: 99px; border: 1.5px solid #f0e4e4; background: white;
-          font-size: 12px; color: #9a7070; cursor: pointer;
-          font-family: 'DM Sans', sans-serif; font-weight: 500;
-          transition: all 0.14s;
-        }
-        .chip-btn:hover { border-color: #fca5a5; color: #e03131; background: #fff8f6; }
-        .chip-btn.active { background: #fff0f0; border-color: #e03131; color: #e03131; font-weight: 700; }
-
-        .search-input:focus { outline: none; }
-        .search-wrap:focus-within { border-color: #e03131 !important; box-shadow: 0 0 0 3px rgba(224,49,49,0.09) !important; }
-
-        .new-btn:hover { background: #c92a2a !important; box-shadow: 0 8px 28px rgba(224,49,49,0.32) !important; transform: translateY(-1px); }
-        .new-btn { transition: all 0.16s !important; }
-
-        .page-btn:hover:not(:disabled) { background: #fff0f0 !important; border-color: #e03131 !important; color: #e03131 !important; }
-        .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-      `}</style>
-
-      <div style={{ display: "flex", height: "100vh", background: "#fdf8f6", fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
-
-        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <aside style={{
-  width: 224, flexShrink: 0, background: "white",
-  borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column",
-  boxShadow: "2px 0 12px rgba(224,49,49,0.04)",
-}}>
-  {/* Brand */}
-  <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <img src={logo} alt="Logo" style={{ width:20, height:30 }} />
-      
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>South Lakes IS</div>
-        <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
-      </div>
-    </div>
-  </div>
-
-  {/* Nav */}
-  <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
-    {getVisibleNavGroups(NAV).map((group) => (
-      <div key={group.section} style={{ marginBottom: 6 }}>
-        <div style={{
-          fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em",
-          textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600,
-        }}>
-          {group.section}
-        </div>
-        {group.items.map((item) => {
-          const active = location.pathname === item.path;
-          return (
-            <div
-              key={item.path}
-              className={`nav-item${active ? " nav-active" : ""}`}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 10px", borderRadius: 9,
-                fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer",
-              }}
-              onClick={() => navigate(item.path)}
-              role="button" tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
-            >
-              <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
-              {item.label}
-            </div>
-          );
-        })}
-      </div>
-    ))}
-  </nav>
-
-    <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-          <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
-            <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
-          </div>
-        <button
-          title="Logout"
-          onClick={() => setShowLogout(true)}
-          style={{
-            width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8,
-            background:"white", display:"flex", alignItems:"center", justifyContent:"center",
-            cursor:"pointer", color:"#c09090", transition:"all 0.12s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; e.currentTarget.style.borderColor="#f0e4e4"; }}
-        >
-                   <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-        </button>
-      </div>
-    </div>
-</aside>
-        {/* ── Main ────────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <AppLayout>
 
           {/* Topbar */}
           <div style={{
@@ -496,30 +293,32 @@ export default function StudentsPage() {
             {/* ── Stat cards ── */}
             <div style={{ display: "flex", gap: 12 }}>
               <StatCard
-                label="Total Students" 
-                imgSrc={manIcon}
+                label="Total Students"
+                icon="ti-users"
                 value={statusCounts.all} loading={loading}
                 color="#e03131" bg="#fff0f0"
               />
               <StatCard
-                label="Active" 
-                imgSrc={activeIcon}
+                label="Active"
+                icon="ti-user-check"
                 value={statusCounts.active} loading={loading}
                 color="#2e6b0d" bg="#e8f5e0"
               />
               <StatCard
-                label="Graduated" 
-                imgSrc ={graduateIcon}
+                label="Graduated"
+                icon="ti-certificate"
                 value={statusCounts.graduated} loading={loading}
                 color="#1455a0" bg="#e3f0fd"
               />
               <StatCard
-                label="Transferred" imgSrc={TransferIcon}
+                label="Transferred"
+                icon="ti-transfer"
                 value={statusCounts.transferred} loading={loading}
                 color="#7a4a08" bg="#fef3e2"
               />
               <StatCard
-                label="Dropped" imgSrc={droppedIcon}f
+                label="Dropped"
+                icon="ti-user-x"
                 value={statusCounts.dropped} loading={loading}
                 color="#9b2020" bg="#fde8e8"
               />
@@ -792,14 +591,14 @@ export default function StudentsPage() {
                                     className="row-action" title="Edit"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/students/${st.student_id}/edit`); }}
                                   >
-                                    <img src={editIcon} alt="Edit" style={{ width: 16, height: 16 }} />
+                                    <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                   </button>
                                   <button
                                     className="row-action danger" title="Delete"
                                     style={{ color: "#c09090" }}
                                     onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
                                   >
-                                    <img src={trashIcon} alt="Delete" style={{ width: 16, height: 16 }} />
+                                    <i className="ti ti-trash" style={{ fontSize: 14 }} />
                                   </button>
                                 </div>
                               </td>
@@ -857,8 +656,6 @@ export default function StudentsPage() {
             )}
 
           </div>
-        </div>
-      </div>
 
       {/* Delete modal */}
       {toDelete && (
@@ -868,17 +665,7 @@ export default function StudentsPage() {
           onCancel={() => setToDelete(null)}
         />
       )}
-
-      {showLogout && (
-        <LogoutModal
-          onConfirm={() => {
-            clearAuthSession();
-            navigate("/");
-          }}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
 

@@ -96,20 +96,37 @@ class Student(models.Model):
         ]
 
     def _generate_student_number(self):
-        last_student = Student.objects.order_by("-student_id").first()
-        if last_student and last_student.student_number and last_student.student_number.startswith("SN"):
+        from django.utils import timezone
+        year = timezone.now().year
+        prefix = f"{year}-"
+        # Find the highest sequential number for this year's prefix
+        last = (
+            Student.objects.filter(student_number__startswith=prefix)
+            .order_by("-student_number")
+            .values_list("student_number", flat=True)
+            .first()
+        )
+        if last:
             try:
-                last_num = int(last_student.student_number[2:])
-                return f"SN{last_num + 1:08d}"
+                seq = int(last[len(prefix):]) + 1
             except ValueError:
-                pass
-        return "SN20260001"
+                seq = 1
+        else:
+            seq = 1
+        return f"{prefix}{seq:04d}"
 
     def save(self, *args, **kwargs):
         if not self.student_number:
-            self.student_number = self._generate_student_number()
-            while Student.objects.filter(student_number=self.student_number).exists():
-                self.student_number = self._generate_student_number()
+            candidate = self._generate_student_number()
+            # Walk forward until we find a free number (guards against races)
+            from django.utils import timezone
+            year = timezone.now().year
+            prefix = f"{year}-"
+            seq = int(candidate[len(prefix):])
+            while Student.objects.filter(student_number=candidate).exists():
+                seq += 1
+                candidate = f"{prefix}{seq:04d}"
+            self.student_number = candidate
         super().save(*args, **kwargs)
 
 

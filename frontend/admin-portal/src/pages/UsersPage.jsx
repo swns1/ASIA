@@ -1,38 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession, getCurrentUser, setCurrentUser, isAdminRole } from "../utils/auth";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
+import { getCurrentUser, isAdminRole } from "../utils/auth";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const IDENTITY_API = "http://localhost:8001/api/auth";
 
-const NAV = [
-  { section: "Main", items: [
-    { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard"   },
-    { label: "Students",     icon: "ti-users",            path: "/students"    },
-    { label: "Enrollments",  icon: "ti-clipboard-list",   path: "/enrollments" },
-    { label: "Subjects",     icon: "ti-book",             path: "/subjects"    },
-    { label: "Grades",       icon: "ti-chart-bar",        path: "/grades"      },
-    { label: "Requirements", icon: "ti-file-check",       path: "/requirements"},
-    { label: "Analytics", icon: "ti-chart-dots-3", path: "/analytics" },
-  ]},
-  { section: "Finance", items: [
-    { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-    { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-    { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-  ]},
-  { section: "Settings", items: [
-    { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-    { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
-    { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-    { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-    { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-  ]},
-];
 
 const ROLES = ["admin", "super_admin", "registrar", "cashier", "teacher"];
 
@@ -556,7 +530,6 @@ export default function UsersPage() {
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [showLogout, setShowLogout] = useState(false);
 
   // Sidebar user reflects session (updated after self-edit)
   const [sidebarUser, setSidebarUser] = useState(currentUser);
@@ -603,77 +576,10 @@ export default function UsersPage() {
     return matchSearch && matchRole;
   });
 
-  const sidebarU = sidebarUser || currentUser;
 
-  // ── Logout modal ─────────────────────────────────────────────────────────
-  function doLogout() {
-    clearAuthSession();
-    navigate("/login");
-  }
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        input:focus, select:focus { border-color: #fca5a5 !important; box-shadow: 0 0 0 3px rgba(224,49,49,0.08); }
-      `}</style>
-
-      <div style={{ display: "flex", height: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
-
-        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-        <aside style={{ width: 224, flexShrink: 0, background: C.white, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" }}>
-          <div style={{ padding: "22px 18px 18px", borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: "-0.01em" }}>South Lakes IS</div>
-                <div style={{ fontSize: 11, color: C.pale, marginTop: 1 }}>Admin Portal</div>
-              </div>
-            </div>
-          </div>
-
-          <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
-            {getVisibleNavGroups(NAV).map(group => (
-              <div key={group.section} style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 }}>
-                  {group.section}
-                </div>
-                {group.items.map(item => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div key={item.path}
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? C.red : "#7a5a5a", cursor: "pointer", background: active ? C.redLight : "transparent", fontWeight: active ? 600 : 400 }}
-                      onClick={() => navigate(item.path)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && navigate(item.path)}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div style={{ padding: "14px 10px", borderTop: `1px solid ${C.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" }}>
-              {sidebarU ? <Avatar user={sidebarU} size={32} /> : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red }}>?</div>}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sidebarU?.name || "User"}</div>
-                <div style={{ fontSize: 11, color: C.pale }}>{sidebarU?.role || ""}</div>
-              </div>
-              <button title="Logout" onClick={() => setShowLogout(true)}
-                style={{ width: 30, height: 30, border: `1px solid #f0e4e4`, borderRadius: 8, background: C.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}
-                onMouseEnter={e => { e.currentTarget.style.background = C.redLight; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
-                onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
-                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Main ─────────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-
+    <AppLayout>
           {/* Topbar */}
           <div style={{ background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
@@ -752,8 +658,6 @@ export default function UsersPage() {
               </div>
             )}
           </div>
-        </div>
-      </div>
 
       {/* ── Modals ───────────────────────────────────────────────────────────── */}
       {editTarget && (
@@ -767,22 +671,6 @@ export default function UsersPage() {
       {showCreate && (
         <CreateUserModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />
       )}
-      {showLogout && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
-          onClick={(e) => e.target === e.currentTarget && setShowLogout(false)}>
-          <div style={{ background: C.white, borderRadius: 18, padding: 28, maxWidth: 360, width: "90%", boxShadow: "0 20px 60px rgba(224,49,49,0.14)", textAlign: "center" }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-              <img src={logoutIcon} alt="Logout" style={{ width: 26, height: 26 }} />
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Sign out?</div>
-            <div style={{ fontSize: 13, color: C.muted, marginTop: 6, marginBottom: 22 }}>You will be returned to the login screen.</div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setShowLogout(false)} style={{ flex: 1, height: 40, border: `1px solid ${C.border}`, borderRadius: 10, background: C.white, fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-              <button onClick={doLogout} style={{ flex: 1, height: 40, border: "none", borderRadius: 10, background: `linear-gradient(135deg, ${C.red}, ${C.redDark})`, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Sign out</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </AppLayout>
   );
 }

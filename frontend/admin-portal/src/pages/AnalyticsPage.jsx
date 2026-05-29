@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import AppLayout from "../components/AppLayout";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getVisibleNavGroups } from "../utils/navigation";
 import { clearAuthSession } from "../utils/auth";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
-import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const ENROLLMENT_API = "http://localhost:8003/api";
@@ -20,29 +18,6 @@ async function apiFetch(url) {
 }
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
-const NAV = [
-  { section: "Main", items: [
-    { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard"    },
-    { label: "Students",     icon: "ti-users",             path: "/students"     },
-    { label: "Enrollments",  icon: "ti-clipboard-list",    path: "/enrollments"  },
-    { label: "Subjects",     icon: "ti-book",              path: "/subjects"     },
-    { label: "Grades",       icon: "ti-chart-bar",         path: "/grades"       },
-    { label: "Analytics",    icon: "ti-chart-dots-3",      path: "/analytics"    },
-    { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-  ]},
-  { section: "Finance", items: [
-    { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-    { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-    { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-  ]},
-  { section: "Settings", items: [
-    { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-    { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-    { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-    { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-  ]},
-];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -489,52 +464,14 @@ export default function AnalyticsPage() {
     }
   }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
 
-  const navGroups = getVisibleNavGroups(NAV);
-
   function handleLogout() {
     clearAuthSession();
     navigate("/login");
   }
 
   return (
-    <div style={s.page}>
-
-      {/* ── Sidebar ── */}
-      <aside style={s.sidebar}>
-        <div style={s.logoBox}>
-          <img src={logo} alt="SLIS" style={s.logoImg} />
-          <div>
-            <div style={s.logoTitle}>SLIS</div>
-            <div style={s.logoSub}>Admin Portal</div>
-          </div>
-        </div>
-
-        <nav style={{ flex: 1 }}>
-          {navGroups.map((g) => (
-            <div key={g.section}>
-              <div style={s.section}>{g.section}</div>
-              {g.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  style={s.navBtn(location.pathname === item.path)}
-                >
-                  <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20 }} />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-
-        <button onClick={handleLogout} style={s.logoutBtn}>
-          <img src={logoutIcon} alt="" style={{ width: 16, height: 16, opacity: 0.5 }} />
-          Logout
-        </button>
-      </aside>
-
-      {/* ── Main ── */}
-      <main style={s.main}>
+    <AppLayout>
+      <div style={{ flex: 1, overflowY: "auto", padding: "28px 36px", minWidth: 0 }}>
         <div style={s.header}>
           <div style={s.title}>Student Performance Analytics</div>
           <div style={s.subtitle}>K-Means clustering on student grades with AI-powered interpretation</div>
@@ -741,11 +678,7 @@ export default function AnalyticsPage() {
             />
           </>
         )}
-      </main>
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
