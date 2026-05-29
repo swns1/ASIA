@@ -181,9 +181,23 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class BulkStudentSerializer(serializers.ModelSerializer):
+    """Used only inside bulk-create — student_id, household FK, and updated_at are managed server-side."""
+    class Meta:
+        model = Student
+        exclude = ["student_id", "household", "updated_at"]
+
+
+class BulkHouseholdSerializer(serializers.ModelSerializer):
+    """Used only inside bulk-create — household_id is auto-generated server-side."""
+    class Meta:
+        model = Household
+        exclude = ["household_id"]
+
+
 class StudentBulkCreateSerializer(serializers.Serializer):
-    student   = StudentSerializer()
-    household = HouseholdSerializer(required=False, allow_null=True)
+    student   = BulkStudentSerializer()
+    household = BulkHouseholdSerializer(required=False, allow_null=True)
     guardians = BulkGuardianSerializer(many=True, required=False, default=list)
 
 

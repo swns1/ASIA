@@ -22,6 +22,11 @@ export async function createSibling(payload) {
   return res.data;
 }
 
+export async function updateSibling(id, payload) {
+  const res = await studentClient.put(`/siblings/${id}/`, payload);
+  return res.data;
+}
+
 export async function deleteSibling(id) {
   const res = await studentClient.delete(`/siblings/${id}/`);
   return res.data;

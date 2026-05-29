@@ -104,6 +104,13 @@ class HouseholdViewSet(viewsets.ModelViewSet):
     queryset = Household.objects.all()
     serializer_class = HouseholdSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            queryset = queryset.filter(student__student_id=student_id)
+        return queryset
+
 
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.all()

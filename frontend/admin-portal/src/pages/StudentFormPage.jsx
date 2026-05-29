@@ -9,11 +9,13 @@ import {
 } from "../api/guardianApi";
 import {
   createSibling,
+  updateSibling,
   deleteSibling,
   getSiblingsByStudent,
 } from "../api/siblingApi";
 import {
   createPreviousSchool,
+  updatePreviousSchool,
   deletePreviousSchool,
   getPreviousSchoolsByStudent,
 } from "../api/previousSchoolApi";
@@ -746,15 +748,15 @@ export default function StudentFormPage() {
 
         // 2) Household — create or update depending on whether one already exists
         if (householdHasContent(household)) {
-          const hhPayload = nullify(
-            { ...household, student: id },
-            nullableHouseholdFields
-          );
+          const hhPayload = nullify({ ...household }, nullableHouseholdFields);
           if (householdId) {
             await updateHousehold(householdId, hhPayload);
           } else {
             const created = await createHousehold(hhPayload);
-            setHouseholdId(created.household_id || created.id || null);
+            const createdId = created.household_id || created.id || null;
+            setHouseholdId(createdId);
+            // Link the new household to the student
+            if (createdId) await updateStudent(id, { ...studentPayload, household: createdId });
           }
         }
 
@@ -771,33 +773,36 @@ export default function StudentFormPage() {
           try { await deleteGuardian(gid); } catch (e) { /* ignore */ }
         }
 
-        // 4) Siblings — for new ones create; removed ones delete
-        // (Sibling model in your codebase doesn't seem to have an update endpoint,
-        //  so for existing ones we leave them as-is. If full_name was edited, we
-        //  delete + recreate.)
+        // 4) Siblings — update existing, create new, delete removed
         for (const s of siblings) {
           if (!s.full_name?.trim()) continue;
-          if (!s.sibling_id) {
-            await createSibling({
-              student: id,
-              full_name: s.full_name,
-              age: s.age ? parseInt(s.age) : null,
-            });
+          const siblingPayload = {
+            student: id,
+            full_name: s.full_name,
+            age: s.age ? parseInt(s.age) : null,
+          };
+          if (s.sibling_id) {
+            await updateSibling(s.sibling_id, siblingPayload);
+          } else {
+            await createSibling(siblingPayload);
           }
         }
         for (const sid of removedSiblingIds) {
           try { await deleteSibling(sid); } catch (e) { /* ignore */ }
         }
 
-        // 5) Previous schools — same pattern
+        // 5) Previous schools — update existing, create new, delete removed
         for (const s of schools) {
           if (!s.school_name?.trim()) continue;
-          if (!s.previous_school_id) {
-            await createPreviousSchool({
-              student: id,
-              school_name: s.school_name,
-              school_address: s.school_address,
-            });
+          const schoolPayload = {
+            student: id,
+            school_name: s.school_name,
+            school_address: s.school_address,
+          };
+          if (s.previous_school_id) {
+            await updatePreviousSchool(s.previous_school_id, schoolPayload);
+          } else {
+            await createPreviousSchool(schoolPayload);
           }
         }
         for (const psid of removedSchoolIds) {
@@ -844,11 +849,17 @@ export default function StudentFormPage() {
       navigate("/students");
     } catch (err) {
       const data = err?.response?.data;
-      const msg = typeof data === "string"
-        ? data
-        : JSON.stringify(data) || "Something went wrong. Please check your inputs.";
-      setError(msg);
-      setStep(0); // go back to start so user can fix
+      let msg;
+      if (!data) {
+        msg = err?.message || "Something went wrong. Please check your inputs.";
+      } else if (typeof data === "string") {
+        msg = data;
+      } else {
+        const entries = Object.entries(data);
+        msg = entries.map(([field, errs]) => `${field}: ${[].concat(errs).join(", ")}`).join(" | ");
+      }
+      setError(msg || "Something went wrong. Please check your inputs.");
+      setStep(0);
     } finally {
       setLoading(false);
     }

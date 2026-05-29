@@ -22,6 +22,11 @@ export async function createPreviousSchool(payload) {
   return res.data;
 }
 
+export async function updatePreviousSchool(id, payload) {
+  const res = await studentClient.put(`/previous_schools/${id}/`, payload);
+  return res.data;
+}
+
 export async function deletePreviousSchool(id) {
   const res = await studentClient.delete(`/previous_schools/${id}/`);
   return res.data;
