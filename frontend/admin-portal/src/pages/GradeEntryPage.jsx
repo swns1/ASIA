@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getVisibleNavGroups } from "../utils/navigation";
-import { clearAuthSession } from "../utils/auth";
+import { clearAuthSession, getCurrentUser } from "../utils/auth";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
 
@@ -325,7 +325,7 @@ function LogoutModal({ onConfirm, onCancel }) {
 export default function GradeEntryPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
+  const currentUser = getCurrentUser();
   // ── Selection state ──
   const [student,       setStudent]       = useState(null);
   const [enrollment,    setEnrollment]    = useState(null);
@@ -469,7 +469,7 @@ export default function GradeEntryPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -525,10 +525,10 @@ export default function GradeEntryPage() {
           </nav>
             <div style={{ padding:"14px 10px", borderTop:"1px solid #f5eaea" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>SA</div>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#e03131", flexShrink:0 }}>{(currentUser?.name || "SA").slice(0, 2).toUpperCase()}</div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>Super Admin</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>super_admin</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
+                  <div style={{ fontSize:11, color:"#b09090" }}>{currentUser?.role || "super_admin"}</div>
                 </div>
                 <button
                   title="Logout"
@@ -573,7 +573,7 @@ export default function GradeEntryPage() {
 
             {/* Page title */}
             <div>
-              <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif", letterSpacing:"-0.01em" }}>Grade Entry</div>
+              <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>Grade Entry</div>
               <div style={{ fontSize:13, color:"#b09090", marginTop:4 }}>Select a student, enrollment, subject, and period to enter raw scores.</div>
             </div>
 
@@ -689,7 +689,7 @@ export default function GradeEntryPage() {
                     <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
                       <i className="ti ti-pencil" style={{ fontSize:24, color:"#e08080" }} />
                     </div>
-                    <div style={{ fontSize:15, color:"#7a5050", fontWeight:600, fontFamily:"'Playfair Display',serif" }}>Select a student and subject</div>
+                    <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>Select a student and subject</div>
                     <div style={{ fontSize:13, color:"#b09090", marginTop:6 }}>Use the steps on the left to get started</div>
                   </div>
                 ) : !template ? (
@@ -711,7 +711,7 @@ export default function GradeEntryPage() {
                     {/* Subject header */}
                     <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"18px 22px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
                       <div>
-                        <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", fontFamily:"'Playfair Display',serif" }}>{subject.subject_name}</div>
+                        <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>{subject.subject_name}</div>
                         <div style={{ fontSize:12, color:"#b09090", marginTop:3 }}>
                           {subject.subject_code} · {template.template_name} · {PERIOD_LABELS[gradingPeriod]}
                         </div>

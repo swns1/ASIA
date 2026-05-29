@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
+import { useNavigate, useLocation } from "react-router-dom";
+import { getVisibleNavGroups } from "../utils/navigation";
+import { clearAuthSession } from "../utils/auth";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
@@ -20,48 +21,38 @@ async function apiFetch(url) {
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 const NAV = [
-  {
-    section: "Main",
-    items: [
-      { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard"    },
-      { label: "Students",     icon: "ti-users",             path: "/students"     },
-      { label: "Enrollments",  icon: "ti-clipboard-list",    path: "/enrollments"  },
-      { label: "Subjects",     icon: "ti-book",              path: "/subjects"     },
-      { label: "Grades",       icon: "ti-chart-bar",         path: "/grades"       },
-      { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
-      { label: "Analytics",    icon: "ti-chart-dots-3",      path: "/analytics"    },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
-    ],
-  },
-  {
-    section: "Settings",
-    items: [
-      { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail", adminOnly: true },
-      { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
-    ],
-  },
+  { section: "Main", items: [
+    { label: "Dashboard",    icon: "ti-layout-dashboard", path: "/dashboard"    },
+    { label: "Students",     icon: "ti-users",             path: "/students"     },
+    { label: "Enrollments",  icon: "ti-clipboard-list",    path: "/enrollments"  },
+    { label: "Subjects",     icon: "ti-book",              path: "/subjects"     },
+    { label: "Grades",       icon: "ti-chart-bar",         path: "/grades"       },
+    { label: "Analytics",    icon: "ti-chart-dots-3",      path: "/analytics"    },
+    { label: "Requirements", icon: "ti-file-check",        path: "/requirements" },
+  ]},
+  { section: "Finance", items: [
+    { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
+    { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
+    { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
+  ]},
+  { section: "Settings", items: [
+    { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
+    { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
+    { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
+    { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
+    { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
+  ]},
 ];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
   { value: "overall",      label: "Overall (All Periods)" },
-  { value: "1st_quarter",  label: "1st Quarter"           },
-  { value: "2nd_quarter",  label: "2nd Quarter"           },
-  { value: "3rd_quarter",  label: "3rd Quarter"           },
-  { value: "4th_quarter",  label: "4th Quarter"           },
-  { value: "1st_semester", label: "1st Semester"          },
-  { value: "2nd_semester", label: "2nd Semester"          },
+  { value: "1st_quarter",  label: "1st Quarter"  },
+  { value: "2nd_quarter",  label: "2nd Quarter"  },
+  { value: "3rd_quarter",  label: "3rd Quarter"  },
+  { value: "4th_quarter",  label: "4th Quarter"  },
+  { value: "1st_semester", label: "1st Semester" },
+  { value: "2nd_semester", label: "2nd Semester" },
 ];
 
 const GRADE_LEVEL_OPTIONS = [
@@ -88,53 +79,76 @@ function currentSchoolYear() {
   return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
 }
 
-// ── LogoutModal ───────────────────────────────────────────────────────────────
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-logout" style={{ fontSize: 24, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Log out?</div>
-        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Panel — mirrors DashboardPage exactly (no inner padding wrapper) ───────────
-// Children are responsible for their own padding/layout, just like in Dashboard.
-function Panel({ title, subtitle, action, onAction, children }) {
-  return (
-    <div style={s.panel}>
-      <div style={s.panelHeader}>
-        <div>
-          <span style={s.panelTitle}>{title}</span>
-          {subtitle && (
-            <span style={{ fontSize: 12, color: "#a07878", fontWeight: 400, marginLeft: 8 }}>
-              {subtitle}
-            </span>
-          )}
-        </div>
-        {action && (
-          <button style={s.panelAction} onClick={onAction}>{action}</button>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s = {
+  page: {
+    display: "flex", minHeight: "100vh",
+    fontFamily: "'DM Sans', sans-serif", background: "#faf9f6",
+  },
+  sidebar: {
+    width: 250, background: "white", borderRight: "1px solid #ede9e1",
+    display: "flex", flexDirection: "column",
+    position: "fixed", top: 0, bottom: 0, overflowY: "auto", zIndex: 50,
+  },
+  logoBox: {
+    display: "flex", alignItems: "center", gap: 12,
+    padding: "22px 22px 18px", borderBottom: "1px solid #f0ece4",
+  },
+  logoImg:   { width: 36, height: 36, borderRadius: 10 },
+  logoTitle: { fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: "#1a0a0a" },
+  logoSub:   { fontSize: 10.5, color: "#b0a898", fontWeight: 500, marginTop: 1 },
+  section:   {
+    fontSize: 10.5, fontWeight: 700, color: "#c8c0b4",
+    letterSpacing: "0.08em", textTransform: "uppercase", padding: "18px 22px 6px",
+  },
+  navBtn: (active) => ({
+    display: "flex", alignItems: "center", gap: 10,
+    padding: "9px 22px", margin: "1px 10px", borderRadius: 10,
+    cursor: "pointer", fontSize: 13.5, fontWeight: active ? 700 : 500,
+    color: active ? "#c0392b" : "#5f5e5a",
+    background: active ? "#fdf0f0" : "transparent",
+    border: "none", width: "calc(100% - 20px)", textAlign: "left",
+    transition: "all 0.12s",
+  }),
+  logoutBtn: {
+    display: "flex", alignItems: "center", gap: 10,
+    padding: "12px 22px", margin: "auto 10px 16px", borderRadius: 10,
+    border: "1px solid #f0ece4", background: "white", color: "#5f5e5a",
+    cursor: "pointer", fontSize: 13, fontWeight: 500,
+  },
+  main: { marginLeft: 250, flex: 1, padding: "28px 36px", minWidth: 0 },
+  header:   { marginBottom: 24 },
+  title:    { fontSize: 22, fontWeight: 800, color: "#1a0a0a", letterSpacing: "-0.02em" },
+  subtitle: { fontSize: 13, color: "#b0a898", marginTop: 2 },
+  card: {
+    background: "white", borderRadius: 16, border: "1px solid #ede9e1",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20,
+  },
+  filterRow:   { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
+  filterGroup: { display: "flex", flexDirection: "column", gap: 4, minWidth: 160 },
+  filterLabel: {
+    fontSize: 11, fontWeight: 600, color: "#8a8480",
+    textTransform: "uppercase", letterSpacing: "0.05em",
+  },
+  select: {
+    padding: "8px 12px", borderRadius: 8, border: "1px solid #e0dcd4", fontSize: 13,
+    color: "#3a3a3a", background: "white", cursor: "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+  },
+  runBtn: {
+    display: "flex", alignItems: "center", gap: 8,
+    height: 38, padding: "0 20px", borderRadius: 10,
+    background: "linear-gradient(135deg, #e03131, #c92a2a)", color: "white",
+    border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+    boxShadow: "0 4px 14px rgba(224,49,49,0.25)", transition: "all 0.12s",
+  },
+  emptyState: {
+    display: "flex", flexDirection: "column", alignItems: "center",
+    justifyContent: "center", padding: "60px 20px",
+    color: "#c0b8b0", textAlign: "center",
+  },
+};
 
 // ── Scatter Plot ──────────────────────────────────────────────────────────────
 function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
@@ -147,30 +161,65 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
   const W = 700, H = 420, PAD = 50;
   const xs = allPoints.map((p) => p.x);
   const ys = allPoints.map((p) => p.y);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
-  const xRange = xMax - xMin || 1;
-  const yRange = yMax - yMin || 1;
 
-  const scaleX = (v) => PAD + ((v - xMin) / xRange) * (W - 2 * PAD);
-  const scaleY = (v) => H - PAD - ((v - yMin) / yRange) * (H - 2 * PAD);
+  // FIX: use reduce instead of spread — Math.min(...largeArray) can silently
+  // fail in Firefox/Edge/older Chrome due to call-stack size limits, causing
+  // all points to collapse to a single spot on those browsers.
+  const xMin = xs.reduce((a, b) => Math.min(a, b), Infinity);
+  const xMax = xs.reduce((a, b) => Math.max(a, b), -Infinity);
+  const yMin = ys.reduce((a, b) => Math.min(a, b), Infinity);
+  const yMax = ys.reduce((a, b) => Math.max(a, b), -Infinity);
+
+  // FIX: add 10% padding so edge points don't sit directly on the axis lines
+  const xPad   = (xMax - xMin || 1) * 0.1;
+  const yPad   = (yMax - yMin || 1) * 0.1;
+  const xRange = (xMax - xMin || 1) + xPad * 2;
+  const yRange = (yMax - yMin || 1) + yPad * 2;
+
+  const scaleX = (v) => PAD + ((v - (xMin - xPad)) / xRange) * (W - 2 * PAD);
+  const scaleY = (v) => H - PAD - ((v - (yMin - yPad)) / yRange) * (H - 2 * PAD);
 
   const [hovered, setHovered] = useState(null);
 
   return (
-    // No border here — the Panel card is the container
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxHeight: 420, background: "#fff8f6", display: "block" }}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 12, border: "1px solid #f0ece4" }}
+    >
+      {/* Grid lines */}
       {[0.25, 0.5, 0.75].map((frac) => (
         <g key={frac}>
-          <line x1={PAD} x2={W - PAD} y1={scaleY(yMin + frac * yRange)} y2={scaleY(yMin + frac * yRange)} stroke="#f5eaea" strokeDasharray="4,4" />
-          <line y1={PAD} y2={H - PAD} x1={scaleX(xMin + frac * xRange)} x2={scaleX(xMin + frac * xRange)} stroke="#f5eaea" strokeDasharray="4,4" />
+          <line
+            x1={PAD} x2={W - PAD}
+            y1={scaleY(yMin - yPad + frac * yRange)}
+            y2={scaleY(yMin - yPad + frac * yRange)}
+            stroke="#f0ece4" strokeDasharray="4,4"
+          />
+          <line
+            y1={PAD} y2={H - PAD}
+            x1={scaleX(xMin - xPad + frac * xRange)}
+            x2={scaleX(xMin - xPad + frac * xRange)}
+            stroke="#f0ece4" strokeDasharray="4,4"
+          />
         </g>
       ))}
-      <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#e8d8d8" />
-      <line x1={PAD} x2={PAD} y1={PAD} y2={H - PAD} stroke="#e8d8d8" />
-      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a07878" fontFamily="DM Sans">PCA Component 1</text>
-      <text x={14} y={H / 2} textAnchor="middle" fontSize="11" fill="#a07878" fontFamily="DM Sans" transform={`rotate(-90, 14, ${H / 2})`}>PCA Component 2</text>
 
+      {/* Axes */}
+      <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#d8d4cc" />
+      <line x1={PAD} x2={PAD}     y1={PAD}     y2={H - PAD} stroke="#d8d4cc" />
+
+      {/* Axis labels */}
+      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans">
+        PCA Component 1
+      </text>
+      <text
+        x={14} y={H / 2} textAnchor="middle" fontSize="11" fill="#a09890"
+        fontFamily="DM Sans" transform={`rotate(-90, 14, ${H / 2})`}
+      >
+        PCA Component 2
+      </text>
+
+      {/* Data points */}
       {allPoints.map((pt) => {
         const cx = scaleX(pt.x);
         const cy = scaleY(pt.y);
@@ -194,9 +243,10 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
         );
       })}
 
+      {/* Tooltip */}
       {hovered && (() => {
-        const tx = scaleX(hovered.x);
-        const ty = scaleY(hovered.y);
+        const tx   = scaleX(hovered.x);
+        const ty   = scaleY(hovered.y);
         const tipW = 185, tipH = 52;
         const flipX = tx + tipW + 10 > W - PAD;
         const flipY = ty - tipH - 10 < PAD;
@@ -204,10 +254,20 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
         const ry = flipY ? ty + 12 : ty - tipH - 8;
         return (
           <g>
-            <rect x={rx} y={ry} width={tipW} height={tipH} rx={8} fill="white" stroke="#f5eaea" strokeWidth={1} filter="drop-shadow(0 2px 6px rgba(224,49,49,0.08))" />
-            <text x={rx + 10} y={ry + 18} fontSize="12" fontWeight="700" fill="#1a0a0a" fontFamily="DM Sans">{hovered.student_name}</text>
-            <text x={rx + 10} y={ry + 33} fontSize="11" fill="#b09090" fontFamily="DM Sans">{hovered.student_number}</text>
-            <text x={rx + 10} y={ry + 46} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">Grade: {hovered.grade} · {hovered.clusterLabel}</text>
+            <rect
+              x={rx} y={ry} width={tipW} height={tipH} rx={8}
+              fill="white" stroke="#e0dcd4" strokeWidth={1}
+              filter="drop-shadow(0 2px 6px rgba(0,0,0,0.08))"
+            />
+            <text x={rx + 10} y={ry + 18} fontSize="12" fontWeight="700" fill="#1a0a0a" fontFamily="DM Sans">
+              {hovered.student_name}
+            </text>
+            <text x={rx + 10} y={ry + 33} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
+              {hovered.student_number}
+            </text>
+            <text x={rx + 10} y={ry + 46} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">
+              Grade: {hovered.grade} · {hovered.clusterLabel}
+            </text>
           </g>
         );
       })()}
@@ -219,21 +279,21 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 function ClusterLegend({ clusters }) {
   if (!clusters) return null;
   return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "14px 18px" }}>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       {clusters.map((c) => (
         <div key={c.cluster_id} style={{
           flex: "1 1 180px", padding: "14px 16px", borderRadius: 12,
-          border: `2px solid ${c.color}28`, background: `${c.color}0a`,
+          border: `2px solid ${c.color}20`, background: `${c.color}08`,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: c.color }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{c.label}</span>
           </div>
-          <div style={{ fontSize: 12, color: "#7a5a5a", lineHeight: 1.7 }}>
+          <div style={{ fontSize: 12, color: "#6a6460", lineHeight: 1.7 }}>
             <span style={{ fontWeight: 600 }}>{c.student_count}</span> student{c.student_count !== 1 ? "s" : ""}
-            <span style={{ margin: "0 6px", color: "#d8c0c0" }}>·</span>
+            <span style={{ margin: "0 6px", color: "#d0c8c0" }}>·</span>
             Avg <span style={{ fontWeight: 600 }}>{c.avg_grade}</span>
-            <span style={{ margin: "0 6px", color: "#d8c0c0" }}>·</span>
+            <span style={{ margin: "0 6px", color: "#d0c8c0" }}>·</span>
             Range {c.min_grade}–{c.max_grade}
           </div>
         </div>
@@ -247,29 +307,30 @@ function StudentDetailPanel({ student, onClose }) {
   if (!student) return null;
   return (
     <div style={{
+      background: "white", border: "1px solid #ede9e1", borderRadius: 14,
+      padding: "16px 20px", marginTop: 12,
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "12px 18px", borderTop: "1px solid #f5eaea",
-      background: "#fff8f6",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{
-          width: 38, height: 38, borderRadius: 10,
+          width: 40, height: 40, borderRadius: 10,
           background: `${student.color || "#e03131"}18`,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <i className="ti ti-user" style={{ fontSize: 17, color: student.color || "#e03131" }} />
+          <i className="ti ti-user" style={{ fontSize: 18, color: student.color || "#e03131" }} />
         </div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{student.student_name}</div>
-          <div style={{ fontSize: 12, color: "#b09090", marginTop: 1 }}>
-            {student.student_number} · Grade: <strong style={{ color: "#1a0a0a" }}>{student.grade}</strong> · {student.clusterLabel}
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>{student.student_name}</div>
+          <div style={{ fontSize: 12, color: "#8a8480", marginTop: 1 }}>
+            {student.student_number} · Grade: <strong>{student.grade}</strong> · {student.clusterLabel}
           </div>
         </div>
       </div>
       <button onClick={onClose} style={{
-        background: "none", border: "1px solid #f5eaea", borderRadius: 8,
-        padding: "5px 12px", fontSize: 12, color: "#a07878", cursor: "pointer",
-        fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
+        background: "none", border: "1px solid #e0dcd4", borderRadius: 8,
+        padding: "6px 12px", fontSize: 12, color: "#8a8480", cursor: "pointer",
+        fontFamily: "'DM Sans', sans-serif",
       }}>
         Close
       </button>
@@ -278,7 +339,6 @@ function StudentDetailPanel({ student, onClose }) {
 }
 
 // ── Student Table ─────────────────────────────────────────────────────────────
-// Rendered flush inside Panel — no outer border/borderRadius (Panel provides that)
 function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
   if (!clusters) return null;
 
@@ -287,10 +347,10 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
   ).sort((a, b) => a.grade - b.grade);
 
   return (
-    <div style={{ maxHeight: 360, overflowY: "auto" }}>
+    <div style={{ maxHeight: 360, overflowY: "auto", borderRadius: 12, border: "1px solid #ede9e1" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
-          <tr style={{ background: "#fff8f6" }}>
+          <tr style={{ background: "#faf9f6", borderBottom: "1px solid #ede9e1" }}>
             <th style={thStyle}>Student</th>
             <th style={thStyle}>Number</th>
             <th style={thStyle}>Grade</th>
@@ -305,21 +365,21 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
                 key={st.student_id}
                 onClick={() => onSelectStudent(st)}
                 style={{
-                  borderBottom: "1px solid #f9f0f0",
+                  borderBottom: "1px solid #f4f0ec",
                   cursor: "pointer",
                   background: isSelected ? `${st.color}10` : "white",
                   transition: "background 0.1s",
                 }}
-                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#fff8f6"; }}
-                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = isSelected ? `${st.color}10` : "white"; }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#faf9f6"; }}
+                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "white"; }}
               >
                 <td style={tdStyle}>{st.student_name}</td>
                 <td style={tdStyle}>{st.student_number}</td>
-                <td style={{ ...tdStyle, fontWeight: 600, color: "#1a0a0a" }}>{st.grade}</td>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>{st.grade}</td>
                 <td style={tdStyle}>
                   <span style={{
                     display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600,
                     background: `${st.color}14`, color: st.color,
                   }}>
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color }} />
@@ -336,27 +396,52 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
 }
 
 const thStyle = {
-  padding: "10px 18px", textAlign: "left", fontSize: 10.5,
-  fontWeight: 600, color: "#c0a0a0", textTransform: "uppercase",
-  letterSpacing: "0.07em", borderBottom: "1px solid #f5eaea",
-  position: "sticky", top: 0, background: "#fff8f6", zIndex: 1,
+  padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700,
+  color: "#a09890", textTransform: "uppercase", letterSpacing: "0.05em",
 };
-const tdStyle = { padding: "10px 18px", color: "#1a0a0a", verticalAlign: "middle" };
+const tdStyle = { padding: "10px 14px", color: "#3a3a3a" };
+
+// ── AI Insight Panel wrapper ──────────────────────────────────────────────────
+// Extracted as its own component so the `key` prop forces a full remount
+// (and clears stale output) whenever a new analysis is run.
+function ClusterInsightPanel({ result }) {
+  const onFetch = () => {
+    const clusterSummary = result.clusters
+      .map((c) =>
+        `${c.label}: ${c.student_count} students, avg=${c.avg_grade}, range=[${c.min_grade}-${c.max_grade}]`
+      )
+      .join("\n");
+
+    return callGemini("dashboard_insights", {
+      analysis_type:   "student_performance_clustering",
+      school_year:     result.meta.school_year,
+      grading_period:  result.meta.grading_period,
+      grade_level:     result.meta.grade_level,
+      subject:         result.meta.subject,
+      total_students:  result.meta.total_students,
+      n_clusters:      result.meta.n_clusters,
+      cluster_summary: clusterSummary,
+    });
+  };
+
+  return (
+    <AIInsightPanel
+      title="Cluster Interpretation"
+      description="AI analysis of the clustering results — click Analyze to generate"
+      disabled={false}
+      onFetch={onFetch}
+    />
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
+// ── PAGE COMPONENT ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AnalyticsPage() {
-  const navigate          = useNavigate();
-  const schoolYearDefault = currentSchoolYear();
-  const currentUser       = getCurrentUser();
-  const navGroups         = NAV.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.adminOnly || canViewAuditTrail(currentUser)),
-  }));
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // ── state ──
-  const [schoolYear,      setSchoolYear]      = useState(schoolYearDefault);
+  const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
   const [gradingPeriod,   setGradingPeriod]   = useState("1st_quarter");
   const [subjectId,       setSubjectId]       = useState("");
   const [gradeLevel,      setGradeLevel]      = useState("");
@@ -366,11 +451,8 @@ export default function AnalyticsPage() {
   const [loading,         setLoading]         = useState(false);
   const [error,           setError]           = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [showLogout,      setShowLogout]      = useState(false);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     apiFetch(`${ENROLLMENT_API}/subjects/`).then((data) => {
       const list = Array.isArray(data) ? data : data.results || [];
       setSubjects(list);
@@ -399,356 +481,271 @@ export default function AnalyticsPage() {
       try {
         const parsed = JSON.parse(msg.split(": ").slice(1).join(": "));
         setError(parsed.error || msg);
-      } catch { setError(msg); }
+      } catch {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
   }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
 
-  function buildOnFetch(currentResult) {
-    return () => {
-      const clusterSummary = currentResult.clusters.map((c) =>
-        `${c.label}: ${c.student_count} students, avg=${c.avg_grade}, range=[${c.min_grade}-${c.max_grade}]`
-      ).join("\n");
-      return callGemini("dashboard_insights", {
-        analysis_type:   "student_performance_clustering",
-        school_year:     currentResult.meta.school_year,
-        grading_period:  currentResult.meta.grading_period,
-        grade_level:     currentResult.meta.grade_level,
-        subject:         currentResult.meta.subject,
-        total_students:  currentResult.meta.total_students,
-        n_clusters:      currentResult.meta.n_clusters,
-        cluster_summary: clusterSummary,
-      });
-    };
+  const navGroups = getVisibleNavGroups(NAV);
+
+  function handleLogout() {
+    clearAuthSession();
+    navigate("/login");
   }
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.45} }
-        @keyframes spin    { to { transform: rotate(360deg); } }
-        @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans',sans-serif; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-        .nav-item { transition:background 0.12s,color 0.12s; }
-        .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
-        .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-        .filter-select:focus { outline:none; border-color:#fca5a5; box-shadow:0 0 0 3px rgba(224,49,49,0.08); }
-      `}</style>
+    <div style={s.page}>
 
-      <div style={s.shell}>
-
-        {/* ── Sidebar ── */}
-        <aside style={{ width: 224, flexShrink: 0, background: "white", borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" }}>
-
-          {/* Logo */}
-          <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>South Lakes IS</div>
-                <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
-              </div>
-            </div>
+      {/* ── Sidebar ── */}
+      <aside style={s.sidebar}>
+        <div style={s.logoBox}>
+          <img src={logo} alt="SLIS" style={s.logoImg} />
+          <div>
+            <div style={s.logoTitle}>SLIS</div>
+            <div style={s.logoSub}>Admin Portal</div>
           </div>
+        </div>
 
-          {/* Nav */}
-          <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
-            {navGroups.map((group) => (
-              <div key={group.section} style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 }}>
-                  {group.section}
-                </div>
-                {group.items.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <div
-                      key={item.path}
-                      className={`nav-item${active ? " nav-active" : ""}`}
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer" }}
-                      onClick={() => navigate(item.path)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
-                    >
-                      <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center" }} />
-                      {item.label}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          {/* User + Logout */}
-          <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0 }}>
-                {(currentUser?.name || "SA").slice(0, 2).toUpperCase()}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{currentUser?.name || "Super Admin"}</div>
-                <div style={{ fontSize: 11, color: "#b09090" }}>{currentUser?.role || "super_admin"}</div>
-              </div>
-              <button
-                title="Logout"
-                onClick={() => setShowLogout(true)}
-                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "all 0.12s" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}
-              >
-                <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Main ── */}
-        <div style={s.main}>
-
-          {/* Topbar */}
-          <div style={s.topbar}>
-            <div>
-              <div style={s.topbarTitle}>Analytics</div>
-              <div style={s.topbarSub}>
-                S.Y. {schoolYearDefault} · K-Means clustering with AI-powered interpretation
-              </div>
-            </div>
-          </div>
-
-          {/* Scrollable content */}
-          <div style={s.content}>
-
-            {/* ── Filters ── */}
-            <Panel title="Analysis Filters">
-              <div style={{ padding: "16px 18px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-
-                <div style={s.filterGroup}>
-                  <label style={s.filterLabel}>School Year</label>
-                  <input
-                    type="text"
-                    value={schoolYear}
-                    onChange={(e) => setSchoolYear(e.target.value)}
-                    placeholder="2024-2025"
-                    className="filter-select"
-                    style={{ ...s.select, width: 130 }}
-                  />
-                </div>
-
-                <div style={s.filterGroup}>
-                  <label style={s.filterLabel}>Grading Period</label>
-                  <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} className="filter-select" style={s.select}>
-                    {PERIOD_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={s.filterGroup}>
-                  <label style={s.filterLabel}>Grade Level</label>
-                  <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} className="filter-select" style={{ ...s.select, minWidth: 150 }}>
-                    {GRADE_LEVEL_OPTIONS.map((g) => (
-                      <option key={g.value} value={g.value}>{g.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={s.filterGroup}>
-                  <label style={s.filterLabel}>Subject</label>
-                  <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="filter-select" style={{ ...s.select, minWidth: 200 }}>
-                    <option value="">Overall (All Subjects)</option>
-                    {subjects.map((sub) => (
-                      <option key={sub.subject_id} value={sub.subject_id}>
-                        {sub.subject_code} — {sub.subject_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={s.filterGroup}>
-                  <label style={s.filterLabel}>Clusters</label>
-                  <select value={nClusters} onChange={(e) => setNClusters(Number(e.target.value))} className="filter-select" style={{ ...s.select, width: 70 }}>
-                    {[2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
-
+        <nav style={{ flex: 1 }}>
+          {navGroups.map((g) => (
+            <div key={g.section}>
+              <div style={s.section}>{g.section}</div>
+              {g.items.map((item) => (
                 <button
-                  onClick={runClustering}
-                  disabled={loading}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    height: 38, padding: "0 20px", borderRadius: 10,
-                    background: loading ? "#e8b4b4" : "linear-gradient(135deg,#e03131,#c92a2a)",
-                    color: "white", border: "none", fontSize: 13, fontWeight: 700,
-                    cursor: loading ? "not-allowed" : "pointer",
-                    fontFamily: "'DM Sans',sans-serif",
-                    boxShadow: loading ? "none" : "0 4px 14px rgba(224,49,49,0.25)",
-                    transition: "all 0.12s", alignSelf: "flex-end",
-                  }}
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
+                  style={s.navBtn(location.pathname === item.path)}
                 >
-                  {loading ? (
-                    <>
-                      <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
-                      Running…
-                    </>
-                  ) : (
-                    <>
-                      <i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />
-                      Run Analysis
-                    </>
-                  )}
+                  <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20 }} />
+                  {item.label}
                 </button>
+              ))}
+            </div>
+          ))}
+        </nav>
 
-              </div>
-            </Panel>
+        <button onClick={handleLogout} style={s.logoutBtn}>
+          <img src={logoutIcon} alt="" style={{ width: 16, height: 16, opacity: 0.5 }} />
+          Logout
+        </button>
+      </aside>
 
-            {/* Error banner */}
-            {error && (
-              <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "10px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131" }} />
-                <span>{error}</span>
-              </div>
-            )}
+      {/* ── Main ── */}
+      <main style={s.main}>
+        <div style={s.header}>
+          <div style={s.title}>Student Performance Analytics</div>
+          <div style={s.subtitle}>K-Means clustering on student grades with AI-powered interpretation</div>
+        </div>
 
-            {/* Loading */}
-            {loading && (
-              <Panel title="Running Analysis">
-                <div style={{ padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className="ti ti-loader-2" style={{ fontSize: 22, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>Running K-Means clustering…</div>
-                  <div style={{ fontSize: 12, color: "#b09090" }}>Analyzing grades and generating AI interpretation</div>
-                </div>
-              </Panel>
-            )}
+        {/* Filters */}
+        <div style={s.card}>
+          <div style={s.filterRow}>
 
-            {/* Empty state */}
-            {!loading && !result && !error && (
-              <Panel title="No Analysis Yet">
-                <div style={{ padding: "64px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
-                  <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className="ti ti-chart-dots-3" style={{ fontSize: 26, color: "#e8a0a0" }} />
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>No analysis yet</div>
-                  <div style={{ fontSize: 13, color: "#b09090", maxWidth: 340, lineHeight: 1.7 }}>
-                    Select your filters above and click{" "}
-                    <strong style={{ color: "#e03131" }}>Run Analysis</strong>{" "}
-                    to cluster students by their academic performance.
-                  </div>
-                </div>
-              </Panel>
-            )}
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>School Year</label>
+              <input
+                type="text"
+                value={schoolYear}
+                onChange={(e) => setSchoolYear(e.target.value)}
+                placeholder="2024-2025"
+                style={{ ...s.select, width: 130 }}
+              />
+            </div>
 
-            {/* ── Results ── */}
-            {result && (
-              <>
-                {/* Meta stat cards — same grid as Dashboard */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
-                  {[
-                    { label: "Students",    value: result.meta.total_students, icon: "ti-users"        },
-                    { label: "Grade Level", value: result.meta.grade_level,    icon: "ti-school"       },
-                    { label: "Subject",     value: result.meta.subject,        icon: "ti-book"         },
-                    { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
-                    { label: "Clusters",    value: result.meta.n_clusters,     icon: "ti-chart-dots-3" },
-                  ].map((m) => (
-                    <div key={m.label} style={s.statCard}>
-                      <div style={s.statTop}>
-                        <span style={s.statLabel}>{m.label}</span>
-                        <div style={s.statIcon}>
-                          <i className={`ti ${m.icon}`} style={{ fontSize: 15, color: "#e03131" }} />
-                        </div>
-                      </div>
-                      <div style={{ fontSize: m.label === "Subject" ? 12 : 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.2, wordBreak: "break-word" }}>
-                        {m.value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>Grading Period</label>
+              <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} style={s.select}>
+                {PERIOD_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
 
-                {/* Cluster Overview */}
-                <Panel title="Cluster Overview">
-                  <ClusterLegend clusters={result.clusters} />
-                </Panel>
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>Grade Level</label>
+              <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...s.select, minWidth: 150 }}>
+                {GRADE_LEVEL_OPTIONS.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
+                ))}
+              </select>
+            </div>
 
-                {/* Scatter Plot — SVG rendered flush, detail panel attached below */}
-                <Panel title="Student Distribution" subtitle="Click any dot to see student details">
-                  <ScatterPlot
-                    clusters={result.clusters}
-                    selectedStudent={selectedStudent}
-                    onSelectStudent={setSelectedStudent}
-                  />
-                  {selectedStudent && (
-                    <StudentDetailPanel
-                      student={selectedStudent}
-                      onClose={() => setSelectedStudent(null)}
-                    />
-                  )}
-                </Panel>
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>Subject</label>
+              <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={{ ...s.select, minWidth: 200 }}>
+                <option value="">Overall (All Subjects)</option>
+                {subjects.map((sub) => (
+                  <option key={sub.subject_id} value={sub.subject_id}>
+                    {sub.subject_code} — {sub.subject_name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                {/* Student List — table rendered flush to panel edges */}
-                <Panel title="Student List" subtitle="Sorted by grade (lowest first)">
-                  <StudentTable
-                    clusters={result.clusters}
-                    selectedStudent={selectedStudent}
-                    onSelectStudent={setSelectedStudent}
-                  />
-                </Panel>
+            <div style={s.filterGroup}>
+              <label style={s.filterLabel}>Clusters</label>
+              <select value={nClusters} onChange={(e) => setNClusters(Number(e.target.value))} style={{ ...s.select, width: 70 }}>
+                {[2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
 
-                {/* AI Interpretation */}
-                <AIInsightPanel
-                  title="Cluster Interpretation"
-                  description="AI analysis of the clustering results — click Analyze to generate"
-                  disabled={false}
-                  onFetch={buildOnFetch(result)}
-                />
-              </>
-            )}
+            <button
+              onClick={runClustering}
+              disabled={loading}
+              style={{
+                ...s.runBtn,
+                opacity: loading ? 0.6 : 1,
+                cursor:  loading ? "not-allowed" : "pointer",
+                marginBottom: 0,
+              }}
+            >
+              {loading ? (
+                <>
+                  <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />
+                  Run Analysis
+                </>
+              )}
+            </button>
 
           </div>
         </div>
-      </div>
 
-      {showLogout && (
-        <LogoutModal
-          onConfirm={() => { clearAuthSession(); navigate("/"); }}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
-    </>
+        {/* Error */}
+        {error && (
+          <div style={{
+            ...s.card, background: "#fef2f2", border: "1px solid #fca5a5",
+            display: "flex", alignItems: "center", gap: 10, padding: "14px 20px",
+          }}>
+            <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131" }} />
+            <span style={{ fontSize: 13, color: "#b91c1c" }}>{error}</span>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div style={s.card}>
+            <div style={s.emptyState}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14,
+                background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+              }}>
+                <i className="ti ti-loader-2" style={{ fontSize: 22, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Running K-Means clustering…</div>
+              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and generating AI interpretation</div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !result && !error && (
+          <div style={s.card}>
+            <div style={s.emptyState}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16,
+                background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+              }}>
+                <i className="ti ti-chart-dots-3" style={{ fontSize: 26, color: "#e8a0a0" }} />
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>No analysis yet</div>
+              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4, maxWidth: 340, lineHeight: 1.6 }}>
+                Select your filters above and click{" "}
+                <strong style={{ color: "#e03131" }}>Run Analysis</strong>{" "}
+                to cluster students by their academic performance.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        {result && (
+          <>
+            {/* Meta bar */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              {[
+                { label: "Students",    value: result.meta.total_students, icon: "ti-users"        },
+                { label: "Grade Level", value: result.meta.grade_level,    icon: "ti-school"       },
+                { label: "Subject",     value: result.meta.subject,        icon: "ti-book"         },
+                { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
+                { label: "Clusters",    value: result.meta.n_clusters,     icon: "ti-chart-dots-3" },
+              ].map((m) => (
+                <div key={m.label} style={{
+                  flex: "1 1 140px", padding: "12px 16px", borderRadius: 12,
+                  background: "white", border: "1px solid #ede9e1",
+                  display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <i className={`ti ${m.icon}`} style={{ fontSize: 16, color: "#e03131" }} />
+                  <div>
+                    <div style={{ fontSize: 10.5, color: "#a09890", fontWeight: 600, textTransform: "uppercase" }}>{m.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Cluster legend */}
+            <div style={{ ...s.card, paddingBottom: 18 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 12 }}>Cluster Overview</div>
+              <ClusterLegend clusters={result.clusters} />
+            </div>
+
+            {/* Scatter Plot */}
+            <div style={s.card}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 14 }}>
+                Student Distribution
+                <span style={{ fontSize: 12, fontWeight: 400, color: "#a09890", marginLeft: 8 }}>
+                  Click any dot to see student details
+                </span>
+              </div>
+              <ScatterPlot
+                clusters={result.clusters}
+                selectedStudent={selectedStudent}
+                onSelectStudent={setSelectedStudent}
+              />
+              <StudentDetailPanel student={selectedStudent} onClose={() => setSelectedStudent(null)} />
+            </div>
+
+            {/* Student list */}
+            <div style={s.card}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 14 }}>
+                Student List
+                <span style={{ fontSize: 12, fontWeight: 400, color: "#a09890", marginLeft: 8 }}>
+                  Sorted by grade (lowest first)
+                </span>
+              </div>
+              <StudentTable
+                clusters={result.clusters}
+                selectedStudent={selectedStudent}
+                onSelectStudent={setSelectedStudent}
+              />
+            </div>
+
+            {/* AI Interpretation
+                Uses a unique key so the panel fully resets on each new analysis
+                instead of showing output from a previous run. */}
+            <ClusterInsightPanel
+              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}`}
+              result={result}
+            />
+          </>
+        )}
+      </main>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-const s = {
-  // Shell — matches Dashboard exactly
-  shell:       { display: "flex", height: "100vh", background: "#fdf8f6", fontFamily: "'DM Sans',sans-serif", overflow: "hidden" },
-  main:        { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topbar:      { background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize: 15, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" },
-  topbarSub:   { fontSize: 11.5, color: "#b09090", marginTop: 1 },
-  content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 },
-
-  // Stat cards — same as Dashboard
-  statCard:    { background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" },
-  statTop:     { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  statLabel:   { fontSize: 12, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" },
-  statIcon:    { width: 30, height: 30, borderRadius: 8, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" },
-
-  // Panel — matches Dashboard Panel exactly (no overflow:hidden so content isn't clipped)
-  panel:       { background: "white", border: "1px solid #f5eaea", borderRadius: 16, display: "flex", flexDirection: "column", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" },
-  panelHeader: { padding: "14px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between" },
-  panelTitle:  { fontSize: 13, fontWeight: 700, color: "#1a0a0a" },
-  panelAction: { fontSize: 12, color: "#e03131", cursor: "pointer", border: "none", background: "none", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 },
-
-  // Filters
-  filterGroup: { display: "flex", flexDirection: "column", gap: 4 },
-  filterLabel: { fontSize: 11, fontWeight: 600, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" },
-  select:      { padding: "8px 12px", borderRadius: 8, border: "1px solid #f0e0e0", fontSize: 13, color: "#1a0a0a", background: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "border-color 0.12s" },
-};
