@@ -59,12 +59,12 @@ const emptySchool = { school_name: "", school_address: "" };
 
 // ─── step config ─────────────────────────────────────────────────────────────
 const STEPS = [
-  { id: "student",   label: "Student",        icon: "👤" },
-  { id: "household", label: "Household",       icon: "🏠" },
-  { id: "guardians", label: "Guardians",       icon: "👨‍👩‍👧" },
-  { id: "siblings",  label: "Siblings",        icon: "👫" },
-  { id: "schools",   label: "Prev. Schools",   icon: "🏫" },
-  { id: "review",    label: "Review",          icon: "✅" },
+  { id: "student",   label: "Student",        icon: "ti-user" },
+  { id: "household", label: "Household",       icon: "ti-home" },
+  { id: "guardians", label: "Guardians",       icon: "ti-users" },
+  { id: "siblings",  label: "Siblings",        icon: "ti-friends" },
+  { id: "schools",   label: "Prev. Schools",   icon: "ti-school" },
+  { id: "review",    label: "Review",          icon: "ti-clipboard-check" },
 ];
 
 // ─── style tokens ────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ function StepBar({ current }) {
                 color: done ? "#fff" : active ? C.red : C.muted,
                 fontWeight: 700, transition: "all .2s",
               }}>
-                {done ? "✓" : s.icon}
+                {done ? "✓" : <i className={`ti ${s.icon}`} style={{ fontSize: 16 }} />}
               </div>
               <span style={{
                 fontSize: 10, fontWeight: active ? 700 : 500,
@@ -486,7 +486,7 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
   return (
     <div>
       <h3 style={{ marginBottom: 20, color: C.dark }}>Review & Submit</h3>
-      <Section title="👤 Student">
+      <Section title={<><i className="ti ti-user" style={{ marginRight: 6 }} />Student</>}>
         <Row label="LRN" value={student.lrn} />
         <Row label="Full Name" value={`${student.first_name} ${student.middle_name || ""} ${student.last_name} ${student.suffix || ""}`.trim()} />
         <Row label="Sex" value={student.sex} />
@@ -500,7 +500,7 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
       </Section>
 
       {(household.parent_marital_status || household.living_arrangement || household.is_4ps_beneficiary) && (
-        <Section title="🏠 Household">
+        <Section title={<><i className="ti ti-home" style={{ marginRight: 6 }} />Household</>}>
           <Row label="Marital Status" value={household.parent_marital_status} />
           <Row label="Living Arrangement" value={household.living_arrangement} />
           <Row label="4Ps Beneficiary" value={household.is_4ps_beneficiary ? "Yes" : "No"} />
@@ -509,7 +509,7 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
       )}
 
       {guardians.length > 0 && (
-        <Section title="👨‍👩‍👧 Guardians">
+        <Section title={<><i className="ti ti-users" style={{ marginRight: 6 }} />Guardians</>}>
           {guardians.map((g, i) => (
             <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < guardians.length - 1 ? `1px dashed ${C.redMid}` : "none" }}>
               <Row label="Name" value={g.full_name} />
@@ -524,7 +524,7 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
       )}
 
       {siblings.length > 0 && (
-        <Section title="👫 Siblings">
+        <Section title={<><i className="ti ti-friends" style={{ marginRight: 6 }} />Siblings</>}>
           {siblings.map((s, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <Row label={`Sibling ${i + 1}`} value={`${s.full_name}${s.age ? `, age ${s.age}` : ""}`} />
@@ -534,7 +534,7 @@ function ReviewStep({ student, household, guardians, siblings, schools }) {
       )}
 
       {schools.length > 0 && (
-        <Section title="🏫 Previous Schools">
+        <Section title={<><i className="ti ti-school" style={{ marginRight: 6 }} />Previous Schools</>}>
           {schools.map((s, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <Row label={`School ${i + 1}`} value={s.school_name} />
@@ -867,11 +867,19 @@ export default function StudentFormPage() {
 
   const isLastStep = step === STEPS.length - 1;
 
+  const sideNavBtn = {
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
+    width: 44, height: 44, borderRadius: "50%", border: "none",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer", fontSize: 20, fontWeight: 700, zIndex: 10,
+    boxShadow: "0 4px 16px rgba(224,49,49,0.18)", transition: "opacity .2s, box-shadow .2s",
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');`}</style>
 
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+      <div style={{ maxWidth: 780, margin: "0 auto", position: "relative" }}>
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <button
@@ -898,49 +906,75 @@ export default function StudentFormPage() {
           </div>
         )}
 
-        {/* Step content */}
-        <div style={{ ...cardStyle, minHeight: 320 }}>
-          {step === 0 && (
-            <>
-              {!id && (
-                <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
-                  <OcrScanButton onExtracted={handleOcrExtracted} />
-                </div>
-              )}
-              <StudentStep data={student} onChange={setStudent} />
-            </>
-          )}
-          {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
-          {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
-          {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
-          {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
-          {step === 5 && (
-            <ReviewStep
-              student={student} household={household}
-              guardians={guardians} siblings={siblings} schools={schools}
-            />
-          )}
-        </div>
+        {/* Step content with side nav buttons */}
+        <div style={{ position: "relative" }}>
 
-        {/* Navigation */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-          <button style={btnSecondary} onClick={prev} disabled={step === 0} type="button">
-            ← Previous
+          {/* Previous button — left of card */}
+          <button
+            onClick={prev}
+            disabled={step === 0}
+            type="button"
+            title="Previous"
+            style={{
+              ...sideNavBtn, left: -60,
+              background: step === 0 ? "#f3e8e8" : C.white,
+              color: step === 0 ? C.redMid : C.red,
+              opacity: step === 0 ? 0.4 : 1,
+              cursor: step === 0 ? "not-allowed" : "pointer",
+            }}
+          >
+            <i className="ti ti-chevron-left" />
           </button>
+
+          {/* Next / Submit button — right of card */}
           {isLastStep ? (
             <button
-              style={{ ...btnPrimary, opacity: loading ? .7 : 1 }}
               onClick={handleSubmit}
               disabled={loading}
               type="button"
+              title={id ? "Update Student" : "Submit Registration"}
+              style={{
+                ...sideNavBtn, right: -60,
+                background: C.red, color: "#fff",
+                opacity: loading ? 0.6 : 1,
+                cursor: loading ? "not-allowed" : "pointer",
+              }}
             >
-              {loading ? "Saving..." : id ? "Update Student" : "✓ Submit Registration"}
+              <i className="ti ti-check" />
             </button>
           ) : (
-            <button style={btnPrimary} onClick={next} type="button">
-              Next →
+            <button
+              onClick={next}
+              type="button"
+              title="Next"
+              style={{ ...sideNavBtn, right: -60, background: C.red, color: "#fff" }}
+            >
+              <i className="ti ti-chevron-right" />
             </button>
           )}
+
+          <div style={{ ...cardStyle, minHeight: 320 }}>
+            {step === 0 && (
+              <>
+                {!id && (
+                  <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
+                    <OcrScanButton onExtracted={handleOcrExtracted} />
+                  </div>
+                )}
+                <StudentStep data={student} onChange={setStudent} />
+              </>
+            )}
+            {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
+            {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+            {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+            {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
+            {step === 5 && (
+              <ReviewStep
+                student={student} household={household}
+                guardians={guardians} siblings={siblings} schools={schools}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
