@@ -99,7 +99,7 @@ export default function Sidebar({ user: userProp }) {
                 {group.section}
               </div>
               {group.items.map((item) => {
-                const active = location.pathname === item.path;
+                const active = location.pathname === item.path || location.pathname.startsWith(item.path + "/");
                 return (
                   <div
                     key={item.path}

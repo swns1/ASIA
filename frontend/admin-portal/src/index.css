@@ -18,6 +18,80 @@
   animation: slideUp 0.6s ease-out both;
 }
 
+/* ── Chip buttons ──────────────────────────────────────────────────────────── */
+.subject-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: white;
+  border: 1px solid #f5eaea;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-family: 'DM Sans', sans-serif;
+  color: #5a4040;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  text-align: left;
+}
+.subject-chip:hover {
+  background: #fff8f6;
+  border-color: #fca5a5;
+  color: #1a0a0a;
+}
+.subject-chip.active {
+  background: #fff0f0;
+  border-color: #e03131;
+  color: #e03131;
+}
+
+.period-chip {
+  background: white;
+  border: 1.5px solid #f0e4e4;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a7070;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.period-chip:hover {
+  background: #fff0f0;
+  border-color: #fca5a5;
+  color: #e03131;
+}
+.period-chip.active {
+  background: #e03131;
+  border-color: #e03131;
+  color: white;
+}
+
+.enr-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: white;
+  border: 1px solid #f5eaea;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'DM Sans', sans-serif;
+  color: #5a4040;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: left;
+}
+.enr-chip:hover {
+  background: #fff8f6;
+  border-color: #fca5a5;
+}
+.enr-chip.active {
+  background: #fff8f6;
+  border-color: #e03131;
+}
+
 /* Full-screen reset */
 html, body, #root {
   width: 100%;

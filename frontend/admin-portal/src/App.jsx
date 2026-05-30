@@ -8,8 +8,7 @@ import EnrollmentFormPage from "./pages/EnrollmentFormPage";
 import EnrollmentsPage from "./pages/EnrollmentsPage";
 import SubjectsPage from "./pages/SubjectsPage";
 import GradingTemplatesPage from "./pages/GradingTemplatesPage";
-import GradeEntryPage from "./pages/GradeEntryPage";
-import GradeSummaryPage from "./pages/GradeSummaryPage";
+import GradesPage from "./pages/GradesPage";
 import ScholarshipTypesPage from "./pages/ScholarshipTypesPage";
 import ScholarshipsPage from "./pages/ScholarshipsPage";
 import SchoolSettingsPage from "./pages/SchoolSettingsPage";
@@ -38,9 +37,9 @@ export default function App() {
         <Route path="/enrollments/:id/edit" element={<EnrollmentFormPage />} />
         <Route path="/subjects" element={<SubjectsPage />} />
         <Route path="/grading-templates" element={<GradingTemplatesPage />} />
-        <Route path="/grades/entry" element={<GradeEntryPage />} />
-        <Route path="/grades"         element={<GradeSummaryPage />} />
-        <Route path="/grades/summary" element={<GradeSummaryPage />} />
+        <Route path="/grades"         element={<GradesPage />} />
+        <Route path="/grades/summary" element={<GradesPage />} />
+        <Route path="/grades/entry"   element={<GradesPage />} />
         <Route path="/scholarship-types" element={<ScholarshipTypesPage />} />
         <Route path="/scholarships" element={<ScholarshipsPage />} />
         <Route path="/settings"      element={<SchoolSettingsPage />} />
