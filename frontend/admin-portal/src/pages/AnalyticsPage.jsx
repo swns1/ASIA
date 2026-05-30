@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
-import { useNavigate, useLocation } from "react-router-dom";
-import { clearAuthSession } from "../utils/auth";
+import { useNavigate } from "react-router-dom";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -56,45 +55,10 @@ function currentSchoolYear() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = {
-  page: {
-    display: "flex", minHeight: "100vh",
-    fontFamily: "'DM Sans', sans-serif", background: "#faf9f6",
-  },
-  sidebar: {
-    width: 250, background: "white", borderRight: "1px solid #ede9e1",
-    display: "flex", flexDirection: "column",
-    position: "fixed", top: 0, bottom: 0, overflowY: "auto", zIndex: 50,
-  },
-  logoBox: {
-    display: "flex", alignItems: "center", gap: 12,
-    padding: "22px 22px 18px", borderBottom: "1px solid #f0ece4",
-  },
-  logoImg:   { width: 36, height: 36, borderRadius: 10 },
-  logoTitle: { fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em", color: "#1a0a0a" },
-  logoSub:   { fontSize: 10.5, color: "#b0a898", fontWeight: 500, marginTop: 1 },
-  section:   {
-    fontSize: 10.5, fontWeight: 700, color: "#c8c0b4",
-    letterSpacing: "0.08em", textTransform: "uppercase", padding: "18px 22px 6px",
-  },
-  navBtn: (active) => ({
-    display: "flex", alignItems: "center", gap: 10,
-    padding: "9px 22px", margin: "1px 10px", borderRadius: 10,
-    cursor: "pointer", fontSize: 13.5, fontWeight: active ? 700 : 500,
-    color: active ? "#c0392b" : "#5f5e5a",
-    background: active ? "#fdf0f0" : "transparent",
-    border: "none", width: "calc(100% - 20px)", textAlign: "left",
-    transition: "all 0.12s",
-  }),
-  logoutBtn: {
-    display: "flex", alignItems: "center", gap: 10,
-    padding: "12px 22px", margin: "auto 10px 16px", borderRadius: 10,
-    border: "1px solid #f0ece4", background: "white", color: "#5f5e5a",
-    cursor: "pointer", fontSize: 13, fontWeight: 500,
-  },
-  main: { marginLeft: 250, flex: 1, padding: "28px 36px", minWidth: 0 },
-  header:   { marginBottom: 24 },
-  title:    { fontSize: 22, fontWeight: 800, color: "#1a0a0a", letterSpacing: "-0.02em" },
-  subtitle: { fontSize: 13, color: "#b0a898", marginTop: 2 },
+  topbar:      { background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
+  topbarTitle: { fontSize: 15, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" },
+  topbarSub:   { fontSize: 11.5, color: "#b09090", marginTop: 1 },
+  content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 },
   card: {
     background: "white", borderRadius: 16, border: "1px solid #ede9e1",
     boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20,
@@ -414,7 +378,6 @@ function ClusterInsightPanel({ result }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AnalyticsPage() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
   const [gradingPeriod,   setGradingPeriod]   = useState("1st_quarter");
@@ -464,18 +427,18 @@ export default function AnalyticsPage() {
     }
   }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
 
-  function handleLogout() {
-    clearAuthSession();
-    navigate("/login");
-  }
-
   return (
     <AppLayout>
-      <div style={{ flex: 1, overflowY: "auto", padding: "28px 36px", minWidth: 0 }}>
-        <div style={s.header}>
-          <div style={s.title}>Student Performance Analytics</div>
-          <div style={s.subtitle}>K-Means clustering on student grades with AI-powered interpretation</div>
-        </div>
+          {/* Topbar */}
+          <div style={s.topbar}>
+            <div>
+              <div style={s.topbarTitle}>Analytics</div>
+              <div style={s.topbarSub}>K-Means clustering on student grades · S.Y. {schoolYear}</div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={s.content}>
 
         {/* Filters */}
         <div style={s.card}>

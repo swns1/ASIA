@@ -82,7 +82,7 @@ export default function Sidebar({ user: userProp }) {
   return (
     <>
       <aside style={{ width: 224, flexShrink: 0, background: "white", borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" }}>
-        <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid #f5eaea" }}>
+        <div style={{ height: 58, padding: "0 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
             <div>
