@@ -498,7 +498,7 @@ function UserCard({ user, currentUser, isAdmin, onEdit, onDelete }) {
             style={{ height: 34, padding: "0 14px", border: `1px solid ${C.border}`, borderRadius: 9, background: C.white, fontSize: 12, fontWeight: 600, color: C.muted, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}
             onMouseEnter={e => { e.currentTarget.style.background = C.redLight; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
             onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border; }}>
-            <i className="ti ti-pencil" style={{ fontSize: 13 }} /> Edit
+            <i className="ti ti-pencil" style={{ fontSize: 13 }} /> 
           </button>
         )}
         {canDelete && (

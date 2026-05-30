@@ -20,6 +20,25 @@ async function apiFetch(url) {
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
+// ── Filter constants ──────────────────────────────────────────────────────────
+const SCHOOL_YEARS = (() => {
+  const now = new Date();
+  const cur = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+  return Array.from({ length: 5 }, (_, i) => {
+    const y = cur - i;
+    return `${y}-${y + 1}`;
+  });
+})();
+
+const LEVEL_GRADES = {
+  "":                [],
+  nursery:           ["Nursery"],
+  kindergarten:      ["Kinder"],
+  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
+  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
+  senior_highschool: ["Grade 11","Grade 12"],
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const LEVEL_LABELS = {
   nursery:           "Nursery",
@@ -53,6 +72,16 @@ function pillStyle(status) {
   return map[status] ?? { bg: "#f1efe8", color: "#5f5e5a" };
 }
 
+// ── Live clock ────────────────────────────────────────────────────────────────
+function useClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 // Current school year helper
 function currentSchoolYear() {
   const now = new Date();
@@ -66,7 +95,8 @@ const Sk = ({ w = "100%", h = 18, r = 6 }) => (
 );
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, chipText, chipType, loading }) {
+function StatCard({ label, value, icon, chipText, chipType, loading, filters, filterValues, onFilterChange }) {
+  const [showFilters, setShowFilters] = useState(false);
   const chips = {
     up:      { bg: "#eaf3de", color: "#3b6d11" },
     down:    { bg: "#fcebeb", color: "#a32d2d" },
@@ -74,6 +104,12 @@ function StatCard({ label, value, icon, chipText, chipType, loading }) {
     info:    { bg: "#e3f0fd", color: "#1455a0" },
   };
   const chip = chips[chipType] ?? chips.neutral;
+  const hasActiveFilter = filters?.some((f) => filterValues?.[f.key]);
+  const selStyle = {
+    flex: 1, padding: "4px 6px", borderRadius: 6, border: "1px solid #f0e0e0",
+    fontSize: 11, color: "#5a3a3a", background: "white", cursor: "pointer",
+    fontFamily: "'DM Sans',sans-serif", outline: "none", minWidth: 0,
+  };
   return (
     <div style={s.statCard}>
       <div style={s.statTop}>
@@ -83,12 +119,64 @@ function StatCard({ label, value, icon, chipText, chipType, loading }) {
         </div>
       </div>
       {loading ? <Sk h={30} w="60%" /> : <div style={s.statValue}>{value}</div>}
-      <div style={s.statFooter}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {loading
           ? <Sk h={16} w="70%" />
           : <span style={{ ...s.chip, background: chip.bg, color: chip.color }}>{chipText}</span>
         }
+        {filters?.length > 0 && (
+          <div style={{ display: "flex", gap: 4 }}>
+            {hasActiveFilter && (
+              <button
+                onClick={() => filters.forEach((f) => onFilterChange(f.key, null))}
+                style={{
+                  display: "flex", alignItems: "center", gap: 3,
+                  fontSize: 10.5, padding: "2px 7px", borderRadius: 99,
+                  border: "1px solid #f0e0e0", background: "white",
+                  color: "#b09090", cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif", fontWeight: 500,
+                  transition: "all 0.12s",
+                }}
+              >
+                <i className="ti ti-x" style={{ fontSize: 10 }} />
+                Clear
+              </button>
+            )}
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              style={{
+                display: "flex", alignItems: "center", gap: 3,
+                fontSize: 10.5, padding: "2px 7px", borderRadius: 99,
+                border: `1px solid ${hasActiveFilter ? "#e03131" : "#f0e0e0"}`,
+                background: hasActiveFilter ? "#fff0f0" : "white",
+                color: hasActiveFilter ? "#e03131" : "#b09090",
+                cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500,
+                transition: "all 0.12s",
+              }}
+            >
+              <i className="ti ti-adjustments-horizontal" style={{ fontSize: 10 }} />
+              {hasActiveFilter ? "Filtered" : "Filter"}
+            </button>
+          </div>
+        )}
       </div>
+      {showFilters && filters?.length > 0 && (
+        <div style={{ display: "flex", gap: 4, paddingTop: 6, borderTop: "1px solid #f9f0f0", marginTop: 2 }}>
+          {filters.map((f) => (
+            <select
+              key={f.key}
+              value={filterValues?.[f.key] ?? ""}
+              onChange={(e) => onFilterChange(f.key, e.target.value || null)}
+              style={selStyle}
+            >
+              <option value="">{f.placeholder ?? "All"}</option>
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -110,11 +198,25 @@ function Panel({ title, action, onAction, children }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
-  const navigate  = useNavigate();
-  const schoolYear = currentSchoolYear();
-  const currentUser = getCurrentUser();
+  const navigate     = useNavigate();
+  const currentUser  = getCurrentUser();
+  const now          = useClock();
 
-  // ── state ──
+  // ── per-card filter state ──
+  const [studentsFilters,    setStudentsFilters]    = useState({ level: null, grade: null });
+  const [enrolledFilters,    setEnrolledFilters]    = useState({ year: null, level: null, grade: null });
+  const [pendingFilters,     setPendingFilters]     = useState({ year: null, level: null, grade: null });
+  const [scholarshipFilters, setScholarshipFilters] = useState({ year: null, level: null, grade: null });
+
+  function updateFilter(setter) {
+    return (key, val) => setter((prev) => {
+      const next = { ...prev, [key]: val };
+      if (key === "level") next.grade = null;
+      return next;
+    });
+  }
+
+  // ── data state ──
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState("");
 
@@ -130,11 +232,18 @@ export default function DashboardPage() {
   const [recentStudents,    setRecentStudents]    = useState([]);
   const [scholarships,      setScholarships]      = useState([]);
 
+  const schoolYear = currentSchoolYear();
+
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
     fetchAll();
   }, []);
+
+  useEffect(() => { fetchStudentStats(); },    [studentsFilters]);
+  useEffect(() => { fetchEnrollmentStats(); }, [enrolledFilters]);
+  useEffect(() => { fetchPendingStats(); },    [pendingFilters]);
+  useEffect(() => { fetchScholarships(); },    [scholarshipFilters]);
 
   async function fetchAll() {
     setLoading(true);
@@ -142,6 +251,7 @@ export default function DashboardPage() {
       await Promise.all([
         fetchStudentStats(),
         fetchEnrollmentStats(),
+        fetchPendingStats(),
         fetchRecentEnrollments(),
         fetchLevelBreakdown(),
         fetchRecentStudents(),
@@ -156,26 +266,39 @@ export default function DashboardPage() {
     }
   }
 
+  function buildGp(f) {
+    if (f.grade) return `&grade_level=${encodeURIComponent(f.grade)}`;
+    if (f.level) return `&school_level=${f.level}`;
+    return "";
+  }
+
   async function fetchStudentStats() {
-    const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=1`);
+    const gp = buildGp(studentsFilters);
+    const [data, active] = await Promise.all([
+      apiFetch(`${STUDENT_API}/api/students/?page_size=1${gp}`),
+      apiFetch(`${STUDENT_API}/api/students/?status=active&page_size=1${gp}`),
+    ]);
     setTotalStudents(data.count ?? 0);
-    const active = await apiFetch(`${STUDENT_API}/api/students/?status=active&page_size=1`);
     setActiveStudents(active.count ?? 0);
   }
 
   async function fetchEnrollmentStats() {
-    const [enrolled, pending] = await Promise.all([
-      apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=enrolled&school_year=${schoolYear}&page_size=1`),
-      apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=pending&school_year=${schoolYear}&page_size=1`),
-    ]);
-    setEnrolledCount(enrolled.count ?? 0);
-    setPendingCount(pending.count ?? 0);
+    const sy = enrolledFilters.year ?? schoolYear;
+    const gp = buildGp(enrolledFilters);
+    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=enrolled&school_year=${sy}&page_size=1${gp}`);
+    setEnrolledCount(data.count ?? 0);
+  }
+
+  async function fetchPendingStats() {
+    const sy = pendingFilters.year ?? schoolYear;
+    const gp = buildGp(pendingFilters);
+    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=pending&school_year=${sy}&page_size=1${gp}`);
+    setPendingCount(data.count ?? 0);
   }
 
   async function fetchRecentEnrollments() {
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?school_year=${schoolYear}&page_size=8&ordering=-enrollment_id`);
-    const results = data.results ?? [];
-    setRecentEnrollments(results);
+    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?school_year=${schoolYear}&page_size=10&ordering=-enrollment_id`);
+    setRecentEnrollments((data.results ?? []).slice(0, 5));
   }
 
   async function fetchLevelBreakdown() {
@@ -196,7 +319,9 @@ export default function DashboardPage() {
   }
 
   async function fetchScholarships() {
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollment-scholarships/?page_size=100`);
+    const sy = scholarshipFilters.year ?? schoolYear;
+    const gp = buildGp(scholarshipFilters);
+    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollment-scholarships/?page_size=100&school_year=${sy}${gp}`);
     const results = Array.isArray(data) ? data : data.results ?? [];
     setScholarships(results);
     setScholarshipCount(results.length);
@@ -220,6 +345,13 @@ export default function DashboardPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
 
+  // ── filter option lists ──
+  const yearOpts  = SCHOOL_YEARS.map((y) => ({ value: y, label: y }));
+  const levelOpts = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }));
+  function gradeOpts(f) {
+    return (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
+  }
+
   return (
     <AppLayout>
 
@@ -227,20 +359,16 @@ export default function DashboardPage() {
           <div style={s.topbar}>
             <div>
               <div style={s.topbarTitle}>Dashboard</div>
-              <div style={s.topbarSub}>S.Y. {schoolYear} · {new Date().toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
+              <div style={s.topbarSub}>S.Y. {schoolYear} · {now.toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
             </div>
-            {/* <div style={{ display:"flex", gap:8 }}>
-              <button className="icon-btn" style={s.iconBtn}>
-                <img
-                  src="/path/to/your-image.png"
-                  alt="icon"
-                  style={{ width: 20, height: 20, objectFit: "contain" }}
-                />
-              </button>
-              <button className="icon-btn" style={s.iconBtn} onClick={() => navigate("/students")}>
-                <i className="ti ti-search" style={{ fontSize:17 }} />
-              </button>
-            </div> */}
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+                {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </div>
+              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
+                {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
+              </div>
+            </div>
           </div>
 
           {/* Content */}
@@ -260,28 +388,59 @@ export default function DashboardPage() {
                 icon="ti-users"
                 value={totalStudents.toLocaleString()}
                 chipText={`${activeStudents.toLocaleString()} active`}
-                chipType="up" loading={loading}
+                chipType="up"
+                loading={loading}
+                filters={[
+                  { key: "level", options: levelOpts, placeholder: "All Levels" },
+                  ...(studentsFilters.level ? [{ key: "grade", options: gradeOpts(studentsFilters), placeholder: "All Grades" }] : []),
+                ]}
+                filterValues={studentsFilters}
+                onFilterChange={updateFilter(setStudentsFilters)}
               />
               <StatCard
                 label="Enrolled this S.Y."
                 icon="ti-calendar-event"
                 value={enrolledCount.toLocaleString()}
-                chipText={`${enrollmentRate}% of total`}
-                chipType="neutral" loading={loading}
+                chipText={`S.Y. ${enrolledFilters.year ?? schoolYear}`}
+                chipType="neutral"
+                loading={loading}
+                filters={[
+                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
+                  { key: "level", options: levelOpts, placeholder: "All Levels" },
+                  ...(enrolledFilters.level ? [{ key: "grade", options: gradeOpts(enrolledFilters), placeholder: "All Grades" }] : []),
+                ]}
+                filterValues={enrolledFilters}
+                onFilterChange={updateFilter(setEnrolledFilters)}
               />
               <StatCard
                 label="Pending Enrollment"
                 icon="ti-clipboard-list"
                 value={pendingCount.toLocaleString()}
                 chipText={pendingCount > 0 ? "needs action" : "all clear"}
-                chipType={pendingCount > 0 ? "down" : "up"} loading={loading}
+                chipType={pendingCount > 0 ? "down" : "up"}
+                loading={loading}
+                filters={[
+                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
+                  { key: "level", options: levelOpts, placeholder: "All Levels" },
+                  ...(pendingFilters.level ? [{ key: "grade", options: gradeOpts(pendingFilters), placeholder: "All Grades" }] : []),
+                ]}
+                filterValues={pendingFilters}
+                onFilterChange={updateFilter(setPendingFilters)}
               />
               <StatCard
                 label="Scholarships Awarded"
                 icon="ti-award"
                 value={scholarshipCount.toLocaleString()}
-                chipText={`${subjectCount} subjects`}
-                chipType="info" loading={loading}
+                chipText={`S.Y. ${scholarshipFilters.year ?? schoolYear}`}
+                chipType="info"
+                loading={loading}
+                filters={[
+                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
+                  { key: "level", options: levelOpts, placeholder: "All Levels" },
+                  ...(scholarshipFilters.level ? [{ key: "grade", options: gradeOpts(scholarshipFilters), placeholder: "All Grades" }] : []),
+                ]}
+                filterValues={scholarshipFilters}
+                onFilterChange={updateFilter(setScholarshipFilters)}
               />
             </div>
 
@@ -299,7 +458,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {loading
-                      ? Array.from({ length: 6 }).map((_, i) => (
+                      ? Array.from({ length: 10 }).map((_, i) => (
                           <tr key={i}>
                             {[130,90,70,60].map((w, j) => (
                               <td key={j} style={s.td}><Sk w={w} h={13} /></td>
