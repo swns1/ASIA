@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -18,21 +20,84 @@ async function apiCall(method, url, body = null) {
   return res.json();
 }
 
-const getEvents   = (sy)    => apiCall("GET",   `${ENROLLMENT_API}/calendar-events/?school_year=${sy}&page_size=200`);
-const createEvent = (p)     => apiCall("POST",  `${ENROLLMENT_API}/calendar-events/`, p);
-const updateEvent = (id, p) => apiCall("PATCH", `${ENROLLMENT_API}/calendar-events/${id}/`, p);
-const deleteEvent = (id)    => apiCall("DELETE",`${ENROLLMENT_API}/calendar-events/${id}/`);
+const getEvents      = (sy)    => apiCall("GET",   `${ENROLLMENT_API}/calendar-events/?school_year=${sy}&page_size=200`);
+const createEvent    = (p)     => apiCall("POST",  `${ENROLLMENT_API}/calendar-events/`, p);
+const updateEvent    = (id, p) => apiCall("PATCH", `${ENROLLMENT_API}/calendar-events/${id}/`, p);
+const deleteEvent    = (id)    => apiCall("DELETE",`${ENROLLMENT_API}/calendar-events/${id}/`);
+const getSchoolSettings = ()   => apiCall("GET",   "http://localhost:8002/api/school-settings/current/");
+
+// ── CSV Export ────────────────────────────────────────────────────────────────
+
+function quoteCSV(v) {
+  const s = v == null ? "" : String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportCSV(events, schoolYear) {
+  const header = ["Date", "End Date", "Title", "Type", "Description", "School Year"];
+  const rows = [...events]
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .map((ev) => [
+      ev.start_date,
+      ev.end_date,
+      ev.title,
+      eventMeta(ev.event_type).label,
+      ev.description ?? "",
+      ev.school_year,
+    ]);
+  const csv = [header, ...rows].map((r) => r.map(quoteCSV).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = `academic-calendar-SY${schoolYear}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
-const EVENT_TYPES = [
-  { value: "holiday",        label: "Holiday",           color: "#e03131", bg: "#fde8e8", light: "#fff5f5", icon: "ti-flag" },
-  { value: "exam",           label: "Exam",              color: "#1455a0", bg: "#e3f0fd", light: "#f0f7ff", icon: "ti-writing" },
-  { value: "enrollment",     label: "Enrollment",        color: "#2e6b0d", bg: "#e8f5e0", light: "#f2fae9", icon: "ti-clipboard-list" },
-  { value: "quarter_break",  label: "Quarter Break",     color: "#7c3aed", bg: "#f0e8fd", light: "#f8f4ff", icon: "ti-calendar-pause" },
-  { value: "school_day_off", label: "No Classes",        color: "#d97706", bg: "#fdf5e8", light: "#fffbf0", icon: "ti-school-off" },
-  { value: "other",          label: "Other",             color: "#9a7070", bg: "#f5eeee", light: "#fdf9f9", icon: "ti-calendar" },
+const EVENT_TYPE_DEFAULTS = [
+  { value: "holiday",        label: "Holiday",       color: "#e03131", icon: "ti-flag" },
+  { value: "exam",           label: "Exam",          color: "#1455a0", icon: "ti-writing" },
+  { value: "enrollment",     label: "Enrollment",    color: "#2e6b0d", icon: "ti-clipboard-list" },
+  { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
+  { value: "school_day_off", label: "No Classes",    color: "#d97706", icon: "ti-school-off" },
+  { value: "other",          label: "Other",         color: "#9a7070", icon: "ti-calendar" },
 ];
+
+const COLOR_STORAGE_KEY = "cal_event_colors";
+
+function loadColorOverrides() {
+  try { return JSON.parse(localStorage.getItem(COLOR_STORAGE_KEY) ?? "{}"); }
+  catch { return {}; }
+}
+
+function saveColorOverrides(overrides) {
+  localStorage.setItem(COLOR_STORAGE_KEY, JSON.stringify(overrides));
+}
+
+// Derive bg/light from a hex color (lightened tints)
+function hexToTints(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  const mix = (v, t) => Math.round(v + (255 - v) * t).toString(16).padStart(2,"0");
+  const bg    = `#${mix(r,0.82)}${mix(g,0.82)}${mix(b,0.82)}`;
+  const light = `#${mix(r,0.93)}${mix(g,0.93)}${mix(b,0.93)}`;
+  return { bg, light };
+}
+
+function buildEventTypes(overrides) {
+  return EVENT_TYPE_DEFAULTS.map((t) => {
+    const color = overrides[t.value] ?? t.color;
+    const { bg, light } = hexToTints(color);
+    return { ...t, color, bg, light };
+  });
+}
+
+// Module-level reactive event types — updated when colors change
+let EVENT_TYPES = buildEventTypes(loadColorOverrides());
 
 function eventMeta(type) {
   return EVENT_TYPES.find((t) => t.value === type) ?? EVENT_TYPES[EVENT_TYPES.length - 1];
@@ -479,6 +544,98 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   );
 }
 
+// ── Color Settings Modal ──────────────────────────────────────────────────────
+
+function ColorSettingsModal({ onClose, onSaved }) {
+  const [overrides, setOverrides] = useState(() => loadColorOverrides());
+
+  const setColor = (value, color) => setOverrides((prev) => ({ ...prev, [value]: color }));
+  const resetAll = () => setOverrides({});
+
+  function handleSave() {
+    saveColorOverrides(overrides);
+    EVENT_TYPES = buildEventTypes(overrides);
+    onSaved();
+    onClose();
+  }
+
+  const preview = buildEventTypes(overrides);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}>
+      <div style={{ background: "white", borderRadius: 22, width: 420, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
+
+        {/* Header */}
+        <div style={{ background: "linear-gradient(135deg,#fff5f5,white)", padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="ti ti-palette" style={{ fontSize: 22, color: "#e03131" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Event Colors</div>
+            <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Customize strip colors for each event type</div>
+          </div>
+          <button onClick={onClose} style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </button>
+        </div>
+
+        {/* Color rows */}
+        <div style={{ padding: "18px 28px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {preview.map((t) => (
+            <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Live preview strip */}
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: t.bg, border: `2px solid ${t.color}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: t.color }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1a0a0a" }}>{t.label}</div>
+                <div style={{ fontSize: 10.5, color: "#b09090", marginTop: 1 }}>
+                  {/* Mini strip preview */}
+                  <span style={{ display: "inline-block", background: t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 10, color: t.color, fontWeight: 600 }}>
+                    Sample event
+                  </span>
+                </div>
+              </div>
+              {/* Color picker */}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <input
+                  type="color"
+                  value={overrides[t.value] ?? t.color}
+                  onChange={(e) => setColor(t.value, e.target.value)}
+                  style={{ width: 36, height: 36, border: "1.5px solid #f0e4e4", borderRadius: 9, cursor: "pointer", padding: 2, background: "white" }}
+                  title={`Pick color for ${t.label}`}
+                />
+              </div>
+              {/* Reset individual */}
+              {overrides[t.value] && (
+                <button
+                  onClick={() => setOverrides((p) => { const n = { ...p }; delete n[t.value]; return n; })}
+                  title="Reset to default"
+                  style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#c0a0a0" }}>
+                  <i className="ti ti-refresh" style={{ fontSize: 12 }} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", gap: 10, padding: "0 28px 24px", alignItems: "center" }}>
+          <button onClick={resetAll} style={{ height: 38, padding: "0 14px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 12, color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            <i className="ti ti-refresh" style={{ fontSize: 13 }} />Reset all
+          </button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ height: 38, padding: "0 16px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
+          <button onClick={handleSave} className="new-btn"
+            style={{ height: 38, padding: "0 20px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)", display: "flex", alignItems: "center", gap: 7 }}>
+            <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── PH Holidays Import Modal ──────────────────────────────────────────────────
 
 function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }) {
@@ -778,6 +935,231 @@ function EventsList({ events, loading, schoolYear, onEdit, onDelete, onJumpMonth
   );
 }
 
+// ── Print Components ─────────────────────────────────────────────────────────
+
+function PrintHeader({ schoolName, schoolYear }) {
+  const today = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid #e03131", paddingBottom: 10, marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <img src={logo} alt="Logo" style={{ width: 28, height: 42, objectFit: "contain" }} />
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>{schoolName}</div>
+          <div style={{ fontSize: 12, color: "#7a5050", marginTop: 2 }}>Academic Calendar — S.Y. {schoolYear}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 10, color: "#b09090", textAlign: "right" }}>
+        Generated on {today}
+      </div>
+    </div>
+  );
+}
+
+// Full-year list: all 12 months as tables
+function YearListPrint({ events, schoolYear, schoolName }) {
+  const [syYear, syYear2] = schoolYear.split("-").map(Number);
+  const sorted = [...events].sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+  return (
+    <div style={{ fontFamily: "'DM Sans', Arial, sans-serif", fontSize: 11, color: "#1a0a0a", padding: "0 8px" }}>
+      <PrintHeader schoolName={schoolName} schoolYear={schoolYear} />
+      {MONTHS.map((month, mi) => {
+        const monthYear = mi >= 6 ? syYear : syYear2;
+        const monthEvs = sorted.filter((ev) => {
+          const [y, m] = ev.start_date.split("-").map(Number);
+          return m - 1 === mi && y === monthYear;
+        });
+        return (
+          <div key={mi} style={{ marginBottom: 18, breakInside: "avoid" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fde8e8", padding: "5px 10px", borderRadius: 4, marginBottom: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#e03131" }}>{month} {monthYear}</span>
+              <span style={{ fontSize: 10, color: "#b09090" }}>{monthEvs.length} event{monthEvs.length !== 1 ? "s" : ""}</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
+              <thead>
+                <tr style={{ background: "#fdf8f8" }}>
+                  {["Date", "Event", "Type", "Description"].map((h) => (
+                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", borderBottom: "1px solid #f0e4e4", color: "#9a7070", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {monthEvs.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: "6px 8px", color: "#c8b0b0", fontStyle: "italic", fontSize: 10 }}>No events this month</td></tr>
+                ) : monthEvs.map((ev) => {
+                  const meta = eventMeta(ev.event_type);
+                  return (
+                    <tr key={ev.event_id} style={{ borderBottom: "1px solid #faf0f0" }}>
+                      <td style={{ padding: "5px 8px", whiteSpace: "nowrap", color: "#5a3a3a", fontVariantNumeric: "tabular-nums" }}>{formatDateRange(ev.start_date, ev.end_date)}</td>
+                      <td style={{ padding: "5px 8px", fontWeight: 600 }}>{ev.title}</td>
+                      <td style={{ padding: "5px 8px" }}>
+                        <span style={{ background: meta.bg, color: meta.color, borderLeft: `3px solid ${meta.color}`, padding: "2px 7px", borderRadius: "0 3px 3px 0", fontSize: 9.5, fontWeight: 700 }}>{meta.label}</span>
+                      </td>
+                      <td style={{ padding: "5px 8px", color: "#7a5a5a", fontSize: 10 }}>{ev.description ?? ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", borderTop: "1px solid #f0e4e4", paddingTop: 8, marginTop: 4 }}>
+        {EVENT_TYPES.map((t) => (
+          <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
+            <span style={{ fontSize: 9.5, color: "#7a5a5a" }}>{t.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Monthly sheet: one month per page with mini grid
+function MonthGridPrint({ events, schoolYear, schoolName }) {
+  const [syYear, syYear2] = schoolYear.split("-").map(Number);
+  const eventMap = buildEventMap(events);
+
+  return (
+    <div style={{ fontFamily: "'DM Sans', Arial, sans-serif", fontSize: 11, color: "#1a0a0a" }}>
+      {MONTHS.map((month, mi) => {
+        const monthYear   = mi >= 6 ? syYear : syYear2;
+        const firstDay    = new Date(monthYear, mi, 1).getDay();
+        const daysInMonth = new Date(monthYear, mi + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+
+        const monthEvs = events
+          .filter((ev) => { const [y, m] = ev.start_date.split("-").map(Number); return m - 1 === mi && y === monthYear; })
+          .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+        return (
+          <div key={mi} style={{ pageBreakBefore: mi === 0 ? "auto" : "always", padding: "0 8px 16px" }}>
+            <PrintHeader schoolName={schoolName} schoolYear={schoolYear} />
+
+            {/* Month title */}
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#e03131", marginBottom: 10 }}>{month} {monthYear}</div>
+
+            {/* Mini calendar grid */}
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14, tableLayout: "fixed" }}>
+              <thead>
+                <tr>
+                  {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
+                    <th key={d} style={{ padding: "4px 0", textAlign: "center", fontSize: 9, fontWeight: 700, color: i === 0 || i === 6 ? "#e0a0a0" : "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #f0e4e4" }}>{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: cells.length / 7 }, (_, week) => (
+                  <tr key={week}>
+                    {cells.slice(week * 7, week * 7 + 7).map((day, ci) => {
+                      if (!day) return <td key={ci} style={{ border: "1px solid #faf0f0", height: 44, background: "#fdfafa" }} />;
+                      const k = `${monthYear}-${String(mi + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                      const dayEvs = eventMap[k] ?? [];
+                      const isWeekend = ci === 0 || ci === 6;
+                      return (
+                        <td key={k} style={{ border: "1px solid #f0e4e4", height: 44, verticalAlign: "top", padding: "3px 3px 2px", background: isWeekend ? "#fdfafa" : "white" }}>
+                          <div style={{ fontSize: 10, fontWeight: dayEvs.length ? 700 : 400, color: isWeekend ? "#c09090" : "#2a1a1a", marginBottom: 2 }}>{day}</div>
+                          {dayEvs.slice(0, 2).map((ev) => {
+                            const meta = eventMeta(ev.event_type);
+                            const isStart = ev.start_date === k;
+                            return (
+                              <div key={ev.event_id} style={{ fontSize: 8, background: meta.bg, color: meta.color, borderLeft: `2px solid ${meta.color}`, padding: "1px 3px", marginBottom: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", borderRadius: "0 2px 2px 0" }}>
+                                {isStart ? ev.title : ""}
+                              </div>
+                            );
+                          })}
+                          {dayEvs.length > 2 && <div style={{ fontSize: 7.5, color: "#b09090" }}>+{dayEvs.length - 2}</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Event list for this month */}
+            {monthEvs.length > 0 && (
+              <div style={{ borderTop: "1px solid #f0e4e4", paddingTop: 8 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Events This Month</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {monthEvs.map((ev) => {
+                    const meta = eventMeta(ev.event_type);
+                    return (
+                      <div key={ev.event_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", background: meta.bg, borderLeft: `3px solid ${meta.color}`, borderRadius: "0 5px 5px 0" }}>
+                        <span style={{ fontSize: 9.5, fontVariantNumeric: "tabular-nums", color: "#7a5050", whiteSpace: "nowrap" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, flex: 1 }}>{ev.title}</span>
+                        {ev.description && <span style={{ fontSize: 9, color: "#9a7070", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: 180 }}>{ev.description}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Legend on last month */}
+            {mi === 11 && (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", borderTop: "1px solid #f0e4e4", paddingTop: 8, marginTop: 10 }}>
+                {EVENT_TYPES.map((t) => (
+                  <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ width: 9, height: 9, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
+                    <span style={{ fontSize: 9, color: "#7a5a5a" }}>{t.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Print Toolbar ─────────────────────────────────────────────────────────────
+
+function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "white", borderRadius: 12, border: "1px solid #f0e6e6", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", marginTop: 4 }}>
+      <i className="ti ti-printer" style={{ fontSize: 15, color: "#c0a0a0" }} />
+      <span style={{ fontSize: 12, fontWeight: 600, color: "#9a7070" }}>Export</span>
+      <div style={{ width: 1, height: 18, background: "#f0e4e4" }} />
+
+      {/* View toggle */}
+      <div style={{ display: "flex", background: "#fdf8f8", borderRadius: 8, padding: 3, gap: 2 }}>
+        {[
+          { value: "list",  label: "Full Year List",  icon: "ti-list" },
+          { value: "month", label: "Monthly Sheets",  icon: "ti-layout-grid" },
+        ].map((opt) => (
+          <button key={opt.value} onClick={() => setPrintView(opt.value)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#e03131" : "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
+            <i className={`ti ${opt.icon}`} style={{ fontSize: 13 }} />{opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* CSV */}
+      <button onClick={onExportCSV}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#7a5a5a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s" }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#fca5a5"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.background = "#fff8f8"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5a5a"; e.currentTarget.style.background = "white"; }}>
+        <i className="ti ti-table-export" style={{ fontSize: 14 }} />Download CSV
+      </button>
+
+      {/* Print */}
+      <button onClick={onPrint} className="new-btn"
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 16px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 12, fontWeight: 700, color: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(224,49,49,0.28)" }}>
+        <i className="ti ti-printer" style={{ fontSize: 14 }} />Print / PDF
+      </button>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AcademicCalendarPage() {
@@ -789,10 +1171,16 @@ export default function AcademicCalendarPage() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [modal,        setModal]       = useState(null);
   const [toDelete,     setToDelete]   = useState(null);
-  const [showImport,   setShowImport] = useState(false);
-  const [activeMonth, setActiveMonth] = useState(() => new Date().getMonth());
+  const [showImport,    setShowImport]    = useState(false);
+  const [showColors,    setShowColors]    = useState(false);
+  const [colorVersion,  setColorVersion]  = useState(0);
+  const [activeMonth,   setActiveMonth]   = useState(() => new Date().getMonth());
+  const [printView,      setPrintView]     = useState("list");
+  const [schoolSettings, setSchoolSettings] = useState(null);
 
-  const [syYear] = schoolYear.split("-").map(Number);
+  const [syYear, syYear2] = schoolYear.split("-").map(Number);
+  // PH school year: Jul–Dec belong to Y1, Jan–Jun belong to Y2
+  const activeMonthYear = activeMonth >= 6 ? syYear : syYear2;
 
   const fetchEvents = useCallback(async (sy) => {
     setLoading(true); setError("");
@@ -833,6 +1221,7 @@ export default function AcademicCalendarPage() {
   useEffect(() => {
     if (!sessionStorage.getItem("access_token")) { navigate("/"); return; }
     fetchEvents(schoolYear);
+    getSchoolSettings().then(setSchoolSettings).catch(() => {});
   }, [schoolYear, fetchEvents, navigate]);
 
   const eventMap      = buildEventMap(events);
@@ -843,16 +1232,21 @@ export default function AcademicCalendarPage() {
   function handleSaved() { setModal(null); fetchEvents(schoolYear); }
   async function handleDeleteConfirm() { await deleteEvent(toDelete.event_id); setToDelete(null); setSelectedDay(null); fetchEvents(schoolYear); }
 
+  function handlePrint() {
+    window.print();
+  }
+
   let selectedLabel = null;
   if (selectedDay) {
-    const [, sm, sd] = selectedDay.split("-").map(Number);
-    selectedLabel = `${MONTHS[sm - 1]} ${sd}, ${syYear}`;
+    const [sy, sm, sd] = selectedDay.split("-").map(Number);
+    selectedLabel = `${MONTHS[sm - 1]} ${sd}, ${sy}`;
   }
 
   // Count events per type for stats bar
   const typeCounts = EVENT_TYPES.map((t) => ({ ...t, count: events.filter((e) => e.event_type === t.value).length })).filter((t) => t.count > 0);
 
   return (
+    <>
     <AppLayout>
       <style>{`
         .cal-day:hover { background: #fff4f4 !important; }
@@ -861,10 +1255,17 @@ export default function AcademicCalendarPage() {
         .ev-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; }
         .month-pill:hover { border-color: #fca5a5 !important; color: #e03131 !important; background: #fff8f8 !important; }
         .ev-list-row:hover { background: #fff8f6 !important; }
+        #cal-print-portal { display: none; }
+        @media print {
+          @page { margin: 14mm 12mm; size: A4 portrait; }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; }
+          body > *:not(#cal-print-portal) { display: none !important; visibility: hidden !important; }
+          #cal-print-portal { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; background: white !important; }
+        }
       `}</style>
 
       {/* ── Topbar ── */}
-      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
+      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="ti ti-calendar-event" style={{ fontSize: 18, color: "#e03131" }} />
@@ -884,6 +1285,12 @@ export default function AcademicCalendarPage() {
             onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.borderColor = "#e03131"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.borderColor = "#fca5a5"; }}>
             <i className="ti ti-flag" style={{ fontSize: 14 }} />PH Holidays
+          </button>
+          <button onClick={() => setShowColors(true)} title="Customize event colors"
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "white", color: "#9a7070", border: "1.5px solid #f0e4e4", borderRadius: 10, cursor: "pointer", transition: "all 0.14s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
+            <i className="ti ti-palette" style={{ fontSize: 16 }} />
           </button>
           <button className="new-btn" onClick={() => setModal({ mode: "create" })}
             style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
@@ -912,7 +1319,7 @@ export default function AcademicCalendarPage() {
               <i className="ti ti-chevron-left" style={{ fontSize: 15 }} />
             </button>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", minWidth: 148, textAlign: "center" }}>
-              {MONTHS[activeMonth]} <span style={{ color: "#c09090", fontWeight: 500 }}>{syYear}</span>
+              {MONTHS[activeMonth]} <span style={{ color: "#c09090", fontWeight: 500 }}>{activeMonthYear}</span>
             </div>
             <button className="row-action month-nav-btn" onClick={() => setActiveMonth((m) => (m + 1) % 12)}>
               <i className="ti ti-chevron-right" style={{ fontSize: 15 }} />
@@ -933,8 +1340,8 @@ export default function AcademicCalendarPage() {
           {/* Calendar grid */}
           {loading ? <Sk h={480} r={18} /> : (
             <MonthGrid
-              key={`${schoolYear}-${activeMonth}`}
-              year={syYear}
+              key={`${schoolYear}-${activeMonth}-${colorVersion}`}
+              year={activeMonthYear}
               monthIndex={activeMonth}
               eventMap={eventMap}
               selectedDay={selectedDay}
@@ -951,6 +1358,14 @@ export default function AcademicCalendarPage() {
               </div>
             ))}
           </div>
+
+          {/* Print toolbar */}
+          <PrintToolbar
+            printView={printView}
+            setPrintView={setPrintView}
+            onPrint={handlePrint}
+            onExportCSV={() => exportCSV(events, schoolYear)}
+          />
         </div>
 
         {/* ── Right Panel ── */}
@@ -1026,6 +1441,18 @@ export default function AcademicCalendarPage() {
       {modal && <EventModal mode={modal.mode} initial={modal.event ?? null} schoolYear={schoolYear} onClose={() => setModal(null)} onSaved={handleSaved} />}
       {toDelete && <DeleteModal event={toDelete} onConfirm={handleDeleteConfirm} onCancel={() => setToDelete(null)} />}
       {showImport && <ImportHolidaysModal schoolYear={schoolYear} existingEvents={events} onClose={() => setShowImport(false)} onImported={() => fetchEvents(schoolYear)} />}
+      {showColors && <ColorSettingsModal onClose={() => setShowColors(false)} onSaved={() => setColorVersion((v) => v + 1)} />}
+
     </AppLayout>
+    {createPortal(
+      <div id="cal-print-portal">
+        {printView === "list"
+          ? <YearListPrint events={events} schoolYear={schoolYear} schoolName={schoolSettings?.school_name ?? "South Lakes Integrated School"} />
+          : <MonthGridPrint events={events} schoolYear={schoolYear} schoolName={schoolSettings?.school_name ?? "South Lakes Integrated School"} />
+        }
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
