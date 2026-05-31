@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
-import { useNavigate } from "react-router-dom";
+import RecordPaymentModal from "../components/RecordPaymentModal";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 
 
@@ -23,6 +24,7 @@ async function apiCall(method, url, body = null) {
 const getInvoices     = (p = {}) => apiCall("GET",  `${BILLING_API}/invoices/?${new URLSearchParams(p)}`);
 const getInvoice      = (id)     => apiCall("GET",  `${BILLING_API}/invoices/${id}/`);
 const getBreakdown    = (id)     => apiCall("GET",  `${BILLING_API}/invoices/${id}/breakdown/`);
+const getInvoiceSummary = (p={}) => apiCall("GET",  `${BILLING_API}/invoices/summary/?${new URLSearchParams(p)}`);
 const generateInvoice = (p)      => apiCall("POST", `${BILLING_API}/invoices/generate/`, p);
 const voidInvoice     = (id)     => apiCall("PATCH",`${BILLING_API}/invoices/${id}/`, { status: "void" });
 const getEnrollments  = (p = {}) => apiCall("GET",  `${ENROLLMENT_API}/enrollments/?${new URLSearchParams(p)}`);
@@ -190,7 +192,7 @@ function GenerateModal({ onClose, onGenerated }) {
 }
 
 // ── Invoice Detail ────────────────────────────────────────────────────────────
-function InvoiceDetail({ invoiceId, onVoided }) {
+function InvoiceDetail({ invoiceId, onVoided, onRecordPayment, onPaymentSaved }) {
   const navigate = useNavigate();
   const [invoice,    setInvoice]    = useState(null);
   const [breakdown,  setBreakdown]  = useState(null);
@@ -259,7 +261,7 @@ function InvoiceDetail({ invoiceId, onVoided }) {
           </div>
           {invoice.status !== "void" && (
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => navigate(`/payments?invoice=${invoiceId}`)}
+              <button onClick={() => onRecordPayment(invoiceId)}
                 style={{ display:"inline-flex", alignItems:"center", gap:6, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"8px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 14px rgba(224,49,49,0.26)" }}>
                 <i className="ti ti-cash" style={{ fontSize:13 }} />Record Payment
               </button>
@@ -400,38 +402,94 @@ function InvoiceDetail({ invoiceId, onVoided }) {
       )}
 
       {/* Tab: Payments */}
-      {tab === "payments" && (
-        <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}>
-          {(invoice.payments ?? []).length === 0 ? (
-            <div style={{ padding:"40px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No payments recorded yet.</div>
-          ) : (
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-              <thead>
-                <tr style={{ background:"#fdfafa" }}>
-                  {["Date","Amount","Method","Reference","Notes"].map((h) => (
-                    <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.payments.map((p) => (
-                  <tr key={p.payment_id} style={{ borderBottom:"1px solid #f9f0f0" }}
-                    onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
-                    onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background=""); }}>
-                    <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmtDate(p.payment_date)}</td>
-                    <td style={{ padding:"11px 18px", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
-                    <td style={{ padding:"11px 18px" }}>
-                      <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:6, background:"#e3f0fd", color:"#1455a0" }}>{p.payment_method}</span>
-                    </td>
-                    <td style={{ padding:"11px 18px", color:"#5a4a4a", fontFamily:"monospace", fontSize:12 }}>{p.reference_number || "—"}</td>
-                    <td style={{ padding:"11px 18px", color:"#7a5050", fontSize:12 }}>{p.notes || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+      {tab === "payments" && (() => {
+        const payments     = invoice.payments ?? [];
+        const totalPaidAmt = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
+        const pmColors     = Object.fromEntries(
+          [
+            { value:"cash",          color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-cash"          },
+            { value:"gcash",         color:"#1455a0", bg:"#e3f0fd", icon:"ti-device-mobile"  },
+            { value:"bank_transfer", color:"#7c3aed", bg:"#f0e8fd", icon:"ti-building-bank"  },
+            { value:"card",          color:"#d97706", bg:"#fdf5e8", icon:"ti-credit-card"    },
+            { value:"check",         color:"#854f0b", bg:"#faeeda", icon:"ti-file-text"      },
+            { value:"others",        color:"#5c5752", bg:"#f0ede8", icon:"ti-dots"           },
+          ].map((m) => [m.value, m])
+        );
+        return (
+          <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}>
+            {/* Tab header with action */}
+            <div style={{ padding:"12px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
+              <span style={{ fontSize:12, fontWeight:600, color:"#7a5050" }}>
+                {payments.length} payment{payments.length !== 1 ? "s" : ""} · {fmt(totalPaidAmt)} collected
+              </span>
+              {invoice.status !== "void" && balance > 0 && (
+                <button onClick={() => onRecordPayment(invoiceId)}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, height:30, padding:"0 12px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 3px 10px rgba(46,107,13,0.22)" }}>
+                  <i className="ti ti-plus" style={{ fontSize:11 }} />Record Payment
+                </button>
+              )}
+              {invoice.status !== "void" && balance <= 0 && (
+                <span style={{ fontSize:11, fontWeight:700, color:"#2e6b0d", display:"inline-flex", alignItems:"center", gap:4 }}>
+                  <i className="ti ti-circle-check" style={{ fontSize:12 }} />Fully paid
+                </span>
+              )}
+            </div>
+
+            {payments.length === 0 ? (
+              <div style={{ padding:"40px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+                <div style={{ width:44, height:44, borderRadius:12, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <i className="ti ti-cash" style={{ fontSize:20, color:"#2e6b0d" }} />
+                </div>
+                <div style={{ fontSize:13, color:"#b09090", fontStyle:"italic" }}>No payments recorded yet.</div>
+                {invoice.status !== "void" && (
+                  <button onClick={() => onRecordPayment(invoiceId)}
+                    style={{ marginTop:4, display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                    <i className="ti ti-cash" style={{ fontSize:12 }} />Record First Payment
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                  <thead>
+                    <tr style={{ background:"#fdfafa" }}>
+                      {["Date","Amount","Method","Reference","Notes"].map((h) => (
+                        <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map((p) => {
+                      const mc = pmColors[p.payment_method] ?? pmColors.others;
+                      return (
+                        <tr key={p.payment_id} style={{ borderBottom:"1px solid #f9f0f0" }}
+                          onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
+                          onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background=""); }}>
+                          <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmtDate(p.payment_date)}</td>
+                          <td style={{ padding:"11px 18px", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
+                          <td style={{ padding:"11px 18px" }}>
+                            <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color, display:"inline-flex", alignItems:"center", gap:4 }}>
+                              <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
+                              {p.payment_method.replace("_", " ")}
+                            </span>
+                          </td>
+                          <td style={{ padding:"11px 18px", color:"#5a4a4a", fontFamily:"monospace", fontSize:12 }}>{p.reference_number || "—"}</td>
+                          <td style={{ padding:"11px 18px", color:"#7a5050", fontSize:12 }}>{p.notes || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {/* Running total row */}
+                <div style={{ padding:"10px 18px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", justifyContent:"flex-end", gap:20 }}>
+                  <span style={{ fontSize:12, color:"#b09090" }}>Total collected</span>
+                  <span style={{ fontSize:13, fontWeight:700, color:"#2e6b0d" }}>{fmt(totalPaidAmt)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Void confirm */}
       {showVoidConfirm && (
@@ -459,15 +517,22 @@ function InvoiceDetail({ invoiceId, onVoided }) {
 export default function InvoicesPage() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
+  const [searchParams] = useSearchParams();
+
   const [invoices,      setInvoices]      = useState([]);
   const [loading,       setLoading]       = useState(true);
-  const [selectedId,    setSelectedId]    = useState(null);
+  const [selectedId,    setSelectedId]    = useState(() => {
+    const p = searchParams.get("selected");
+    return p ? parseInt(p) : null;
+  });
   const [statusFilter,  setStatusFilter]  = useState("all");
   const [planFilter,    setPlanFilter]    = useState("all");
   const [page,          setPage]          = useState(1);
   const [pageMeta,      setPageMeta]      = useState({ count:0, next:null, previous:null });
-  const [showGenModal,  setShowGenModal]  = useState(false);
-  const [refreshKey,    setRefreshKey]    = useState(0);
+  const [showGenModal,       setShowGenModal]       = useState(false);
+  const [payModalInvoiceId,  setPayModalInvoiceId]  = useState(null);
+  const [refreshKey,         setRefreshKey]         = useState(0);
+  const [summary,            setSummary]            = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0 });
 
   const fetchInvoices = useCallback(async (p = 1, status = statusFilter, plan = planFilter) => {
     setLoading(true);
@@ -475,10 +540,18 @@ export default function InvoicesPage() {
       const params = { page: p };
       if (status !== "all") params.status = status;
       if (plan   !== "all") params.payment_plan = plan;
-      const data = await getInvoices(params);
+
+      const summaryParams = {};
+      if (plan !== "all") summaryParams.payment_plan = plan;
+
+      const [data, summaryData] = await Promise.all([
+        getInvoices(params),
+        getInvoiceSummary(summaryParams),
+      ]);
       setInvoices(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
+      setSummary(summaryData);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [statusFilter, planFilter]);
@@ -491,12 +564,6 @@ export default function InvoicesPage() {
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
-  const unpaidCount   = invoices.filter((i) => i.status === "unpaid").length;
-  const partialCount  = invoices.filter((i) => i.status === "partially_paid").length;
-
-  const paidCount = invoices.filter((i) => i.status === "paid").length;
-  const voidCount = invoices.filter((i) => i.status === "void").length;
-
   return (
     <AppLayout>
 
@@ -505,7 +572,7 @@ export default function InvoicesPage() {
             <div>
               <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>Invoices</div>
               <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
-                {loading ? "Loading…" : `${pageMeta.count} total · ${unpaidCount} unpaid · ${partialCount} partial`}
+                {loading ? "Loading…" : `${summary.total} total · ${summary.unpaid} unpaid · ${summary.partially_paid} partial`}
               </div>
             </div>
             <button onClick={() => setShowGenModal(true)}
@@ -517,24 +584,31 @@ export default function InvoicesPage() {
           {/* Content */}
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
 
-            {/* Stat cards */}
+            {/* Stat cards — clickable status filters, real aggregate counts */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 }}>
               {[
-                { label:"Unpaid",   value:unpaidCount,  icon:"ti-clock",        color:STATUS_META.unpaid.color,         bg:STATUS_META.unpaid.bg         },
-                { label:"Partial",  value:partialCount, icon:"ti-clock-half-2", color:STATUS_META.partially_paid.color, bg:STATUS_META.partially_paid.bg },
-                { label:"Paid",     value:paidCount,    icon:"ti-circle-check", color:STATUS_META.paid.color,           bg:STATUS_META.paid.bg           },
-                { label:"Void",     value:voidCount,    icon:"ti-ban",          color:STATUS_META.void.color,           bg:STATUS_META.void.bg           },
-              ].map((s) => (
-                <div key={s.label} style={{ background:"white", borderRadius:14, padding:"16px 20px", border:"1px solid #f5eaea", display:"flex", alignItems:"center", gap:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)" }}>
-                  <div style={{ width:42, height:42, borderRadius:12, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <i className={`ti ${s.icon}`} style={{ fontSize:18, color:s.color }} />
+                { label:"Unpaid",  statusKey:"unpaid",         value:summary.unpaid,         icon:"ti-clock",        color:STATUS_META.unpaid.color,         bg:STATUS_META.unpaid.bg         },
+                { label:"Partial", statusKey:"partially_paid", value:summary.partially_paid, icon:"ti-clock-half-2", color:STATUS_META.partially_paid.color, bg:STATUS_META.partially_paid.bg },
+                { label:"Paid",    statusKey:"paid",           value:summary.paid,           icon:"ti-circle-check", color:STATUS_META.paid.color,           bg:STATUS_META.paid.bg           },
+                { label:"Void",    statusKey:"void",           value:summary.void,           icon:"ti-ban",          color:STATUS_META.void.color,           bg:STATUS_META.void.bg           },
+              ].map((s) => {
+                const isActive = statusFilter === s.statusKey;
+                return (
+                  <div key={s.label}
+                    onClick={() => { const next = isActive ? "all" : s.statusKey; setStatusFilter(next); fetchInvoices(1, next, planFilter); }}
+                    style={{ background:isActive ? s.bg : "white", borderRadius:14, padding:"16px 20px", border:`1.5px solid ${isActive ? s.color : "#f5eaea"}`, display:"flex", alignItems:"center", gap:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)", cursor:"pointer", transition:"all .15s" }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.borderColor = s.color; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.borderColor = "#f5eaea"; }}>
+                    <div style={{ width:42, height:42, borderRadius:12, background:isActive ? "white" : s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <i className={`ti ${s.icon}`} style={{ fontSize:18, color:s.color }} />
+                    </div>
+                    <div>
+                      {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize:22, fontWeight:700, color: isActive ? s.color : "#1a0a0a", lineHeight:1 }}>{s.value}</div>}
+                      <div style={{ fontSize:11, color: isActive ? s.color : "#a07878", marginTop:4, fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
+                    </div>
                   </div>
-                  <div>
-                    {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>}
-                    <div style={{ fontSize:11, color:"#a07878", marginTop:4, fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Filters */}
@@ -584,15 +658,20 @@ export default function InvoicesPage() {
                     const pm = PLAN_META[inv.payment_plan] ?? PLAN_META.monthly;
                     const isSelected = selectedId === inv.invoice_id;
                     const en = inv.enrollment_detail;
+                    const balance = parseFloat(inv.balance ?? 0);
+                    const isOverdue = inv.due_date && new Date(inv.due_date) < new Date() && inv.status !== "paid" && inv.status !== "void";
                     return (
                       <div key={inv.invoice_id}
-                        style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", background:isSelected?"#fff8f6":"white", borderLeft:`3px solid ${isSelected?"#e03131":"transparent"}`, transition:"all 0.12s", animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}
+                        style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", background:isSelected?"#fff8f6":"white", borderLeft:`3px solid ${isSelected?"#e03131":isOverdue?"#7c3aed":"transparent"}`, transition:"all 0.12s", animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}
                         onClick={() => setSelectedId(inv.invoice_id)}
                         onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.background="#fff8f6"; }}
                         onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.background="white"; }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
                           <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
-                          <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 7px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
+                          <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                            {isOverdue && <span style={{ fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:99, background:"#f0e8fd", color:"#7c3aed" }}>Overdue</span>}
+                            <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 7px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
+                          </div>
                         </div>
                         <div style={{ fontSize:12, color:"#5a4a4a", fontWeight:600, marginBottom:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`}</div>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -600,7 +679,7 @@ export default function InvoicesPage() {
                             <span style={{ fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background:pm.bg, color:pm.color }}>{pm.label}</span>
                             <span style={{ fontSize:11, color:"#b09090" }}>{en?.grade_level ?? ""}</span>
                           </div>
-                          <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>{fmt(inv.balance ?? 0)} bal.</span>
+                          <span style={{ fontSize:12, fontWeight:700, color: balance > 0 ? "#a32d2d" : "#2e6b0d" }}>{fmt(balance)} bal.</span>
                         </div>
                       </div>
                     );
@@ -613,22 +692,42 @@ export default function InvoicesPage() {
                     <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
                     <div style={{ display:"flex", gap:4 }}>
                       <button disabled={!pageMeta.previous} onClick={() => fetchInvoices(page - 1)}
-                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:pageMeta.previous?"pointer":"not-allowed", color:"#9a7070", opacity:pageMeta.previous?1:0.4 }}>
                         <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
                       </button>
                       <button disabled={!pageMeta.next} onClick={() => fetchInvoices(page + 1)}
-                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:pageMeta.next?"pointer":"not-allowed", color:"#9a7070", opacity:pageMeta.next?1:0.4 }}>
                         <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
                       </button>
                     </div>
                   </div>
                 )}
+
+                {/* Aggregate totals footer */}
+                {!loading && invoices.length > 0 && (() => {
+                  const pageTotal    = invoices.reduce((s, i) => s + parseFloat(i.balance ?? 0), 0);
+                  const overdueCount = invoices.filter((i) => i.due_date && new Date(i.due_date) < new Date() && i.status !== "paid" && i.status !== "void").length;
+                  return (
+                    <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:11, color:"#b09090" }}>
+                        <span style={{ fontWeight:600, color:"#1a0a0a" }}>{fmt(pageTotal)}</span> outstanding this page
+                      </div>
+                      {overdueCount > 0 && (
+                        <div style={{ fontSize:11, color:"#7c3aed", fontWeight:600 }}>
+                          <i className="ti ti-alert-triangle" style={{ fontSize:11, marginRight:3 }} />{overdueCount} overdue
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right: Detail */}
               {selectedId ? (
                 <InvoiceDetail key={`${selectedId}-${refreshKey}`} invoiceId={selectedId}
-                  onVoided={() => { setSelectedId(null); setRefreshKey((k) => k + 1); }} />
+                  onVoided={() => { setSelectedId(null); setRefreshKey((k) => k + 1); }}
+                  onRecordPayment={(id) => setPayModalInvoiceId(id)}
+                  onPaymentSaved={() => setRefreshKey((k) => k + 1)} />
               ) : !loading && invoices.length > 0 ? (
                 <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"56px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:"#b09090", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
                   <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -644,6 +743,14 @@ export default function InvoicesPage() {
       {showGenModal && (
         <GenerateModal onClose={() => setShowGenModal(false)}
           onGenerated={(inv) => { setRefreshKey((k) => k + 1); setSelectedId(inv.invoice_id); }} />
+      )}
+
+      {payModalInvoiceId && (
+        <RecordPaymentModal
+          preloadedInvoiceId={payModalInvoiceId}
+          onClose={() => setPayModalInvoiceId(null)}
+          onSaved={() => { setPayModalInvoiceId(null); setRefreshKey((k) => k + 1); }}
+        />
       )}
     </AppLayout>
   );

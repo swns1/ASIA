@@ -6,6 +6,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .models import (
     FeeSchedule, FeeScheduleItem,
@@ -119,6 +120,31 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         ser = StudentInvoiceSerializer(invoice)
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        GET /api/invoices/summary/
+        Returns real aggregate counts across ALL invoices (not just the current page).
+        Accepts the same status/payment_plan/enrollment_id filter params as the list view.
+        """
+        qs = StudentInvoice.objects.all()
+        enrollment_id = request.query_params.get("enrollment_id")
+        payment_plan  = request.query_params.get("payment_plan")
+        if enrollment_id:
+            qs = qs.filter(enrollment_id=enrollment_id)
+        if payment_plan:
+            qs = qs.filter(payment_plan=payment_plan)
+
+        from django.db.models import Count
+        counts = qs.values("status").annotate(n=Count("invoice_id"))
+        result = {"unpaid": 0, "partially_paid": 0, "paid": 0, "void": 0, "total": 0}
+        for row in counts:
+            s = row["status"]
+            if s in result:
+                result[s] = row["n"]
+            result["total"] += row["n"]
+        return Response(result)
+
     @action(detail=True, methods=["get"], url_path="breakdown")
     def breakdown(self, request, pk=None):
         """Return the discount waterfall as a step-by-step breakdown for the UI."""
@@ -163,12 +189,55 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
 
     On POST: creates the payment row AND calls apply_payment() to distribute
     across installments and update invoice status.
+
+    Supported query params (GET list):
+      payment_method        — cash | gcash | bank_transfer | card | check | others
+      date_from             — YYYY-MM-DD  (payment_date >=)
+      date_to               — YYYY-MM-DD  (payment_date <=)
+      amount_min            — decimal     (amount_paid >=)
+      amount_max            — decimal     (amount_paid <=)
+      search                — student name substring (via invoice_detail)
+      ordering              — payment_date | amount_paid | -payment_date | -amount_paid
     """
-    queryset = StudentPayment.objects.all().order_by("-payment_id")
     serializer_class = StudentPaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_fields = ("invoice", "payment_method")
+    search_fields = ("invoice__enrollment_id",)
+    ordering_fields = ("payment_date", "amount_paid", "payment_id")
+    ordering = ("-payment_id",)
+
+    def get_queryset(self):
+        qs = StudentPayment.objects.all().order_by("-payment_id")
+        params = self.request.query_params
+
+        date_from  = params.get("date_from")
+        date_to    = params.get("date_to")
+        amount_min = params.get("amount_min")
+        amount_max = params.get("amount_max")
+        student    = params.get("student_name", "").strip()
+
+        if date_from:
+            qs = qs.filter(payment_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(payment_date__lte=date_to)
+        if amount_min:
+            try:
+                qs = qs.filter(amount_paid__gte=Decimal(amount_min))
+            except Exception:
+                pass
+        if amount_max:
+            try:
+                qs = qs.filter(amount_paid__lte=Decimal(amount_max))
+            except Exception:
+                pass
+        if student:
+            # student_name lives in a cross-service call (not a DB column), so we
+            # match against invoice_no as a practical proxy until the name is
+            # denormalized onto the invoice model.
+            qs = qs.filter(invoice__invoice_no__icontains=student)
+
+        return qs
 
     @transaction.atomic
     def perform_create(self, serializer):

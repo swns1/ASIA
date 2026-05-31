@@ -343,6 +343,8 @@ const tdStyle = { padding: "10px 14px", color: "#3a3a3a" };
 // ── AI Insight Panel wrapper ──────────────────────────────────────────────────
 // Extracted as its own component so the `key` prop forces a full remount
 // (and clears stale output) whenever a new analysis is run.
+// Shows the Groq interpretation from the cluster API immediately; the Analyze
+// button sends the same data to Gemini for a second opinion or deeper analysis.
 function ClusterInsightPanel({ result }) {
   const onFetch = () => {
     const clusterSummary = result.clusters
@@ -351,11 +353,10 @@ function ClusterInsightPanel({ result }) {
       )
       .join("\n");
 
-    return callGemini("dashboard_insights", {
-      analysis_type:   "student_performance_clustering",
+    return callGemini("clustering_insights", {
       school_year:     result.meta.school_year,
       grading_period:  result.meta.grading_period,
-      grade_level:     result.meta.grade_level,
+      grade_level:     result.meta.grade_level || "All Grade Levels",
       subject:         result.meta.subject,
       total_students:  result.meta.total_students,
       n_clusters:      result.meta.n_clusters,
@@ -365,9 +366,10 @@ function ClusterInsightPanel({ result }) {
 
   return (
     <AIInsightPanel
-      title="Cluster Interpretation"
-      description="AI analysis of the clustering results — click Analyze to generate"
+      title="AI Interpretation"
+      description="Powered by Groq · Click Analyze for a deeper Gemini analysis"
       disabled={false}
+      initialInterpretation={result.interpretation || ""}
       onFetch={onFetch}
     />
   );

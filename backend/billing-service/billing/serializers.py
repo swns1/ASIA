@@ -120,11 +120,14 @@ class InvoiceInstallmentSerializer(serializers.ModelSerializer):
 
 
 class StudentPaymentSerializer(serializers.ModelSerializer):
+    invoice_detail = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = StudentPayment
         fields = (
             "payment_id",
             "invoice",
+            "invoice_detail",
             "payment_date",
             "amount_paid",
             "payment_method",
@@ -132,7 +135,26 @@ class StudentPaymentSerializer(serializers.ModelSerializer):
             "notes",
             "created_at",
         )
-        read_only_fields = ("payment_id", "created_at")
+        read_only_fields = ("payment_id", "created_at", "invoice_detail")
+
+    def get_invoice_detail(self, obj):
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT s.first_name, s.middle_name, s.last_name, i.invoice_no
+                  FROM student_invoices i
+                  JOIN enrollments e ON e.enrollment_id = i.enrollment_id
+                  LEFT JOIN students s ON s.student_id = e.student_id
+                 WHERE i.invoice_id = %s
+                """,
+                [obj.invoice_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            full_name = " ".join(p for p in [row[0], row[1], row[2]] if p)
+            return {"student_name": full_name, "invoice_no": row[3]}
 
 
 class StudentInvoiceSerializer(serializers.ModelSerializer):

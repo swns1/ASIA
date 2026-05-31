@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
+import RecordPaymentModal from "../components/RecordPaymentModal";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 
-
-// ── API ───────────────────────────────────────────────────────────────────────
 const BILLING_API = "http://localhost:8002/api";
-
 function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
 async function apiCall(method, url, body = null) {
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
   const opts = { method, headers };
@@ -18,15 +15,9 @@ async function apiCall(method, url, body = null) {
   if (method === "DELETE") return null;
   return res.json();
 }
+const getPayments = (p = {}) => apiCall("GET", `${BILLING_API}/payments/?${new URLSearchParams(p)}`);
 
-const getPayments   = (p = {}) => apiCall("GET",  `${BILLING_API}/payments/?${new URLSearchParams(p)}`);
-const getInvoices   = (p = {}) => apiCall("GET",  `${BILLING_API}/invoices/?${new URLSearchParams(p)}`);
-const getInvoice    = (id)     => apiCall("GET",  `${BILLING_API}/invoices/${id}/`);
-const createPayment = (p)      => apiCall("POST", `${BILLING_API}/payments/`, p);
-
-// ── NAV ───────────────────────────────────────────────────────────────────────
-
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 const PAYMENT_METHODS = [
   { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0" },
   { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd" },
@@ -35,307 +26,97 @@ const PAYMENT_METHODS = [
   { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda" },
   { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8" },
 ];
+const PM = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m]));
 
-const STATUS_META = {
-  unpaid:         { label:"Unpaid",   color:"#a32d2d", bg:"#fde8e8" },
-  partially_paid: { label:"Partial",  color:"#854f0b", bg:"#faeeda" },
-  paid:           { label:"Paid",     color:"#2e6b0d", bg:"#e8f5e0" },
-  void:           { label:"Void",     color:"#5c5752", bg:"#f0ede8" },
-};
-
-const PLAN_META = {
-  monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd" },
-  quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0" },
-  semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd" },
-  annual:      { label:"Annual",      color:"#d97706", bg:"#fdf5e8" },
-};
-
-const fmt = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
 const Sk = ({ w="100%", h=14, r=6 }) => (
   <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
 );
 
-
-// ── Record Payment Modal ──────────────────────────────────────────────────────
-function RecordPaymentModal({ preloadedInvoiceId, onClose, onSaved }) {
-  const [invoiceSearch,  setInvoiceSearch]  = useState("");
-  const [invoiceResults, setInvoiceResults] = useState([]);
-  const [searching,      setSearching]      = useState(false);
-  const [invoice,        setInvoice]        = useState(null);
-  const [loadingInvoice, setLoadingInvoice] = useState(false);
-  const [open,           setOpen]           = useState(false);
-
-  const [form, setForm] = useState({
-    amount_paid:      "",
-    payment_method:   "cash",
-    payment_date:     new Date().toISOString().slice(0, 10),
-    reference_number: "",
-    notes:            "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState("");
-
-  // Pre-load invoice if navigated from invoices page
-  useEffect(() => {
-    if (!preloadedInvoiceId) return;
-    setLoadingInvoice(true);
-    getInvoice(preloadedInvoiceId)
-      .then((inv) => setInvoice(inv))
-      .catch(() => {})
-      .finally(() => setLoadingInvoice(false));
-  }, [preloadedInvoiceId]);
-
-  // Search invoices
-  useEffect(() => {
-    if (!invoiceSearch.trim()) { setInvoiceResults([]); return; }
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await getInvoices({ search: invoiceSearch, page_size: 20 });
-        setInvoiceResults(Array.isArray(data) ? data : data?.results ?? []);
-      } catch { setInvoiceResults([]); }
-      finally { setSearching(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [invoiceSearch]);
-
-  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-const handleSave = async () => {
-  if (!invoice)                { setError("Select an invoice."); return; }
-
-  const netAmount  = parseFloat(invoice.net_amount ?? 0);
-  const totalPaid  = parseFloat(invoice.total_paid ?? 0);
-  const balance    = parseFloat(invoice.balance ?? (netAmount - totalPaid));
-
-  if (!form.amount_paid || parseFloat(form.amount_paid) <= 0) {
-    setError("Amount must be greater than 0."); return;
-  }
-  if (parseFloat(form.amount_paid) > balance + 0.01) {
-    setError(`Amount exceeds remaining balance of ${fmt(balance)}. Maximum payable is ${fmt(balance)}.`);
-    return;
-  }
-
-  setSaving(true); setError("");
-  try {
-    await createPayment({
-      invoice:          invoice.invoice_id,
-      amount_paid:      parseFloat(form.amount_paid),
-      payment_method:   form.payment_method,
-      payment_date:     form.payment_date,
-      reference_number: form.reference_number.trim() || null,
-      notes:            form.notes.trim() || null,
-    });
-    onSaved();
-    onClose();
-  } catch (e) { setError(e.message || "Failed to record payment."); }
-  finally { setSaving(false); }
-};
-
-  const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
-  const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
-
-  const balance    = invoice ? parseFloat(invoice.balance ?? 0) : 0;
-  const en         = invoice?.enrollment_detail;
-  const statusMeta = invoice ? STATUS_META[invoice.status] ?? STATUS_META.unpaid : null;
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, width:540, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease" }}>
-
-        {/* Header */}
-        <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:38, height:38, borderRadius:10, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-cash" style={{ fontSize:18, color:"#2e6b0d" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>Record Payment</div>
-              <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Apply a payment to an invoice</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", fontSize:20 }}><i className="ti ti-x" /></button>
-        </div>
-
-        <div style={{ padding:"22px 28px" }}>
-          {error && <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}><i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}</div>}
-
-          {/* Invoice selector */}
-          <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Invoice *</label>
-            {loadingInvoice ? <Sk h={52} /> :
-             invoice ? (
-              <div style={{ padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"#fff8f6" }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{invoice.invoice_no}</span>
-                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                    <span style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:99, background:statusMeta.bg, color:statusMeta.color }}>{statusMeta.label}</span>
-                    {!preloadedInvoiceId && <button onClick={() => setInvoice(null)} style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"4px 8px", fontSize:11, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>}
-                  </div>
-                </div>
-                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en?.student_name ?? `Enrollment #${invoice.enrollment_id}`}</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>{en?.grade_level} · {en?.section} · S.Y. {en?.school_year}</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:12 }}>
-                  {[
-                    { label:"Total Due",     val:fmt(invoice.net_amount ?? 0),  color:"#1a0a0a" },
-                    { label:"Total Paid",    val:fmt(invoice.total_paid ?? 0),  color:"#2e6b0d" },
-                    { label:"Balance",       val:fmt(balance),                   color: balance > 0 ? "#a32d2d" : "#2e6b0d" },
-                  ].map((s) => (
-                    <div key={s.label} style={{ textAlign:"center", padding:"10px 8px", background:"white", borderRadius:10, border:"1px solid #f5eaea" }}>
-                      <div style={{ fontSize:14, fontWeight:700, color:s.color }}>{s.val}</div>
-                      <div style={{ fontSize:10.5, color:"#b09090", marginTop:3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div style={{ position:"relative" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#c0a0a0" }} />
-                  <input placeholder="Search by invoice number or student name…" value={invoiceSearch}
-                    onChange={(e) => { setInvoiceSearch(e.target.value); setOpen(true); }}
-                    onFocus={() => setOpen(true)}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-                  {searching && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#e03131", animation:"spin 1s linear infinite" }} />}
-                </div>
-                {open && invoiceSearch && (
-                  <div style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
-                    {invoiceResults.length === 0 && !searching && <div style={{ padding:"16px", textAlign:"center", color:"#b09090", fontSize:13 }}>No invoices found.</div>}
-                    {invoiceResults.map((inv) => {
-                      const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
-                      if (inv.status === "void" || inv.status === "paid") return null;
-                      const en = inv.enrollment_detail;
-                      return (
-                        <div key={inv.invoice_id} onClick={() => { setInvoice(inv); setOpen(false); setInvoiceSearch(""); }}
-                          style={{ padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                          onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                            <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
-                            <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 6px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
-                          </div>
-                          <div style={{ fontSize:12, color:"#5a4a4a", marginTop:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`} · {fmt(inv.balance ?? 0)} remaining</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Payment method */}
-          <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Payment Method *</label>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-              {PAYMENT_METHODS.map((pm) => {
-                const active = form.payment_method === pm.value;
-                return (
-                  <button key={pm.value} type="button" onClick={() => setF("payment_method", pm.value)}
-                    style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, border:`1.5px solid ${active?pm.color:"#f0e4e4"}`, background:active?pm.bg:"white", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}>
-                    <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:active?pm.color:"#9a7070" }} />
-                    <span style={{ fontSize:12, fontWeight:active?700:500, color:active?pm.color:"#7a5050" }}>{pm.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Amount + date */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
-            <div>
-              <label style={lbl}>Amount Paid *</label>
-              <div style={{ position:"relative" }}>
-                <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#b09090", fontWeight:600 }}>₱</span>
-                <input type="number" min="0.01" step="0.01"
-                  max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
-                  value={form.amount_paid}
-                  onChange={(e) => setF("amount_paid", e.target.value)}
-                  placeholder="0.00"
-                  style={{ ...inp, paddingLeft:26, textAlign:"right" }} />
-              </div>
-              {invoice && balance > 0 && (
-                <div style={{ marginTop:5, display:"flex", gap:6 }}>
-                  <button type="button" onClick={() => setF("amount_paid", String(balance))}
-                    style={{ fontSize:11, color:"#e03131", background:"#fff0f0", border:"none", borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
-                    Full balance {fmt(balance)}
-                  </button>
-                  {invoice.installments && invoice.installments.length > 0 && (() => {
-                    const next = invoice.installments.find((i) => i.status !== "paid");
-                    if (!next) return null;
-                    const nextBal = parseFloat(next.amount) - parseFloat(next.amount_paid);
-                    return (
-                      <button type="button" onClick={() => setF("amount_paid", String(nextBal))}
-                        style={{ fontSize:11, color:"#1455a0", background:"#e3f0fd", border:"none", borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
-                        Next installment {fmt(nextBal)}
-                      </button>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-            <div>
-              <label style={lbl}>Payment Date *</label>
-              <input type="date" value={form.payment_date} onChange={(e) => setF("payment_date", e.target.value)} style={inp} />
-            </div>
-          </div>
-
-          {/* Reference + notes */}
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Reference Number</label>
-            <input value={form.reference_number} onChange={(e) => setF("reference_number", e.target.value)} placeholder="Transaction ID, check no., etc." style={inp} />
-          </div>
-          <div>
-            <label style={lbl}>Notes</label>
-            <textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} placeholder="Optional remarks…" rows={2} style={{ ...inp, resize:"vertical" }} />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
-          <button onClick={onClose} style={{ background:"transparent", color:"#9a7070", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !invoice}
-            style={{ background:saving?"#e87474":"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:saving||!invoice?"not-allowed":"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(46,107,13,0.26)", opacity:!invoice?0.6:1 }}>
-            {saving ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Recording…</> : <><i className="ti ti-cash" style={{ fontSize:13 }} />Record Payment</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function initials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-// ════════════════════════════════════════════════════════════════════════════
+// Deterministic avatar color from name
+const AVATAR_PALETTES = [
+  { bg:"#fde8e8", color:"#a32d2d" },
+  { bg:"#e3f0fd", color:"#1455a0" },
+  { bg:"#e8f5e0", color:"#2e6b0d" },
+  { bg:"#f0e8fd", color:"#7c3aed" },
+  { bg:"#faeeda", color:"#854f0b" },
+  { bg:"#fdf5e8", color:"#d97706" },
+];
+function avatarPalette(name) {
+  if (!name) return AVATAR_PALETTES[0];
+  const code = name.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+  return AVATAR_PALETTES[code % AVATAR_PALETTES.length];
+}
+
+// ── Table row ─────────────────────────────────────────────────────────────────
+// Rendered inside a <tbody> — not a standalone component.
+// Keeps all columns fixed-width so amount/method/reference never jump.
+
+// ════════════════════════════════════════════════════════════════════════════════
 export default function PaymentsPage() {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
   const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
   const preloadedInvoiceId = searchParams.get("invoice") ? parseInt(searchParams.get("invoice")) : null;
 
-  const [payments,      setPayments]      = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [page,          setPage]          = useState(1);
-  const [pageMeta,      setPageMeta]      = useState({ count:0, next:null, previous:null });
-  const [methodFilter,  setMethodFilter]  = useState("all");
-  const [showModal,     setShowModal]     = useState(Boolean(preloadedInvoiceId));
-  const [refreshKey,    setRefreshKey]    = useState(0);
+  const [payments,   setPayments]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [page,       setPage]       = useState(1);
+  const [pageMeta,   setPageMeta]   = useState({ count:0, next:null, previous:null });
+  const [showModal,  setShowModal]  = useState(Boolean(preloadedInvoiceId));
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Totals
+  // Filters
+  const [methodFilter, setMethodFilter] = useState("all");
+  const [dateFrom,     setDateFrom]     = useState("");
+  const [dateTo,       setDateTo]       = useState("");
+  const [amountMin,    setAmountMin]    = useState("");
+  const [amountMax,    setAmountMax]    = useState("");
+  const [sortField,    setSortField]    = useState("-payment_date");
+  const [filtersOpen,  setFiltersOpen]  = useState(false);
+
+  const hasDateOrAmount = dateFrom || dateTo || amountMin || amountMax;
+  const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount || sortField !== "-payment_date";
+
+  const clearFilters = () => {
+    setMethodFilter("all");
+    setDateFrom(""); setDateTo("");
+    setAmountMin(""); setAmountMax("");
+    setSortField("-payment_date");
+  };
+
   const totalCollected = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
 
-  const fetchPayments = useCallback(async (p = 1, method = methodFilter) => {
+  const buildParams = (p = 1, overrides = {}) => {
+    const f = { methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, ...overrides };
+    const params = { page: p, ordering: f.sortField };
+    if (f.methodFilter !== "all") params.payment_method = f.methodFilter;
+    if (f.dateFrom)  params.date_from  = f.dateFrom;
+    if (f.dateTo)    params.date_to    = f.dateTo;
+    if (f.amountMin) params.amount_min = f.amountMin;
+    if (f.amountMax) params.amount_max = f.amountMax;
+    return params;
+  };
+
+  const fetchPayments = useCallback(async (p = 1, overrides = {}) => {
     setLoading(true);
     try {
-      const params = { page: p };
-      if (method !== "all") params.payment_method = method;
-      const data = await getPayments(params);
+      const data = await getPayments(buildParams(p, overrides));
       setPayments(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [methodFilter]);
+  }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
@@ -343,136 +124,313 @@ export default function PaymentsPage() {
     fetchPayments();
   }, [refreshKey]);
 
-  const totalPages = Math.ceil(pageMeta.count / 20);
+  const totalPages  = Math.ceil(pageMeta.count / 20);
 
-  const methodColors = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, { color:m.color, bg:m.bg, icon:m.icon }]));
+  // Per-method totals from current page
+  const methodTotals = Object.fromEntries(
+    PAYMENT_METHODS.map((pm) => [
+      pm.value,
+      payments.filter((p) => p.payment_method === pm.value).reduce((s, p) => s + parseFloat(p.amount_paid), 0),
+    ])
+  );
+
+  // ── Shared input / label styles used in filters ────────────────────────────
+  const filterInput = {
+    border:"1.5px solid #f0e4e4", borderRadius:8, padding:"6px 10px",
+    fontSize:12, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a",
+    background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box",
+  };
+  const filterLabel = {
+    fontSize:10, fontWeight:700, color:"#c0a0a0",
+    textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4,
+    display:"block",
+  };
 
   return (
     <AppLayout>
 
-          {/* Topbar */}
-          <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-            <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>Payments</div>
-              <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
-                {loading ? "Loading…" : `${pageMeta.count} transactions · ${fmt(totalCollected)} collected this page`}
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:10 }}>
-              <button onClick={() => navigate("/invoices")}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#7a5050", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor="#fca5a5"; e.currentTarget.style.color="#e03131"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
-                <i className="ti ti-receipt" style={{ fontSize:13 }} />View Invoices
-              </button>
-              <button onClick={() => setShowModal(true)}
-                style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}>
-                <i className="ti ti-cash" style={{ fontSize:15 }} />Record Payment
-              </button>
-            </div>
+      {/* ── Topbar ─────────────────────────────────────────────────────────── */}
+      <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
+        <div>
+          <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Payments</div>
+          <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
+            {loading ? "Loading…" : `${pageMeta.count} transaction${pageMeta.count !== 1 ? "s" : ""} · ${fmt(totalCollected)} this page`}
           </div>
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={() => navigate("/invoices")}
+            style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#7a5050", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor="#fca5a5"; e.currentTarget.style.color="#e03131"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
+            <i className="ti ti-receipt" style={{ fontSize:13 }} />View Invoices
+          </button>
+          <button onClick={() => setShowModal(true)}
+            style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}>
+            <i className="ti ti-cash" style={{ fontSize:15 }} />Record Payment
+          </button>
+        </div>
+      </div>
 
-          {/* Content */}
-          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
+      {/* ── Content ────────────────────────────────────────────────────────── */}
+      <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", display:"flex", flexDirection:"column", gap:14 }}>
 
-            {/* Method totals */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(6,minmax(0,1fr))", gap:10 }}>
-              {PAYMENT_METHODS.map((pm) => {
-                const total = payments.filter((p) => p.payment_method === pm.value).reduce((s, p) => s + parseFloat(p.amount_paid), 0);
-                return (
-                  <div key={pm.value} style={{ background:"white", borderRadius:12, border:"1px solid #f5eaea", padding:"12px 14px", boxShadow:"0 2px 8px rgba(224,49,49,0.04)", textAlign:"center" }}>
-                    <div style={{ width:32, height:32, borderRadius:8, background:pm.bg, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 8px" }}>
-                      <i className={`ti ${pm.icon}`} style={{ fontSize:15, color:pm.color }} />
-                    </div>
-                    {loading ? <Sk w={60} h={14} /> : <div style={{ fontSize:13, fontWeight:700, color:pm.color }}>{fmt(total)}</div>}
-                    <div style={{ fontSize:10.5, color:"#b09090", marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>{pm.label}</div>
-                  </div>
-                );
-              })}
+        {/* ── Summary strip ──────────────────────────────────────────────── */}
+        <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 8px rgba(224,49,49,0.04)", display:"grid", gridTemplateColumns:"repeat(6,1fr) 2px 1fr", alignItems:"center", gap:0 }}>
+          {PAYMENT_METHODS.map((pm) => (
+            <div key={pm.value} style={{ textAlign:"center", padding:"0 12px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginBottom:6 }}>
+                <div style={{ width:28, height:28, borderRadius:8, background:pm.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:pm.color }} />
+                </div>
+                <span style={{ fontSize:11.5, fontWeight:600, color:"#7a5050" }}>{pm.label}</span>
+              </div>
+              {loading
+                ? <Sk w="80%" h={13} />
+                : <div style={{ fontSize:13, fontWeight:700, color: methodTotals[pm.value] > 0 ? pm.color : "#c0a0a0" }}>{fmt(methodTotals[pm.value])}</div>
+              }
             </div>
+          ))}
+          {/* Divider */}
+          <div style={{ background:"#f0e8e8", height:"100%", margin:"0 8px" }} />
+          {/* Total */}
+          <div style={{ paddingLeft:16 }}>
+            <div style={{ fontSize:10.5, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Total collected</div>
+            {loading ? <Sk w={100} h={18} /> : <div style={{ fontSize:20, fontWeight:800, color:"#1a0a0a", letterSpacing:"-0.01em" }}>{fmt(totalCollected)}</div>}
+          </div>
+        </div>
 
-            {/* Method filter + table */}
-            <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
+        {/* ── Filter bar ─────────────────────────────────────────────────── */}
+        <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}>
 
-              {/* Filter row */}
-              <div style={{ padding:"12px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                <span style={{ fontSize:10.5, color:"#cdb0b0", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em", marginRight:4 }}>Method</span>
-                <button className={`chip-btn${methodFilter==="all"?" active":""}`} onClick={() => { setMethodFilter("all"); fetchPayments(1, "all"); }}>All</button>
-                {PAYMENT_METHODS.map((pm) => (
-                  <button key={pm.value} className={`chip-btn${methodFilter===pm.value?" active":""}`}
-                    onClick={() => { setMethodFilter(pm.value); fetchPayments(1, pm.value); }}>
-                    <i className={`ti ${pm.icon}`} style={{ fontSize:11 }} />{pm.label}
-                  </button>
-                ))}
+          {/* Top row */}
+          <div style={{ padding:"10px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+
+            {/* Method chips */}
+            <button
+              className={`chip-btn${methodFilter==="all"?" active":""}`}
+              onClick={() => { setMethodFilter("all"); fetchPayments(1, { methodFilter:"all" }); }}>
+              All
+            </button>
+            {PAYMENT_METHODS.map((pm) => (
+              <button key={pm.value}
+                className={`chip-btn${methodFilter===pm.value?" active":""}`}
+                onClick={() => { setMethodFilter(pm.value); fetchPayments(1, { methodFilter:pm.value }); }}>
+                <i className={`ti ${pm.icon}`} style={{ fontSize:11 }} />{pm.label}
+              </button>
+            ))}
+
+            <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
+              {/* Sort */}
+              <div style={{ display:"flex", alignItems:"center", gap:5, background:"#fdfafa", border:"1px solid #f0e4e4", borderRadius:8, padding:"4px 10px 4px 8px", height:32 }}>
+                <i className="ti ti-arrows-sort" style={{ fontSize:12, color:"#c0a0a0" }} />
+                <select value={sortField}
+                  onChange={(e) => { setSortField(e.target.value); fetchPayments(1, { sortField:e.target.value }); }}
+                  style={{ border:"none", background:"transparent", fontSize:12, color:"#5a4a4a", fontWeight:600, fontFamily:"'DM Sans',sans-serif", outline:"none", cursor:"pointer" }}>
+                  <option value="-payment_date">Date ↓</option>
+                  <option value="payment_date">Date ↑</option>
+                  <option value="-amount_paid">Amount ↓</option>
+                  <option value="amount_paid">Amount ↑</option>
+                </select>
               </div>
 
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:"#fdfafa" }}>
-                    {["Date","Invoice","Student","Amount","Method","Reference","Notes"].map((h) => (
-                      <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading
-                    ? Array.from({ length: 8 }).map((_, i) => (
-                        <tr key={i}>
-                          {[80,100,130,80,70,90,80].map((w, j) => (
-                            <td key={j} style={{ padding:"12px 18px", borderBottom:"1px solid #f9f0f0" }}><Sk w={w} h={13} /></td>
-                          ))}
-                        </tr>
-                      ))
-                    : payments.length === 0
-                      ? <tr><td colSpan={7} style={{ textAlign:"center", padding:"56px", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No payments recorded yet.</td></tr>
-                      : payments.map((p, idx) => {
-                          const mc = methodColors[p.payment_method] ?? { color:"#5c5752", bg:"#f0ede8", icon:"ti-dots" };
-                          return (
-                            <tr key={p.payment_id} className="pay-row" style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*15}ms` }}>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0", color:"#5a4a4a", whiteSpace:"nowrap" }}>{fmtDate(p.payment_date)}</td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0" }}>
-                                <button onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
-                                  style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"monospace", fontSize:12, color:"#e03131", fontWeight:700, textDecoration:"underline", padding:0 }}>
-                                  #{p.invoice}
-                                </button>
-                              </td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0", color:"#1a0a0a", fontSize:12 }}>
-                                {p.invoice_detail?.student_name ?? "—"}
-                              </td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0" }}>
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color }}>
-                                  <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
-                                  {p.payment_method.replace("_", " ")}
-                                </span>
-                              </td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0", color:"#5a4a4a", fontFamily:"monospace", fontSize:12 }}>{p.reference_number || "—"}</td>
-                              <td style={{ padding:"11px 18px", borderBottom:"1px solid #f9f0f0", color:"#7a5050", fontSize:12 }}>{p.notes || "—"}</td>
-                            </tr>
-                          );
-                        })
-                  }
-                </tbody>
-              </table>
+              {/* Date/amount filter toggle */}
+              <button onClick={() => setFiltersOpen((v) => !v)}
+                style={{ display:"inline-flex", alignItems:"center", gap:5, height:32, padding:"0 12px", border:`1.5px solid ${filtersOpen||hasDateOrAmount?"#e03131":"#f0e4e4"}`, borderRadius:8, background:filtersOpen||hasDateOrAmount?"#fff0f0":"white", color:filtersOpen||hasDateOrAmount?"#e03131":"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
+                <i className="ti ti-calendar-search" style={{ fontSize:12 }} />
+                Date / Amount{hasDateOrAmount?" •":""}
+                <i className={`ti ti-chevron-${filtersOpen?"up":"down"}`} style={{ fontSize:11 }} />
+              </button>
 
-              {/* Pagination */}
-              {!loading && pageMeta.count > 20 && (
-                <div style={{ padding:"12px 18px", borderTop:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
-                  <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
-                  <div style={{ display:"flex", gap:4 }}>
-                    <button disabled={!pageMeta.previous} onClick={() => fetchPayments(page - 1)}
-                      style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
-                      <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
-                    </button>
-                    <button disabled={!pageMeta.next} onClick={() => fetchPayments(page + 1)}
-                      style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
-                      <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
-                    </button>
-                  </div>
-                </div>
+              {hasActiveFilters && (
+                <button onClick={() => { clearFilters(); fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date" }); }}
+                  style={{ height:32, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#9a7070", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                  Clear all
+                </button>
               )}
             </div>
           </div>
+
+          {/* Expanded date/amount row */}
+          {filtersOpen && (
+            <div style={{ padding:"12px 16px 14px", borderTop:"1px solid #f9f0f0", display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
+              <div>
+                <label style={filterLabel}>Date from</label>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
+              </div>
+              <div>
+                <label style={filterLabel}>Date to</label>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
+              </div>
+              <div>
+                <label style={filterLabel}>Min amount</label>
+                <div style={{ position:"relative" }}>
+                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#c0a0a0", fontWeight:600 }}>₱</span>
+                  <input type="number" min="0" step="0.01" value={amountMin} onChange={(e) => setAmountMin(e.target.value)}
+                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
+                </div>
+              </div>
+              <div>
+                <label style={filterLabel}>Max amount</label>
+                <div style={{ position:"relative" }}>
+                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#c0a0a0", fontWeight:600 }}>₱</span>
+                  <input type="number" min="0" step="0.01" value={amountMax} onChange={(e) => setAmountMax(e.target.value)}
+                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
+                </div>
+              </div>
+              {/* Quick presets */}
+              <div>
+                <label style={filterLabel}>Quick</label>
+                <div style={{ display:"flex", gap:6 }}>
+                  {[
+                    { label:"Today",      fn:() => { const d=new Date().toISOString().slice(0,10); setDateFrom(d); setDateTo(d); } },
+                    { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
+                    { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
+                  ].map((q) => (
+                    <button key={q.label} type="button" onClick={q.fn}
+                      style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => fetchPayments(1)}
+                style={{ height:34, padding:"0 18px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#e03131,#c01a1a)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginLeft:"auto", boxShadow:"0 3px 10px rgba(224,49,49,0.22)" }}>
+                Apply
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Payments table ──────────────────────────────────────────────── */}
+        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:"#fdfafa" }}>
+                {["Student","Invoice","Date","Amount","Method","Reference","Notes"].map((h) => (
+                  <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 16px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading
+                ? Array.from({ length:8 }).map((_, i) => (
+                    <tr key={i}>
+                      {[160, 90, 90, 80, 90, 100, 110].map((w, j) => (
+                        <td key={j} style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0" }}>
+                          {j === 0
+                            ? <div style={{ display:"flex", alignItems:"center", gap:10 }}><div style={{ width:34, height:34, borderRadius:9, background:"#f5eaea", flexShrink:0 }} /><div style={{ display:"flex", flexDirection:"column", gap:6 }}><Sk w={120} h={12} /><Sk w={70} h={10} /></div></div>
+                            : <Sk w={w} h={12} />}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : payments.length === 0
+                  ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding:"64px 24px", textAlign:"center" }}>
+                        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+                          <div style={{ width:52, height:52, borderRadius:14, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <i className="ti ti-cash" style={{ fontSize:24, color:"#2e6b0d" }} />
+                          </div>
+                          <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>No payments found</div>
+                          <div style={{ fontSize:13, color:"#b09090" }}>
+                            {hasActiveFilters ? "Try adjusting your filters." : "Record the first payment to get started."}
+                          </div>
+                          {!hasActiveFilters && (
+                            <button onClick={() => setShowModal(true)}
+                              style={{ marginTop:4, display:"inline-flex", alignItems:"center", gap:7, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:10, padding:"10px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}>
+                              <i className="ti ti-cash" style={{ fontSize:14 }} />Record Payment
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                  : payments.map((p, idx) => {
+                      const name  = p.invoice_detail?.student_name || null;
+                      const invNo = p.invoice_detail?.invoice_no   || `#${p.invoice}`;
+                      const mc    = PM[p.payment_method] ?? PM.others;
+                      const pal   = avatarPalette(name);
+                      return (
+                        <tr key={p.payment_id}
+                          style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*15}ms` }}
+                          onMouseEnter={(e) => Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fffbfb")}
+                          onMouseLeave={(e) => Array.from(e.currentTarget.cells).forEach((c) => c.style.background="")}>
+
+                          {/* Student */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              <div style={{ width:34, height:34, borderRadius:9, background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
+                                {name ? initials(name) : <i className="ti ti-user" style={{ fontSize:15 }} />}
+                              </div>
+                              <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap" }}>
+                                {name ?? <span style={{ color:"#b09090", fontStyle:"italic", fontWeight:400 }}>Unknown</span>}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Invoice */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0" }}>
+                            <button onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
+                              style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"monospace", fontSize:11.5, color:"#e03131", fontWeight:700, textDecoration:"underline", padding:0, whiteSpace:"nowrap" }}>
+                              {invNo}
+                            </button>
+                          </td>
+
+                          {/* Date */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0", color:"#5a4a4a", whiteSpace:"nowrap" }}>
+                            {fmtDate(p.payment_date)}
+                          </td>
+
+                          {/* Amount */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0", fontWeight:700, color:"#2e6b0d", whiteSpace:"nowrap" }}>
+                            {fmt(p.amount_paid)}
+                          </td>
+
+                          {/* Method */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0" }}>
+                            <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:600, padding:"3px 9px", borderRadius:99, background:mc.bg, color:mc.color, whiteSpace:"nowrap" }}>
+                              <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />{mc.label}
+                            </span>
+                          </td>
+
+                          {/* Reference */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0", color:"#5a4a4a", fontFamily:"monospace", fontSize:11.5 }}>
+                            {p.reference_number || <span style={{ color:"#d0b8b8" }}>—</span>}
+                          </td>
+
+                          {/* Notes */}
+                          <td style={{ padding:"11px 16px", borderBottom:"1px solid #f9f0f0", color:"#7a5050", fontSize:12, maxWidth:180 }}>
+                            {p.notes
+                              ? <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.notes}</span>
+                              : <span style={{ color:"#d0b8b8" }}>—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })
+              }
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          {!loading && pageMeta.count > 20 && (
+            <div style={{ padding:"12px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
+              <div style={{ display:"flex", gap:6 }}>
+                <button disabled={!pageMeta.previous} onClick={() => fetchPayments(page - 1)}
+                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.previous?"pointer":"not-allowed", color:pageMeta.previous?"#5a4a4a":"#c0a0a0", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.previous?1:0.5 }}>
+                  <i className="ti ti-chevron-left" style={{ fontSize:13 }} />Prev
+                </button>
+                <button disabled={!pageMeta.next} onClick={() => fetchPayments(page + 1)}
+                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.next?"pointer":"not-allowed", color:pageMeta.next?"#5a4a4a":"#c0a0a0", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.next?1:0.5 }}>
+                  Next<i className="ti ti-chevron-right" style={{ fontSize:13 }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
 
       {showModal && (
         <RecordPaymentModal

@@ -46,6 +46,21 @@ School Data:
 {payload}
 """,
 
+    "clustering_insights": """
+You are an academic analytics assistant for a Philippine basic education school (DepEd K–12 system).
+Analyze the following K-Means clustering results on student grades and provide a clear, professional interpretation for school administrators and teachers.
+
+Structure your response in exactly three sections:
+1. CLUSTER ANALYSIS — 2-3 sentences describing what the clustering reveals about overall student performance distribution
+2. CLUSTER BREAKDOWN — one bullet per cluster describing who is in it and what it means (use the DepEd scale: 90-100 Outstanding, 85-89 Very Satisfactory, 80-84 Satisfactory, 75-79 Fairly Satisfactory, below 75 Did Not Meet Expectations)
+3. RECOMMENDED ACTIONS — 2-3 concrete, actionable steps teachers or administrators should take based on these results
+
+Be direct, encouraging, and practical. Keep the total response under 300 words.
+
+Clustering Data:
+{payload}
+""",
+
     "scholarship_eligibility": """
 You are an academic records officer for a Philippine basic education school.
 Based on the following student grade data, write a brief scholarship eligibility justification.
