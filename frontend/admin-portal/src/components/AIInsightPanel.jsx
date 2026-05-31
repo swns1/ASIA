@@ -6,7 +6,7 @@
 //   onFetch     — async fn that returns { interpretation: string } from the backend
 //   disabled    — bool, disables the Analyze button (e.g. no data loaded yet)
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const API_BASE = "http://localhost:8003/api";
 
@@ -110,7 +110,7 @@ function Sk({ w = "100%", h = 13 }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function AIInsightPanel({ title = "AI Interpretation", description, onFetch, disabled = false, initialInterpretation = "" }) {
+export default function AIInsightPanel({ title = "AI Interpretation", description, onFetch, disabled = false, initialInterpretation = "", autoFetch = false }) {
   const [status, setStatus]   = useState(initialInterpretation ? "success" : "idle");
   const [result, setResult]   = useState(initialInterpretation);
   const [errMsg, setErrMsg]   = useState("");
@@ -135,6 +135,10 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
     handleAnalyze();
   }
 
+  useEffect(() => {
+    if (autoFetch && !initialInterpretation && !disabled) handleAnalyze();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
       <style>{`
@@ -147,13 +151,14 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
 
       <div style={{
         background: "white", border: "1px solid #f5eaea", borderRadius: 16,
-        overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+        boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
         animation: "fadeUp 0.25s ease both",
       }}>
 
         {/* ── Header ── */}
         <div style={{
           padding: "14px 20px", borderBottom: "1px solid #f5eaea",
+          borderRadius: "16px 16px 0 0",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "linear-gradient(to right, #fdfafa, white)",
         }}>

@@ -48,14 +48,24 @@ School Data:
 
     "clustering_insights": """
 You are an academic analytics assistant for a Philippine basic education school (DepEd K–12 system).
-Analyze the following K-Means clustering results on student grades and provide a clear, professional interpretation for school administrators and teachers.
+Analyze the following K-Means clustering results on student grades and provide a clear, professional interpretation with actionable recommendations for school administrators and teachers.
 
-Structure your response in exactly three sections:
-1. CLUSTER ANALYSIS — 2-3 sentences describing what the clustering reveals about overall student performance distribution
-2. CLUSTER BREAKDOWN — one bullet per cluster describing who is in it and what it means (use the DepEd scale: 90-100 Outstanding, 85-89 Very Satisfactory, 80-84 Satisfactory, 75-79 Fairly Satisfactory, below 75 Did Not Meet Expectations)
-3. RECOMMENDED ACTIONS — 2-3 concrete, actionable steps teachers or administrators should take based on these results
+Structure your response in exactly four sections using this exact format:
 
-Be direct, encouraging, and practical. Keep the total response under 300 words.
+**CLUSTER ANALYSIS**
+2-3 sentences describing what the clustering reveals about overall student performance distribution across the grade level and period.
+
+**CLUSTER BREAKDOWN**
+One bullet per cluster. For each cluster state: what performance band it falls in (use the DepEd scale below), how many students it contains, and what the average grade implies about their academic standing.
+DepEd Scale: 90-100 Outstanding · 85-89 Very Satisfactory · 80-84 Satisfactory · 75-79 Fairly Satisfactory · below 75 Did Not Meet Expectations
+
+**KEY CONCERNS**
+2-3 bullets identifying specific risks or patterns that need attention (e.g. clusters below passing, wide grade spread, large low-performing groups).
+
+**RECOMMENDATIONS**
+3-4 concrete, actionable steps that teachers or administrators should take. Be specific — reference the actual cluster data (student counts, averages). Each bullet should name who should act and what they should do.
+
+Be direct, encouraging, and practical. Keep the total response under 400 words.
 
 Clustering Data:
 {payload}

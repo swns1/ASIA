@@ -11,11 +11,24 @@ function getToken() {
   return sessionStorage.getItem("access_token") || "";
 }
 
+async function parseApiError(res) {
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text);
+    const msgs = Object.values(json).flatMap((v) =>
+      Array.isArray(v) ? v.map(String) : [String(v)]
+    );
+    return msgs.join(" | ") || `HTTP ${res.status}`;
+  } catch {
+    return text || `HTTP ${res.status}`;
+  }
+}
+
 async function apiCall(url) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
-  if (!res.ok) throw new Error(res.status);
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
 }
 
@@ -25,7 +38,7 @@ async function apiPost(url, body) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(t); }
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
 }
 
@@ -35,7 +48,7 @@ async function apiPatch(url, body) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) { const t = await res.text(); throw new Error(t); }
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
 }
 
@@ -162,30 +175,35 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
   const [strand,      setStrand]      = useState("");
   const [semester,    setSemester]    = useState("1st");
 
-  const [searchQuery,  setSearchQuery]  = useState("");
-  const [candidates,   setCandidates]   = useState([]);
-  const [candLoading,  setCandLoading]  = useState(false);
-  const [enrolled,     setEnrolled]     = useState([]);
-  const [enrollLoading,setEnrollLoading]= useState(false);
-  const [selected,     setSelected]     = useState(new Set());
-  const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState("");
-  const [removing,     setRemoving]     = useState(new Set());
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [candidates,     setCandidates]     = useState([]);
+  const [candLoading,    setCandLoading]    = useState(false);
+  const [enrolled,       setEnrolled]       = useState([]);
+  const [enrollLoading,  setEnrollLoading]  = useState(false);
+  const [selected,       setSelected]       = useState(new Set());
+  const [saving,         setSaving]         = useState(false);
+  const [saveResult,     setSaveResult]     = useState(null); // { created, failed }
+  const [error,          setError]          = useState("");
+  const [removing,       setRemoving]       = useState(new Set());
+  const [pendingRemove,  setPendingRemove]  = useState(null); // enrollment obj awaiting confirm
+  // eligibilityMap: { [student_id]: { is_eligible, missing_docs, blocking_reasons } }
+  const [eligibilityMap, setEligibilityMap] = useState({});
 
   const isSHS = schoolLevel === "senior_highschool";
   const gradeOpts = GRADE_LEVELS_BY_LEVEL_MODAL[schoolLevel] ?? [];
-  const classReady = schoolYear && schoolLevel && gradeLevel && section.trim();
+  // SHS also requires strand before the class is considered ready
+  const classReady = schoolYear && schoolLevel && gradeLevel && section.trim()
+    && (!isSHS || strand.trim());
 
-  // When school level changes, reset grade to first option
+  // When school level changes, reset grade to first option and clear strand
   useEffect(() => {
     const opts = GRADE_LEVELS_BY_LEVEL_MODAL[schoolLevel] ?? [];
     setGradeLevel(opts[0] ?? "");
     setStrand("");
   }, [schoolLevel]);
 
-  // Fetch enrolled students when class fields are complete
-  useEffect(() => {
-    if (!classReady) { setEnrolled([]); return; }
+  const reloadEnrolled = () => {
+    if (!classReady) return;
     setEnrollLoading(true);
     const params = new URLSearchParams({
       school_year: schoolYear, school_level: schoolLevel,
@@ -195,13 +213,19 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
       .then((d) => setEnrolled((d.results ?? []).filter((e) => e.enrollment_status !== "cancelled")))
       .catch(() => setEnrolled([]))
       .finally(() => setEnrollLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schoolYear, schoolLevel, gradeLevel, section]);
+  };
 
-  // Debounced candidate search with grade-progression filter
+  // Fetch enrolled students when class fields are complete
+  useEffect(() => {
+    if (!classReady) { setEnrolled([]); return; }
+    reloadEnrolled();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolYear, schoolLevel, gradeLevel, section, strand]);
+
+  // Debounced candidate search — uses last *completed* enrollment as progression baseline
   const searchTimer = useRef(null);
   useEffect(() => {
-    if (!classReady) { setCandidates([]); return; }
+    if (!classReady) { setCandidates([]); setEligibilityMap({}); return; }
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(async () => {
       setCandLoading(true);
@@ -213,15 +237,17 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 
         const enrolledIds = new Set(enrolled.map((e) => e.student_id ?? e.student));
 
-        // Fetch last enrollment for each student in parallel
+        // Fetch last COMPLETED enrollment for each student in parallel
         const pairs = await Promise.all(
           students.map(async (st) => {
-            if (enrolledIds.has(st.student_id)) return null; // already enrolled
+            if (enrolledIds.has(st.student_id)) return null; // already in this class
             try {
-              const d = await apiCall(`${API_BASE}/enrollments/?student=${st.student_id}&page_size=100`);
-              const list = d.results ?? [];
-              if (!list.length) return { ...st, lastGrade: null }; // new student — eligible for any grade
-              const latest = list.reduce((a, b) =>
+              const d = await apiCall(
+                `${API_BASE}/enrollments/?student=${st.student_id}&enrollment_status=completed&page_size=100`
+              );
+              const completed = d.results ?? [];
+              if (!completed.length) return { ...st, lastGrade: null }; // new student
+              const latest = completed.reduce((a, b) =>
                 (a.school_year > b.school_year || (a.school_year === b.school_year && a.enrollment_id > b.enrollment_id)) ? a : b
               );
               return { ...st, lastGrade: latest.grade_level ?? null };
@@ -231,10 +257,22 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 
         const eligible = pairs.filter((st) => {
           if (!st) return false;
-          if (st.lastGrade === null) return true; // new student
-          return getNextGrade(st.lastGrade) === gradeLevel;
+          if (st.lastGrade === null) return true; // new student — eligible for any grade
+          return getNextGrade(st.lastGrade) === gradeLevel || st.lastGrade === gradeLevel; // promotion or retention
         });
         setCandidates(eligible);
+
+        // Fetch eligibility details for visible candidates (non-blocking)
+        const eligMap = {};
+        await Promise.all(
+          eligible.map(async (st) => {
+            try {
+              const e = await apiCall(`${API_BASE}/enrollments/eligibility/?student_id=${st.student_id}`);
+              eligMap[st.student_id] = e;
+            } catch { /* non-critical */ }
+          })
+        );
+        setEligibilityMap(eligMap);
       } catch { setCandidates([]); }
       finally { setCandLoading(false); }
     }, 320);
@@ -251,39 +289,38 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
   const allSelected = candidates.length > 0 && candidates.every((c) => selected.has(c.student_id));
   const toggleAll   = () => setSelected(allSelected ? new Set() : new Set(candidates.map((c) => c.student_id)));
 
+  // Single bulk API call — creates students as Pending
   const handleEnroll = async () => {
     setError("");
+    setSaveResult(null);
     setSaving(true);
-    const ids = [...selected];
-    let failed = 0;
-    for (const sid of ids) {
-      try {
-        const payload = {
-          student: sid, school_year: schoolYear, school_level: schoolLevel,
-          grade_level: gradeLevel, section: section.trim(),
-          enrollment_status: "enrolled",
-          strand:   isSHS ? (strand || null)   : null,
-          semester: isSHS ? (semester || null) : null,
-        };
-        await apiPost(`${API_BASE}/enrollments/`, payload);
-      } catch { failed++; }
+    try {
+      const result = await apiPost(`${API_BASE}/enrollments/bulk/`, {
+        students:          [...selected],
+        school_year:       schoolYear,
+        school_level:      schoolLevel,
+        grade_level:       gradeLevel,
+        section:           section.trim(),
+        enrollment_status: "pending",
+        strand:   isSHS ? (strand   || null) : null,
+        semester: isSHS ? (semester || null) : null,
+      });
+      setSelected(new Set());
+      setSaveResult(result);
+      reloadEnrolled();
+      if (!result.failed?.length) onSuccess?.();
+    } catch (e) {
+      setError(e.message || "Bulk enrollment failed.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    if (failed > 0) setError(`${failed} enrollment(s) failed — they may already be enrolled for this school year.`);
-    setSelected(new Set());
-    // Refresh enrolled list
-    const params = new URLSearchParams({
-      school_year: schoolYear, school_level: schoolLevel,
-      grade_level: gradeLevel, section: section.trim(), page_size: 200,
-    });
-    apiCall(`${API_BASE}/enrollments/?${params}`)
-      .then((d) => setEnrolled((d.results ?? []).filter((e) => e.enrollment_status !== "cancelled")))
-      .catch(() => {});
-    if (failed === 0) onSuccess?.();
   };
 
-  const handleRemove = async (enrollment) => {
-    const eid = enrollment.enrollment_id;
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    const en = pendingRemove;
+    setPendingRemove(null);
+    const eid = en.enrollment_id;
     setRemoving((prev) => new Set([...prev, eid]));
     try {
       await apiPatch(`${API_BASE}/enrollments/${eid}/`, { enrollment_status: "cancelled" });
@@ -316,7 +353,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
               </div>
               <div>
                 <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Mass Enroll</div>
-                <div style={{ fontSize:11.5, color:"#b09090" }}>Bulk-assign students to a class section</div>
+                <div style={{ fontSize:11.5, color:"#b09090" }}>Bulk-assign students to a class section · Created as <strong>Pending</strong></div>
               </div>
             </div>
             <button onClick={onClose} style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}
@@ -359,11 +396,14 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           {isSHS && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginTop:10 }}>
               <div style={{ gridColumn:"1/3" }}>
-                <label style={lbl}>Strand</label>
-                <select value={strand} onChange={(e) => setStrand(e.target.value)} style={sel}>
+                <label style={lbl}>Strand <span style={{ color:"#e03131" }}>*</span></label>
+                <select value={strand} onChange={(e) => setStrand(e.target.value)} style={{ ...sel, borderColor: isSHS && !strand ? "#fca5a5" : undefined }}>
                   <option value="">— Select strand —</option>
                   {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
+                {isSHS && !strand && (
+                  <div style={{ fontSize:10, color:"#e03131", marginTop:3 }}>Strand is required for Senior HS</div>
+                )}
               </div>
               <div style={{ gridColumn:"3/5" }}>
                 <label style={lbl}>Semester</label>
@@ -419,6 +459,14 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                     const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
                     const name = [st.last_name+",", st.first_name, st.middle_name].filter(Boolean).join(" ");
                     const isSelected = selected.has(st.student_id);
+                    const elig = eligibilityMap[st.student_id];
+                    // Eligibility badge
+                    const eligBadge = elig == null ? null
+                      : elig.blocking_reasons?.length > 0
+                        ? { bg:"#fef2f2", color:"#991b1b", border:"#fca5a5", icon:"ti-circle-x", label:"Blocked" }
+                        : elig.missing_docs?.length > 0
+                          ? { bg:"#fffbeb", color:"#92400e", border:"#fde68a", icon:"ti-file-x", label:`Docs (${elig.missing_docs.length})` }
+                          : { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0", icon:"ti-circle-check", label:"Eligible" };
                     return (
                       <div key={st.student_id}
                         onClick={() => toggleSelect(st.student_id)}
@@ -431,7 +479,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                         <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                             <span>LRN {st.lrn ?? "—"}</span>
                             {st.lastGrade ? (
                               <span style={{ background:"#fff0e8", color:"#b45309", border:"1px solid #fcd9a8", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
@@ -439,6 +487,11 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                               </span>
                             ) : (
                               <span style={{ background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
+                            )}
+                            {eligBadge && (
+                              <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:eligBadge.bg, color:eligBadge.color, border:`1px solid ${eligBadge.border}`, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                <i className={`ti ${eligBadge.icon}`} style={{ fontSize:10 }} />{eligBadge.label}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -454,7 +507,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           <div style={{ display:"flex", flexDirection:"column", minHeight:0 }}>
             <div style={{ padding:"12px 18px 10px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
               <div style={{ fontSize:11, fontWeight:700, color:"#7a5050", textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                Enrolled
+                In This Class
                 <span style={{ marginLeft:6, fontWeight:400, color:"#b09090" }}>
                   {enrollLoading ? "loading…" : `(${enrolled.length})`}
                 </span>
@@ -467,29 +520,57 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                 </div>
               )}
               {classReady && !enrollLoading && enrolled.length === 0 && (
-                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>No students enrolled in this class yet.</div>
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>No students in this class yet.</div>
               )}
               {enrolled.map((en) => {
-                const name = en.student_name ?? `Student #${en.student}`;
+                const name = en.student_name ?? en.student_detail
+                  ? [en.student_detail?.first_name, en.student_detail?.last_name].filter(Boolean).join(" ")
+                  : `Student #${en.student}`;
                 const p = avatarFor(name);
-                const initials = name.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase();
+                const initials = name.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0,2).toUpperCase();
                 const isRemoving = removing.has(en.enrollment_id);
+                const isPendingThisRemove = pendingRemove?.enrollment_id === en.enrollment_id;
+                const statusPill = STATUS_META[en.enrollment_status];
                 return (
-                  <div key={en.enrollment_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", borderBottom:"1px solid #f9f0f0" }}>
-                    <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                      <div style={{ fontSize:10.5, color:"#b09090", marginTop:1 }}>ID #{en.enrollment_id}</div>
+                  <div key={en.enrollment_id} style={{ borderBottom:"1px solid #f9f0f0" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px" }}>
+                      <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+                        <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                          <span>#{en.enrollment_id}</span>
+                          {statusPill && (
+                            <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:statusPill.bg, color:statusPill.color, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                              <span style={{ width:5, height:5, borderRadius:"50%", background:statusPill.dot }} />{statusPill.label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => setPendingRemove(isPendingThisRemove ? null : en)}
+                        disabled={isRemoving}
+                        title="Remove from class"
+                        style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#c0a0a0", flexShrink:0, transition:"all .12s" }}
+                        onMouseEnter={(e) => { if (!isRemoving) { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}}
+                        onMouseLeave={(e) => { if (!isPendingThisRemove) { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c0a0a0"; e.currentTarget.style.borderColor="#fde2de"; }}}>
+                        {isRemoving
+                          ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
+                          : <i className="ti ti-x" style={{ fontSize:12 }} />}
+                      </button>
                     </div>
-                    <button onClick={() => handleRemove(en)} disabled={isRemoving}
-                      title="Cancel enrollment"
-                      style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color:"#c0a0a0", flexShrink:0, transition:"all .12s" }}
-                      onMouseEnter={(e) => { if (!isRemoving) { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}}
-                      onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c0a0a0"; e.currentTarget.style.borderColor="#fde2de"; }}>
-                      {isRemoving
-                        ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
-                        : <i className="ti ti-x" style={{ fontSize:12 }} />}
-                    </button>
+                    {/* Inline remove confirmation */}
+                    {isPendingThisRemove && (
+                      <div style={{ margin:"0 18px 10px", padding:"10px 14px", background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:9, display:"flex", alignItems:"center", gap:10 }}>
+                        <span style={{ flex:1, fontSize:12, color:"#991b1b" }}>Remove <strong>{name}</strong> from this class?</span>
+                        <button onClick={confirmRemove}
+                          style={{ padding:"5px 12px", background:"#e03131", color:"white", border:"none", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                          Confirm
+                        </button>
+                        <button onClick={() => setPendingRemove(null)}
+                          style={{ padding:"5px 12px", background:"white", color:"#7a5050", border:"1px solid #f0e4e4", borderRadius:7, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -500,21 +581,39 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
         {/* Footer */}
         <div style={{ padding:"14px 26px", borderTop:"1px solid #f5eaea", flexShrink:0 }}>
           {error && (
-            <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"9px 13px", fontSize:12.5, color:"#b91c1c", marginBottom:12, display:"flex", alignItems:"center", gap:7 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize:14, flexShrink:0 }} />{error}
+            <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"9px 13px", fontSize:12.5, color:"#b91c1c", marginBottom:12, display:"flex", alignItems:"flex-start", gap:7 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize:14, flexShrink:0, marginTop:1 }} />
+              <span style={{ whiteSpace:"pre-wrap" }}>{error}</span>
             </div>
           )}
-          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-            <button onClick={onClose}
-              style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-              Close
-            </button>
-            <button onClick={handleEnroll} disabled={selected.size === 0 || saving || !classReady}
-              style={{ padding:"9px 22px", background: (selected.size === 0 || saving || !classReady) ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (selected.size === 0 || !classReady) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", boxShadow: selected.size > 0 && classReady ? "0 4px 16px rgba(224,49,49,0.28)" : "none", display:"inline-flex", alignItems:"center", gap:7, opacity: saving ? 0.7 : 1 }}>
-              {saving
-                ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Enrolling…</>
-                : <><i className="ti ti-check" style={{ fontSize:14 }} />Enroll Selected{selected.size > 0 ? ` (${selected.size})` : ""}</>}
-            </button>
+          {saveResult && (
+            <div style={{ background: saveResult.failed?.length ? "#fffbeb" : "#f0fdf4", border:`1px solid ${saveResult.failed?.length ? "#fde68a" : "#bbf7d0"}`, borderRadius:8, padding:"9px 13px", fontSize:12.5, color: saveResult.failed?.length ? "#92400e" : "#15803d", marginBottom:12 }}>
+              <div style={{ fontWeight:700, marginBottom: saveResult.failed?.length ? 6 : 0 }}>
+                <i className={`ti ${saveResult.failed?.length ? "ti-alert-triangle" : "ti-circle-check"}`} style={{ marginRight:5 }} />
+                {saveResult.created?.length} student{saveResult.created?.length !== 1 ? "s" : ""} added as Pending.
+                {saveResult.failed?.length > 0 && ` ${saveResult.failed.length} failed.`}
+              </div>
+              {saveResult.failed?.map((f, i) => (
+                <div key={i} style={{ fontSize:11.5, marginTop:3 }}>· Student #{f.student_id}: {f.reason}</div>
+              ))}
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+            <div style={{ fontSize:11, color:"#b09090", fontStyle:"italic" }}>
+              Students are added as <strong>Pending</strong> — activate each to Enrolled after documents are submitted.
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={onClose}
+                style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                Close
+              </button>
+              <button onClick={handleEnroll} disabled={selected.size === 0 || saving || !classReady}
+                style={{ padding:"9px 22px", background: (selected.size === 0 || saving || !classReady) ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (selected.size === 0 || !classReady) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", boxShadow: selected.size > 0 && classReady ? "0 4px 16px rgba(224,49,49,0.28)" : "none", display:"inline-flex", alignItems:"center", gap:7, opacity: saving ? 0.7 : 1 }}>
+                {saving
+                  ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Enrolling…</>
+                  : <><i className="ti ti-check" style={{ fontSize:14 }} />Enroll Selected{selected.size > 0 ? ` (${selected.size})` : ""}</>}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -602,6 +701,8 @@ export default function EnrollmentsPage() {
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes rowIn   { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
         .new-btn { transition:all .16s; }
         .new-btn:hover { background:#c92a2a !important; box-shadow:0 8px 28px rgba(224,49,49,0.32) !important; transform:translateY(-1px); }

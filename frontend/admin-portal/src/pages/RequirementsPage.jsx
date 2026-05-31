@@ -289,15 +289,15 @@ function RequirementCard({ req, onUpload, onView, onRemove }) {
         )}
       </div>
 
-      <div style={{ padding: "0 16px 14px", display: "flex", gap: 8 }}>
+      <div style={{ padding: "0 16px 14px", display: "flex", flexWrap: "wrap", gap: 6 }}>
         {req.is_submitted ? (
           <>
             {hasImage && (
-              <button onClick={() => onView(imageUrl, req.requirement_name)} style={s.outlineBtn}>
+              <button onClick={() => onView(imageUrl, req.requirement_name)} style={{ ...s.outlineBtn, flex: 1, minWidth: 60 }}>
                 <i className="ti ti-eye" style={{ fontSize: 13 }} />View
               </button>
             )}
-            <button onClick={() => onUpload(req)} style={{ ...s.outlineBtn, flex: 1 }}>
+            <button onClick={() => onUpload(req)} style={{ ...s.outlineBtn, flex: 1, minWidth: 60 }}>
               <i className="ti ti-replace" style={{ fontSize: 13 }} />Replace
             </button>
             <button onClick={() => onRemove(req)} title="Remove"
@@ -343,6 +343,11 @@ export default function RequirementsPage() {
   const [showDropdown,  setShowDropdown]  = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const searchRef = useRef(null);
+  const suppressSearch = useRef(false);
+
+  // Recent students
+  const [recentStudents,      setRecentStudents]      = useState([]);
+  const [recentStudentsLoading, setRecentStudentsLoading] = useState(false);
 
   // Requirements state
   const [requirements, setRequirements] = useState([]);
@@ -359,6 +364,15 @@ export default function RequirementsPage() {
     if (!sessionStorage.getItem("access_token")) navigate("/");
   }, [navigate]);
 
+  // Load recently enrolled students on mount
+  useEffect(() => {
+    setRecentStudentsLoading(true);
+    getStudents({ ordering: "-created_at", page: 1 })
+      .then((data) => setRecentStudents(Array.isArray(data) ? data.slice(0, 10) : (data?.results ?? []).slice(0, 10)))
+      .catch(() => {})
+      .finally(() => setRecentStudentsLoading(false));
+  }, []);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handler(e) {
@@ -370,6 +384,7 @@ export default function RequirementsPage() {
 
   // Live debounced student search
   useEffect(() => {
+    if (suppressSearch.current) { suppressSearch.current = false; return; }
     if (!searchInput.trim()) { setSearchResults([]); setShowDropdown(false); return; }
     setSearchLoading(true);
     setShowDropdown(true);
@@ -388,8 +403,10 @@ export default function RequirementsPage() {
 
   // Select a student → load requirements
   async function selectStudent(student) {
+    suppressSearch.current = true;
     setSelectedStudent(student);
     setShowDropdown(false);
+    setSearchResults([]);
     setSearchInput(`${student.first_name} ${student.last_name}`);
     setReqLoading(true);
     setReqError("");
@@ -460,6 +477,7 @@ export default function RequirementsPage() {
               <div style={{ padding: "18px 22px" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12}}>
                   <i className="ti ti-search" style={{ fontSize: 15, color: C.red, marginRight: 8 }} />Search Student
+                  <span style={{ fontSize: 11, fontWeight: 400, color: C.pale, marginLeft: 8 }}>or select from the list below</span>
                 </div>
 
                 {/* Search input — live debounced, no form submit needed */}
@@ -525,17 +543,61 @@ export default function RequirementsPage() {
                   <div style={{ width: 48, height: 48, borderRadius: "50%", background: `linear-gradient(135deg,${C.redLight},${C.redBorder})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: C.red, flexShrink: 0 }}>
                     {selectedStudent.first_name?.[0]}{selectedStudent.last_name?.[0]}
                   </div>
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {selectedStudent.first_name} {selectedStudent.last_name}
                     </div>
                     <div style={{ fontSize: 11, color: C.pale }}>LRN: {selectedStudent.lrn}</div>
                     <div style={{ fontSize: 11, color: C.pale }}>{selectedStudent.student_number}</div>
+                    <button
+                      onClick={() => navigate(`/students/${selectedStudent.student_id}`)}
+                      style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5, height: 26, padding: "0 10px", border: `1px solid ${C.border}`, borderRadius: 7, background: "white", color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                    >
+                      <i className="ti ti-user" style={{ fontSize: 12 }} />View Profile
+                    </button>
                   </div>
                 </div>
                 <StatCard label="Total Requirements" value={requirements.length} icon="ti-list"          loading={reqLoading} />
                 <StatCard label="Submitted"          value={submitted}           icon="ti-circle-check" color={C.green} loading={reqLoading} />
                 <StatCard label="Pending"            value={pending}             icon="ti-clock"        loading={reqLoading} />
+              </div>
+            )}
+
+            {/* ── Document completeness bar ── */}
+            {selectedStudent && !reqLoading && requirements.length > 0 && (
+              <div style={{
+                background: submitted === requirements.length ? "#f0fdf4" : "#fef9ec",
+                border: `1px solid ${submitted === requirements.length ? "#bbf7d0" : "#fde68a"}`,
+                borderRadius: 12, padding: "14px 20px", display: "flex", alignItems: "center", gap: 16,
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: submitted === requirements.length ? "#15803d" : "#92400e" }}>
+                      {submitted === requirements.length
+                        ? "All documents submitted — student is ready to be activated to Enrolled."
+                        : `${requirements.length - submitted} of ${requirements.length} document(s) still missing.`}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: submitted === requirements.length ? "#16a34a" : "#d97706" }}>
+                      {submitted} / {requirements.length}
+                    </span>
+                  </div>
+                  <div style={{ height: 8, background: "#e5e7eb", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${requirements.length > 0 ? Math.round((submitted / requirements.length) * 100) : 0}%`,
+                      background: submitted === requirements.length
+                        ? "linear-gradient(to right,#16a34a,#22c55e)"
+                        : "linear-gradient(to right,#d97706,#f59e0b)",
+                      borderRadius: 99, transition: "width .4s ease",
+                    }} />
+                  </div>
+                </div>
+                {submitted < requirements.length && (
+                  <div style={{ fontSize: 11, color: "#92400e", textAlign: "center", flexShrink: 0, maxWidth: 160, lineHeight: 1.5 }}>
+                    <i className="ti ti-info-circle" style={{ fontSize: 13, display: "block", marginBottom: 2 }} />
+                    Enrollment can be created as <strong>Pending</strong>. All docs required to activate.
+                  </div>
+                )}
               </div>
             )}
 
@@ -604,19 +666,57 @@ export default function RequirementsPage() {
               </section>
             )}
 
-            {/* ── Empty state ── */}
+            {/* ── Recently enrolled students ── */}
             {!selectedStudent && (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>
-                <div style={{ textAlign: "center", color: C.pale }}>
-                  <div style={{ width: 72, height: 72, borderRadius: 20, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
-                    <i className="ti ti-users-group" style={{ fontSize: 32, color: "#e8a0a0" }} />
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.muted}}>No student selected</div>
-                  <div style={{ fontSize: 13, color: C.pale, marginTop: 6, maxWidth: 300, lineHeight: 1.7 }}>
-                    Search for a student above to view and manage their requirement documents.
+              <section style={s.panel}>
+                <div style={s.panelHeader}>
+                  <div>
+                    <div style={s.panelTitle}>
+                      <i className="ti ti-clock" style={{ fontSize: 14, color: C.red, marginRight: 8 }} />
+                      Recently Enrolled Students
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.pale, marginTop: 2 }}>Click a student to view their requirements</div>
                   </div>
                 </div>
-              </div>
+                <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {recentStudentsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.softBorder}` }}>
+                        <Sk w={36} h={36} r={99} />
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <Sk h={13} w="45%" />
+                          <Sk h={10} w="30%" />
+                        </div>
+                      </div>
+                    ))
+                  ) : recentStudents.length === 0 ? (
+                    <div style={{ padding: "32px 0", textAlign: "center", color: C.pale }}>
+                      <i className="ti ti-users" style={{ fontSize: 28, display: "block", marginBottom: 8 }} />
+                      No students found.
+                    </div>
+                  ) : (
+                    recentStudents.map((st) => (
+                      <div
+                        key={st.student_id}
+                        className="dropdown-item"
+                        onClick={() => selectStudent(st)}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.softBorder}`, cursor: "pointer", transition: "background 0.12s" }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg,${C.redLight},${C.redBorder})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red, flexShrink: 0 }}>
+                          {st.first_name?.[0]}{st.last_name?.[0]}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {st.first_name} {st.middle_name ? st.middle_name + " " : ""}{st.last_name}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.pale }}>LRN: {st.lrn} · {st.student_number}</div>
+                        </div>
+                        <i className="ti ti-chevron-right" style={{ fontSize: 13, color: C.pale, flexShrink: 0 }} />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
             )}
           </div>
       {/* ── Modals ── */}

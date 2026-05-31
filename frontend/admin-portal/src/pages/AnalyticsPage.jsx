@@ -16,8 +16,6 @@ async function apiFetch(url) {
   return res.json();
 }
 
-// ── NAV ───────────────────────────────────────────────────────────────────────
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
   { value: "overall",      label: "Overall (All Periods)" },
@@ -53,30 +51,59 @@ function currentSchoolYear() {
   return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Shared style tokens (aligned with system design) ──────────────────────────
 const s = {
-  topbar:      { background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
+  topbar: {
+    background: "white",
+    borderBottom: "1px solid #f5eaea",
+    padding: "0 28px",
+    height: 58,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexShrink: 0,
+    boxShadow: "0 1px 8px rgba(224,49,49,0.04)",
+  },
   topbarTitle: { fontSize: 15, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" },
   topbarSub:   { fontSize: 11.5, color: "#b09090", marginTop: 1 },
-  content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 },
+  content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 },
   card: {
-    background: "white", borderRadius: 16, border: "1px solid #ede9e1",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20,
+    background: "white",
+    borderRadius: 12,
+    border: "1px solid #f0ece4",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
   },
+  cardHeader: {
+    padding: "14px 20px",
+    borderBottom: "1px solid #f5eaea",
+    borderRadius: "12px 12px 0 0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    background: "linear-gradient(to right, #fdfafa, white)",
+  },
+  cardHeaderTitle: { fontSize: 13, fontWeight: 700, color: "#1a0a0a" },
+  cardHeaderSub:   { fontSize: 11, color: "#b09090", marginTop: 1 },
+  cardBody:        { padding: "18px 20px" },
   filterRow:   { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
-  filterGroup: { display: "flex", flexDirection: "column", gap: 4, minWidth: 160 },
+  filterGroup: { display: "flex", flexDirection: "column", gap: 4, minWidth: 150 },
   filterLabel: {
     fontSize: 11, fontWeight: 600, color: "#8a8480",
     textTransform: "uppercase", letterSpacing: "0.05em",
   },
   select: {
-    padding: "8px 12px", borderRadius: 8, border: "1px solid #e0dcd4", fontSize: 13,
+    padding: "8px 12px", borderRadius: 8, border: "1px solid #ede9e1", fontSize: 13,
     color: "#3a3a3a", background: "white", cursor: "pointer",
-    fontFamily: "'DM Sans', sans-serif",
+    fontFamily: "'DM Sans', sans-serif", outline: "none",
+  },
+  input: {
+    padding: "8px 12px", borderRadius: 8, border: "1px solid #ede9e1", fontSize: 13,
+    color: "#3a3a3a", background: "white",
+    fontFamily: "'DM Sans', sans-serif", outline: "none", width: 130,
   },
   runBtn: {
     display: "flex", alignItems: "center", gap: 8,
-    height: 38, padding: "0 20px", borderRadius: 10,
+    height: 38, padding: "0 20px", borderRadius: 9,
     background: "linear-gradient(135deg, #e03131, #c92a2a)", color: "white",
     border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
     fontFamily: "'DM Sans', sans-serif",
@@ -101,15 +128,14 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
   const xs = allPoints.map((p) => p.x);
   const ys = allPoints.map((p) => p.y);
 
-  // FIX: use reduce instead of spread — Math.min(...largeArray) can silently
-  // fail in Firefox/Edge/older Chrome due to call-stack size limits, causing
-  // all points to collapse to a single spot on those browsers.
+  // use reduce instead of spread — Math.min(...largeArray) can silently
+  // fail in Firefox/Edge/older Chrome due to call-stack size limits
   const xMin = xs.reduce((a, b) => Math.min(a, b), Infinity);
   const xMax = xs.reduce((a, b) => Math.max(a, b), -Infinity);
   const yMin = ys.reduce((a, b) => Math.min(a, b), Infinity);
   const yMax = ys.reduce((a, b) => Math.max(a, b), -Infinity);
 
-  // FIX: add 10% padding so edge points don't sit directly on the axis lines
+  // 10% padding so edge points don't sit directly on the axis lines
   const xPad   = (xMax - xMin || 1) * 0.1;
   const yPad   = (yMax - yMin || 1) * 0.1;
   const xRange = (xMax - xMin || 1) + xPad * 2;
@@ -123,7 +149,7 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 12, border: "1px solid #f0ece4" }}
+      style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 8, border: "1px solid #f0ece4" }}
     >
       {/* Grid lines */}
       {[0.25, 0.5, 0.75].map((frac) => (
@@ -221,11 +247,11 @@ function ClusterLegend({ clusters }) {
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       {clusters.map((c) => (
         <div key={c.cluster_id} style={{
-          flex: "1 1 180px", padding: "14px 16px", borderRadius: 12,
-          border: `2px solid ${c.color}20`, background: `${c.color}08`,
+          flex: "1 1 180px", padding: "12px 16px", borderRadius: 10,
+          border: `1.5px solid ${c.color}22`, background: `${c.color}08`,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: c.color }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+            <div style={{ width: 9, height: 9, borderRadius: "50%", background: c.color }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{c.label}</span>
           </div>
           <div style={{ fontSize: 12, color: "#6a6460", lineHeight: 1.7 }}>
@@ -246,30 +272,29 @@ function StudentDetailPanel({ student, onClose }) {
   if (!student) return null;
   return (
     <div style={{
-      background: "white", border: "1px solid #ede9e1", borderRadius: 14,
-      padding: "16px 20px", marginTop: 12,
+      background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10,
+      padding: "14px 18px", marginTop: 12,
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{
-          width: 40, height: 40, borderRadius: 10,
+          width: 38, height: 38, borderRadius: 10,
           background: `${student.color || "#e03131"}18`,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <i className="ti ti-user" style={{ fontSize: 18, color: student.color || "#e03131" }} />
+          <i className="ti ti-user" style={{ fontSize: 17, color: student.color || "#e03131" }} />
         </div>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>{student.student_name}</div>
-          <div style={{ fontSize: 12, color: "#8a8480", marginTop: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{student.student_name}</div>
+          <div style={{ fontSize: 11.5, color: "#8a8480", marginTop: 1 }}>
             {student.student_number} · Grade: <strong>{student.grade}</strong> · {student.clusterLabel}
           </div>
         </div>
       </div>
       <button onClick={onClose} style={{
-        background: "none", border: "1px solid #e0dcd4", borderRadius: 8,
-        padding: "6px 12px", fontSize: 12, color: "#8a8480", cursor: "pointer",
-        fontFamily: "'DM Sans', sans-serif",
+        background: "white", border: "1px solid #ede9e1", borderRadius: 8,
+        padding: "5px 12px", fontSize: 12, color: "#8a8480", cursor: "pointer",
+        fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
       }}>
         Close
       </button>
@@ -286,10 +311,10 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
   ).sort((a, b) => a.grade - b.grade);
 
   return (
-    <div style={{ maxHeight: 360, overflowY: "auto", borderRadius: 12, border: "1px solid #ede9e1" }}>
+    <div style={{ maxHeight: 360, overflowY: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
-          <tr style={{ background: "#faf9f6", borderBottom: "1px solid #ede9e1" }}>
+          <tr style={{ background: "#faf9f6", position: "sticky", top: 0 }}>
             <th style={thStyle}>Student</th>
             <th style={thStyle}>Number</th>
             <th style={thStyle}>Grade</th>
@@ -304,12 +329,12 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
                 key={st.student_id}
                 onClick={() => onSelectStudent(st)}
                 style={{
-                  borderBottom: "1px solid #f4f0ec",
+                  borderBottom: "1px solid #f5eaea",
                   cursor: "pointer",
                   background: isSelected ? `${st.color}10` : "white",
                   transition: "background 0.1s",
                 }}
-                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#faf9f6"; }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#fff8f6"; }}
                 onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "white"; }}
               >
                 <td style={tdStyle}>{st.student_name}</td>
@@ -317,11 +342,11 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
                 <td style={{ ...tdStyle, fontWeight: 600 }}>{st.grade}</td>
                 <td style={tdStyle}>
                   <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
+                    display: "inline-flex", alignItems: "center", gap: 5,
                     padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600,
                     background: `${st.color}14`, color: st.color,
                   }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color }} />
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: st.color }} />
                     {st.clusterLabel}
                   </span>
                 </td>
@@ -335,41 +360,41 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
 }
 
 const thStyle = {
-  padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700,
+  padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700,
   color: "#a09890", textTransform: "uppercase", letterSpacing: "0.05em",
+  borderBottom: "1px solid #f5eaea",
 };
-const tdStyle = { padding: "10px 14px", color: "#3a3a3a" };
+const tdStyle = { padding: "10px 16px", color: "#3a3a3a" };
 
-// ── AI Insight Panel wrapper ──────────────────────────────────────────────────
-// Extracted as its own component so the `key` prop forces a full remount
-// (and clears stale output) whenever a new analysis is run.
-// Shows the Groq interpretation from the cluster API immediately; the Analyze
-// button sends the same data to Gemini for a second opinion or deeper analysis.
+// ── Cluster AI Insight Panel ──────────────────────────────────────────────────
+// Sends cluster data to Gemini for interpretation + actionable recommendations.
+// Uses a `key` prop on the parent so this fully remounts on each new analysis.
 function ClusterInsightPanel({ result }) {
   const onFetch = () => {
-    const clusterSummary = result.clusters
+    const clusterDetails = result.clusters
       .map((c) =>
-        `${c.label}: ${c.student_count} students, avg=${c.avg_grade}, range=[${c.min_grade}-${c.max_grade}]`
+        `${c.label}: ${c.student_count} student(s), avg grade=${c.avg_grade}, range=[${c.min_grade}–${c.max_grade}]`
       )
       .join("\n");
 
     return callGemini("clustering_insights", {
-      school_year:     result.meta.school_year,
-      grading_period:  result.meta.grading_period,
-      grade_level:     result.meta.grade_level || "All Grade Levels",
-      subject:         result.meta.subject,
-      total_students:  result.meta.total_students,
-      n_clusters:      result.meta.n_clusters,
-      cluster_summary: clusterSummary,
+      school_year:      result.meta.school_year,
+      grading_period:   result.meta.grading_period,
+      grade_level:      result.meta.grade_level || "All Grade Levels",
+      subject:          result.meta.subject,
+      total_students:   result.meta.total_students,
+      n_clusters:       result.meta.n_clusters,
+      cluster_details:  clusterDetails,
+      include_recommendations: true,
     });
   };
 
   return (
     <AIInsightPanel
-      title="AI Interpretation"
-      description="Powered by Groq · Click Analyze for a deeper Gemini analysis"
+      title="AI Interpretation & Recommendations"
+      description="Powered by Gemini · Analysis of clustering results with actionable insights"
       disabled={false}
-      initialInterpretation={result.interpretation || ""}
+      autoFetch={true}
       onFetch={onFetch}
     />
   );
@@ -431,135 +456,145 @@ export default function AnalyticsPage() {
 
   return (
     <AppLayout>
-          {/* Topbar */}
-          <div style={s.topbar}>
+      {/* Topbar */}
+      <div style={s.topbar}>
+        <div>
+          <div style={s.topbarTitle}>Analytics</div>
+          <div style={s.topbarSub}>K-Means clustering · Academic performance segmentation · S.Y. {schoolYear}</div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={s.content}>
+
+        {/* ── Filters ── */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
             <div>
-              <div style={s.topbarTitle}>Analytics</div>
-              <div style={s.topbarSub}>K-Means clustering on student grades · S.Y. {schoolYear}</div>
+              <div style={s.cardHeaderTitle}>Analysis Parameters</div>
+              <div style={s.cardHeaderSub}>Configure filters then run the clustering algorithm</div>
             </div>
           </div>
+          <div style={{ ...s.cardBody }}>
+            <div style={s.filterRow}>
 
-          {/* Content */}
-          <div style={s.content}>
+              <div style={s.filterGroup}>
+                <label style={s.filterLabel}>School Year</label>
+                <input
+                  type="text"
+                  value={schoolYear}
+                  onChange={(e) => setSchoolYear(e.target.value)}
+                  placeholder="2024-2025"
+                  style={s.input}
+                />
+              </div>
 
-        {/* Filters */}
-        <div style={s.card}>
-          <div style={s.filterRow}>
+              <div style={s.filterGroup}>
+                <label style={s.filterLabel}>Grading Period</label>
+                <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} style={s.select}>
+                  {PERIOD_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div style={s.filterGroup}>
-              <label style={s.filterLabel}>School Year</label>
-              <input
-                type="text"
-                value={schoolYear}
-                onChange={(e) => setSchoolYear(e.target.value)}
-                placeholder="2024-2025"
-                style={{ ...s.select, width: 130 }}
-              />
+              <div style={s.filterGroup}>
+                <label style={s.filterLabel}>Grade Level</label>
+                <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...s.select, minWidth: 150 }}>
+                  {GRADE_LEVEL_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={s.filterGroup}>
+                <label style={s.filterLabel}>Subject</label>
+                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={{ ...s.select, minWidth: 200 }}>
+                  <option value="">Overall (All Subjects)</option>
+                  {subjects.map((sub) => (
+                    <option key={sub.subject_id} value={sub.subject_id}>
+                      {sub.subject_code} — {sub.subject_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={s.filterGroup}>
+                <label style={s.filterLabel}>Clusters (k)</label>
+                <select value={nClusters} onChange={(e) => setNClusters(Number(e.target.value))} style={{ ...s.select, width: 72 }}>
+                  {[2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={runClustering}
+                disabled={loading}
+                className="new-btn"
+                style={{
+                  ...s.runBtn,
+                  opacity: loading ? 0.6 : 1,
+                  cursor:  loading ? "not-allowed" : "pointer",
+                  marginBottom: 0,
+                  alignSelf: "flex-end",
+                }}
+              >
+                {loading ? (
+                  <>
+                    <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
+                    Running…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />
+                    Run Analysis
+                  </>
+                )}
+              </button>
+
             </div>
-
-            <div style={s.filterGroup}>
-              <label style={s.filterLabel}>Grading Period</label>
-              <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} style={s.select}>
-                {PERIOD_OPTIONS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={s.filterGroup}>
-              <label style={s.filterLabel}>Grade Level</label>
-              <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...s.select, minWidth: 150 }}>
-                {GRADE_LEVEL_OPTIONS.map((g) => (
-                  <option key={g.value} value={g.value}>{g.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={s.filterGroup}>
-              <label style={s.filterLabel}>Subject</label>
-              <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={{ ...s.select, minWidth: 200 }}>
-                <option value="">Overall (All Subjects)</option>
-                {subjects.map((sub) => (
-                  <option key={sub.subject_id} value={sub.subject_id}>
-                    {sub.subject_code} — {sub.subject_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={s.filterGroup}>
-              <label style={s.filterLabel}>Clusters</label>
-              <select value={nClusters} onChange={(e) => setNClusters(Number(e.target.value))} style={{ ...s.select, width: 70 }}>
-                {[2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={runClustering}
-              disabled={loading}
-              style={{
-                ...s.runBtn,
-                opacity: loading ? 0.6 : 1,
-                cursor:  loading ? "not-allowed" : "pointer",
-                marginBottom: 0,
-              }}
-            >
-              {loading ? (
-                <>
-                  <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
-                  Running…
-                </>
-              ) : (
-                <>
-                  <i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />
-                  Run Analysis
-                </>
-              )}
-            </button>
-
           </div>
         </div>
 
-        {/* Error */}
+        {/* ── Error ── */}
         {error && (
           <div style={{
-            ...s.card, background: "#fef2f2", border: "1px solid #fca5a5",
-            display: "flex", alignItems: "center", gap: 10, padding: "14px 20px",
+            background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
+            display: "flex", alignItems: "center", gap: 10, padding: "13px 18px",
           }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131" }} />
+            <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131", flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: "#b91c1c" }}>{error}</span>
           </div>
         )}
 
-        {/* Loading */}
+        {/* ── Loading ── */}
         {loading && (
           <div style={s.card}>
             <div style={s.emptyState}>
               <div style={{
-                width: 48, height: 48, borderRadius: 14,
+                width: 46, height: 46, borderRadius: 12,
                 background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
                 display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
               }}>
-                <i className="ti ti-loader-2" style={{ fontSize: 22, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
+                <i className="ti ti-loader-2" style={{ fontSize: 20, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
               </div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Running K-Means clustering…</div>
-              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and generating AI interpretation</div>
+              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and preparing results</div>
             </div>
           </div>
         )}
 
-        {/* Empty state */}
+        {/* ── Empty state ── */}
         {!loading && !result && !error && (
           <div style={s.card}>
             <div style={s.emptyState}>
               <div style={{
-                width: 56, height: 56, borderRadius: 16,
+                width: 52, height: 52, borderRadius: 14,
                 background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
                 display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
               }}>
-                <i className="ti ti-chart-dots-3" style={{ fontSize: 26, color: "#e8a0a0" }} />
+                <i className="ti ti-chart-dots-3" style={{ fontSize: 24, color: "#e8a0a0" }} />
               </div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>No analysis yet</div>
               <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4, maxWidth: 340, lineHeight: 1.6 }}>
@@ -571,60 +606,88 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Results */}
+        {/* ── Results ── */}
         {result && (
           <>
-            {/* Meta bar */}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            {/* Meta chips */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {[
                 { label: "Students",    value: result.meta.total_students, icon: "ti-users"        },
-                { label: "Grade Level", value: result.meta.grade_level,    icon: "ti-school"       },
+                { label: "Grade Level", value: result.meta.grade_level || "All",    icon: "ti-school"       },
                 { label: "Subject",     value: result.meta.subject,        icon: "ti-book"         },
                 { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
                 { label: "Clusters",    value: result.meta.n_clusters,     icon: "ti-chart-dots-3" },
               ].map((m) => (
                 <div key={m.label} style={{
-                  flex: "1 1 140px", padding: "12px 16px", borderRadius: 12,
-                  background: "white", border: "1px solid #ede9e1",
+                  flex: "1 1 130px", padding: "11px 14px", borderRadius: 10,
+                  background: "white", border: "1px solid #f0ece4",
                   display: "flex", alignItems: "center", gap: 10,
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
                 }}>
-                  <i className={`ti ${m.icon}`} style={{ fontSize: 16, color: "#e03131" }} />
+                  <div style={{
+                    width: 30, height: 30, borderRadius: 8,
+                    background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <i className={`ti ${m.icon}`} style={{ fontSize: 14, color: "#e03131" }} />
+                  </div>
                   <div>
-                    <div style={{ fontSize: 10.5, color: "#a09890", fontWeight: 600, textTransform: "uppercase" }}>{m.label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
+                    <div style={{ fontSize: 10, color: "#a09890", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Cluster legend */}
-            <div style={{ ...s.card, paddingBottom: 18 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 12 }}>Cluster Overview</div>
-              <ClusterLegend clusters={result.clusters} />
+            {/* Cluster Overview */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div>
+                  <div style={s.cardHeaderTitle}>Cluster Overview</div>
+                  <div style={s.cardHeaderSub}>Performance bands identified by K-Means</div>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                  borderRadius: 20, background: "#fff0f0", color: "#e03131",
+                }}>
+                  k = {result.meta.n_clusters}
+                </span>
+              </div>
+              <div style={s.cardBody}>
+                <ClusterLegend clusters={result.clusters} />
+              </div>
             </div>
 
             {/* Scatter Plot */}
             <div style={s.card}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 14 }}>
-                Student Distribution
-                <span style={{ fontSize: 12, fontWeight: 400, color: "#a09890", marginLeft: 8 }}>
-                  Click any dot to see student details
-                </span>
+              <div style={s.cardHeader}>
+                <div>
+                  <div style={s.cardHeaderTitle}>Student Distribution</div>
+                  <div style={s.cardHeaderSub}>PCA projection · click any dot to view student details</div>
+                </div>
               </div>
-              <ScatterPlot
-                clusters={result.clusters}
-                selectedStudent={selectedStudent}
-                onSelectStudent={setSelectedStudent}
-              />
-              <StudentDetailPanel student={selectedStudent} onClose={() => setSelectedStudent(null)} />
+              <div style={s.cardBody}>
+                <ScatterPlot
+                  clusters={result.clusters}
+                  selectedStudent={selectedStudent}
+                  onSelectStudent={setSelectedStudent}
+                />
+                <StudentDetailPanel student={selectedStudent} onClose={() => setSelectedStudent(null)} />
+              </div>
             </div>
 
-            {/* Student list */}
-            <div style={s.card}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a", marginBottom: 14 }}>
-                Student List
-                <span style={{ fontSize: 12, fontWeight: 400, color: "#a09890", marginLeft: 8 }}>
-                  Sorted by grade (lowest first)
+            {/* Student List */}
+            <div style={{ ...s.card, overflow: "hidden" }}>
+              <div style={s.cardHeader}>
+                <div>
+                  <div style={s.cardHeaderTitle}>Student List</div>
+                  <div style={s.cardHeaderSub}>All clustered students · sorted by grade (lowest first)</div>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                  borderRadius: 20, background: "#f5f3ef", color: "#6a6460",
+                }}>
+                  {result.meta.total_students} student{result.meta.total_students !== 1 ? "s" : ""}
                 </span>
               </div>
               <StudentTable
@@ -634,11 +697,11 @@ export default function AnalyticsPage() {
               />
             </div>
 
-            {/* AI Interpretation
-                Uses a unique key so the panel fully resets on each new analysis
-                instead of showing output from a previous run. */}
+            {/* AI Interpretation & Recommendations
+                key forces a full remount on each new analysis run so stale
+                output from a previous query never bleeds into the new one. */}
             <ClusterInsightPanel
-              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}`}
+              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
               result={result}
             />
           </>

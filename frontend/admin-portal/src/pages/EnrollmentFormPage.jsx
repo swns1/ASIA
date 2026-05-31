@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 
 // ── API calls ─────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8003/api";
@@ -9,6 +10,19 @@ function getToken() {
   return sessionStorage.getItem("access_token") || "";
 }
 
+async function parseApiError(res) {
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text);
+    const msgs = Object.values(json).flatMap((v) =>
+      Array.isArray(v) ? v.map(String) : [String(v)]
+    );
+    return msgs.join(" | ") || `HTTP ${res.status}`;
+  } catch {
+    return text || `HTTP ${res.status}`;
+  }
+}
+
 async function apiCall(method, url, body = null) {
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
@@ -16,22 +30,20 @@ async function apiCall(method, url, body = null) {
   const opts = { method, headers };
   if (body && method !== "GET") opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`${res.status}: ${err}`);
-  }
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json();
 }
 
-const getStudents             = (p = {}) => apiCall("GET",   `${AUTH_API}/api/students/?${new URLSearchParams(p)}`);
-const getStudent              = (id)     => apiCall("GET",   `${AUTH_API}/api/students/${id}/`);
-const createEnrollment        = (p)      => apiCall("POST",  `${API_BASE}/enrollments/`, p);
-const getEnrollment           = (id)     => apiCall("GET",   `${API_BASE}/enrollments/${id}/`);
-const updateEnrollment        = (id, p)  => apiCall("PATCH", `${API_BASE}/enrollments/${id}/`, p);
-const getScholarshipTypes     = ()       => apiCall("GET",   `${API_BASE}/scholarship-types/?is_active=true`);
-const createEnrollmentScholarship = (p)  => apiCall("POST",  `${API_BASE}/enrollment-scholarships/`, p);
-const sendEnrollmentEmail = (p) => apiCall("POST", `http://localhost:8003/api/send-enrollment-email/`, p);
-const getStudentEnrollments   = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/?student=${sid}&page_size=100`);
+const getStudents                 = (p = {}) => apiCall("GET",   `${AUTH_API}/api/students/?${new URLSearchParams(p)}`);
+const getStudent                  = (id)     => apiCall("GET",   `${AUTH_API}/api/students/${id}/`);
+const createEnrollment            = (p)      => apiCall("POST",  `${API_BASE}/enrollments/`, p);
+const getEnrollment               = (id)     => apiCall("GET",   `${API_BASE}/enrollments/${id}/`);
+const updateEnrollment            = (id, p)  => apiCall("PATCH", `${API_BASE}/enrollments/${id}/`, p);
+const getScholarshipTypes         = ()       => apiCall("GET",   `${API_BASE}/scholarship-types/?is_active=true`);
+const createEnrollmentScholarship = (p)      => apiCall("POST",  `${API_BASE}/enrollment-scholarships/`, p);
+const sendEnrollmentEmail         = (p)      => apiCall("POST",  `http://localhost:8003/api/send-enrollment-email/`, p);
+const getStudentEnrollments       = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/?student=${sid}&page_size=100`);
+const getStudentEligibility       = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/eligibility/?student_id=${sid}`);
 
 // ─── Style tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -183,6 +195,135 @@ function SectionCard({ title, icon, badge, children }) {
   );
 }
 
+// ─── EligibilityPanel ────────────────────────────────────────────────────────
+function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin }) {
+  if (loading) {
+    return (
+      <div style={{ background: "#fff8f6", border: `1px solid ${C.redMid}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 13 }}>
+        <i className="ti ti-loader-2" style={{ fontSize: 15, color: C.red, animation: "spin 1s linear infinite" }} />
+        Checking enrollment eligibility…
+      </div>
+    );
+  }
+
+  if (!eligibility) return null;
+
+  const { is_eligible, is_new_student, blocking_reasons, missing_docs, can_repeat, admin_override_required, next_allowed_grade, last_enrollment } = eligibility;
+
+  if (is_new_student) {
+    return (
+      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="ti ti-star" style={{ fontSize: 15, color: "#16a34a" }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>New Student</div>
+          <div style={{ fontSize: 12, color: "#166534", marginTop: 1 }}>No prior enrollment records. Student can be enrolled in any grade level.</div>
+        </div>
+      </div>
+    );
+  }
+
+  const panelBg    = is_eligible ? "#f0fdf4"  : overrideMode ? "#fffbeb"  : "#fef2f2";
+  const panelBord  = is_eligible ? "#bbf7d0"  : overrideMode ? "#fde68a"  : "#fca5a5";
+  const iconColor  = is_eligible ? "#16a34a"  : overrideMode ? "#d97706"  : C.red;
+  const iconBg     = is_eligible ? "#dcfce7"  : overrideMode ? "#fef3c7"  : C.redLight;
+  const iconName   = is_eligible ? "ti-circle-check" : overrideMode ? "ti-alert-triangle" : "ti-circle-x";
+  const titleColor = is_eligible ? "#15803d"  : overrideMode ? "#92400e"  : "#991b1b";
+  const titleText  = is_eligible ? "Eligible for Enrollment" : overrideMode ? "Override Active — Proceed with Caution" : "Enrollment Blocked";
+
+  return (
+    <div style={{ background: panelBg, border: `1px solid ${panelBord}`, borderRadius: 14, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className={`ti ${iconName}`} style={{ fontSize: 16, color: iconColor }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: titleColor }}>{titleText}</div>
+          {last_enrollment && (
+            <div style={{ fontSize: 11, color: "#666", marginTop: 1 }}>
+              Last completed: <strong>{last_enrollment.grade_level}</strong>
+              {last_enrollment.semester ? ` (${last_enrollment.semester} Sem)` : ""}
+              {next_allowed_grade && <> → Next allowed: <strong style={{ color: iconColor }}>{next_allowed_grade}</strong></>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Blocking reasons */}
+      {blocking_reasons.length > 0 && (
+        <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#991b1b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            <i className="ti ti-alert-circle" style={{ marginRight: 5 }} />Failed / Incomplete Subjects
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+            {blocking_reasons.map((r, i) => (
+              <li key={i} style={{ fontSize: 12, color: "#7f1d1d" }}>{r}</li>
+            ))}
+          </ul>
+          {can_repeat && (
+            <div style={{ fontSize: 11, color: "#92400e", marginTop: 8, fontStyle: "italic" }}>
+              Student may repeat the same grade level (retention).
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Missing documents */}
+      {missing_docs.length > 0 && (
+        <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            <i className="ti ti-file-x" style={{ marginRight: 5 }} />Missing Required Documents ({missing_docs.length})
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+            {missing_docs.map((d) => (
+              <li key={d.requirement_type_id} style={{ fontSize: 12, color: "#7c2d12" }}>{d.requirement_name}</li>
+            ))}
+          </ul>
+          <div style={{ fontSize: 11, color: "#78350f", marginTop: 8, fontStyle: "italic" }}>
+            Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
+          </div>
+        </div>
+      )}
+
+      {/* Admin override toggle — only shown to admin users */}
+      {admin_override_required && isAdmin && (
+        <div style={{ borderTop: `1px solid ${panelBord}`, paddingTop: 12 }}>
+          <button
+            type="button"
+            onClick={onToggleOverride}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7,
+              padding: "7px 14px", borderRadius: 99, fontSize: 12, fontWeight: 700,
+              border: `1.5px solid ${overrideMode ? "#d97706" : "#d1d5db"}`,
+              background: overrideMode ? "#fef3c7" : "white",
+              color: overrideMode ? "#92400e" : "#374151",
+              cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s",
+            }}>
+            <i className={`ti ${overrideMode ? "ti-lock-open" : "ti-lock"}`} style={{ fontSize: 13 }} />
+            {overrideMode ? "Override Active" : "Admin Override"}
+          </button>
+          {overrideMode && (
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
+                Override Reason <span style={{ color: C.red }}>*</span>
+              </label>
+              <textarea
+                value={overrideReason}
+                onChange={(e) => onChangeReason(e.target.value)}
+                placeholder="Explain why the grade progression rule is being bypassed (e.g. transferee with incomplete records, admin approval)…"
+                rows={2}
+                style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
@@ -316,12 +457,26 @@ export default function EnrollmentFormPage() {
   const { id }   = useParams();
   const navigate = useNavigate();
   const isEdit   = Boolean(id);
+  const isAdmin  = canViewAuditTrail(getCurrentUser());
 
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [student, setStudent] = useState(null);
   const [studentLastGrade, setStudentLastGrade] = useState(null);
+
+  // Eligibility state (new enrollment)
+  const [eligibility,        setEligibility]        = useState(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [overrideMode,       setOverrideMode]       = useState(false);
+  const [overrideReason,     setOverrideReason]     = useState("");
+
+  // Edit-mode grade placement unlock state
+  const [gradePlacementUnlocked, setGradePlacementUnlocked] = useState(false);
+  const [gradePlacementReason,   setGradePlacementReason]   = useState("");
+
+  // Original grade fields when editing — used to detect if they actually changed
+  const [originalGradeFields, setOriginalGradeFields] = useState(null);
 
   const [form, setForm] = useState({
     school_year:       defaultSchoolYear(),
@@ -357,6 +512,13 @@ export default function EnrollmentFormPage() {
           semester:          e.semester ?? "",
           enrollment_status: e.enrollment_status,
         });
+        setOriginalGradeFields({
+          school_year:  e.school_year ?? defaultSchoolYear(),
+          school_level: e.school_level,
+          grade_level:  e.grade_level,
+          strand:       e.strand ?? "",
+          semester:     e.semester ?? "",
+        });
         if (e.student_id) {
           const s = await getStudent(e.student_id).catch(() => null);
           if (s) setStudent(s);
@@ -386,10 +548,16 @@ export default function EnrollmentFormPage() {
     if (!st) {
       setStudent(null);
       setStudentLastGrade(null);
+      setEligibility(null);
+      setOverrideMode(false);
+      setOverrideReason("");
       return;
     }
     setStudent(st);
     setStudentLastGrade(lastGrade ?? null);
+    setOverrideMode(false);
+    setOverrideReason("");
+
     if (lastGrade) {
       const next = getNextGradeLevel(lastGrade);
       if (next) {
@@ -397,11 +565,29 @@ export default function EnrollmentFormPage() {
         setForm((f) => ({ ...f, school_level: level, grade_level: next, strand: "", semester: level === "senior_highschool" ? (f.semester || "1st") : "" }));
       }
     }
+
+    // Fetch eligibility report for the selected student
+    setEligibilityLoading(true);
+    getStudentEligibility(st.student_id)
+      .then((data) => setEligibility(data))
+      .catch(() => setEligibility(null))
+      .finally(() => setEligibilityLoading(false));
   };
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleScholarship = (sid) =>
     setSelectedSchols((arr) => arr.includes(sid) ? arr.filter((x) => x !== sid) : [...arr, sid]);
+
+  const gradePlacementChanged = useMemo(() => {
+    if (!isEdit || !originalGradeFields) return false;
+    return (
+      form.school_year  !== originalGradeFields.school_year  ||
+      form.school_level !== originalGradeFields.school_level ||
+      form.grade_level  !== originalGradeFields.grade_level  ||
+      form.strand       !== originalGradeFields.strand        ||
+      form.semester     !== originalGradeFields.semester
+    );
+  }, [isEdit, form, originalGradeFields]);
 
   const validationError = useMemo(() => {
     if (!student && !isEdit)          return "Please select a student.";
@@ -411,19 +597,30 @@ export default function EnrollmentFormPage() {
     if (!form.section.trim())         return "Section is required.";
     if (isSHS && !form.semester)      return "Semester is required for Senior HS.";
     if (isSHS && !form.strand.trim()) return "Strand is required for Senior HS.";
-    if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade)
+    if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade && !overrideMode)
       return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
+    if (!isEdit && overrideMode && !overrideReason.trim())
+      return "An override reason is required when bypassing grade progression rules.";
+    if (isEdit && gradePlacementChanged && !gradePlacementReason.trim())
+      return "A reason is required when changing grade placement on an existing enrollment.";
     return "";
-  }, [student, form, isSHS, isEdit, nextAllowedGrade, studentLastGrade]);
+  }, [student, form, isSHS, isEdit, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason]);
 
     const handleSubmit = async () => {
       setError("");
       if (validationError) { setError(validationError); return; }
       setSaving(true);
-      console.log("Student object:", student);
       try {
         const payload = nullify({ ...form, student: student.student_id }, ["strand", "semester"]);
-        if (isEdit) { 
+        if (overrideMode) {
+          payload.progression_override = true;
+          payload.progression_override_reason = overrideReason.trim();
+        }
+        if (isEdit) {
+          if (gradePlacementChanged) {
+            payload.progression_override = true;
+            payload.progression_override_reason = gradePlacementReason.trim();
+          }
           await updateEnrollment(id, payload);
         } else {
           const created = await createEnrollment(payload);
@@ -518,13 +715,34 @@ export default function EnrollmentFormPage() {
               )}
             </SectionCard>
 
+            {/* Eligibility panel — new enrollments only */}
+            {!isEdit && student && (
+              <EligibilityPanel
+                eligibility={eligibility}
+                loading={eligibilityLoading}
+                overrideMode={overrideMode}
+                overrideReason={overrideReason}
+                onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
+                onChangeReason={setOverrideReason}
+                isAdmin={isAdmin}
+              />
+            )}
+
             {/* 2. Term */}
             <SectionCard title="Academic Term" icon="ti-calendar-event">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-                <Field label="School Year" required>
-                  <Select value={form.school_year} onChange={(e) => setField("school_year", e.target.value)}>
-                    {buildSchoolYearOptions().map((sy) => <option key={sy} value={sy}>{sy}</option>)}
-                  </Select>
+                <Field label="School Year" required
+                  hint={isEdit && !gradePlacementUnlocked ? "Locked — unlock grade placement to change." : undefined}>
+                  {isEdit && !gradePlacementUnlocked ? (
+                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                      {form.school_year}
+                    </div>
+                  ) : (
+                    <Select value={form.school_year} onChange={(e) => setField("school_year", e.target.value)}>
+                      {buildSchoolYearOptions().map((sy) => <option key={sy} value={sy}>{sy}</option>)}
+                    </Select>
+                  )}
                 </Field>
                 <Field label="Enrollment Status" required>
                   <Select value={form.enrollment_status} onChange={(e) => setField("enrollment_status", e.target.value)}>
@@ -535,12 +753,72 @@ export default function EnrollmentFormPage() {
             </SectionCard>
 
             {/* 3. Class Assignment */}
-            <SectionCard title="Class Assignment" icon="ti-school">
+            <SectionCard title="Class Assignment" icon="ti-school"
+              badge={isEdit && gradePlacementChanged ? "Modified" : null}>
+
+              {/* Edit-mode: lock banner + unlock toggle */}
+              {isEdit && (
+                <div style={{
+                  marginBottom: 16,
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: gradePlacementUnlocked ? "#fffbeb" : "#f8fafc",
+                  border: `1px solid ${gradePlacementUnlocked ? "#fde68a" : "#e2e8f0"}`,
+                  display: "flex", alignItems: "flex-start", gap: 12,
+                }}>
+                  <i className={`ti ${gradePlacementUnlocked ? "ti-lock-open" : "ti-lock"}`}
+                    style={{ fontSize: 16, color: gradePlacementUnlocked ? "#d97706" : "#64748b", marginTop: 1, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: gradePlacementUnlocked ? "#92400e" : "#334155" }}>
+                      {gradePlacementUnlocked ? "Grade placement unlocked — changes will be audited" : "Grade placement is locked"}
+                    </div>
+                    <div style={{ fontSize: 11, color: gradePlacementUnlocked ? "#a16207" : "#64748b", marginTop: 2 }}>
+                      {gradePlacementUnlocked
+                        ? "You may now change grade level, school level, strand, or semester. A reason is required."
+                        : "School level, grade level, strand, and semester cannot be changed without admin override."}
+                    </div>
+                    {gradePlacementUnlocked && (
+                      <div style={{ marginTop: 10 }}>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
+                          Reason for change <span style={{ color: C.red }}>*</span>
+                        </label>
+                        <textarea
+                          value={gradePlacementReason}
+                          onChange={(e) => setGradePlacementReason(e.target.value)}
+                          placeholder="Explain why the grade placement is being corrected (e.g. data entry error, transferee re-classification)…"
+                          rows={2}
+                          style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGradePlacementUnlocked((v) => !v);
+                      setGradePlacementReason("");
+                      // Reset grade fields to original when re-locking
+                      if (gradePlacementUnlocked && originalGradeFields) {
+                        setForm((f) => ({ ...f, ...originalGradeFields }));
+                      }
+                    }}
+                    style={{
+                      flexShrink: 0, padding: "6px 13px", borderRadius: 99, fontSize: 12, fontWeight: 700,
+                      border: `1.5px solid ${gradePlacementUnlocked ? "#fcd34d" : "#cbd5e1"}`,
+                      background: gradePlacementUnlocked ? "#fef3c7" : "white",
+                      color: gradePlacementUnlocked ? "#92400e" : "#475569",
+                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                    }}>
+                    {gradePlacementUnlocked ? "Re-lock" : "Unlock"}
+                  </button>
+                </div>
+              )}
+
               <Field label="School Level" required>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {SCHOOL_LEVELS.map((lvl) => {
                     const active = form.school_level === lvl.value;
-                    const locked = !isEdit && Boolean(nextAllowedGrade);
+                    const locked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(nextAllowedGrade));
                     return (
                       <button key={lvl.value} type="button"
                         onClick={() => !locked && setField("school_level", lvl.value)}
@@ -553,10 +831,10 @@ export default function EnrollmentFormPage() {
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
                 <Field label="Grade Level" required hint={!isEdit && nextAllowedGrade ? `Locked to ${nextAllowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
-                  {!isEdit && nextAllowedGrade ? (
-                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#fff8f0", borderColor: "#fcd9a8", color: "#b45309", fontWeight: 700, cursor: "not-allowed" }}>
-                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#b45309" }} />
-                      {nextAllowedGrade}
+                  {(isEdit && !gradePlacementUnlocked) || (!isEdit && nextAllowedGrade) ? (
+                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                      {form.grade_level}
                     </div>
                   ) : (
                     <Select value={form.grade_level} onChange={(e) => setField("grade_level", e.target.value)}>
@@ -573,15 +851,29 @@ export default function EnrollmentFormPage() {
                   <div style={{ fontSize: 11, color: C.red, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Senior HS specifics</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
                     <Field label="Strand" required>
-                      <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
-                        <option value="">— Select strand —</option>
-                        {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </Select>
+                      {isEdit && !gradePlacementUnlocked ? (
+                        <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                          <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                          {form.strand || "—"}
+                        </div>
+                      ) : (
+                        <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
+                          <option value="">— Select strand —</option>
+                          {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </Select>
+                      )}
                     </Field>
                     <Field label="Semester" required>
-                      <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
-                        {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </Select>
+                      {isEdit && !gradePlacementUnlocked ? (
+                        <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                          <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                          {form.semester || "—"}
+                        </div>
+                      ) : (
+                        <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
+                          {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </Select>
+                      )}
                     </Field>
                   </div>
                 </div>

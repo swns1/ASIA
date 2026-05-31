@@ -89,3 +89,29 @@ class Enrollment(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"#{self.enrollment_id} · student={self.student_id} · SY {self.school_year}"
+
+
+# ─── Enrollment Override audit ───────────────────────────────────────────────
+class EnrollmentOverride(models.Model):
+    """
+    Audit record created whenever a staff member bypasses grade progression or
+    subject-completion rules via progression_override=true.
+    """
+
+    enrollment_override_id = models.BigAutoField(primary_key=True)
+    enrollment = models.OneToOneField(
+        Enrollment,
+        on_delete=models.CASCADE,
+        db_column="enrollment_id",
+        related_name="override",
+    )
+    override_reason = models.TextField()
+    overridden_by = models.IntegerField()   # user_id from identity-service JWT
+    overridden_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "enrollment_overrides"
+
+    def __str__(self):  # pragma: no cover
+        return f"Override for enrollment #{self.enrollment_id} by user #{self.overridden_by}"
