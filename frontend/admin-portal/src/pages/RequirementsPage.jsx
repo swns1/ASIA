@@ -13,6 +13,9 @@ import {
 
 
 
+// ── Debug flag — set to false to hide dev-only UI ─────────────────────────────
+const DEV_MODE = true;
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
   red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
@@ -451,6 +454,32 @@ export default function RequirementsPage() {
     }
   }
 
+  const [completing, setCompleting] = useState(false);
+
+  async function handleCompleteAll() {
+    const pending = requirements.filter((r) => !r.is_submitted);
+    if (!pending.length) return;
+    setCompleting(true);
+    const placeholder = new File(["debug"], "debug_placeholder.txt", { type: "text/plain" });
+    try {
+      await Promise.all(
+        pending.map((req) =>
+          uploadRequirement({
+            studentId: selectedStudent.student_id,
+            requirementTypeId: req.requirement_type_id,
+            file: placeholder,
+            remarks: "debug auto-complete",
+          })
+        )
+      );
+      await reloadRequirements();
+    } catch (e) {
+      setReqError(e.message || "Failed to complete all requirements.");
+    } finally {
+      setCompleting(false);
+    }
+  }
+
   const submitted = requirements.filter((r) => r.is_submitted).length;
   const pending   = requirements.length - submitted;
 
@@ -611,16 +640,31 @@ export default function RequirementsPage() {
                       {submitted} of {requirements.length} submitted
                     </div>
                   </div>
-                  {requirements.length > 0 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ height: 8, width: 120, borderRadius: 99, background: "#f0e4e4", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${requirements.length ? (submitted / requirements.length) * 100 : 0}%`, background: `linear-gradient(90deg,${C.green},#43a047)`, borderRadius: 99, transition: "width 0.4s" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {requirements.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ height: 8, width: 120, borderRadius: 99, background: "#f0e4e4", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${requirements.length ? (submitted / requirements.length) * 100 : 0}%`, background: `linear-gradient(90deg,${C.green},#43a047)`, borderRadius: 99, transition: "width 0.4s" }} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>
+                          {requirements.length ? Math.round((submitted / requirements.length) * 100) : 0}%
+                        </span>
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>
-                        {requirements.length ? Math.round((submitted / requirements.length) * 100) : 0}%
-                      </span>
-                    </div>
-                  )}
+                    )}
+                    {DEV_MODE && pending > 0 && (
+                      <button
+                        onClick={handleCompleteAll}
+                        disabled={completing}
+                        title="DEBUG: mark all pending requirements as submitted"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", border: "1.5px dashed #f59e0b", borderRadius: 8, background: "#fffbeb", color: "#92400e", fontSize: 11, fontWeight: 700, cursor: completing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", opacity: completing ? 0.6 : 1 }}
+                      >
+                        {completing
+                          ? <><i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 0.8s linear infinite" }} />Completing…</>
+                          : <><i className="ti ti-bug" style={{ fontSize: 12 }} />Complete All (dev)</>
+                        }
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ padding: "18px 20px" }}>
