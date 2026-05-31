@@ -98,10 +98,12 @@ function SectionCard({ title, icon, children, badge }) {
       boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
       animation: "fadeUp 0.3s ease both",
     }}>
+      {/* Accent strip — matches the hero card's top gradient */}
+      <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "16px 22px", borderBottom: "1px solid #f9f0f0",
-        background: "linear-gradient(to right, #fdfafa, white)",
+        padding: "14px 22px", borderBottom: "1px solid #f9f0f0",
+        background: "linear-gradient(to right, #fff8f8, white)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
@@ -111,7 +113,7 @@ function SectionCard({ title, icon, children, badge }) {
           }}>
             <i className={`ti ${icon}`} style={{ fontSize: 16, color: "#e03131" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a"}}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>
             {title}
           </span>
         </div>
@@ -498,12 +500,14 @@ export default function StudentDetailPage() {
                           overflow:"hidden",
                         }}
                       >
+                        {/* Accent strip */}
+                        <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
                         {/* Card header */}
                         <div style={{
                           padding:"14px 22px",
                           background: g.is_primary_contact
                             ? "linear-gradient(to right, #fff0f0, #fdfafa)"
-                            : "linear-gradient(to right, #fdfafa, white)",
+                            : "linear-gradient(to right, #fff8f8, white)",
                           borderBottom:"1px solid #f9f0f0",
                           display:"flex", alignItems:"center", justifyContent:"space-between",
                         }}>
@@ -601,9 +605,11 @@ export default function StudentDetailPage() {
                           overflow:"hidden",
                         }}
                       >
+                        {/* Accent strip */}
+                        <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
                         <div style={{
                           padding:"14px 22px",
-                          background:"linear-gradient(to right, #fdfafa, white)",
+                          background:"linear-gradient(to right, #fff8f8, white)",
                           borderBottom:"1px solid #f9f0f0",
                           display:"flex", alignItems:"center", gap:12,
                         }}>

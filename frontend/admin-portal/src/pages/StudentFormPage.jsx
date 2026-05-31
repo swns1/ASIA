@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { createStudent, getStudent, updateStudent } from "../api/studentApi";
 import {
@@ -25,7 +25,15 @@ import {
   updateHousehold,
 } from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
-import OcrScanButton from "../components/OcrScanButton";
+import {
+  fetchRequirementTypes,
+  fetchRequirementSummary,
+  uploadRequirement,
+  replaceRequirement,
+  removeRequirement,
+  resolveMediaUrl,
+} from "../api/requirementApi";
+import { scanDocument } from "../api/ocrApi";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const nullify = (obj, fields) => {
@@ -59,7 +67,8 @@ const emptySchool = { school_name: "", school_address: "" };
 
 // ─── step config ─────────────────────────────────────────────────────────────
 const STEPS = [
-  { id: "student",   label: "Student",        icon: "ti-user" },
+  { id: "documents", label: "Documents",       icon: "ti-file-check" },
+  { id: "student",   label: "Student",         icon: "ti-user" },
   { id: "household", label: "Household",       icon: "ti-home" },
   { id: "guardians", label: "Guardians",       icon: "ti-users" },
   { id: "siblings",  label: "Siblings",        icon: "ti-friends" },
@@ -166,17 +175,20 @@ function Textarea({ style, ...props }) {
 }
 
 // ─── step indicator ──────────────────────────────────────────────────────────
-function StepBar({ current }) {
+function StepBar({ current, onStepClick }) {
   return (
     <div style={{ display: "flex", alignItems: "center", marginBottom: 32, gap: 0 }}>
       {STEPS.map((s, i) => {
         const done = i < current;
         const active = i === current;
+        const clickable = i !== current;
         return (
           <div key={s.id} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-            }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: clickable ? "pointer" : "default" }}
+              onClick={() => clickable && onStepClick(i)}
+              title={clickable ? `Go to ${s.label}` : undefined}
+            >
               <div style={{
                 width: 36, height: 36, borderRadius: "50%",
                 background: done ? C.red : active ? C.redLight : "#f3e8e8",
@@ -189,7 +201,7 @@ function StepBar({ current }) {
                 {done ? "✓" : <i className={`ti ${s.icon}`} style={{ fontSize: 16 }} />}
               </div>
               <span style={{
-                fontSize: 10, fontWeight: active ? 700 : 500,
+                fontSize: 9, fontWeight: active ? 700 : 500,
                 color: active ? C.red : done ? C.muted : "#c4a4a0",
                 letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap",
               }}>
@@ -213,24 +225,70 @@ function StepBar({ current }) {
 // STEP COMPONENTS
 // ════════════════════════════════════════════════════════════════════════════
 
+// Shared section header used across all steps
+function SectionHeader({ icon, title, subtitle }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, paddingBottom: 14, borderBottom: `1.5px solid ${C.redMid}` }}>
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <i className={`ti ${icon}`} style={{ fontSize: 18, color: C.red }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{subtitle}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Thin divider with label between field groups
+function Divider({ label }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 16px" }}>
+      <div style={{ flex: 1, height: 1, background: C.redMid }} />
+      <span style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: C.redMid }} />
+    </div>
+  );
+}
+
 function StudentStep({ data, onChange }) {
   const h = (e) => onChange({ ...data, [e.target.name]: e.target.value });
+
+  const statusColors = {
+    active:      { bg: "#e8f5e0", color: "#2e7d32", border: "#a5d6a7" },
+    inactive:    { bg: "#f5f5f5", color: "#757575", border: "#e0e0e0" },
+    transferred: { bg: "#e3f2fd", color: "#1565c0", border: "#90caf9" },
+    graduated:   { bg: "#fff8e1", color: "#f57f17", border: "#ffe082" },
+    dropped:     { bg: "#fce4ec", color: "#c62828", border: "#f48fb1" },
+  };
+  const sc = statusColors[data.status] || statusColors.active;
+
   return (
     <div>
-      <h3 style={{ marginBottom: 20, color: C.dark }}>
-        Student Information
-      </h3>
+      <SectionHeader icon="ti-user" title="Student Information" subtitle="Basic identity and enrollment details" />
+
+      {/* LRN + Status row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
         <Field label="LRN *">
           <Input name="lrn" value={data.lrn} onChange={h} required placeholder="e.g. 123456789012" />
         </Field>
-        <Field label="Status">
-          <Select name="status" value={data.status} onChange={h}>
-            {["active","inactive","transferred","graduated","dropped"].map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </Select>
+        <Field label="Enrollment Status">
+          <div style={{ position: "relative" }}>
+            <Select name="status" value={data.status} onChange={h}
+              style={{ paddingLeft: 36, background: sc.bg, borderColor: sc.border, color: sc.color, fontWeight: 700 }}>
+              {["active","inactive","transferred","graduated","dropped"].map(s => (
+                <option key={s} value={s} style={{ background: "#fff", color: C.dark, fontWeight: 400 }}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </Select>
+            <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", width: 8, height: 8, borderRadius: "50%", background: sc.color, pointerEvents: "none" }} />
+          </div>
         </Field>
+      </div>
+
+      <Divider label="Full Name" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
         <Field label="First Name *">
           <Input name="first_name" value={data.first_name} onChange={h} required placeholder="Juan" />
         </Field>
@@ -243,6 +301,10 @@ function StudentStep({ data, onChange }) {
         <Field label="Suffix">
           <Input name="suffix" value={data.suffix || ""} onChange={h} placeholder="Jr., Sr., III" />
         </Field>
+      </div>
+
+      <Divider label="Personal Details" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
         <Field label="Sex *">
           <Select name="sex" value={data.sex} onChange={h}>
             <option value="male">Male</option>
@@ -255,18 +317,20 @@ function StudentStep({ data, onChange }) {
         <Field label="Religion">
           <Input name="religion" value={data.religion || ""} onChange={h} placeholder="Optional" />
         </Field>
-        <Field label="Email">
-          <Input type="email" name="email" value={data.email || ""} onChange={h} placeholder="Optional" />
-        </Field>
         <Field label="Mobile Number">
           <Input name="mobile_number" value={data.mobile_number || ""} onChange={h} placeholder="09XXXXXXXXX" />
         </Field>
+        <Field label="Email" style={{ gridColumn: "1 / -1" }}>
+          <Input type="email" name="email" value={data.email || ""} onChange={h} placeholder="Optional" />
+        </Field>
       </div>
+
+      <Divider label="Address" />
       <Field label="Current Address *">
         <Textarea name="current_address" value={data.current_address} onChange={h} required placeholder="House No., Street, Barangay, City" />
       </Field>
       <Field label="Permanent Address *">
-        <Textarea name="permanent_address" value={data.permanent_address} onChange={h} required placeholder="Same as current or different" />
+        <Textarea name="permanent_address" value={data.permanent_address} onChange={h} required placeholder="Same as current if identical" />
       </Field>
     </div>
   );
@@ -277,45 +341,81 @@ function HouseholdStep({ data, onChange }) {
     const val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
     onChange({ ...data, [e.target.name]: val });
   };
+
+  const maritalOptions = [
+    { value: "married",       label: "Married",       icon: "ti-heart" },
+    { value: "separated",     label: "Separated",     icon: "ti-heart-broken" },
+    { value: "annulled",      label: "Annulled",      icon: "ti-x" },
+    { value: "single_parent", label: "Single Parent", icon: "ti-user" },
+    { value: "widowed",       label: "Widowed",       icon: "ti-star" },
+  ];
+
+  const arrangementOptions = [
+    { value: "both_parents", label: "Both Parents" },
+    { value: "mother_only",  label: "Mother Only" },
+    { value: "father_only",  label: "Father Only" },
+    { value: "guardian",     label: "Guardian" },
+    { value: "relative",     label: "Relative" },
+    { value: "independent",  label: "Independent" },
+    { value: "others",       label: "Others" },
+  ];
+
   return (
     <div>
-      <h3 style={{ marginBottom: 20, color: C.dark }}>
-        Household Information
-      </h3>
-      <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
-        All fields are optional. Fill in what's applicable.
-      </p>
+      <SectionHeader icon="ti-home" title="Household Information" subtitle="All fields are optional — fill in what's applicable" />
+
+      <Divider label="Parents" />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
         <Field label="Parent Marital Status">
           <Select name="parent_marital_status" value={data.parent_marital_status || ""} onChange={h}>
             <option value="">— Select —</option>
-            {["married","separated","annulled","single_parent","widowed"].map(s => (
-              <option key={s} value={s}>{s.replace("_", " ")}</option>
-            ))}
+            {maritalOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
         <Field label="Living Arrangement">
           <Select name="living_arrangement" value={data.living_arrangement || ""} onChange={h}>
             <option value="">— Select —</option>
-            {["both_parents","mother_only","father_only","guardian","relative","independent","others"].map(s => (
-              <option key={s} value={s}>{s.replace("_", " ")}</option>
-            ))}
+            {arrangementOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <input
-          type="checkbox" id="is4ps" name="is_4ps_beneficiary"
-          checked={data.is_4ps_beneficiary} onChange={h}
-          style={{ width: 16, height: 16, accentColor: C.red, cursor: "pointer" }}
-        />
-        <label htmlFor="is4ps" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>
-          4Ps Beneficiary
-        </label>
+
+      <Divider label="Government Programs" />
+      <div
+        onClick={() => onChange({ ...data, is_4ps_beneficiary: !data.is_4ps_beneficiary })}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 18px", borderRadius: 12, cursor: "pointer", marginBottom: 14,
+          border: `1.5px solid ${data.is_4ps_beneficiary ? C.red : C.redMid}`,
+          background: data.is_4ps_beneficiary ? C.redLight : C.white,
+          transition: "all .15s",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: data.is_4ps_beneficiary ? C.red : "#f3e8e8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <i className="ti ti-shield-check" style={{ fontSize: 16, color: data.is_4ps_beneficiary ? "#fff" : C.muted }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>4Ps Beneficiary</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Pantawid Pamilyang Pilipino Program</div>
+          </div>
+        </div>
+        <div style={{
+          width: 42, height: 24, borderRadius: 99, position: "relative", transition: "background .2s",
+          background: data.is_4ps_beneficiary ? C.red : "#e0d0d0",
+        }}>
+          <div style={{
+            position: "absolute", top: 3, left: data.is_4ps_beneficiary ? 21 : 3,
+            width: 18, height: 18, borderRadius: "50%", background: "#fff",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left .2s",
+          }} />
+        </div>
+        <input type="checkbox" name="is_4ps_beneficiary" checked={data.is_4ps_beneficiary} onChange={h} style={{ display: "none" }} />
       </div>
+
       {data.is_4ps_beneficiary && (
         <Field label="4Ps ID *">
-          <Input name="four_ps_id" value={data.four_ps_id || ""} onChange={h} placeholder="Required for 4Ps beneficiaries" required />
+          <Input name="four_ps_id" value={data.four_ps_id || ""} onChange={h} placeholder="Enter 4Ps beneficiary ID" required />
         </Field>
       )}
     </div>
@@ -328,62 +428,95 @@ function GuardiansStep({ data, onChange }) {
   const update = (i, field, val) => {
     const next = [...data];
     next[i] = { ...next[i], [field]: val };
-    // Only one primary contact
     if (field === "is_primary_contact" && val) {
       next.forEach((g, idx) => { if (idx !== i) next[idx] = { ...next[idx], is_primary_contact: false }; });
     }
     onChange(next);
   };
 
+  const relIcons = { mother: "ti-woman", father: "ti-man", guardian: "ti-user-shield" };
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{ color: C.dark, margin: 0 }}>Guardians</h3>
-        <button style={btnGhost} onClick={add} type="button">+ Add Guardian</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 0 }}>
+        <SectionHeader icon="ti-users" title="Guardians" subtitle={`${data.length} guardian${data.length !== 1 ? "s" : ""} added`} />
+        <button style={{ ...btnGhost, marginBottom: 20, flexShrink: 0 }} onClick={add} type="button">
+          <i className="ti ti-plus" style={{ fontSize: 13 }} /> Add Guardian
+        </button>
       </div>
+
       {data.length === 0 && (
-        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
-          No guardians added yet. Click "Add Guardian" to start.
+        <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <i className="ti ti-users" style={{ fontSize: 26, color: "#e8a0a0" }} />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No guardians added yet</div>
+          <div style={{ fontSize: 12 }}>Click "Add Guardian" to add a parent or guardian.</div>
         </div>
       )}
+
       {data.map((g, i) => (
-        <div key={i} style={{ ...cardStyle, position: "relative" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>
-              Guardian {i + 1}{g.guardian_id ? " (existing)" : " (new)"}
-            </span>
-            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-            <Field label="Full Name *">
-              <Input value={g.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
-            </Field>
-            <Field label="Relationship *">
-              <Select value={g.relationship} onChange={e => update(i, "relationship", e.target.value)}>
-                <option value="mother">Mother</option>
-                <option value="father">Father</option>
-                <option value="guardian">Guardian</option>
-              </Select>
-            </Field>
-            <Field label="Occupation">
-              <Input value={g.occupation || ""} onChange={e => update(i, "occupation", e.target.value)} placeholder="Optional" />
-            </Field>
-            <Field label="Mobile Number">
-              <Input value={g.mobile_number || ""} onChange={e => update(i, "mobile_number", e.target.value)} placeholder="09XXXXXXXXX" />
-            </Field>
-            <Field label="Email Address">
-              <Input type="email" value={g.email_address || ""} onChange={e => update(i, "email_address", e.target.value)} placeholder="Optional" />
-            </Field>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox" id={`primary-${i}`} checked={g.is_primary_contact}
-              onChange={e => update(i, "is_primary_contact", e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: C.red, cursor: "pointer" }}
-            />
-            <label htmlFor={`primary-${i}`} style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>
-              Primary Contact
-            </label>
+        <div key={i} style={{ ...cardStyle, marginBottom: 14, position: "relative", overflow: "hidden" }}>
+          {/* colored left accent */}
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: g.is_primary_contact ? C.red : C.redMid, borderRadius: "16px 0 0 16px" }} />
+          <div style={{ paddingLeft: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className={`ti ${relIcons[g.relationship] || "ti-user"}`} style={{ fontSize: 17, color: C.red }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>
+                    {g.full_name || `Guardian ${i + 1}`}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, textTransform: "capitalize" }}>
+                    {g.relationship}{g.guardian_id ? " · saved" : " · new"}
+                    {g.is_primary_contact && <span style={{ marginLeft: 6, color: C.red, fontWeight: 700 }}>· Primary</span>}
+                  </div>
+                </div>
+              </div>
+              <button style={btnDanger} onClick={() => remove(i)} type="button">
+                <i className="ti ti-trash" style={{ fontSize: 12 }} /> Remove
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <Field label="Full Name *">
+                <Input value={g.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
+              </Field>
+              <Field label="Relationship *">
+                <Select value={g.relationship} onChange={e => update(i, "relationship", e.target.value)}>
+                  <option value="mother">Mother</option>
+                  <option value="father">Father</option>
+                  <option value="guardian">Guardian</option>
+                </Select>
+              </Field>
+              <Field label="Occupation">
+                <Input value={g.occupation || ""} onChange={e => update(i, "occupation", e.target.value)} placeholder="Optional" />
+              </Field>
+              <Field label="Mobile Number">
+                <Input value={g.mobile_number || ""} onChange={e => update(i, "mobile_number", e.target.value)} placeholder="09XXXXXXXXX" />
+              </Field>
+              <Field label="Email Address" style={{ gridColumn: "1 / -1" }}>
+                <Input type="email" value={g.email_address || ""} onChange={e => update(i, "email_address", e.target.value)} placeholder="Optional" />
+              </Field>
+            </div>
+
+            <div
+              onClick={() => update(i, "is_primary_contact", !g.is_primary_contact)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
+                padding: "8px 14px", borderRadius: 99, cursor: "pointer",
+                border: `1.5px solid ${g.is_primary_contact ? C.red : C.redMid}`,
+                background: g.is_primary_contact ? C.redLight : C.white,
+                fontSize: 12, fontWeight: 700,
+                color: g.is_primary_contact ? C.red : C.muted,
+                transition: "all .15s",
+              }}
+            >
+              <i className={`ti ${g.is_primary_contact ? "ti-star-filled" : "ti-star"}`} style={{ fontSize: 13 }} />
+              {g.is_primary_contact ? "Primary Contact" : "Set as Primary Contact"}
+            </div>
           </div>
         </div>
       ))}
@@ -402,28 +535,52 @@ function SiblingsStep({ data, onChange }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{color: C.dark, margin: 0 }}>Siblings</h3>
-        <button style={btnGhost} onClick={add} type="button">+ Add Sibling</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <SectionHeader icon="ti-friends" title="Siblings" subtitle={`${data.length} sibling${data.length !== 1 ? "s" : ""} added`} />
+        <button style={{ ...btnGhost, marginBottom: 20, flexShrink: 0 }} onClick={add} type="button">
+          <i className="ti ti-plus" style={{ fontSize: 13 }} /> Add Sibling
+        </button>
       </div>
+
       {data.length === 0 && (
-        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
-          No siblings added. Click "Add Sibling" if applicable.
+        <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <i className="ti ti-friends" style={{ fontSize: 26, color: "#e8a0a0" }} />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No siblings added</div>
+          <div style={{ fontSize: 12 }}>Click "Add Sibling" if applicable.</div>
         </div>
       )}
-      {data.map((s, i) => (
-        <div key={i} style={{ ...cardStyle, display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 16, alignItems: "end" }}>
-          <Field label={`Sibling ${i + 1} Full Name *${s.sibling_id ? " (existing)" : " (new)"}`}>
-            <Input value={s.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
-          </Field>
-          <Field label="Age">
-            <Input type="number" min="0" max="100" value={s.age || ""} onChange={e => update(i, "age", e.target.value)} placeholder="Age" />
-          </Field>
-          <div style={{ paddingBottom: 14 }}>
-            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {data.map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, background: C.white, border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.red }}>
+              {i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Input
+                value={s.full_name}
+                onChange={e => update(i, "full_name", e.target.value)}
+                required
+                placeholder={`Sibling ${i + 1} full name`}
+                style={{ marginBottom: 0 }}
+              />
+            </div>
+            <div style={{ width: 90, flexShrink: 0 }}>
+              <Input
+                type="number" min="0" max="100"
+                value={s.age || ""}
+                onChange={e => update(i, "age", e.target.value)}
+                placeholder="Age"
+              />
+            </div>
+            <button style={{ ...btnDanger, flexShrink: 0 }} onClick={() => remove(i)} type="button">
+              <i className="ti ti-x" style={{ fontSize: 12 }} />
+            </button>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -439,112 +596,743 @@ function SchoolsStep({ data, onChange }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h3 style={{ color: C.dark, margin: 0 }}>Previous Schools</h3>
-        <button style={btnGhost} onClick={add} type="button">+ Add School</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <SectionHeader icon="ti-school" title="Previous Schools" subtitle={`${data.length} school${data.length !== 1 ? "s" : ""} added`} />
+        <button style={{ ...btnGhost, marginBottom: 20, flexShrink: 0 }} onClick={add} type="button">
+          <i className="ti ti-plus" style={{ fontSize: 13 }} /> Add School
+        </button>
       </div>
+
       {data.length === 0 && (
-        <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
-          No previous schools added.
+        <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <i className="ti ti-school" style={{ fontSize: 26, color: "#e8a0a0" }} />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No previous schools added</div>
+          <div style={{ fontSize: 12 }}>Add any schools the student previously attended.</div>
         </div>
       )}
+
       {data.map((s, i) => (
-        <div key={i} style={{ ...cardStyle }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontWeight: 700, color: C.red, fontSize: 13 }}>
-              School {i + 1}{s.previous_school_id ? " (existing)" : " (new)"}
-            </span>
-            <button style={btnDanger} onClick={() => remove(i)} type="button">Remove</button>
+        <div key={i} style={{ ...cardStyle, marginBottom: 14, overflow: "hidden", position: "relative" }}>
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: C.red, borderRadius: "16px 0 0 16px" }} />
+          <div style={{ paddingLeft: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-building-community" style={{ fontSize: 16, color: C.red }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>{s.school_name || `School ${i + 1}`}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{s.previous_school_id ? "Saved record" : "New entry"}</div>
+                </div>
+              </div>
+              <button style={btnDanger} onClick={() => remove(i)} type="button">
+                <i className="ti ti-trash" style={{ fontSize: 12 }} /> Remove
+              </button>
+            </div>
+            <Field label="School Name *">
+              <Input value={s.school_name} onChange={e => update(i, "school_name", e.target.value)} required placeholder="Full school name" />
+            </Field>
+            <Field label="School Address *">
+              <Textarea value={s.school_address} onChange={e => update(i, "school_address", e.target.value)} required placeholder="Full address of the school" />
+            </Field>
           </div>
-          <Field label="School Name *">
-            <Input value={s.school_name} onChange={e => update(i, "school_name", e.target.value)} required placeholder="School name" />
-          </Field>
-          <Field label="School Address *">
-            <Textarea value={s.school_address} onChange={e => update(i, "school_address", e.target.value)} required placeholder="Full address" />
-          </Field>
         </div>
       ))}
     </div>
   );
 }
 
-function ReviewStep({ student, household, guardians, siblings, schools }) {
-  const Row = ({ label, value }) => value ? (
-    <div style={{ display: "flex", gap: 12, padding: "6px 0", borderBottom: `1px solid ${C.redMid}` }}>
-      <span style={{ width: 160, fontSize: 12, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 13, color: C.dark }}>{value}</span>
-    </div>
-  ) : null;
+// ─── Documents step helpers (mirrors RequirementsPage design) ────────────────
 
-  const Section = ({ title, children }) => (
-    <div style={{ ...cardStyle, marginBottom: 16 }}>
-      <h4 style={{color: C.red, margin: "0 0 14px", fontSize: 16 }}>{title}</h4>
-      {children}
+const REQ_ICONS = {
+  birth_certificate:          "ti-certificate",
+  form_138:                   "ti-file-description",
+  certificate_good_moral:     "ti-rosette",
+  ncae_result:                "ti-chart-bar",
+  esc_completers:             "ti-school",
+  certificate_non_sf9:        "ti-file-check",
+  recommendation_letter:      "ti-mail",
+  clearance_previous_school:  "ti-building",
+  psa_birth_certificate:      "ti-id",
+  health_record:              "ti-heart-rate-monitor",
+  alien_certificate:          "ti-world",
+  form_137_or_138:            "ti-files",
+  esc_transferee_qc:          "ti-arrows-transfer",
+};
+const reqIcon = (code) => REQ_ICONS[code] || "ti-file";
+const isImageUrl = (url) => url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+
+const DC = {
+  green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
+  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#b09090",
+};
+
+function DocStatusBadge({ submitted }) {
+  return submitted ? (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: DC.greenLight, color: DC.green, fontSize: 11, fontWeight: 700, border: `1px solid ${DC.greenBorder}` }}>
+      <i className="ti ti-circle-check" style={{ fontSize: 12 }} />Submitted
+    </span>
+  ) : (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#888", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
+      <i className="ti ti-clock" style={{ fontSize: 12 }} />Pending
+    </span>
+  );
+}
+
+function DocRemoveModal({ name, onConfirm, onCancel }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(4px)" }}>
+      <div style={{ background: C.white, borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <i className="ti ti-trash" style={{ fontSize: 24, color: C.red }} />
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.dark }}>Remove Document?</div>
+        <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.7 }}>
+          You're about to remove <strong style={{ color: C.dark }}>{name}</strong>. This cannot be undone.
+        </div>
+        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
+          <button onClick={onCancel} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: C.red, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Yes, remove</button>
+        </div>
+      </div>
     </div>
   );
+}
+
+function DocUploadModal({ req, isEdit, studentId, pendingEntry, onClose, onFileSelected }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [remarks, setRemarks] = useState("");
+  const fileInputRef = useRef(null);
+  const isReplace = isEdit && !!req?.submission_id;
+  const currentImageUrl = isReplace && req.image_url ? resolveMediaUrl(req.image_url) : null;
+  const hasPending = !isEdit && !!pendingEntry;
+
+  function handleFileChange(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setPreview(ev.target.result);
+      reader.readAsDataURL(f);
+    } else { setPreview(null); }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setPreview(ev.target.result);
+      reader.readAsDataURL(f);
+    } else { setPreview(null); }
+  }
+
+  function handleConfirm() {
+    if (!file) return;
+    onFileSelected(req.requirement_type_id, req.requirement_code, req.requirement_name, file, remarks);
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1099, backdropFilter: "blur(4px)", padding: 16 }}>
+      <div style={{ background: C.white, borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden" }}>
+        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${DC.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>
+              {isReplace ? "Replace" : hasPending ? "Replace" : "Upload"} Document
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{req?.requirement_name}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </button>
+        </div>
+
+        <div style={{ padding: "20px 24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          {currentImageUrl && !preview && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
+              <img src={currentImageUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${DC.border}`, background: "#fafafa" }} />
+            </div>
+          )}
+          {hasPending && pendingEntry.previewUrl && !preview && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
+              {pendingEntry.file.type.startsWith("image/") ? (
+                <img src={pendingEntry.previewUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${DC.border}`, background: "#fafafa" }} />
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: `1px solid ${DC.border}`, borderRadius: 10, background: "#fafafa" }}>
+                  <i className="ti ti-file-description" style={{ fontSize: 22, color: C.red }} />
+                  <span style={{ fontSize: 13, color: C.dark, fontWeight: 600 }}>{pendingEntry.file.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ border: `2px dashed ${file ? C.redBorder : "#e0d0d0"}`, borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: file ? C.redLight : "#fafafa", transition: "all 0.15s" }}
+          >
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf" capture="environment" style={{ display: "none" }} onChange={handleFileChange} />
+            {preview ? (
+              <img src={preview} alt="preview" style={{ maxHeight: 180, maxWidth: "100%", objectFit: "contain", borderRadius: 8 }} />
+            ) : file ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <i className="ti ti-file-description" style={{ fontSize: 32, color: C.red }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{file.name}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>Click to change file</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#c0a0a0" }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
+                  {isReplace || hasPending ? "Drop new file or click to browse" : "Drop file here or click to browse"}
+                </div>
+                <div style={{ fontSize: 11, color: DC.pale }}>Images (JPG, PNG, GIF) or PDF</div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+              Remarks <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span>
+            </label>
+            <textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={2}
+              placeholder="Add any notes about this document…"
+              style={{ width: "100%", border: `1.5px solid ${C.redMid}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical", outline: "none", color: C.dark, background: "#fffbfb", boxSizing: "border-box" }}
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: "16px 24px", borderTop: `1px solid ${DC.border}`, display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
+          <button
+            onClick={handleConfirm}
+            disabled={!file}
+            style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: !file ? "#f0dada" : C.red, color: !file ? C.muted : C.white, fontSize: 13, fontWeight: 700, cursor: !file ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            <i className="ti ti-upload" style={{ fontSize: 14 }} />
+            {isReplace || hasPending ? "Replace Document" : "Upload Document"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocViewModal({ url, name, onClose }) {
+  const isPdf = /\.pdf(\?.*)?$/i.test(url);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(10,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200, padding: 24 }} onClick={onClose}>
+      <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: "absolute", top: -14, right: -14, width: 36, height: 36, borderRadius: "50%", background: C.white, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", zIndex: 1 }}>
+          <i className="ti ti-x" style={{ fontSize: 16, color: C.dark }} />
+        </button>
+        {isPdf
+          ? <iframe src={url} title={name} style={{ width: "80vw", height: "80vh", border: "none", borderRadius: 12 }} />
+          : <img src={url} alt={name} style={{ maxWidth: "86vw", maxHeight: "86vh", objectFit: "contain", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
+        }
+        <div style={{ position: "absolute", bottom: -32, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{name}</div>
+      </div>
+    </div>
+  );
+}
+
+function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrConfidence }) {
+  const CONF_DOT = { high: DC.green, medium: "#b7791f", low: "#b91c1c" };
+  const icon = reqIcon(req.requirement_code);
+
+  const resolvedUrl = isEdit
+    ? resolveMediaUrl(req.image_url)
+    : (pendingEntry?.previewUrl || null);
+
+  const hasImage = isEdit
+    ? (req.is_submitted && resolvedUrl && isImageUrl(req.image_url))
+    : (pendingEntry && pendingEntry.file?.type.startsWith("image/") && pendingEntry.previewUrl);
+
+  const isSubmitted = isEdit ? req.is_submitted : !!pendingEntry;
+  const isScanningOcr = ocrState === "scanning";
+
+  return (
+    <div style={{
+      background: C.white,
+      border: `1.5px solid ${isSubmitted ? DC.greenBorder : DC.border}`,
+      borderRadius: 16,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: isSubmitted ? "0 2px 16px rgba(46,125,50,0.08)" : "0 2px 12px rgba(224,49,49,0.05)",
+      transition: "box-shadow 0.15s, transform 0.15s",
+    }}>
+      <div style={{ height: 4, background: isSubmitted ? `linear-gradient(90deg,${DC.green},#43a047)` : `linear-gradient(90deg,#e0d0d0,#f0e4e4)` }} />
+
+      <div
+        style={{ height: 120, background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderBottom: `1px solid ${DC.softBorder}`, cursor: (hasImage && !isScanningOcr) ? "pointer" : "default" }}
+        onClick={() => hasImage && !isScanningOcr && onView(resolvedUrl, req.requirement_name)}
+      >
+        {isScanningOcr ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <i className="ti ti-loader-2" style={{ fontSize: 28, color: C.red, animation: "spin 0.8s linear infinite" }} />
+            <span style={{ fontSize: 11, color: C.muted }}>Scanning…</span>
+          </div>
+        ) : hasImage ? (
+          <img src={resolvedUrl} alt={req.requirement_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : isSubmitted ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <i className="ti ti-file-check" style={{ fontSize: 34, color: DC.green }} />
+            <span style={{ fontSize: 11, color: DC.green, fontWeight: 600 }}>Document on file</span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#c8b0b0" }} />
+            <span style={{ fontSize: 11, color: DC.pale }}>No document yet</span>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, lineHeight: 1.35 }}>{req.requirement_name}</div>
+          <DocStatusBadge submitted={isSubmitted} />
+        </div>
+        {ocrState === "done" && ocrConfidence && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: CONF_DOT[ocrConfidence] }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: CONF_DOT[ocrConfidence] }} />
+            OCR: {ocrConfidence} confidence
+          </div>
+        )}
+        {ocrState === "error" && (
+          <div style={{ fontSize: 11, color: "#b91c1c", display: "flex", alignItems: "center", gap: 4 }}>
+            <i className="ti ti-alert-circle" style={{ fontSize: 12 }} />OCR failed — form not auto-filled
+          </div>
+        )}
+        {isEdit && req.submitted_at && (
+          <div style={{ fontSize: 10.5, color: DC.pale, marginTop: 2 }}>
+            <i className="ti ti-calendar" style={{ fontSize: 11 }} />{" "}
+            {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "0 16px 14px", display: "flex", gap: 8 }}>
+        {isSubmitted ? (
+          <>
+            {hasImage && !isScanningOcr && (
+              <button onClick={() => onView(resolvedUrl, req.requirement_name)}
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                <i className="ti ti-eye" style={{ fontSize: 13 }} />View
+              </button>
+            )}
+            <button onClick={() => onUpload(req)}
+              style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              <i className="ti ti-replace" style={{ fontSize: 13 }} />Replace
+            </button>
+            <button onClick={() => onRemove(req)} title="Remove"
+              style={{ width: 34, height: 34, border: `1px solid ${C.redMid}`, borderRadius: 8, background: C.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.red, flexShrink: 0 }}>
+              <i className="ti ti-trash" style={{ fontSize: 13 }} />
+            </button>
+          </>
+        ) : (
+          <button onClick={() => onUpload(req)}
+            style={{ flex: 1, height: 34, border: "none", borderRadius: 8, background: C.red, color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <i className="ti ti-upload" style={{ fontSize: 13 }} />Upload Document
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocumentsStep({
+  isEdit, requirementTypes,
+  pendingUploads, setPendingUploads,
+  existingDocs, setExistingDocs,
+  studentId, onOcrExtracted, onViewDoc,
+}) {
+  const [uploadModal, setUploadModal] = useState(null);
+  const [removeModal, setRemoveModal] = useState(null);
+  const [ocrStates, setOcrStates] = useState({}); // { [reqTypeId]: { state, confidence } }
+  const [editLoading, setEditLoading] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  async function handleFileSelected(reqTypeId, reqCode, reqName, file, remarks) {
+    const previewUrl = URL.createObjectURL(file);
+    const isImage = file.type.startsWith("image/");
+
+    if (!isEdit) {
+      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null } }));
+      setPendingUploads((prev) => {
+        const old = prev.find((p) => p.requirementTypeId === reqTypeId);
+        if (old) URL.revokeObjectURL(old.previewUrl);
+        return [
+          ...prev.filter((p) => p.requirementTypeId !== reqTypeId),
+          { requirementTypeId: reqTypeId, requirementCode: reqCode, requirementName: reqName, file, previewUrl, remarks: remarks || "" },
+        ];
+      });
+
+      if (isImage) {
+        try {
+          const token = sessionStorage.getItem("access_token");
+          const data = await scanDocument(file, token);
+          if (data.success) {
+            onOcrExtracted(data.extracted);
+            setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "done", confidence: data.confidence } }));
+          } else {
+            setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null } }));
+          }
+        } catch {
+          setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null } }));
+        }
+      }
+    } else {
+      setEditLoading(true);
+      setDocError("");
+      try {
+        const existingEntry = existingDocs.find((d) => d.requirement_type_id === reqTypeId);
+        if (existingEntry?.submission_id) {
+          await replaceRequirement({ submissionId: existingEntry.submission_id, file, remarks });
+        } else {
+          await uploadRequirement({ studentId, requirementTypeId: reqTypeId, file, remarks });
+        }
+        const refreshed = await fetchRequirementSummary(studentId);
+        setExistingDocs(Array.isArray(refreshed) ? refreshed : []);
+      } catch (err) {
+        setDocError(err?.message || "Upload failed. Please try again.");
+      } finally {
+        setEditLoading(false);
+      }
+
+      if (isImage) {
+        try {
+          const token = sessionStorage.getItem("access_token");
+          const data = await scanDocument(file, token);
+          if (data.success) onOcrExtracted(data.extracted);
+        } catch { /* OCR failure is non-fatal */ }
+      }
+      URL.revokeObjectURL(previewUrl);
+    }
+  }
+
+  async function handleRemoveConfirm() {
+    if (!removeModal) return;
+    const req = removeModal;
+    setRemoveModal(null);
+    if (!isEdit) {
+      setPendingUploads((prev) => {
+        const old = prev.find((p) => p.requirementTypeId === req.requirement_type_id);
+        if (old) URL.revokeObjectURL(old.previewUrl);
+        return prev.filter((p) => p.requirementTypeId !== req.requirement_type_id);
+      });
+      setOcrStates((prev) => { const n = { ...prev }; delete n[req.requirement_type_id]; return n; });
+    } else {
+      if (req.submission_id) {
+        try {
+          await removeRequirement(req.submission_id);
+          const refreshed = await fetchRequirementSummary(studentId);
+          setExistingDocs(Array.isArray(refreshed) ? refreshed : []);
+        } catch (err) {
+          setDocError(err?.message || "Could not remove document. Please try again.");
+        }
+      }
+    }
+  }
+
+  // Merge requirementTypes with existing/pending data into a unified list
+  const cards = requirementTypes.map((rt) => {
+    if (isEdit) {
+      const existing = existingDocs.find((d) => d.requirement_type_id === rt.requirement_type_id);
+      return existing
+        ? { ...existing }
+        : { requirement_type_id: rt.requirement_type_id, requirement_code: rt.requirement_code, requirement_name: rt.requirement_name, is_submitted: false, image_url: null, submission_id: null };
+    } else {
+      const pending = pendingUploads.find((p) => p.requirementTypeId === rt.requirement_type_id);
+      return {
+        requirement_type_id: rt.requirement_type_id,
+        requirement_code: rt.requirement_code,
+        requirement_name: rt.requirement_name,
+        is_submitted: !!pending,
+        image_url: null,
+        submission_id: null,
+        _pending: pending || null,
+      };
+    }
+  });
+
+  const submitted = cards.filter((c) => c.is_submitted).length;
 
   return (
     <div>
-      <h3 style={{ marginBottom: 20, color: C.dark }}>Review & Submit</h3>
-      <Section title={<><i className="ti ti-user" style={{ marginRight: 6 }} />Student</>}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h3 style={{ color: C.dark, margin: 0 }}>Requirement Documents</h3>
+          <p style={{ fontSize: 13, color: C.muted, margin: "4px 0 0" }}>
+            Upload student documents — OCR will auto-fill form fields from images.
+          </p>
+        </div>
+        {cards.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ height: 8, width: 100, borderRadius: 99, background: C.redMid, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${cards.length ? (submitted / cards.length) * 100 : 0}%`, background: DC.green, borderRadius: 99, transition: "width 0.4s" }} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: DC.green }}>{submitted}/{cards.length}</span>
+          </div>
+        )}
+      </div>
+
+      {editLoading && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.redLight, borderRadius: 10, marginBottom: 16, fontSize: 13, color: C.red }}>
+          <i className="ti ti-loader-2" style={{ animation: "spin 0.8s linear infinite" }} />Uploading document…
+        </div>
+      )}
+
+      {docError && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#b91c1c" }}>
+          <i className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{docError}</span>
+          <button type="button" onClick={() => setDocError("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", padding: 0 }}>
+            <i className="ti ti-x" style={{ fontSize: 13 }} />
+          </button>
+        </div>
+      )}
+
+      {requirementTypes.length === 0 ? (
+        <div style={{ padding: "40px 0", textAlign: "center", color: DC.pale }}>
+          <i className="ti ti-file-search" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
+          No requirement types configured.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
+          {cards.map((req) => {
+            const ocr = ocrStates[req.requirement_type_id] || { state: "idle", confidence: null };
+            return (
+              <DocCard
+                key={req.requirement_type_id}
+                req={req}
+                pendingEntry={req._pending || null}
+                isEdit={isEdit}
+                onUpload={(r) => setUploadModal(r)}
+                onView={(url, name) => onViewDoc(url, name)}
+                onRemove={(r) => setRemoveModal(r)}
+                ocrState={ocr.state}
+                ocrConfidence={ocr.confidence}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {uploadModal && (
+        <DocUploadModal
+          req={uploadModal}
+          isEdit={isEdit}
+          studentId={studentId}
+          pendingEntry={pendingUploads.find((p) => p.requirementTypeId === uploadModal.requirement_type_id) || null}
+          onClose={() => setUploadModal(null)}
+          onFileSelected={(tid, code, name, file, remarks) => {
+            handleFileSelected(tid, code, name, file, remarks);
+          }}
+        />
+      )}
+
+      {removeModal && (
+        <DocRemoveModal
+          name={removeModal.requirement_name}
+          onConfirm={handleRemoveConfirm}
+          onCancel={() => setRemoveModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReviewStep({ student, household, guardians, siblings, schools, pendingUploads = [], existingDocs = [], isEdit = false }) {
+  const Row = ({ label, value }) => value ? (
+    <div style={{ display: "flex", gap: 12, padding: "7px 0", borderBottom: `1px solid ${C.redMid}` }}>
+      <span style={{ width: 150, fontSize: 11, color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0, paddingTop: 1 }}>{label}</span>
+      <span style={{ fontSize: 13, color: C.dark, lineHeight: 1.5 }}>{value}</span>
+    </div>
+  ) : null;
+
+  const Section = ({ icon, title, children }) => (
+    <div style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.redMid}`, marginBottom: 14, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 18px", borderBottom: `1px solid ${C.redMid}`, background: C.redLight }}>
+        <i className={`ti ${icon}`} style={{ fontSize: 15, color: C.red }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>{title}</span>
+      </div>
+      <div style={{ padding: "4px 18px 10px" }}>{children}</div>
+    </div>
+  );
+
+  const statusColors = { active: "#2e7d32", inactive: "#757575", transferred: "#1565c0", graduated: "#f57f17", dropped: "#c62828" };
+
+  return (
+    <div>
+      <SectionHeader icon="ti-clipboard-check" title="Review & Submit" subtitle="Check all information before submitting" />
+
+      <Section icon="ti-user" title="Student Information">
         <Row label="LRN" value={student.lrn} />
         <Row label="Full Name" value={`${student.first_name} ${student.middle_name || ""} ${student.last_name} ${student.suffix || ""}`.trim()} />
-        <Row label="Sex" value={student.sex} />
+        <Row label="Sex" value={student.sex?.charAt(0).toUpperCase() + student.sex?.slice(1)} />
         <Row label="Birth Date" value={student.birth_date} />
         <Row label="Religion" value={student.religion} />
         <Row label="Email" value={student.email} />
         <Row label="Mobile" value={student.mobile_number} />
-        <Row label="Status" value={student.status} />
+        <Row label="Status" value={
+          <span style={{ color: statusColors[student.status] || C.dark, fontWeight: 700, textTransform: "capitalize" }}>{student.status}</span>
+        } />
         <Row label="Current Address" value={student.current_address} />
         <Row label="Permanent Address" value={student.permanent_address} />
       </Section>
 
       {(household.parent_marital_status || household.living_arrangement || household.is_4ps_beneficiary) && (
-        <Section title={<><i className="ti ti-home" style={{ marginRight: 6 }} />Household</>}>
-          <Row label="Marital Status" value={household.parent_marital_status} />
-          <Row label="Living Arrangement" value={household.living_arrangement} />
+        <Section icon="ti-home" title="Household Information">
+          <Row label="Marital Status" value={household.parent_marital_status?.replace(/_/g, " ")} />
+          <Row label="Living With" value={household.living_arrangement?.replace(/_/g, " ")} />
           <Row label="4Ps Beneficiary" value={household.is_4ps_beneficiary ? "Yes" : "No"} />
           <Row label="4Ps ID" value={household.four_ps_id} />
         </Section>
       )}
 
       {guardians.length > 0 && (
-        <Section title={<><i className="ti ti-users" style={{ marginRight: 6 }} />Guardians</>}>
+        <Section icon="ti-users" title={`Guardians (${guardians.length})`}>
           {guardians.map((g, i) => (
-            <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < guardians.length - 1 ? `1px dashed ${C.redMid}` : "none" }}>
-              <Row label="Name" value={g.full_name} />
-              <Row label="Relationship" value={g.relationship} />
+            <div key={i} style={{ paddingTop: i > 0 ? 10 : 0, marginTop: i > 0 ? 10 : 0, borderTop: i > 0 ? `1px dashed ${C.redMid}` : "none" }}>
+              <Row label="Name" value={<span style={{ fontWeight: 700 }}>{g.full_name}{g.is_primary_contact && <span style={{ marginLeft: 8, fontSize: 11, color: C.red, fontWeight: 700 }}>★ Primary</span>}</span>} />
+              <Row label="Relationship" value={g.relationship?.charAt(0).toUpperCase() + g.relationship?.slice(1)} />
               <Row label="Occupation" value={g.occupation} />
               <Row label="Mobile" value={g.mobile_number} />
               <Row label="Email" value={g.email_address} />
-              <Row label="Primary Contact" value={g.is_primary_contact ? "Yes" : null} />
             </div>
           ))}
         </Section>
       )}
 
       {siblings.length > 0 && (
-        <Section title={<><i className="ti ti-friends" style={{ marginRight: 6 }} />Siblings</>}>
+        <Section icon="ti-friends" title={`Siblings (${siblings.length})`}>
           {siblings.map((s, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <Row label={`Sibling ${i + 1}`} value={`${s.full_name}${s.age ? `, age ${s.age}` : ""}`} />
-            </div>
+            <Row key={i} label={`Sibling ${i + 1}`} value={`${s.full_name}${s.age ? `, age ${s.age}` : ""}`} />
           ))}
         </Section>
       )}
 
       {schools.length > 0 && (
-        <Section title={<><i className="ti ti-school" style={{ marginRight: 6 }} />Previous Schools</>}>
+        <Section icon="ti-school" title={`Previous Schools (${schools.length})`}>
           {schools.map((s, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <Row label={`School ${i + 1}`} value={s.school_name} />
+            <div key={i} style={{ paddingTop: i > 0 ? 10 : 0, marginTop: i > 0 ? 10 : 0, borderTop: i > 0 ? `1px dashed ${C.redMid}` : "none" }}>
+              <Row label={`School ${i + 1}`} value={<span style={{ fontWeight: 700 }}>{s.school_name}</span>} />
               <Row label="Address" value={s.school_address} />
             </div>
           ))}
         </Section>
       )}
+
+      {(() => {
+        const docList = isEdit ? existingDocs.filter((d) => d.is_submitted) : pendingUploads;
+        return docList.length > 0 ? (
+          <Section icon="ti-file-check" title={`Documents (${docList.length})`}>
+            {docList.map((d, i) => (
+              <Row key={i} label={`Document ${i + 1}`} value={isEdit ? d.requirement_name : d.requirementName} />
+            ))}
+          </Section>
+        ) : null;
+      })()}
     </div>
   );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DEBUG AUTOFILL  (only active in dev — stripped from production builds)
+// ════════════════════════════════════════════════════════════════════════════
+
+const DEV_FIRST_NAMES = ["Juan", "Maria", "Jose", "Ana", "Carlo", "Liza", "Mark", "Rosa", "Luis", "Nina"];
+const DEV_MIDDLE_NAMES = ["Santos", "Reyes", "Cruz", "Garcia", "Lopez", "Gomez", "Torres", "Flores"];
+const DEV_LAST_NAMES = ["Dela Cruz", "Ramos", "Fernandez", "Villanueva", "Aquino", "Bautista", "Mendoza", "Castillo"];
+const DEV_RELIGIONS = ["Roman Catholic", "Iglesia ni Cristo", "Islam", "Born Again Christian", "Seventh Day Adventist"];
+const DEV_BARANGAYS = ["Barangay Sta. Cruz", "Barangay San Jose", "Barangay Poblacion", "Barangay Bagong Lipunan", "Barangay Mabuhay"];
+const DEV_CITIES = ["Quezon City", "Manila", "Pasig", "Marikina", "Caloocan"];
+const DEV_SCHOOLS = ["Rizal Elementary School", "Mabini National High School", "San Jose Primary School", "Bonifacio Academy", "Katipunan Elementary School"];
+const DEV_OCCUPATIONS = ["Teacher", "Engineer", "Nurse", "Driver", "Vendor", "Overseas Worker", "Farmer"];
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function genDevData() {
+  const rnd2 = () => String(Math.floor(Math.random() * 90) + 10);
+  const lrn = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join("");
+  const mobile = "09" + Array.from({ length: 9 }, () => Math.floor(Math.random() * 10)).join("");
+
+  // Age between 6 and 18
+  const ageYears = 6 + Math.floor(Math.random() * 13);
+  const bDate = new Date();
+  bDate.setFullYear(bDate.getFullYear() - ageYears);
+  bDate.setMonth(Math.floor(Math.random() * 12));
+  bDate.setDate(1 + Math.floor(Math.random() * 28));
+  const birth_date = bDate.toISOString().slice(0, 10);
+
+  const city = pick(DEV_CITIES);
+  const brgy = pick(DEV_BARANGAYS);
+  const address = `${rnd2()} ${brgy}, ${city}`;
+
+  const firstName = pick(DEV_FIRST_NAMES);
+  const lastName = pick(DEV_LAST_NAMES);
+
+  const student = {
+    lrn,
+    first_name: firstName,
+    middle_name: pick(DEV_MIDDLE_NAMES),
+    last_name: lastName,
+    suffix: "",
+    sex: Math.random() > 0.5 ? "male" : "female",
+    birth_date,
+    religion: pick(DEV_RELIGIONS),
+    email: `${firstName.toLowerCase()}.${lastName.toLowerCase().replace(/\s/g, "")}@email.com`,
+    mobile_number: mobile,
+    current_address: address,
+    permanent_address: address,
+    status: "active",
+  };
+
+  const household = {
+    parent_marital_status: pick(["married", "single_parent", "separated", "widowed"]),
+    living_arrangement: pick(["both_parents", "mother_only", "father_only", "guardian"]),
+    is_4ps_beneficiary: false,
+    four_ps_id: "",
+  };
+
+  const guardianMobile = "09" + Array.from({ length: 9 }, () => Math.floor(Math.random() * 10)).join("");
+  const gFirst = pick(DEV_FIRST_NAMES);
+  const gLast = lastName;
+  const guardians = [{
+    relationship: pick(["mother", "father", "guardian"]),
+    full_name: `${gFirst} ${gLast}`,
+    occupation: pick(DEV_OCCUPATIONS),
+    email_address: `${gFirst.toLowerCase()}.${gLast.toLowerCase().replace(/\s/g, "")}@email.com`,
+    mobile_number: guardianMobile,
+    is_primary_contact: true,
+  }];
+
+  const sibFirst = pick(DEV_FIRST_NAMES);
+  const siblings = [{
+    full_name: `${sibFirst} ${lastName}`,
+    age: String(2 + Math.floor(Math.random() * 16)),
+  }];
+
+  const schools = [{
+    school_name: pick(DEV_SCHOOLS),
+    school_address: `${pick(DEV_BARANGAYS)}, ${pick(DEV_CITIES)}`,
+  }];
+
+  return { student, household, guardians, siblings, schools };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -564,6 +1352,12 @@ export default function StudentFormPage() {
   const [guardians, setGuardians] = useState([]);
   const [siblings, setSiblings] = useState([]);
   const [schools, setSchools] = useState([]);
+
+  // ── Documents step ──────────────────────────────────────────────────────────
+  const [requirementTypes, setRequirementTypes] = useState([]);
+  const [existingDocs,     setExistingDocs]     = useState([]);
+  const [pendingUploads,   setPendingUploads]   = useState([]);
+  const [docViewModal,     setDocViewModal]     = useState(null); // { url, name }
 
   // Track which existing records were removed in edit mode (so we can DELETE them on submit)
   const [removedGuardianIds, setRemovedGuardianIds] = useState([]);
@@ -622,6 +1416,17 @@ export default function StudentFormPage() {
     }
   }
 
+  // ── Load requirement types (both modes) ──
+  useEffect(() => {
+    fetchRequirementTypes().then(setRequirementTypes).catch(() => {});
+  }, []);
+
+  // ── Revoke pending upload object URLs on unmount ──
+  useEffect(() => {
+    const uploads = pendingUploads;
+    return () => uploads.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Load existing data for edit mode ──
   useEffect(() => {
     if (!id) return;
@@ -665,6 +1470,12 @@ export default function StudentFormPage() {
         try {
           const ps = await getPreviousSchoolsByStudent(id);
           setSchools(Array.isArray(ps) ? ps : (ps?.results || []));
+        } catch (e) { /* none */ }
+
+        // Existing requirement submissions
+        try {
+          const docs = await fetchRequirementSummary(id);
+          setExistingDocs(Array.isArray(docs) ? docs : []);
         } catch (e) { /* none */ }
       } catch (err) {
         setError("Failed to load student data.");
@@ -720,6 +1531,15 @@ export default function StudentFormPage() {
     setSchools(next);
   };
 
+  function fillDevData() {
+    const d = genDevData();
+    setStudent(d.student);
+    setHousehold(d.household);
+    setGuardians(d.guardians);
+    setSiblings(d.siblings);
+    setSchools(d.schools);
+  }
+
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
@@ -727,7 +1547,65 @@ export default function StudentFormPage() {
   const householdHasContent = (h) =>
     !!(h.parent_marital_status || h.living_arrangement || h.is_4ps_beneficiary);
 
+  // ── Client-side validation ───────────────────────────────────────────────────
+  // Returns { step, message } for the first violation, or null if all valid.
+  function validate() {
+    const s = student;
+
+    // Step 1 — Student
+    if (!s.lrn?.trim())
+      return { step: 1, message: "LRN is required." };
+    if (!/^\d+$/.test(s.lrn.trim()))
+      return { step: 1, message: "LRN must contain only numbers." };
+    if (s.lrn.trim().length !== 12)
+      return { step: 1, message: "LRN must be exactly 12 digits." };
+    if (!s.first_name?.trim())
+      return { step: 1, message: "First name is required." };
+    if (!s.last_name?.trim())
+      return { step: 1, message: "Last name is required." };
+    if (!s.birth_date)
+      return { step: 1, message: "Birth date is required." };
+    if (new Date(s.birth_date) > new Date())
+      return { step: 1, message: "Birth date cannot be in the future." };
+    if (new Date(s.birth_date).getFullYear() < 1970)
+      return { step: 1, message: "Please enter a valid birth date." };
+    if (!s.current_address?.trim())
+      return { step: 1, message: "Current address is required." };
+    if (!s.permanent_address?.trim())
+      return { step: 1, message: "Permanent address is required." };
+    if (s.mobile_number?.trim() && !/^09\d{9}$/.test(s.mobile_number.trim()))
+      return { step: 1, message: "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX)." };
+    if (s.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email.trim()))
+      return { step: 1, message: "Please enter a valid email address." };
+
+    // Step 2 — Household
+    if (household.is_4ps_beneficiary && !household.four_ps_id?.trim())
+      return { step: 2, message: "4Ps ID is required when 4Ps beneficiary is enabled." };
+
+    // Step 3 — Guardians
+    for (let i = 0; i < guardians.length; i++) {
+      if (!guardians[i].full_name?.trim())
+        return { step: 3, message: `Guardian ${i + 1} has no name — fill it in or remove it.` };
+    }
+
+    return null;
+  }
+
+  // True when all required fields pass — used to disable the submit button.
+  const isFormValid = validate() === null;
+
+  // Prevents double-submit even before React re-renders `loading` state.
+  const submittingRef = useRef(false);
+
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+    const violation = validate();
+    if (violation) {
+      setStep(violation.step);
+      setError(violation.message);
+      return;
+    }
+    submittingRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -817,7 +1695,7 @@ export default function StudentFormPage() {
           household: householdHasContent(household)
             ? nullify(household, nullableHouseholdFields)
             : null,
-          guardians: guardians.map((g) => nullify(g, nullableGuardianFields)),
+          guardians: guardians.filter((g) => g.full_name?.trim()).map((g) => nullify(g, nullableGuardianFields)),
         };
 
         const result = await bulkCreateStudent(bulkPayload);
@@ -844,6 +1722,20 @@ export default function StudentFormPage() {
             });
           }
         }
+
+        // pending requirement documents
+        for (const pu of pendingUploads) {
+          try {
+            await uploadRequirement({
+              studentId: newStudentId,
+              requirementTypeId: pu.requirementTypeId,
+              file: pu.file,
+              remarks: pu.remarks || "",
+            });
+          } catch (uploadErr) {
+            console.warn(`Failed to upload ${pu.requirementCode}:`, uploadErr);
+          }
+        }
       }
 
       navigate("/students");
@@ -859,9 +1751,9 @@ export default function StudentFormPage() {
         msg = entries.map(([field, errs]) => `${field}: ${[].concat(errs).join(", ")}`).join(" | ");
       }
       setError(msg || "Something went wrong. Please check your inputs.");
-      setStep(0);
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -877,7 +1769,11 @@ export default function StudentFormPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .req-doc-card:hover { box-shadow: 0 4px 20px rgba(224,49,49,0.10) !important; transform: translateY(-1px); }
+      `}</style>
 
       <div style={{ maxWidth: 780, margin: "0 auto", position: "relative" }}>
         {/* Header */}
@@ -888,21 +1784,49 @@ export default function StudentFormPage() {
           >
             ← Back to Students
           </button>
-          <h2 style={{ margin: 0, fontSize: 28, color: C.dark }}>
-            {id ? "Edit Student" : "New Student Registration"}
-          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 28, color: C.dark }}>
+              {id ? "Edit Student" : "New Student Registration"}
+            </h2>
+            {import.meta.env.DEV && !id && (
+              <button
+                type="button"
+                onClick={fillDevData}
+                title="Auto-fill all fields with random valid test data"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "6px 14px", borderRadius: 8, border: "1.5px dashed #6366f1",
+                  background: "#eef2ff", color: "#4338ca", fontSize: 12, fontWeight: 700,
+                  fontFamily: "'DM Sans', sans-serif", cursor: "pointer", letterSpacing: ".02em",
+                }}
+              >
+                <i className="ti ti-bolt" style={{ fontSize: 13 }} />
+                Dev Fill
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Step bar */}
-        <StepBar current={step} />
+        <StepBar current={step} onStepClick={setStep} />
 
         {/* Error */}
         {error && (
           <div style={{
             background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
             padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20,
+            display: "flex", alignItems: "flex-start", gap: 10,
           }}>
-            {error}
+            <i className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }} />
+            <span style={{ flex: 1 }}>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", padding: 0, lineHeight: 1, flexShrink: 0 }}
+              title="Dismiss"
+            >
+              <i className="ti ti-x" style={{ fontSize: 14 }} />
+            </button>
           </div>
         )}
 
@@ -930,17 +1854,22 @@ export default function StudentFormPage() {
           {isLastStep ? (
             <button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || !isFormValid}
               type="button"
-              title={id ? "Update Student" : "Submit Registration"}
+              title={
+                loading ? "Submitting…"
+                : !isFormValid ? (validate()?.message ?? "Fill in required fields before submitting")
+                : (id ? "Update Student" : "Submit Registration")
+              }
               style={{
                 ...sideNavBtn, right: -60,
-                background: C.red, color: "#fff",
+                background: !isFormValid ? "#e0c8c8" : C.red,
+                color: "#fff",
                 opacity: loading ? 0.6 : 1,
-                cursor: loading ? "not-allowed" : "pointer",
+                cursor: (loading || !isFormValid) ? "not-allowed" : "pointer",
               }}
             >
-              <i className="ti ti-check" />
+              {loading ? <i className="ti ti-loader-2" style={{ animation: "spin 0.8s linear infinite" }} /> : <i className="ti ti-check" />}
             </button>
           ) : (
             <button
@@ -955,28 +1884,43 @@ export default function StudentFormPage() {
 
           <div style={{ ...cardStyle, minHeight: 320 }}>
             {step === 0 && (
-              <>
-                {!id && (
-                  <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
-                    <OcrScanButton onExtracted={handleOcrExtracted} />
-                  </div>
-                )}
-                <StudentStep data={student} onChange={setStudent} />
-              </>
+              <DocumentsStep
+                isEdit={!!id}
+                requirementTypes={requirementTypes}
+                pendingUploads={pendingUploads}
+                setPendingUploads={setPendingUploads}
+                existingDocs={existingDocs}
+                setExistingDocs={setExistingDocs}
+                studentId={id}
+                onOcrExtracted={handleOcrExtracted}
+                onViewDoc={(url, name) => setDocViewModal({ url, name })}
+              />
             )}
-            {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
-            {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
-            {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
-            {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
-            {step === 5 && (
+            {step === 1 && <StudentStep data={student} onChange={setStudent} />}
+            {step === 2 && <HouseholdStep data={household} onChange={setHousehold} />}
+            {step === 3 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+            {step === 4 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+            {step === 5 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
+            {step === 6 && (
               <ReviewStep
                 student={student} household={household}
                 guardians={guardians} siblings={siblings} schools={schools}
+                pendingUploads={pendingUploads}
+                existingDocs={existingDocs}
+                isEdit={!!id}
               />
             )}
           </div>
         </div>
       </div>
+
+      {docViewModal && (
+        <DocViewModal
+          url={docViewModal.url}
+          name={docViewModal.name}
+          onClose={() => setDocViewModal(null)}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,21 @@ const STATUS_META = {
 
 const STATUS_FILTERS = ["all", "active", "inactive", "transferred", "graduated", "dropped"];
 
+const SORT_OPTIONS = [
+  { value: "-student_id", label: "Newest first" },
+  { value: "student_id",  label: "Oldest first" },
+  { value: "last_name",   label: "Name A → Z" },
+  { value: "-last_name",  label: "Name Z → A" },
+  { value: "birth_date",  label: "Youngest last" },
+  { value: "-birth_date", label: "Youngest first" },
+];
+
+const SEX_FILTERS = [
+  { value: "", label: "All" },
+  { value: "male",   label: "Male",   icon: "ti-mars",  color: "#2563eb" },
+  { value: "female", label: "Female", icon: "ti-venus", color: "#be185d" },
+];
+
 // ── Avatar color palette (deterministic from name) ────────────────────────────
 const AVATAR_PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" },
@@ -164,6 +179,9 @@ export default function StudentsPage() {
   const [loading, setLoading]     = useState(true);
   const [toDelete, setToDelete]   = useState(null);
   const [statusFilter, setStatus] = useState("all");
+  const [sexFilter, setSexFilter] = useState("");
+  const [ordering, setOrdering]   = useState("-student_id");
+  const [isRecents, setIsRecents] = useState(false);
 
   // Per-status counts for stat cards
   const [statusCounts, setStatusCounts] = useState({});
@@ -171,14 +189,22 @@ export default function StudentsPage() {
   const searchRef = useRef();
   const token = sessionStorage.getItem("access_token");
 
-  // Fetch students
-  const fetchStudents = async (nextPage = 1, term = search, status = statusFilter) => {
+  // Fetch students — all filter/sort params threaded through
+  const fetchStudents = async (
+    nextPage = 1,
+    term = search,
+    status = statusFilter,
+    sex = sexFilter,
+    ord = ordering,
+  ) => {
     setLoading(true);
     try {
       const data = await getStudents({
         page: nextPage,
         search: term,
         status: status === "all" ? "" : status,
+        sex,
+        ordering: ord,
       });
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
@@ -210,27 +236,66 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
-    fetchStudents(1, "", "all");
+    fetchStudents(1, "", "all", "", "-student_id");
     fetchCounts();
   }, []);
 
   const handleSearch = () => {
     setSearch(inputVal);
-    fetchStudents(1, inputVal, statusFilter);
+    setIsRecents(false);
+    fetchStudents(1, inputVal, statusFilter, sexFilter, ordering);
   };
 
   const handleKeyDown = (e) => { if (e.key === "Enter") handleSearch(); };
 
   const handleStatusFilter = (val) => {
     setStatus(val);
-    fetchStudents(1, inputVal, val);
+    setIsRecents(false);
+    fetchStudents(1, inputVal, val, sexFilter, ordering);
   };
+
+  const handleSexFilter = (val) => {
+    setSexFilter(val);
+    setIsRecents(false);
+    fetchStudents(1, inputVal, statusFilter, val, ordering);
+  };
+
+  const handleOrdering = (val) => {
+    setOrdering(val);
+    setIsRecents(false);
+    fetchStudents(1, inputVal, statusFilter, sexFilter, val);
+  };
+
+  const handleRecents = () => {
+    const newRecents = !isRecents;
+    setIsRecents(newRecents);
+    if (newRecents) {
+      setInputVal("");
+      setSearch("");
+      setStatus("all");
+      setSexFilter("");
+      setOrdering("-student_id");
+      fetchStudents(1, "", "all", "", "-student_id");
+    }
+  };
+
+  const handleClearAll = () => {
+    setInputVal("");
+    setSearch("");
+    setStatus("all");
+    setSexFilter("");
+    setOrdering("-student_id");
+    setIsRecents(false);
+    fetchStudents(1, "", "all", "", "-student_id");
+  };
+
+  const hasActiveFilters = search || statusFilter !== "all" || sexFilter || ordering !== "-student_id";
 
   const handleDelete = async () => {
     if (!toDelete) return;
     await deleteStudent(toDelete.student_id);
     setToDelete(null);
-    fetchStudents(page, search, statusFilter);
+    fetchStudents(page, search, statusFilter, sexFilter, ordering);
     fetchCounts();
   };
 
@@ -324,10 +389,12 @@ export default function StudentsPage() {
               />
             </div>
 
-            {/* ── Search + status chips ── */}
+            {/* ── Search + filters ── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", gap: 10 }}>
-                {/* Search */}
+
+              {/* Row 1: search + sort + clear */}
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {/* Search box */}
                 <div
                   className="search-wrap"
                   style={{
@@ -354,19 +421,43 @@ export default function StudentsPage() {
                   {inputVal && (
                     <button
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
-                      onClick={() => { setInputVal(""); setSearch(""); fetchStudents(1, "", statusFilter); }}
+                      onClick={() => { setInputVal(""); setSearch(""); fetchStudents(1, "", statusFilter, sexFilter, ordering); }}
                     >
                       <i className="ti ti-x" style={{ fontSize: 13 }} />
                     </button>
                   )}
                 </div>
+
+                {/* Sort dropdown */}
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <i className="ti ti-arrows-sort" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#c0a0a0", pointerEvents: "none" }} />
+                  <select
+                    value={ordering}
+                    onChange={(e) => handleOrdering(e.target.value)}
+                    style={{
+                      height: 42, paddingLeft: 34, paddingRight: 14,
+                      border: `1.5px solid ${ordering !== "-student_id" ? "#e03131" : "#f0e4e4"}`,
+                      borderRadius: 12, background: ordering !== "-student_id" ? "#fff0f0" : "white",
+                      fontSize: 13, fontWeight: 600,
+                      color: ordering !== "-student_id" ? "#e03131" : "#7a5050",
+                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                      outline: "none", appearance: "none", minWidth: 158,
+                    }}
+                  >
+                    {SORT_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Search button */}
                 <button
                   style={{
                     height: 42, padding: "0 20px", background: "white",
                     border: "1.5px solid #f0e4e4", borderRadius: 12,
                     fontSize: 13, fontWeight: 600, color: "#7a5050",
                     cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                    transition: "all 0.14s",
+                    transition: "all 0.14s", flexShrink: 0,
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
@@ -374,10 +465,42 @@ export default function StudentsPage() {
                 >
                   Search
                 </button>
+
+                {/* Clear all filters */}
+                {hasActiveFilters && (
+                  <button
+                    onClick={handleClearAll}
+                    title="Clear all filters"
+                    style={{
+                      height: 42, padding: "0 14px", background: "white",
+                      border: "1.5px solid #fca5a5", borderRadius: 12,
+                      fontSize: 12, fontWeight: 600, color: "#b91c1c",
+                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                      display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+                    }}
+                  >
+                    <i className="ti ti-filter-off" style={{ fontSize: 13 }} />
+                    Clear
+                  </button>
+                )}
               </div>
 
-              {/* Status filter chips */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {/* Row 2: quick filters — Recents | Status chips | Sex chips */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+
+                {/* Recents quick-filter */}
+                <button
+                  className={`chip-btn${isRecents ? " active" : ""}`}
+                  onClick={handleRecents}
+                  title="Show most recently registered students"
+                >
+                  <i className="ti ti-clock" style={{ fontSize: 12 }} />
+                  Recents
+                </button>
+
+                <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
+
+                {/* Status filter chips */}
                 {STATUS_FILTERS.map((val) => {
                   const meta = STATUS_META[val];
                   const isActive = statusFilter === val;
@@ -394,7 +517,7 @@ export default function StudentsPage() {
                           flexShrink: 0,
                         }} />
                       )}
-                      {val === "all" ? "All Students" : meta?.label}
+                      {val === "all" ? "All" : meta?.label}
                       {isActive && !loading && statusCounts[val] !== undefined && (
                         <span style={{
                           background: "#e03131", color: "white", borderRadius: 99,
@@ -403,6 +526,23 @@ export default function StudentsPage() {
                           {statusCounts[val]}
                         </span>
                       )}
+                    </button>
+                  );
+                })}
+
+                <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
+
+                {/* Sex filter chips */}
+                {SEX_FILTERS.map((sf) => {
+                  const isActive = sexFilter === sf.value;
+                  return (
+                    <button
+                      key={sf.value}
+                      className={`chip-btn${isActive ? " active" : ""}`}
+                      onClick={() => handleSexFilter(sf.value)}
+                    >
+                      {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12, color: isActive ? "#e03131" : sf.color }} />}
+                      {sf.label}
                     </button>
                   );
                 })}
@@ -623,7 +763,7 @@ export default function StudentsPage() {
                     className="page-btn"
                     style={pgBtn}
                     disabled={!pageMeta.previous}
-                    onClick={() => fetchStudents(page - 1, search, statusFilter)}
+                    onClick={() => fetchStudents(page - 1, search, statusFilter, sexFilter, ordering)}
                   >
                     <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
                   </button>
@@ -637,7 +777,7 @@ export default function StudentsPage() {
                         key={p}
                         className="page-btn"
                         style={{ ...pgBtn, ...(isActive ? pgBtnActive : {}) }}
-                        onClick={() => fetchStudents(p, search, statusFilter)}
+                        onClick={() => fetchStudents(p, search, statusFilter, sexFilter, ordering)}
                       >
                         {p}
                       </button>
@@ -647,7 +787,7 @@ export default function StudentsPage() {
                     className="page-btn"
                     style={pgBtn}
                     disabled={!pageMeta.next}
-                    onClick={() => fetchStudents(page + 1, search, statusFilter)}
+                    onClick={() => fetchStudents(page + 1, search, statusFilter, sexFilter, ordering)}
                   >
                     <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
                   </button>
