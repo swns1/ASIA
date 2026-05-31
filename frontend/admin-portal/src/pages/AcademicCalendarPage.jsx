@@ -280,17 +280,18 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
               onClick={() => onSelectDay(isSelected ? null : k)}
               style={{
                 minHeight: 88,
-                padding: "6px 6px 4px",
+                padding: "6px 0 4px",
                 borderRight: "1px solid #faf0f0",
                 borderBottom: "1px solid #faf0f0",
                 background: isSelected ? "#fff0f0" : isToday ? "#fffbfb" : isWeekend ? "#fdfafa" : "white",
                 cursor: dayEvents.length ? "pointer" : "default",
                 transition: "background 0.12s",
                 position: "relative",
+                overflow: "hidden",
               }}
             >
               {/* Day number */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "0 6px" }}>
                 <span style={{
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
                   width: 24, height: 24, borderRadius: "50%",
@@ -305,22 +306,35 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
               {/* Event strips */}
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {visibleEvs.map((ev) => {
-                  const meta = eventMeta(ev.event_type);
+                  const meta    = eventMeta(ev.event_type);
                   const isStart = ev.start_date === k;
-                  const isEnd   = ev.end_date === k;
-                  const isSpan  = !isStart && !isEnd;
+                  const isEnd   = ev.end_date   === k;
+                  const isSingle = ev.start_date === ev.end_date;
+                  // Round left edge only on start, right edge only on end
+                  const borderRadius = isSingle
+                    ? 4
+                    : isStart ? "4px 0 0 4px"
+                    : isEnd   ? "0 4px 4px 0"
+                    : 0;
+                  // Bleed into cell padding on continuation/end days so strips connect visually
+                  const marginLeft  = isStart || isSingle ?  0 : -7;
+                  const marginRight = isEnd   || isSingle ?  0 : -7;
                   return (
                     <div key={ev.event_id} style={{
-                      fontSize: 10, fontWeight: 600, color: meta.color,
+                      fontSize: 10, fontWeight: 600,
+                      color: isStart || isSingle ? meta.color : "transparent",
                       background: meta.bg,
-                      borderRadius: isStart ? "4px 4px 4px 4px" : isEnd ? "0 4px 4px 0" : "0",
-                      padding: "2px 5px",
+                      borderLeft:  isStart || isSingle ? `2.5px solid ${meta.color}` : `1px solid ${meta.color}22`,
+                      borderRight: isEnd   || isSingle ? "none" : "none",
+                      borderTop:    `1px solid ${meta.color}22`,
+                      borderBottom: `1px solid ${meta.color}22`,
+                      borderRadius,
+                      padding: "2px 4px",
+                      marginLeft,
+                      marginRight,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      borderLeft: isStart || isSpan ? `2.5px solid ${meta.color}` : "none",
-                      marginLeft: isSpan || isEnd ? -6 : 0,
-                      paddingLeft: isSpan || isEnd ? 3 : 5,
                     }}>
-                      {isStart ? ev.title : ""}
+                      {isStart || isSingle ? ev.title : " "}
                     </div>
                   );
                 })}
