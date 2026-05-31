@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/", include("grading.urls")),
     path("api/", include("grades.urls")),
     path("api/", include("ai.urls")),
+    path("api/", include("academic_calendar.urls")),
     path("api/send-enrollment-email/", send_enrollment_email, name="send_enrollment_email"),
 ]
 

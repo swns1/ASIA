@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "scholarships",
     "grading",
     "requirements",
+    "academic_calendar",
 ]
 
 MIDDLEWARE = [
