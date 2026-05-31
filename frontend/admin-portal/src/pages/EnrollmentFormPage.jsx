@@ -31,6 +31,7 @@ const updateEnrollment        = (id, p)  => apiCall("PATCH", `${API_BASE}/enroll
 const getScholarshipTypes     = ()       => apiCall("GET",   `${API_BASE}/scholarship-types/?is_active=true`);
 const createEnrollmentScholarship = (p)  => apiCall("POST",  `${API_BASE}/enrollment-scholarships/`, p);
 const sendEnrollmentEmail = (p) => apiCall("POST", `http://localhost:8003/api/send-enrollment-email/`, p);
+const getStudentEnrollments   = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/?student=${sid}&page_size=100`);
 
 // ─── Style tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -54,6 +55,27 @@ const GRADE_LEVELS_BY_LEVEL = {
   junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
   senior_highschool: ["Grade 11","Grade 12"],
 };
+
+// Flat ordered list of all grade levels for progression lookup
+const ALL_GRADE_LEVELS_ORDERED = [
+  "Nursery","Kindergarten",
+  "Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6",
+  "Grade 7","Grade 8","Grade 9","Grade 10",
+  "Grade 11","Grade 12",
+];
+
+function getNextGradeLevel(currentGrade) {
+  const idx = ALL_GRADE_LEVELS_ORDERED.indexOf(currentGrade);
+  if (idx === -1 || idx === ALL_GRADE_LEVELS_ORDERED.length - 1) return null;
+  return ALL_GRADE_LEVELS_ORDERED[idx + 1];
+}
+
+function getSchoolLevelForGrade(grade) {
+  for (const [level, grades] of Object.entries(GRADE_LEVELS_BY_LEVEL)) {
+    if (grades.includes(grade)) return level;
+  }
+  return null;
+}
 
 const SHS_STRANDS = [
   "STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports",
@@ -143,7 +165,7 @@ function Textarea({ style, ...props }) {
 
 function SectionCard({ title, icon, badge, children }) {
   return (
-    <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, overflow: "hidden", marginBottom: 0 }}>
+    <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, marginBottom: 0 }}>
       <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${C.redMid}`, background: "#fff8f8" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -161,11 +183,12 @@ function SectionCard({ title, icon, badge, children }) {
   );
 }
 
-function StudentPicker({ value, onChange, disabled }) {
-  const [query, setQuery]     = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen]       = useState(false);
+function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
+  const [query, setQuery]       = useState("");
+  const [results, setResults]   = useState([]);
+  const [gradeMap, setGradeMap] = useState({});
+  const [loading, setLoading]   = useState(false);
+  const [open, setOpen]         = useState(false);
 
   useEffect(() => {
     if (!query.trim() || disabled) { setResults([]); return; }
@@ -173,7 +196,27 @@ function StudentPicker({ value, onChange, disabled }) {
     const t = setTimeout(async () => {
       try {
         const data = await getStudents({ search: query, status: "active", page_size: 100 });
-        setResults(data.results || []);
+        const students = data.results || [];
+        setResults(students);
+
+        // Fetch latest enrollment grade for each student in parallel
+        const pairs = await Promise.all(
+          students.map(async (st) => {
+            try {
+              const enData = await getStudentEnrollments(st.student_id);
+              const enrollments = enData.results ?? enData ?? [];
+              if (!enrollments.length) return [st.student_id, null];
+              // Pick most recent by school_year then enrollment_id
+              const latest = enrollments.reduce((a, b) => {
+                if (a.school_year > b.school_year) return a;
+                if (b.school_year > a.school_year) return b;
+                return (a.enrollment_id ?? 0) > (b.enrollment_id ?? 0) ? a : b;
+              });
+              return [st.student_id, latest.grade_level ?? null];
+            } catch { return [st.student_id, null]; }
+          })
+        );
+        setGradeMap(Object.fromEntries(pairs));
       } catch (e) { console.error(e); setResults([]); }
       finally { setLoading(false); }
     }, 280);
@@ -189,9 +232,20 @@ function StudentPicker({ value, onChange, disabled }) {
         <div style={{ width: 46, height: 46, borderRadius: "50%", background: p.bg, color: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{initials || "?"}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>{fullName}</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             {value.student_number && <span><i className="ti ti-id-badge" style={{ fontSize: 11, marginRight: 3 }} />{value.student_number}</span>}
             {value.lrn && <span><i className="ti ti-fingerprint" style={{ fontSize: 11, marginRight: 3 }} />LRN {value.lrn}</span>}
+            {currentGrade && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fff0e8", color: "#b45309", border: "1px solid #fcd9a8", borderRadius: 99, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                <i className="ti ti-school" style={{ fontSize: 10 }} />Current: {currentGrade}
+                {nextGrade && <> → <span style={{ color: C.red }}>{nextGrade}</span></>}
+              </span>
+            )}
+            {!currentGrade && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 99, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                <i className="ti ti-star" style={{ fontSize: 10 }} />New student
+              </span>
+            )}
           </div>
         </div>
         {!disabled && (
@@ -223,15 +277,28 @@ function StudentPicker({ value, onChange, disabled }) {
             const p = getPalette(st.last_name ?? "X");
             const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
             const fullName = [st.last_name + ",", st.first_name, st.middle_name].filter(Boolean).join(" ");
+            const lastGrade = gradeMap[st.student_id];
+            const next = lastGrade ? getNextGradeLevel(lastGrade) : null;
             return (
-              <div key={st.student_id} onClick={() => { onChange(st); setOpen(false); setQuery(""); }}
+              <div key={st.student_id} onClick={() => { onChange(st, lastGrade); setOpen(false); setQuery(""); }}
                 style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f9f0f0", transition: "background .12s" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#fff8f6")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                 <div style={{ width: 34, height: 34, borderRadius: "50%", background: p.bg, color: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{initials || "?"}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{fullName}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>LRN {st.lrn} · {st.student_number ?? "—"}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span>LRN {st.lrn} · {st.student_number ?? "—"}</span>
+                    {lastGrade ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#fff0e8", color: "#b45309", border: "1px solid #fcd9a8", borderRadius: 99, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>
+                        {lastGrade}{next ? <> → <span style={{ color: C.red }}>{next}</span></> : " (final grade)"}
+                      </span>
+                    ) : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 99, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>
+                        New
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -254,6 +321,7 @@ export default function EnrollmentFormPage() {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [student, setStudent] = useState(null);
+  const [studentLastGrade, setStudentLastGrade] = useState(null);
 
   const [form, setForm] = useState({
     school_year:       defaultSchoolYear(),
@@ -312,6 +380,25 @@ export default function EnrollmentFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.school_level]);
 
+  const nextAllowedGrade = studentLastGrade ? getNextGradeLevel(studentLastGrade) : null;
+
+  const handleStudentChange = (st, lastGrade) => {
+    if (!st) {
+      setStudent(null);
+      setStudentLastGrade(null);
+      return;
+    }
+    setStudent(st);
+    setStudentLastGrade(lastGrade ?? null);
+    if (lastGrade) {
+      const next = getNextGradeLevel(lastGrade);
+      if (next) {
+        const level = getSchoolLevelForGrade(next);
+        setForm((f) => ({ ...f, school_level: level, grade_level: next, strand: "", semester: level === "senior_highschool" ? (f.semester || "1st") : "" }));
+      }
+    }
+  };
+
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleScholarship = (sid) =>
     setSelectedSchols((arr) => arr.includes(sid) ? arr.filter((x) => x !== sid) : [...arr, sid]);
@@ -324,8 +411,10 @@ export default function EnrollmentFormPage() {
     if (!form.section.trim())         return "Section is required.";
     if (isSHS && !form.semester)      return "Semester is required for Senior HS.";
     if (isSHS && !form.strand.trim()) return "Strand is required for Senior HS.";
+    if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade)
+      return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
     return "";
-  }, [student, form, isSHS, isEdit]);
+  }, [student, form, isSHS, isEdit, nextAllowedGrade, studentLastGrade]);
 
     const handleSubmit = async () => {
       setError("");
@@ -424,7 +513,7 @@ export default function EnrollmentFormPage() {
                 </>
               ) : (
                 <Field label="Enrolling Student" required hint="Find an existing student record. Need to register a new one first? Use the Students page.">
-                  <StudentPicker value={student} onChange={setStudent} />
+                  <StudentPicker value={student} onChange={handleStudentChange} currentGrade={studentLastGrade} nextGrade={nextAllowedGrade} />
                 </Field>
               )}
             </SectionCard>
@@ -451,9 +540,11 @@ export default function EnrollmentFormPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {SCHOOL_LEVELS.map((lvl) => {
                     const active = form.school_level === lvl.value;
+                    const locked = !isEdit && Boolean(nextAllowedGrade);
                     return (
-                      <button key={lvl.value} type="button" onClick={() => setField("school_level", lvl.value)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s" }}>
+                      <button key={lvl.value} type="button"
+                        onClick={() => !locked && setField("school_level", lvl.value)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: locked ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s", opacity: locked && !active ? 0.45 : 1 }}>
                         <i className={`ti ${lvl.icon}`} style={{ fontSize: 14 }} />{lvl.label}
                       </button>
                     );
@@ -461,10 +552,17 @@ export default function EnrollmentFormPage() {
                 </div>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-                <Field label="Grade Level" required>
-                  <Select value={form.grade_level} onChange={(e) => setField("grade_level", e.target.value)}>
-                    {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-                  </Select>
+                <Field label="Grade Level" required hint={!isEdit && nextAllowedGrade ? `Locked to ${nextAllowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
+                  {!isEdit && nextAllowedGrade ? (
+                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#fff8f0", borderColor: "#fcd9a8", color: "#b45309", fontWeight: 700, cursor: "not-allowed" }}>
+                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#b45309" }} />
+                      {nextAllowedGrade}
+                    </div>
+                  ) : (
+                    <Select value={form.grade_level} onChange={(e) => setField("grade_level", e.target.value)}>
+                      {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                    </Select>
+                  )}
                 </Field>
                 <Field label="Section" required>
                   <Input value={form.section} onChange={(e) => setField("section", e.target.value)} placeholder="e.g. Sampaguita, Section A" />

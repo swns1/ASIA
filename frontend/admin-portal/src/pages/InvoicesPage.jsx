@@ -494,6 +494,9 @@ export default function InvoicesPage() {
   const unpaidCount   = invoices.filter((i) => i.status === "unpaid").length;
   const partialCount  = invoices.filter((i) => i.status === "partially_paid").length;
 
+  const paidCount = invoices.filter((i) => i.status === "paid").length;
+  const voidCount = invoices.filter((i) => i.status === "void").length;
+
   return (
     <AppLayout>
 
@@ -511,108 +514,131 @@ export default function InvoicesPage() {
             </button>
           </div>
 
-          {/* Content — master/detail */}
-          <div style={{ flex:1, overflow:"hidden", display:"grid", gridTemplateColumns:`${selectedId ? "380px 1fr" : "1fr"}` }}>
+          {/* Content */}
+          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
 
-            {/* Left: List */}
-            <div style={{ borderRight: selectedId ? "1px solid #f5eaea" : "none", display:"flex", flexDirection:"column", overflow:"hidden" }}>
-
-              {/* Filters */}
-              <div style={{ padding:"12px 16px", borderBottom:"1px solid #f5eaea", background:"white", display:"flex", flexDirection:"column", gap:8 }}>
-                <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:10.5, color:"#cdb0b0", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, alignSelf:"center", marginRight:4 }}>Status</span>
-                  {["all",...Object.keys(STATUS_META)].map((s) => (
-                    <button key={s} className={`chip-btn${statusFilter===s?" active":""}`}
-                      onClick={() => { setStatusFilter(s); fetchInvoices(1, s, planFilter); }}>
-                      {s === "all" ? "All" : STATUS_META[s].label}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:10.5, color:"#cdb0b0", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, alignSelf:"center", marginRight:4 }}>Plan</span>
-                  {["all",...Object.keys(PLAN_META)].map((p) => (
-                    <button key={p} className={`chip-btn${planFilter===p?" active":""}`}
-                      onClick={() => { setPlanFilter(p); fetchInvoices(1, statusFilter, p); }}>
-                      {p === "all" ? "All" : PLAN_META[p].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Invoice list */}
-              <div style={{ flex:1, overflowY:"auto" }}>
-                {loading ? Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} style={{ padding:"14px 16px", borderBottom:"1px solid #f9f0f0", display:"flex", flexDirection:"column", gap:8 }}>
-                    <Sk w={140} h={14} /><Sk w={100} h={11} /><Sk w={80} h={11} />
+            {/* Stat cards */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 }}>
+              {[
+                { label:"Unpaid",   value:unpaidCount,  icon:"ti-clock",        color:STATUS_META.unpaid.color,         bg:STATUS_META.unpaid.bg         },
+                { label:"Partial",  value:partialCount, icon:"ti-clock-half-2", color:STATUS_META.partially_paid.color, bg:STATUS_META.partially_paid.bg },
+                { label:"Paid",     value:paidCount,    icon:"ti-circle-check", color:STATUS_META.paid.color,           bg:STATUS_META.paid.bg           },
+                { label:"Void",     value:voidCount,    icon:"ti-ban",          color:STATUS_META.void.color,           bg:STATUS_META.void.bg           },
+              ].map((s) => (
+                <div key={s.label} style={{ background:"white", borderRadius:14, padding:"16px 20px", border:"1px solid #f5eaea", display:"flex", alignItems:"center", gap:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)" }}>
+                  <div style={{ width:42, height:42, borderRadius:12, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <i className={`ti ${s.icon}`} style={{ fontSize:18, color:s.color }} />
                   </div>
-                )) : invoices.length === 0 ? (
-                  <div style={{ padding:"48px 16px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No invoices found.</div>
-                ) : invoices.map((inv, idx) => {
-                  const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
-                  const pm = PLAN_META[inv.payment_plan] ?? PLAN_META.monthly;
-                  const isSelected = selectedId === inv.invoice_id;
-                  const en = inv.enrollment_detail;
-                  return (
-                    <div key={inv.invoice_id}
-                      style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", background:isSelected?"#fff8f6":"white", borderLeft:`3px solid ${isSelected?"#e03131":"transparent"}`, transition:"all 0.12s", animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}
-                      onClick={() => setSelectedId(inv.invoice_id)}
-                      onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.background="#fff8f6"; }}
-                      onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.background="white"; }}>
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
-                        <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
-                        <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 7px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
-                      </div>
-                      <div style={{ fontSize:12, color:"#5a4a4a", fontWeight:600, marginBottom:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`}</div>
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                        <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                          <span style={{ fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background:pm.bg, color:pm.color }}>{pm.label}</span>
-                          <span style={{ fontSize:11, color:"#b09090" }}>{en?.grade_level ?? ""}</span>
-                        </div>
-                        <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>{fmt(inv.balance ?? 0)} bal.</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Pagination */}
-              {!loading && pageMeta.count > 20 && (
-                <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"white" }}>
-                  <span style={{ fontSize:11, color:"#b09090" }}>Page {page} of {totalPages}</span>
-                  <div style={{ display:"flex", gap:4 }}>
-                    <button disabled={!pageMeta.previous} onClick={() => fetchInvoices(page - 1)}
-                      style={{ width:28, height:28, border:"1px solid #f0e4e4", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
-                      <i className="ti ti-chevron-left" style={{ fontSize:12 }} />
-                    </button>
-                    <button disabled={!pageMeta.next} onClick={() => fetchInvoices(page + 1)}
-                      style={{ width:28, height:28, border:"1px solid #f0e4e4", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
-                      <i className="ti ti-chevron-right" style={{ fontSize:12 }} />
-                    </button>
+                  <div>
+                    {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>}
+                    <div style={{ fontSize:11, color:"#a07878", marginTop:4, fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
 
-            {/* Right: Detail */}
-            {selectedId && (
-              <div style={{ flex:1, overflowY:"auto", padding:"20px 24px", position:"relative" }}>
-                {/* <button onClick={() => setSelectedId(null)}
-                  style={{ position:"absolute", top:20, right:24, width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", zIndex:10 }}>
-                  <i className="ti ti-x" style={{ fontSize:13 }} />
-                </button> */}
+            {/* Filters */}
+            <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"14px 18px", boxShadow:"0 2px 16px rgba(224,49,49,0.06)", display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
+                <span style={{ fontSize:10.5, color:"#cdb0b0", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, marginRight:4 }}>Status</span>
+                {["all",...Object.keys(STATUS_META)].map((s) => (
+                  <button key={s} className={`chip-btn${statusFilter===s?" active":""}`}
+                    onClick={() => { setStatusFilter(s); fetchInvoices(1, s, planFilter); }}>
+                    {s === "all" ? "All" : STATUS_META[s].label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
+                <span style={{ fontSize:10.5, color:"#cdb0b0", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, marginRight:4 }}>Plan</span>
+                {["all",...Object.keys(PLAN_META)].map((p) => (
+                  <button key={p} className={`chip-btn${planFilter===p?" active":""}`}
+                    onClick={() => { setPlanFilter(p); fetchInvoices(1, statusFilter, p); }}>
+                    {p === "all" ? "All" : PLAN_META[p].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Master / detail */}
+            <div style={{ display:"grid", gridTemplateColumns: selectedId ? "360px 1fr" : "1fr", gap:16, alignItems:"flex-start" }}>
+
+              {/* Left: Invoice list */}
+              <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
+                <div style={{ overflowY:"auto", maxHeight:"calc(100vh - 340px)" }}>
+                  {loading ? Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} style={{ padding:"14px 16px", borderBottom:"1px solid #f9f0f0", display:"flex", flexDirection:"column", gap:8 }}>
+                      <Sk w={140} h={14} /><Sk w={100} h={11} /><Sk w={80} h={11} />
+                    </div>
+                  )) : invoices.length === 0 ? (
+                    <div style={{ padding:"48px 16px", textAlign:"center" }}>
+                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+                        <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          <i className="ti ti-receipt-off" style={{ fontSize:22, color:"#e08080" }} />
+                        </div>
+                        <div style={{ fontSize:14, color:"#7a5050", fontWeight:600 }}>No invoices found</div>
+                        <div style={{ fontSize:12, color:"#b09090" }}>Try adjusting your filters</div>
+                      </div>
+                    </div>
+                  ) : invoices.map((inv, idx) => {
+                    const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
+                    const pm = PLAN_META[inv.payment_plan] ?? PLAN_META.monthly;
+                    const isSelected = selectedId === inv.invoice_id;
+                    const en = inv.enrollment_detail;
+                    return (
+                      <div key={inv.invoice_id}
+                        style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", background:isSelected?"#fff8f6":"white", borderLeft:`3px solid ${isSelected?"#e03131":"transparent"}`, transition:"all 0.12s", animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}
+                        onClick={() => setSelectedId(inv.invoice_id)}
+                        onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.background="#fff8f6"; }}
+                        onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.background="white"; }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
+                          <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
+                          <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 7px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
+                        </div>
+                        <div style={{ fontSize:12, color:"#5a4a4a", fontWeight:600, marginBottom:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`}</div>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                          <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                            <span style={{ fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background:pm.bg, color:pm.color }}>{pm.label}</span>
+                            <span style={{ fontSize:11, color:"#b09090" }}>{en?.grade_level ?? ""}</span>
+                          </div>
+                          <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>{fmt(inv.balance ?? 0)} bal.</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination */}
+                {!loading && pageMeta.count > 20 && (
+                  <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
+                    <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <button disabled={!pageMeta.previous} onClick={() => fetchInvoices(page - 1)}
+                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                        <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
+                      </button>
+                      <button disabled={!pageMeta.next} onClick={() => fetchInvoices(page + 1)}
+                        style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                        <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Detail */}
+              {selectedId ? (
                 <InvoiceDetail key={`${selectedId}-${refreshKey}`} invoiceId={selectedId}
                   onVoided={() => { setSelectedId(null); setRefreshKey((k) => k + 1); }} />
-              </div>
-            )}
-
-            {/* Empty state when nothing selected */}
-            {!selectedId && !loading && invoices.length > 0 && (
-              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", gap:12, color:"#b09090" }}>
-                <i className="ti ti-receipt" style={{ fontSize:36, color:"#e0c0c0" }} />
-                <div style={{ fontSize:14, fontWeight:600, color:"#7a5050"}}>Select an invoice</div>
-                <div style={{ fontSize:13 }}>Click an invoice on the left to view its details</div>
-              </div>
-            )}
+              ) : !loading && invoices.length > 0 ? (
+                <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"56px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:"#b09090", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
+                  <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <i className="ti ti-receipt" style={{ fontSize:22, color:"#e08080" }} />
+                  </div>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#7a5050" }}>Select an invoice</div>
+                  <div style={{ fontSize:13 }}>Click an invoice on the left to view its details</div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
       {showGenModal && (

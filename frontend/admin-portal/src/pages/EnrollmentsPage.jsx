@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
+const API_BASE    = "http://localhost:8003/api";
+const AUTH_API    = "http://localhost:8000";
 
 function getToken() {
   return sessionStorage.getItem("access_token") || "";
@@ -16,6 +17,51 @@ async function apiCall(url) {
   });
   if (!res.ok) throw new Error(res.status);
   return res.json();
+}
+
+async function apiPost(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(t); }
+  return res.json();
+}
+
+async function apiPatch(url, body) {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(t); }
+  return res.json();
+}
+
+// ── Grade progression helpers ─────────────────────────────────────────────────
+const ALL_GRADES_ORDERED = [
+  "Nursery","Kindergarten",
+  "Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6",
+  "Grade 7","Grade 8","Grade 9","Grade 10",
+  "Grade 11","Grade 12",
+];
+
+function getNextGrade(g) {
+  const i = ALL_GRADES_ORDERED.indexOf(g);
+  return i === -1 || i === ALL_GRADES_ORDERED.length - 1 ? null : ALL_GRADES_ORDERED[i + 1];
+}
+
+function getSchoolLevelForGrade(grade) {
+  const map = {
+    Nursery: "nursery", Kindergarten: "kindergarten",
+    "Grade 1":"elementary","Grade 2":"elementary","Grade 3":"elementary",
+    "Grade 4":"elementary","Grade 5":"elementary","Grade 6":"elementary",
+    "Grade 7":"junior_highschool","Grade 8":"junior_highschool",
+    "Grade 9":"junior_highschool","Grade 10":"junior_highschool",
+    "Grade 11":"senior_highschool","Grade 12":"senior_highschool",
+  };
+  return map[grade] ?? null;
 }
 
 
@@ -82,16 +128,411 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   }} />
 );
 
+// ─── Mass Enroll Modal ────────────────────────────────────────────────────────
+const SCHOOL_LEVELS_MODAL = [
+  { value: "nursery",           label: "Nursery"            },
+  { value: "kindergarten",      label: "Kindergarten"       },
+  { value: "elementary",        label: "Elementary"         },
+  { value: "junior_highschool", label: "Junior High School" },
+  { value: "senior_highschool", label: "Senior High School" },
+];
+const GRADE_LEVELS_BY_LEVEL_MODAL = {
+  nursery:           ["Nursery"],
+  kindergarten:      ["Kindergarten"],
+  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
+  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
+  senior_highschool: ["Grade 11","Grade 12"],
+};
+const SHS_STRANDS = ["STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports"];
+const SEMESTERS   = [{ value:"1st", label:"1st Semester" },{ value:"2nd", label:"2nd Semester" }];
+
+const inp = {
+  border:"1.5px solid #fde2de", borderRadius:9, padding:"8px 12px",
+  fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a",
+  background:"#fffbfb", outline:"none", width:"100%", boxSizing:"border-box",
+};
+const sel = { ...inp, cursor:"pointer" };
+const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#9a7070", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
+
+function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
+  const [schoolYear,  setSchoolYear]  = useState(initSchoolYear  || "");
+  const [schoolLevel, setSchoolLevel] = useState(initSchoolLevel || "elementary");
+  const [gradeLevel,  setGradeLevel]  = useState(initGradeLevel  || "Grade 1");
+  const [section,     setSection]     = useState("");
+  const [strand,      setStrand]      = useState("");
+  const [semester,    setSemester]    = useState("1st");
+
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [candidates,   setCandidates]   = useState([]);
+  const [candLoading,  setCandLoading]  = useState(false);
+  const [enrolled,     setEnrolled]     = useState([]);
+  const [enrollLoading,setEnrollLoading]= useState(false);
+  const [selected,     setSelected]     = useState(new Set());
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState("");
+  const [removing,     setRemoving]     = useState(new Set());
+
+  const isSHS = schoolLevel === "senior_highschool";
+  const gradeOpts = GRADE_LEVELS_BY_LEVEL_MODAL[schoolLevel] ?? [];
+  const classReady = schoolYear && schoolLevel && gradeLevel && section.trim();
+
+  // When school level changes, reset grade to first option
+  useEffect(() => {
+    const opts = GRADE_LEVELS_BY_LEVEL_MODAL[schoolLevel] ?? [];
+    setGradeLevel(opts[0] ?? "");
+    setStrand("");
+  }, [schoolLevel]);
+
+  // Fetch enrolled students when class fields are complete
+  useEffect(() => {
+    if (!classReady) { setEnrolled([]); return; }
+    setEnrollLoading(true);
+    const params = new URLSearchParams({
+      school_year: schoolYear, school_level: schoolLevel,
+      grade_level: gradeLevel, section: section.trim(), page_size: 200,
+    });
+    apiCall(`${API_BASE}/enrollments/?${params}`)
+      .then((d) => setEnrolled((d.results ?? []).filter((e) => e.enrollment_status !== "cancelled")))
+      .catch(() => setEnrolled([]))
+      .finally(() => setEnrollLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolYear, schoolLevel, gradeLevel, section]);
+
+  // Debounced candidate search with grade-progression filter
+  const searchTimer = useRef(null);
+  useEffect(() => {
+    if (!classReady) { setCandidates([]); return; }
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      setCandLoading(true);
+      try {
+        const params = new URLSearchParams({ status: "active", page_size: 100 });
+        if (searchQuery.trim()) params.set("search", searchQuery.trim());
+        const data = await apiCall(`${AUTH_API}/api/students/?${params}`);
+        const students = data.results ?? [];
+
+        const enrolledIds = new Set(enrolled.map((e) => e.student_id ?? e.student));
+
+        // Fetch last enrollment for each student in parallel
+        const pairs = await Promise.all(
+          students.map(async (st) => {
+            if (enrolledIds.has(st.student_id)) return null; // already enrolled
+            try {
+              const d = await apiCall(`${API_BASE}/enrollments/?student=${st.student_id}&page_size=100`);
+              const list = d.results ?? [];
+              if (!list.length) return { ...st, lastGrade: null }; // new student — eligible for any grade
+              const latest = list.reduce((a, b) =>
+                (a.school_year > b.school_year || (a.school_year === b.school_year && a.enrollment_id > b.enrollment_id)) ? a : b
+              );
+              return { ...st, lastGrade: latest.grade_level ?? null };
+            } catch { return { ...st, lastGrade: null }; }
+          })
+        );
+
+        const eligible = pairs.filter((st) => {
+          if (!st) return false;
+          if (st.lastGrade === null) return true; // new student
+          return getNextGrade(st.lastGrade) === gradeLevel;
+        });
+        setCandidates(eligible);
+      } catch { setCandidates([]); }
+      finally { setCandLoading(false); }
+    }, 320);
+    return () => clearTimeout(searchTimer.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, classReady, gradeLevel, enrolled]);
+
+  const toggleSelect = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const allSelected = candidates.length > 0 && candidates.every((c) => selected.has(c.student_id));
+  const toggleAll   = () => setSelected(allSelected ? new Set() : new Set(candidates.map((c) => c.student_id)));
+
+  const handleEnroll = async () => {
+    setError("");
+    setSaving(true);
+    const ids = [...selected];
+    let failed = 0;
+    for (const sid of ids) {
+      try {
+        const payload = {
+          student: sid, school_year: schoolYear, school_level: schoolLevel,
+          grade_level: gradeLevel, section: section.trim(),
+          enrollment_status: "enrolled",
+          strand:   isSHS ? (strand || null)   : null,
+          semester: isSHS ? (semester || null) : null,
+        };
+        await apiPost(`${API_BASE}/enrollments/`, payload);
+      } catch { failed++; }
+    }
+    setSaving(false);
+    if (failed > 0) setError(`${failed} enrollment(s) failed — they may already be enrolled for this school year.`);
+    setSelected(new Set());
+    // Refresh enrolled list
+    const params = new URLSearchParams({
+      school_year: schoolYear, school_level: schoolLevel,
+      grade_level: gradeLevel, section: section.trim(), page_size: 200,
+    });
+    apiCall(`${API_BASE}/enrollments/?${params}`)
+      .then((d) => setEnrolled((d.results ?? []).filter((e) => e.enrollment_status !== "cancelled")))
+      .catch(() => {});
+    if (failed === 0) onSuccess?.();
+  };
+
+  const handleRemove = async (enrollment) => {
+    const eid = enrollment.enrollment_id;
+    setRemoving((prev) => new Set([...prev, eid]));
+    try {
+      await apiPatch(`${API_BASE}/enrollments/${eid}/`, { enrollment_status: "cancelled" });
+      setEnrolled((prev) => prev.filter((e) => e.enrollment_id !== eid));
+      onSuccess?.();
+    } catch { setError("Failed to remove student from class."); }
+    finally { setRemoving((prev) => { const n = new Set(prev); n.delete(eid); return n; }); }
+  };
+
+  const avatarFor = (name = "X") => {
+    const palettes = [
+      { bg:"#fde8e8",color:"#c0392b" },{ bg:"#e8f0fd",color:"#2563eb" },
+      { bg:"#e8fdf0",color:"#16a34a" },{ bg:"#fdf5e8",color:"#d97706" },
+      { bg:"#f0e8fd",color:"#7c3aed" },{ bg:"#fde8f8",color:"#be185d" },
+      { bg:"#e8fdfd",color:"#0891b2" },
+    ];
+    return palettes[name.charCodeAt(0) % palettes.length];
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200, backdropFilter:"blur(4px)", animation:"fadeIn 0.15s ease" }}>
+      <div style={{ background:"white", borderRadius:20, width:"min(960px,96vw)", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease", overflow:"hidden" }}>
+
+        {/* Header */}
+        <div style={{ padding:"20px 26px 16px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <i className="ti ti-users-plus" style={{ fontSize:17, color:"#e03131" }} />
+              </div>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Mass Enroll</div>
+                <div style={{ fontSize:11.5, color:"#b09090" }}>Bulk-assign students to a class section</div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#9a7070"; }}>
+              <i className="ti ti-x" style={{ fontSize:14 }} />
+            </button>
+          </div>
+
+          {/* Class config row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1.2fr 1fr", gap:10 }}>
+            <div>
+              <label style={lbl}>School Level</label>
+              <select value={schoolLevel} onChange={(e) => setSchoolLevel(e.target.value)} style={sel}>
+                {SCHOOL_LEVELS_MODAL.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Grade Level</label>
+              <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={sel}>
+                {gradeOpts.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
+              <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. Sampaguita" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>School Year</label>
+              <select value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} style={sel}>
+                <option value="">— Select year —</option>
+                {(() => {
+                  const d = new Date();
+                  const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+                  return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y+1}`; });
+                })().map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+          {isSHS && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginTop:10 }}>
+              <div style={{ gridColumn:"1/3" }}>
+                <label style={lbl}>Strand</label>
+                <select value={strand} onChange={(e) => setStrand(e.target.value)} style={sel}>
+                  <option value="">— Select strand —</option>
+                  {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn:"3/5" }}>
+                <label style={lbl}>Semester</label>
+                <select value={semester} onChange={(e) => setSemester(e.target.value)} style={sel}>
+                  {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Body — two panels */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", flex:1, minHeight:0, overflow:"hidden" }}>
+
+          {/* Left panel — Add Students */}
+          <div style={{ display:"flex", flexDirection:"column", borderRight:"1px solid #f5eaea", minHeight:0 }}>
+            <div style={{ padding:"12px 18px 10px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#7a5050", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                Add Students {candidates.length > 0 && <span style={{ color:"#b09090", fontWeight:400 }}>({candidates.length} eligible)</span>}
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:"white", border:"1.5px solid #f0e4e4", borderRadius:9, padding:"0 12px", height:36 }}>
+                <i className="ti ti-search" style={{ fontSize:13, color:"#c0a0a0" }} />
+                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={classReady ? "Search by name or LRN…" : "Fill class fields above first"}
+                  disabled={!classReady}
+                  style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
+                {candLoading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#e03131", animation:"spin 1s linear infinite" }} />}
+              </div>
+            </div>
+
+            <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+              {!classReady && (
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                  <i className="ti ti-arrow-up" style={{ fontSize:20, display:"block", marginBottom:8 }} />
+                  Complete the class fields above to search for students.
+                </div>
+              )}
+              {classReady && !candLoading && candidates.length === 0 && (
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                  {searchQuery ? `No eligible students match "${searchQuery}".` : "No eligible students found for this grade. Try searching by name."}
+                </div>
+              )}
+              {candidates.length > 0 && (
+                <>
+                  <div style={{ padding:"6px 18px", display:"flex", alignItems:"center", gap:8, borderBottom:"1px solid #f9f0f0" }}>
+                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                      style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer" }} />
+                    <span style={{ fontSize:11.5, color:"#9a7070", fontWeight:600 }}>{allSelected ? "Deselect all" : "Select all"}</span>
+                    {selected.size > 0 && <span style={{ marginLeft:"auto", fontSize:11, background:"#fff0f0", color:"#e03131", border:"1px solid #fca5a5", borderRadius:99, padding:"2px 8px", fontWeight:700 }}>{selected.size} selected</span>}
+                  </div>
+                  {candidates.map((st) => {
+                    const p = avatarFor(st.last_name ?? "X");
+                    const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
+                    const name = [st.last_name+",", st.first_name, st.middle_name].filter(Boolean).join(" ");
+                    const isSelected = selected.has(st.student_id);
+                    return (
+                      <div key={st.student_id}
+                        onClick={() => toggleSelect(st.student_id)}
+                        style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", cursor:"pointer", background: isSelected ? "#fff8f6" : "white", borderBottom:"1px solid #f9f0f0", transition:"background .1s" }}
+                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background="#fff8f6"; }}
+                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background="white"; }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(st.student_id)}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer", flexShrink:0 }} />
+                        <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                            <span>LRN {st.lrn ?? "—"}</span>
+                            {st.lastGrade ? (
+                              <span style={{ background:"#fff0e8", color:"#b45309", border:"1px solid #fcd9a8", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                {st.lastGrade} → <span style={{ color:"#e03131" }}>{gradeLevel}</span>
+                              </span>
+                            ) : (
+                              <span style={{ background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right panel — Enrolled */}
+          <div style={{ display:"flex", flexDirection:"column", minHeight:0 }}>
+            <div style={{ padding:"12px 18px 10px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#7a5050", textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                Enrolled
+                <span style={{ marginLeft:6, fontWeight:400, color:"#b09090" }}>
+                  {enrollLoading ? "loading…" : `(${enrolled.length})`}
+                </span>
+              </div>
+            </div>
+            <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+              {!classReady && (
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                  Fill in the class fields to see enrolled students.
+                </div>
+              )}
+              {classReady && !enrollLoading && enrolled.length === 0 && (
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>No students enrolled in this class yet.</div>
+              )}
+              {enrolled.map((en) => {
+                const name = en.student_name ?? `Student #${en.student}`;
+                const p = avatarFor(name);
+                const initials = name.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase();
+                const isRemoving = removing.has(en.enrollment_id);
+                return (
+                  <div key={en.enrollment_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", borderBottom:"1px solid #f9f0f0" }}>
+                    <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+                      <div style={{ fontSize:10.5, color:"#b09090", marginTop:1 }}>ID #{en.enrollment_id}</div>
+                    </div>
+                    <button onClick={() => handleRemove(en)} disabled={isRemoving}
+                      title="Cancel enrollment"
+                      style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color:"#c0a0a0", flexShrink:0, transition:"all .12s" }}
+                      onMouseEnter={(e) => { if (!isRemoving) { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}}
+                      onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c0a0a0"; e.currentTarget.style.borderColor="#fde2de"; }}>
+                      {isRemoving
+                        ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
+                        : <i className="ti ti-x" style={{ fontSize:12 }} />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"14px 26px", borderTop:"1px solid #f5eaea", flexShrink:0 }}>
+          {error && (
+            <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"9px 13px", fontSize:12.5, color:"#b91c1c", marginBottom:12, display:"flex", alignItems:"center", gap:7 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize:14, flexShrink:0 }} />{error}
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+            <button onClick={onClose}
+              style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+              Close
+            </button>
+            <button onClick={handleEnroll} disabled={selected.size === 0 || saving || !classReady}
+              style={{ padding:"9px 22px", background: (selected.size === 0 || saving || !classReady) ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (selected.size === 0 || !classReady) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", boxShadow: selected.size > 0 && classReady ? "0 4px 16px rgba(224,49,49,0.28)" : "none", display:"inline-flex", alignItems:"center", gap:7, opacity: saving ? 0.7 : 1 }}>
+              {saving
+                ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Enrolling…</>
+                : <><i className="ti ti-check" style={{ fontSize:14 }} />Enroll Selected{selected.size > 0 ? ` (${selected.size})` : ""}</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
 export default function EnrollmentsPage() {
   const navigate = useNavigate();
   const token = sessionStorage.getItem("access_token");
-  const [enrollments, setEnrollments]   = useState([]);
-  const [loading,     setLoading]       = useState(true);
-  const [page,        setPage]          = useState(1);
-  const [pageMeta,    setPageMeta]      = useState({ count: 0, next: null, previous: null });
+  const [enrollments,    setEnrollments]    = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [page,           setPage]           = useState(1);
+  const [pageMeta,       setPageMeta]       = useState({ count: 0, next: null, previous: null });
+  const [showMassEnroll, setShowMassEnroll] = useState(false);
 
   // Filters
   const [schoolYear,   setSchoolYear]   = useState("");
@@ -141,6 +582,7 @@ export default function EnrollmentsPage() {
   const totalPages = Math.ceil(pageMeta.count / 20);
 
   return (
+    <>
     <AppLayout>
       <style>{`
         ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
@@ -156,6 +598,10 @@ export default function EnrollmentsPage() {
         .filter-chip { transition:all .14s; cursor:pointer; border:1.5px solid #f0e4e4; background:white; font-family:'DM Sans',sans-serif; }
         .filter-chip:hover { border-color:#fca5a5; color:#e03131; background:#fff8f6; }
         .filter-chip.active { background:#fff0f0; border-color:#e03131; color:#e03131; font-weight:700; }
+
+        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+        @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin    { to{transform:rotate(360deg)} }
 
         .new-btn { transition:all .16s; }
         .new-btn:hover { background:#c92a2a !important; box-shadow:0 8px 28px rgba(224,49,49,0.32) !important; transform:translateY(-1px); }
@@ -175,11 +621,20 @@ export default function EnrollmentsPage() {
                 {loading ? "Loading…" : `${pageMeta.count.toLocaleString()} enrollment${pageMeta.count !== 1 ? "s" : ""} found`}
               </div>
             </div>
-            <button className="new-btn"
-              style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)", letterSpacing:"0.01em" }}
-              onClick={() => navigate("/enrollments/new")}>
-              <i className="ti ti-clipboard-plus" style={{ fontSize:15 }} />New Enrollment
-            </button>
+            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+              <button
+                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}
+                onClick={() => setShowMassEnroll(true)}
+                onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.borderColor="#e03131"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#fca5a5"; }}>
+                <i className="ti ti-users-plus" style={{ fontSize:15 }} />Mass Enroll
+              </button>
+              <button className="new-btn"
+                style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)", letterSpacing:"0.01em" }}
+                onClick={() => navigate("/enrollments/new")}>
+                <i className="ti ti-clipboard-plus" style={{ fontSize:15 }} />New Enrollment
+              </button>
+            </div>
           </div>
 
           {/* Content */}
@@ -430,6 +885,16 @@ export default function EnrollmentsPage() {
 
           </div>
     </AppLayout>
+    {showMassEnroll && (
+      <MassEnrollModal
+        onClose={() => setShowMassEnroll(false)}
+        onSuccess={() => fetchEnrollments(page)}
+        initSchoolYear={schoolYear   || undefined}
+        initSchoolLevel={schoolLevel || undefined}
+        initGradeLevel={gradeLevel   || undefined}
+      />
+    )}
+    </>
   );
 }
 
