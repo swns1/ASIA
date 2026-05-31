@@ -1882,7 +1882,9 @@ export default function StudentFormPage() {
             </button>
           )}
 
-          <div style={{ ...cardStyle, minHeight: 320 }}>
+          <div style={{ ...cardStyle, padding: 0, overflow: "hidden", minHeight: 320 }}>
+            <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
+            <div style={{ padding: "24px 28px" }}>
             {step === 0 && (
               <DocumentsStep
                 isEdit={!!id}
@@ -1910,6 +1912,7 @@ export default function StudentFormPage() {
                 isEdit={!!id}
               />
             )}
+            </div>
           </div>
         </div>
       </div>

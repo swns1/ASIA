@@ -36,7 +36,7 @@ const sendEnrollmentEmail = (p) => apiCall("POST", `http://localhost:8003/api/se
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
   redMid: "#fde2de", dark: "#1a0a0a", muted: "#7a5050",
-  bg: "#fff8f6", white: "#ffffff",
+  bg: "#fff8f6", white: "#ffffff", shadow: "0 4px 24px rgba(224,49,49,0.10)",
 };
 
 const SCHOOL_LEVELS = [
@@ -143,13 +143,14 @@ function Textarea({ style, ...props }) {
 
 function SectionCard({ title, icon, badge, children }) {
   return (
-    <div style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "visible", animation: "fadeUp 0.3s ease both" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: "1px solid #f9f0f0", background: "linear-gradient(to right, #fdfafa, white)" }}>
+    <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, overflow: "hidden", marginBottom: 0 }}>
+      <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${C.redMid}`, background: "#fff8f8" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #fff0f0, #fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className={`ti ${icon}`} style={{ fontSize: 16, color: C.red }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.dark, fontFamily: "'Playfair Display', serif" }}>{title}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.dark, fontFamily: "'DM Sans', sans-serif" }}>{title}</span>
         </div>
         {badge != null && (
           <span style={{ background: C.redLight, color: C.red, borderRadius: 99, fontSize: 11, fontWeight: 700, padding: "3px 10px", border: `1px solid ${C.redBorder}` }}>{badge}</span>
@@ -385,12 +386,12 @@ export default function EnrollmentFormPage() {
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
           <button onClick={() => navigate("/enrollments")}
-            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
+            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
             <i className="ti ti-arrow-left" style={{ fontSize: 13 }} />Back to Enrollments
           </button>
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", margin: 0, fontSize: 28, color: C.dark, letterSpacing: "-0.01em" }}>
+              <h2 style={{ margin: 0, fontSize: 28, color: C.dark, fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>
                 {isEdit ? "Edit Enrollment" : "New Enrollment"}
               </h2>
               <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
@@ -410,9 +411,9 @@ export default function EnrollmentFormPage() {
         )}
 
         {loading ? (
-          <div style={{ background: "white", borderRadius: 16, padding: 60, textAlign: "center", color: C.muted, border: "1px solid #f5eaea" }}>Loading enrollment…</div>
+          <div style={{ background: C.white, borderRadius: 16, padding: 60, textAlign: "center", color: C.muted, border: `1px solid ${C.redMid}`, boxShadow: C.shadow }}>Loading enrollment…</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
             {/* 1. Student */}
             <SectionCard title="Student" icon="ti-user-search">
