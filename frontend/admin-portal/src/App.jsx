@@ -19,6 +19,7 @@ import AuditTrailPage     from "./pages/AuditTrailPage";
 import RequirementsPage   from "./pages/RequirementsPage";
 import UsersPage          from "./pages/UsersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import AcademicCalendarPage from "./pages/AcademicCalendarPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/requirements"  element={<RequirementsPage />} />
         <Route path="/users"         element={<UsersPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/academic-calendar" element={<AcademicCalendarPage />} />
       </Routes>
     </BrowserRouter>
   );
