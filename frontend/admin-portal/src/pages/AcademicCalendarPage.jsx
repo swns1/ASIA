@@ -63,6 +63,7 @@ const EVENT_TYPE_DEFAULTS = [
   { value: "enrollment",     label: "Enrollment",    color: "#2e6b0d", icon: "ti-clipboard-list" },
   { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
   { value: "school_day_off", label: "No Classes",    color: "#d97706", icon: "ti-school-off" },
+  { value: "event",          label: "Event",         color: "#0e9488", icon: "ti-star" },
   { value: "other",          label: "Other",         color: "#9a7070", icon: "ti-calendar" },
 ];
 

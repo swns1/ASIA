@@ -6,6 +6,7 @@ EVENT_TYPES = [
     ("enrollment",     "Enrollment Period"),
     ("quarter_break",  "Quarter Break"),
     ("school_day_off", "School Day Off"),
+    ("event",          "Event"),
     ("other",          "Other"),
 ]
 
