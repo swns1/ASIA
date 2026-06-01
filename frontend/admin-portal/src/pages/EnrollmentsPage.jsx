@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
+import { modalVariants, springTransition } from "../utils/motion";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -303,8 +305,24 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200, backdropFilter:"blur(4px)", animation:"fadeIn 0.15s ease" }}>
-      <div style={{ background:"white", borderRadius:20, width:"min(960px,96vw)", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease", overflow:"hidden" }}>
+    <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200 }}>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{ position:"absolute", inset:0, background:"rgba(26,10,10,0.45)", backdropFilter:"blur(4px)" }}
+      />
+      {/* Dialog */}
+      <motion.div
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={springTransition}
+        style={{ position:"relative", background:"white", borderRadius:20, width:"min(960px,96vw)", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", overflow:"hidden" }}>
 
         {/* Header */}
         <div style={{ padding:"20px 26px 16px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
@@ -318,11 +336,14 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                 <div style={{ fontSize:11.5, color:"#b09090" }}>Bulk-assign students to a class section · Created as <strong>Pending</strong></div>
               </div>
             </div>
-            <button onClick={onClose} style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#9a7070"; }}>
+            <motion.button
+              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131" }}
+              whileTap={{ scale: 0.93 }}
+              transition={{ duration: 0.12 }}
+              onClick={onClose}
+              style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
               <i className="ti ti-x" style={{ fontSize:14 }} />
-            </button>
+            </motion.button>
           </div>
 
           {/* Class config row */}
@@ -414,52 +435,64 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                     <input type="checkbox" checked={allSelected} onChange={toggleAll}
                       style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer" }} />
                     <span style={{ fontSize:11.5, color:"#9a7070", fontWeight:600 }}>{allSelected ? "Deselect all" : "Select all"}</span>
-                    {selected.size > 0 && <span style={{ marginLeft:"auto", fontSize:11, background:"#fff0f0", color:"#e03131", border:"1px solid #fca5a5", borderRadius:99, padding:"2px 8px", fontWeight:700 }}>{selected.size} selected</span>}
+                    {selected.size > 0 && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        style={{ marginLeft:"auto", fontSize:11, background:"#fff0f0", color:"#e03131", border:"1px solid #fca5a5", borderRadius:99, padding:"2px 8px", fontWeight:700 }}>
+                        {selected.size} selected
+                      </motion.span>
+                    )}
                   </div>
-                  {candidates.map((st) => {
-                    const p = avatarFor(st.last_name ?? "X");
-                    const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
-                    const name = [st.last_name+",", st.first_name, st.middle_name].filter(Boolean).join(" ");
-                    const isSelected = selected.has(st.student_id);
-                    const elig = eligibilityMap[st.student_id];
-                    // Eligibility badge
-                    const eligBadge = elig == null ? null
-                      : elig.blocking_reasons?.length > 0
-                        ? { bg:"#fef2f2", color:"#991b1b", border:"#fca5a5", icon:"ti-circle-x", label:"Blocked" }
-                        : elig.missing_docs?.length > 0
-                          ? { bg:"#fffbeb", color:"#92400e", border:"#fde68a", icon:"ti-file-x", label:`Docs (${elig.missing_docs.length})` }
-                          : { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0", icon:"ti-circle-check", label:"Eligible" };
-                    return (
-                      <div key={st.student_id}
-                        onClick={() => toggleSelect(st.student_id)}
-                        style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", cursor:"pointer", background: isSelected ? "#fff8f6" : "white", borderBottom:"1px solid #f9f0f0", transition:"background .1s" }}
-                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background="#fff8f6"; }}
-                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background="white"; }}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(st.student_id)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer", flexShrink:0 }} />
-                        <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-                            <span>LRN {st.lrn ?? "—"}</span>
-                            {st.lastGrade ? (
-                              <span style={{ background:"#fff0e8", color:"#b45309", border:"1px solid #fcd9a8", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
-                                {st.lastGrade} → <span style={{ color:"#e03131" }}>{gradeLevel}</span>
-                              </span>
-                            ) : (
-                              <span style={{ background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
-                            )}
-                            {eligBadge && (
-                              <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:eligBadge.bg, color:eligBadge.color, border:`1px solid ${eligBadge.border}`, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
-                                <i className={`ti ${eligBadge.icon}`} style={{ fontSize:10 }} />{eligBadge.label}
-                              </span>
-                            )}
+                  <AnimatePresence mode="popLayout">
+                    {candidates.map((st, idx) => {
+                      const p = avatarFor(st.last_name ?? "X");
+                      const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
+                      const name = [st.last_name+",", st.first_name, st.middle_name].filter(Boolean).join(" ");
+                      const isSelected = selected.has(st.student_id);
+                      const elig = eligibilityMap[st.student_id];
+                      const eligBadge = elig == null ? null
+                        : elig.blocking_reasons?.length > 0
+                          ? { bg:"#fef2f2", color:"#991b1b", border:"#fca5a5", icon:"ti-circle-x", label:"Blocked" }
+                          : elig.missing_docs?.length > 0
+                            ? { bg:"#fffbeb", color:"#92400e", border:"#fde68a", icon:"ti-file-x", label:`Docs (${elig.missing_docs.length})` }
+                            : { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0", icon:"ti-circle-check", label:"Eligible" };
+                      return (
+                        <motion.div key={st.student_id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.15, ease: "easeOut", delay: Math.min(idx * 0.018, 0.22) }}
+                          onClick={() => toggleSelect(st.student_id)}
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", cursor:"pointer", background: isSelected ? "#fff8f6" : "white", borderBottom:"1px solid #f9f0f0" }}
+                          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background="#fff8f6"; }}
+                          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background="white"; }}>
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(st.student_id)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer", flexShrink:0 }} />
+                          <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+                            <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                              <span>LRN {st.lrn ?? "—"}</span>
+                              {st.lastGrade ? (
+                                <span style={{ background:"#fff0e8", color:"#b45309", border:"1px solid #fcd9a8", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                  {st.lastGrade} → <span style={{ color:"#e03131" }}>{gradeLevel}</span>
+                                </span>
+                              ) : (
+                                <span style={{ background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
+                              )}
+                              {eligBadge && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:eligBadge.bg, color:eligBadge.color, border:`1px solid ${eligBadge.border}`, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                  <i className={`ti ${eligBadge.icon}`} style={{ fontSize:10 }} />{eligBadge.label}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
                 </>
               )}
             </div>
@@ -484,101 +517,138 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
               {classReady && !enrollLoading && enrolled.length === 0 && (
                 <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>No students in this class yet.</div>
               )}
-              {enrolled.map((en) => {
-                const name = en.student_name ?? en.student_detail
-                  ? [en.student_detail?.first_name, en.student_detail?.last_name].filter(Boolean).join(" ")
-                  : `Student #${en.student}`;
-                const p = avatarFor(name);
-                const initials = name.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0,2).toUpperCase();
-                const isRemoving = removing.has(en.enrollment_id);
-                const isPendingThisRemove = pendingRemove?.enrollment_id === en.enrollment_id;
-                const statusPill = STATUS_META[en.enrollment_status];
-                return (
-                  <div key={en.enrollment_id} style={{ borderBottom:"1px solid #f9f0f0" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px" }}>
-                      <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                        <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
-                          <span>#{en.enrollment_id}</span>
-                          {statusPill && (
-                            <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:statusPill.bg, color:statusPill.color, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
-                              <span style={{ width:5, height:5, borderRadius:"50%", background:statusPill.dot }} />{statusPill.label}
-                            </span>
-                          )}
+              <AnimatePresence mode="popLayout">
+                {enrolled.map((en) => {
+                  const name = en.student_name ?? en.student_detail
+                    ? [en.student_detail?.first_name, en.student_detail?.last_name].filter(Boolean).join(" ")
+                    : `Student #${en.student}`;
+                  const p = avatarFor(name);
+                  const initials = name.split(" ").map((w) => w[0]).filter(Boolean).join("").slice(0,2).toUpperCase();
+                  const isRemoving = removing.has(en.enrollment_id);
+                  const isPendingThisRemove = pendingRemove?.enrollment_id === en.enrollment_id;
+                  const statusPill = STATUS_META[en.enrollment_status];
+                  return (
+                    <motion.div key={en.enrollment_id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: 16 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      style={{ borderBottom:"1px solid #f9f0f0" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px" }}>
+                        <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                            <span>#{en.enrollment_id}</span>
+                            {statusPill && (
+                              <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:statusPill.bg, color:statusPill.color, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                <span style={{ width:5, height:5, borderRadius:"50%", background:statusPill.dot }} />{statusPill.label}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <motion.button
+                          whileHover={!isRemoving ? { scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" } : {}}
+                          whileTap={!isRemoving ? { scale: 0.93 } : {}}
+                          transition={{ duration: 0.12 }}
+                          onClick={() => setPendingRemove(isPendingThisRemove ? null : en)}
+                          disabled={isRemoving}
+                          title="Remove from class"
+                          style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#c0a0a0", flexShrink:0 }}>
+                          {isRemoving
+                            ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
+                            : <i className="ti ti-x" style={{ fontSize:12 }} />}
+                        </motion.button>
                       </div>
-                      <button onClick={() => setPendingRemove(isPendingThisRemove ? null : en)}
-                        disabled={isRemoving}
-                        title="Remove from class"
-                        style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#c0a0a0", flexShrink:0, transition:"all .12s" }}
-                        onMouseEnter={(e) => { if (!isRemoving) { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}}
-                        onMouseLeave={(e) => { if (!isPendingThisRemove) { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c0a0a0"; e.currentTarget.style.borderColor="#fde2de"; }}}>
-                        {isRemoving
-                          ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
-                          : <i className="ti ti-x" style={{ fontSize:12 }} />}
-                      </button>
-                    </div>
-                    {/* Inline remove confirmation */}
-                    {isPendingThisRemove && (
-                      <div style={{ margin:"0 18px 10px", padding:"10px 14px", background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:9, display:"flex", alignItems:"center", gap:10 }}>
-                        <span style={{ flex:1, fontSize:12, color:"#991b1b" }}>Remove <strong>{name}</strong> from this class?</span>
-                        <button onClick={confirmRemove}
-                          style={{ padding:"5px 12px", background:"#e03131", color:"white", border:"none", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                          Confirm
-                        </button>
-                        <button onClick={() => setPendingRemove(null)}
-                          style={{ padding:"5px 12px", background:"white", color:"#7a5050", border:"1px solid #f0e4e4", borderRadius:7, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      {/* Inline remove confirmation */}
+                      <AnimatePresence>
+                        {isPendingThisRemove && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.16, ease: "easeOut" }}
+                            style={{ margin:"0 18px 10px", padding:"10px 14px", background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:9, display:"flex", alignItems:"center", gap:10 }}>
+                            <span style={{ flex:1, fontSize:12, color:"#991b1b" }}>Remove <strong>{name}</strong> from this class?</span>
+                            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} transition={{ duration: 0.1 }}
+                              onClick={confirmRemove}
+                              style={{ padding:"5px 12px", background:"#e03131", color:"white", border:"none", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                              Confirm
+                            </motion.button>
+                            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} transition={{ duration: 0.1 }}
+                              onClick={() => setPendingRemove(null)}
+                              style={{ padding:"5px 12px", background:"white", color:"#7a5050", border:"1px solid #f0e4e4", borderRadius:7, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                              Cancel
+                            </motion.button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
           </div>
         </div>
 
         {/* Footer */}
         <div style={{ padding:"14px 26px", borderTop:"1px solid #f5eaea", flexShrink:0 }}>
-          {error && (
-            <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"9px 13px", fontSize:12.5, color:"#b91c1c", marginBottom:12, display:"flex", alignItems:"flex-start", gap:7 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize:14, flexShrink:0, marginTop:1 }} />
-              <span style={{ whiteSpace:"pre-wrap" }}>{error}</span>
-            </div>
-          )}
-          {saveResult && (
-            <div style={{ background: saveResult.failed?.length ? "#fffbeb" : "#f0fdf4", border:`1px solid ${saveResult.failed?.length ? "#fde68a" : "#bbf7d0"}`, borderRadius:8, padding:"9px 13px", fontSize:12.5, color: saveResult.failed?.length ? "#92400e" : "#15803d", marginBottom:12 }}>
-              <div style={{ fontWeight:700, marginBottom: saveResult.failed?.length ? 6 : 0 }}>
-                <i className={`ti ${saveResult.failed?.length ? "ti-alert-triangle" : "ti-circle-check"}`} style={{ marginRight:5 }} />
-                {saveResult.created?.length} student{saveResult.created?.length !== 1 ? "s" : ""} added as Pending.
-                {saveResult.failed?.length > 0 && ` ${saveResult.failed.length} failed.`}
-              </div>
-              {saveResult.failed?.map((f, i) => (
-                <div key={i} style={{ fontSize:11.5, marginTop:3 }}>· Student #{f.student_id}: {f.reason}</div>
-              ))}
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"9px 13px", fontSize:12.5, color:"#b91c1c", marginBottom:12, display:"flex", alignItems:"flex-start", gap:7 }}>
+                <i className="ti ti-alert-circle" style={{ fontSize:14, flexShrink:0, marginTop:1 }} />
+                <span style={{ whiteSpace:"pre-wrap" }}>{error}</span>
+              </motion.div>
+            )}
+            {saveResult && (
+              <motion.div
+                key="result"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                style={{ background: saveResult.failed?.length ? "#fffbeb" : "#f0fdf4", border:`1px solid ${saveResult.failed?.length ? "#fde68a" : "#bbf7d0"}`, borderRadius:8, padding:"9px 13px", fontSize:12.5, color: saveResult.failed?.length ? "#92400e" : "#15803d", marginBottom:12 }}>
+                <div style={{ fontWeight:700, marginBottom: saveResult.failed?.length ? 6 : 0 }}>
+                  <i className={`ti ${saveResult.failed?.length ? "ti-alert-triangle" : "ti-circle-check"}`} style={{ marginRight:5 }} />
+                  {saveResult.created?.length} student{saveResult.created?.length !== 1 ? "s" : ""} added as Pending.
+                  {saveResult.failed?.length > 0 && ` ${saveResult.failed.length} failed.`}
+                </div>
+                {saveResult.failed?.map((f, i) => (
+                  <div key={i} style={{ fontSize:11.5, marginTop:3 }}>· Student #{f.student_id}: {f.reason}</div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
             <div style={{ fontSize:11, color:"#b09090", fontStyle:"italic" }}>
               Students are added as <strong>Pending</strong> — activate each to Enrolled after documents are submitted.
             </div>
             <div style={{ display:"flex", gap:10 }}>
-              <button onClick={onClose}
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                onClick={onClose}
                 style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                 Close
-              </button>
-              <button onClick={handleEnroll} disabled={selected.size === 0 || saving || !classReady}
+              </motion.button>
+              <motion.button
+                whileHover={selected.size > 0 && classReady && !saving ? { scale: 1.03 } : {}}
+                whileTap={selected.size > 0 && classReady && !saving ? { scale: 0.96 } : {}}
+                transition={{ duration: 0.12 }}
+                onClick={handleEnroll} disabled={selected.size === 0 || saving || !classReady}
                 style={{ padding:"9px 22px", background: (selected.size === 0 || saving || !classReady) ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (selected.size === 0 || !classReady) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", boxShadow: selected.size > 0 && classReady ? "0 4px 16px rgba(224,49,49,0.28)" : "none", display:"inline-flex", alignItems:"center", gap:7, opacity: saving ? 0.7 : 1 }}>
                 {saving
                   ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Enrolling…</>
                   : <><i className="ti ti-check" style={{ fontSize:14 }} />Enroll Selected{selected.size > 0 ? ` (${selected.size})` : ""}</>}
-              </button>
+              </motion.button>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -588,7 +658,10 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 // ════════════════════════════════════════════════════════════════════════════
 function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel, initSection }) {
   // Step: "input" → "preview" → "result"
+  const STEP_ORDER = ["input", "preview", "result"];
   const [step, setStep] = useState("input");
+  const stepDir    = useRef(1);
+  const prevStepRef = useRef("input");
 
   const [fromSchoolYear,  setFromSchoolYear]  = useState(initSchoolYear  || "");
   const [fromGradeLevel,  setFromGradeLevel]  = useState(initGradeLevel  || "Grade 7");
@@ -601,6 +674,14 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
   const [confirming,  setConfirming]  = useState(false);
   const [resultData,  setResultData]  = useState(null);
   const [error,       setError]       = useState("");
+
+  function goStep(next) {
+    const prevIdx = STEP_ORDER.indexOf(prevStepRef.current);
+    const nextIdx = STEP_ORDER.indexOf(next);
+    stepDir.current   = nextIdx > prevIdx ? 1 : -1;
+    prevStepRef.current = next;
+    setStep(next);
+  }
 
   // Auto-populate toSection when fromSection changes (can be overridden)
   useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
@@ -632,7 +713,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
         to_section:       toSection.trim() || fromSection.trim(),
       });
       setPreviewData(data);
-      setStep("preview");
+      goStep("preview");
     } catch (e) {
       setError(e.response?.data?.detail || e.message || "Preview failed.");
     } finally {
@@ -652,7 +733,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
         to_section:       toSection.trim() || fromSection.trim(),
       });
       setResultData(data);
-      setStep("result");
+      goStep("result");
       onSuccess?.();
     } catch (e) {
       setError(e.response?.data?.detail || e.message || "Promotion failed.");
@@ -661,9 +742,32 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
     }
   }
 
+  const dir = stepDir.current;
+  const stepVariants = {
+    enter:  { x: dir * 28, opacity: 0 },
+    center: { x: 0,        opacity: 1 },
+    exit:   { x: dir * -28, opacity: 0 },
+  };
+
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200, backdropFilter:"blur(4px)", animation:"fadeIn 0.15s ease" }}>
-      <div style={{ background:"white", borderRadius:20, width:"min(780px,96vw)", maxHeight:"88vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease", overflow:"hidden" }}>
+    <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200 }}>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{ position:"absolute", inset:0, background:"rgba(26,10,10,0.45)", backdropFilter:"blur(4px)" }}
+      />
+      {/* Dialog */}
+      <motion.div
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={springTransition}
+        style={{ position:"relative", background:"white", borderRadius:20, width:"min(780px,96vw)", maxHeight:"88vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", overflow:"hidden" }}>
 
         {/* Header */}
         <div style={{ padding:"20px 26px 16px", borderBottom:"1px solid #f5eaea", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -673,189 +777,262 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
             </div>
             <div>
               <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Promote Section</div>
-              <div style={{ fontSize:11.5, color:"#b09090" }}>
-                {step === "input"   && "Move a completed section to the next grade level"}
-                {step === "preview" && `Preview · ${previewData?.to_promote?.length ?? 0} to promote, ${previewData?.to_skip?.length ?? 0} to skip`}
-                {step === "result"  && `Done · ${resultData?.created?.length ?? 0} promoted`}
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div key={step}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
+                  style={{ fontSize:11.5, color:"#b09090" }}>
+                  {step === "input"   && "Move a completed section to the next grade level"}
+                  {step === "preview" && `Preview · ${previewData?.to_promote?.length ?? 0} to promote, ${previewData?.to_skip?.length ?? 0} to skip`}
+                  {step === "result"  && `Done · ${resultData?.created?.length ?? 0} promoted`}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
-          <button onClick={onClose} style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#9a7070"; }}>
+          <motion.button
+            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131" }}
+            whileTap={{ scale: 0.93 }}
+            transition={{ duration: 0.12 }}
+            onClick={onClose}
+            style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
             <i className="ti ti-x" style={{ fontSize:14 }} />
-          </button>
+          </motion.button>
         </div>
 
         {/* Body */}
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 26px" }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 26px", position:"relative" }}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              variants={stepVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.2, ease: "easeOut" }}>
 
-          {/* ── Step 1: Input ── */}
-          {step === "input" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-              <div style={{ background:"#f0f5ff", border:"1px solid #c7d9f8", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#1455a0", display:"flex", gap:10, alignItems:"flex-start" }}>
-                <i className="ti ti-info-circle" style={{ fontSize:15, flexShrink:0, marginTop:1 }} />
-                Only students with <strong>completed</strong> status and <strong>no failed/incomplete subjects</strong> will be promoted. You'll see a preview before anything is saved.
-              </div>
+              {/* ── Step 1: Input ── */}
+              {step === "input" && (
+                <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+                  <div style={{ background:"#f0f5ff", border:"1px solid #c7d9f8", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#1455a0", display:"flex", gap:10, alignItems:"flex-start" }}>
+                    <i className="ti ti-info-circle" style={{ fontSize:15, flexShrink:0, marginTop:1 }} />
+                    Only students with <strong>completed</strong> status and <strong>no failed/incomplete subjects</strong> will be promoted. You'll see a preview before anything is saved.
+                  </div>
 
-              <div>
-                <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>From (Source Section)</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                   <div>
-                    <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
-                    <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
-                      <option value="">— Select —</option>
-                      {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>From (Source Section)</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                      <div>
+                        <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                        <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
+                          <option value="">— Select —</option>
+                          {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lbl}>Grade Level <span style={{ color:"#e03131" }}>*</span></label>
+                        <select value={fromGradeLevel} onChange={(e) => setFromGradeLevel(e.target.value)} style={sel}>
+                          {allGrades.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
+                        <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label style={lbl}>Grade Level <span style={{ color:"#e03131" }}>*</span></label>
-                    <select value={fromGradeLevel} onChange={(e) => setFromGradeLevel(e.target.value)} style={sel}>
-                      {allGrades.map((g) => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
-                    <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
-                  </div>
-                </div>
-              </div>
 
-              <div style={{ borderTop:"1px dashed #f0e4e4", paddingTop:18 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
-                  <div>
-                    <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
-                    <select value={toSchoolYear} onChange={(e) => setToSchoolYear(e.target.value)} style={sel}>
-                      <option value="">— Select —</option>
-                      {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                  <div style={{ borderTop:"1px dashed #f0e4e4", paddingTop:18 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                      <div>
+                        <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                        <select value={toSchoolYear} onChange={(e) => setToSchoolYear(e.target.value)} style={sel}>
+                          <option value="">— Select —</option>
+                          {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lbl}>Grade Level</label>
+                        <input
+                          value={fromGradeLevel ? (getNextGrade(fromGradeLevel) ?? "—") : "—"}
+                          readOnly
+                          style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }}
+                        />
+                        <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Auto-computed from source grade</div>
+                      </div>
+                      <div>
+                        <label style={lbl}>Section</label>
+                        <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
+                        <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Defaults to source section name</div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label style={lbl}>Grade Level</label>
-                    <input
-                      value={fromGradeLevel ? (getNextGrade(fromGradeLevel) ?? "—") : "—"}
-                      readOnly
-                      style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }}
-                    />
-                    <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Auto-computed from source grade</div>
-                  </div>
-                  <div>
-                    <label style={lbl}>Section</label>
-                    <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
-                    <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Defaults to source section name</div>
-                  </div>
-                </div>
-              </div>
 
-              {error && <div style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>{error}</div>}
-            </div>
-          )}
-
-          {/* ── Step 2: Preview ── */}
-          {step === "preview" && previewData && (
-            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-              {/* Summary strip */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-                {[
-                  { label:"From",           value:`${fromGradeLevel} · ${fromSection}`,          color:"#1a0a0a" },
-                  { label:"To",             value:`${previewData.to_grade_level} · ${previewData.to_section}`, color:"#1a0a0a" },
-                  { label:"Will Promote",   value:previewData.to_promote.length,                 color:"#2e6b0d" },
-                  { label:"Will Skip",      value:previewData.to_skip.length,                    color: previewData.to_skip.length ? "#c92a2a" : "#7a5050" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={{ background:"#fff8f6", border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px" }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
-                    <div style={{ fontSize:15, fontWeight:700, color, marginTop:4 }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {previewData.to_promote.length === 0 && (
-                <div style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"14px 18px", fontSize:13, color:"#7a4a00" }}>
-                  <i className="ti ti-alert-triangle" style={{ marginRight:7 }} />
-                  No students are eligible for promotion from this section.
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.16 }}
+                        style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
 
-              {/* Promote list */}
-              {previewData.to_promote.length > 0 && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#2e6b0d", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
-                    Will be promoted ({previewData.to_promote.length})
-                  </div>
-                  <div style={{ border:"1px solid #d4edda", borderRadius:10, overflow:"hidden" }}>
-                    {previewData.to_promote.map((s, i) => (
-                      <div key={s.student_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background: i % 2 === 0 ? "white" : "#f8fff8", borderBottom: i < previewData.to_promote.length - 1 ? "1px solid #e8f5e0" : "none" }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <div style={{ width:28, height:28, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#2e6b0d", flexShrink:0 }}>
-                            {s.student_name.charAt(0)}
-                          </div>
-                          <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
-                        </div>
-                        {s.average != null && (
-                          <span style={{ fontSize:12, fontWeight:700, color:"#2e6b0d", background:"#e8f5e0", padding:"2px 10px", borderRadius:50 }}>
-                            Avg: {s.average.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
+              {/* ── Step 2: Preview ── */}
+              {step === "preview" && previewData && (
+                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                  {/* Summary stat cards — stagger in */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
+                    {[
+                      { label:"From",         value:`${fromGradeLevel} · ${fromSection}`,                         color:"#1a0a0a" },
+                      { label:"To",           value:`${previewData.to_grade_level} · ${previewData.to_section}`,  color:"#1a0a0a" },
+                      { label:"Will Promote", value:previewData.to_promote.length,                                color:"#2e6b0d" },
+                      { label:"Will Skip",    value:previewData.to_skip.length,                                   color: previewData.to_skip.length ? "#c92a2a" : "#7a5050" },
+                    ].map(({ label, value, color }, i) => (
+                      <motion.div key={label}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut", delay: i * 0.055 }}
+                        style={{ background:"#fff8f6", border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px" }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
+                        <div style={{ fontSize:15, fontWeight:700, color, marginTop:4 }}>{value}</div>
+                      </motion.div>
                     ))}
                   </div>
-                </div>
-              )}
 
-              {/* Skip list */}
-              {previewData.to_skip.length > 0 && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#c92a2a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
-                    Will be skipped ({previewData.to_skip.length})
-                  </div>
-                  <div style={{ border:"1px solid #fca5a5", borderRadius:10, overflow:"hidden" }}>
-                    {previewData.to_skip.map((s, i) => (
-                      <div key={s.student_id} style={{ padding:"10px 16px", background: i % 2 === 0 ? "white" : "#fff8f8", borderBottom: i < previewData.to_skip.length - 1 ? "1px solid #fde8e8" : "none" }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:3 }}>
-                          <div style={{ width:28, height:28, borderRadius:"50%", background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#c92a2a", flexShrink:0 }}>
-                            {s.student_name.charAt(0)}
-                          </div>
-                          <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
-                        </div>
-                        <div style={{ fontSize:11.5, color:"#9a5050", marginLeft:38 }}>{s.reason}</div>
+                  {previewData.to_promote.length === 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}
+                      style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"14px 18px", fontSize:13, color:"#7a4a00" }}>
+                      <i className="ti ti-alert-triangle" style={{ marginRight:7 }} />
+                      No students are eligible for promotion from this section.
+                    </motion.div>
+                  )}
+
+                  {/* Promote list */}
+                  {previewData.to_promote.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#2e6b0d", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                        Will be promoted ({previewData.to_promote.length})
                       </div>
-                    ))}
+                      <div style={{ border:"1px solid #d4edda", borderRadius:10, overflow:"hidden" }}>
+                        {previewData.to_promote.map((s, i) => (
+                          <motion.div key={s.student_id}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(i * 0.03, 0.3) }}
+                            style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background: i % 2 === 0 ? "white" : "#f8fff8", borderBottom: i < previewData.to_promote.length - 1 ? "1px solid #e8f5e0" : "none" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              <div style={{ width:28, height:28, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#2e6b0d", flexShrink:0 }}>
+                                {s.student_name.charAt(0)}
+                              </div>
+                              <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
+                            </div>
+                            {s.average != null && (
+                              <span style={{ fontSize:12, fontWeight:700, color:"#2e6b0d", background:"#e8f5e0", padding:"2px 10px", borderRadius:50 }}>
+                                Avg: {s.average.toFixed(2)}
+                              </span>
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Skip list */}
+                  {previewData.to_skip.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#c92a2a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                        Will be skipped ({previewData.to_skip.length})
+                      </div>
+                      <div style={{ border:"1px solid #fca5a5", borderRadius:10, overflow:"hidden" }}>
+                        {previewData.to_skip.map((s, i) => (
+                          <motion.div key={s.student_id}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(i * 0.03, 0.3) }}
+                            style={{ padding:"10px 16px", background: i % 2 === 0 ? "white" : "#fff8f8", borderBottom: i < previewData.to_skip.length - 1 ? "1px solid #fde8e8" : "none" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:3 }}>
+                              <div style={{ width:28, height:28, borderRadius:"50%", background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#c92a2a", flexShrink:0 }}>
+                                {s.student_name.charAt(0)}
+                              </div>
+                              <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
+                            </div>
+                            <div style={{ fontSize:11.5, color:"#9a5050", marginLeft:38 }}>{s.reason}</div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.16 }}
+                        style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* ── Step 3: Result ── */}
+              {step === "result" && resultData && (
+                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                  <div style={{ textAlign:"center", padding:"20px 0 8px" }}>
+                    <motion.div
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type:"spring", stiffness: 380, damping: 22 }}
+                      style={{ width:56, height:56, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+                      <i className="ti ti-circle-check" style={{ fontSize:28, color:"#2e6b0d" }} />
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.22, delay: 0.1 }}
+                      style={{ fontSize:17, fontWeight:700, color:"#1a0a0a" }}>
+                      Promotion Complete
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.22, delay: 0.18 }}
+                      style={{ fontSize:13, color:"#7a5050", marginTop:4 }}>
+                      {resultData.created.length} student{resultData.created.length !== 1 ? "s" : ""} promoted to{" "}
+                      <strong>{resultData.to_grade_level}</strong> · {resultData.to_section} · SY {resultData.to_school_year}
+                      {" "}as <strong>Pending</strong>
+                    </motion.div>
                   </div>
+
+                  {resultData.skipped?.length > 0 && (
+                    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ duration:0.2, delay:0.24 }}
+                      style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#7a4a00" }}>
+                      <strong>{resultData.skipped.length}</strong> student{resultData.skipped.length !== 1 ? "s were" : " was"} skipped — check the preview list for reasons.
+                    </motion.div>
+                  )}
+                  {resultData.failed?.length > 0 && (
+                    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ duration:0.2, delay:0.3 }}
+                      style={{ background:"#fde8e8", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#9a2020" }}>
+                      <strong>{resultData.failed.length}</strong> student{resultData.failed.length !== 1 ? "s" : ""} failed to create — check server logs.
+                    </motion.div>
+                  )}
                 </div>
               )}
 
-              {error && <div style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>{error}</div>}
-            </div>
-          )}
-
-          {/* ── Step 3: Result ── */}
-          {step === "result" && resultData && (
-            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-              <div style={{ textAlign:"center", padding:"20px 0 8px" }}>
-                <div style={{ width:56, height:56, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
-                  <i className="ti ti-circle-check" style={{ fontSize:28, color:"#2e6b0d" }} />
-                </div>
-                <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a" }}>Promotion Complete</div>
-                <div style={{ fontSize:13, color:"#7a5050", marginTop:4 }}>
-                  {resultData.created.length} student{resultData.created.length !== 1 ? "s" : ""} promoted to{" "}
-                  <strong>{resultData.to_grade_level}</strong> · {resultData.to_section} · SY {resultData.to_school_year}
-                  {" "}as <strong>Pending</strong>
-                </div>
-              </div>
-
-              {resultData.skipped?.length > 0 && (
-                <div style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#7a4a00" }}>
-                  <strong>{resultData.skipped.length}</strong> student{resultData.skipped.length !== 1 ? "s were" : " was"} skipped — check the preview list for reasons.
-                </div>
-              )}
-              {resultData.failed?.length > 0 && (
-                <div style={{ background:"#fde8e8", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#9a2020" }}>
-                  <strong>{resultData.failed.length}</strong> student{resultData.failed.length !== 1 ? "s" : ""} failed to create — check server logs.
-                </div>
-              )}
-            </div>
-          )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Footer */}
@@ -868,38 +1045,49 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
           <div style={{ display:"flex", gap:10 }}>
             {step === "input" && (
               <>
-                <button onClick={onClose} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.96 }} transition={{ duration:0.12 }}
+                  onClick={onClose} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                   Cancel
-                </button>
-                <button onClick={handlePreview} disabled={!inputReady || previewing}
+                </motion.button>
+                <motion.button
+                  whileHover={inputReady && !previewing ? { scale:1.03 } : {}}
+                  whileTap={inputReady && !previewing ? { scale:0.96 } : {}}
+                  transition={{ duration:0.12 }}
+                  onClick={handlePreview} disabled={!inputReady || previewing}
                   style={{ padding:"9px 22px", background: (!inputReady || previewing) ? "#f0c4c4" : "linear-gradient(135deg,#2563eb,#1d4ed8)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (!inputReady || previewing) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:7 }}>
                   {previewing
                     ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Loading…</>
                     : <><i className="ti ti-eye" style={{ fontSize:13 }} />Preview</>}
-                </button>
+                </motion.button>
               </>
             )}
             {step === "preview" && (
               <>
-                <button onClick={() => { setStep("input"); setError(""); }} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.96 }} transition={{ duration:0.12 }}
+                  onClick={() => { goStep("input"); setError(""); }} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                   Back
-                </button>
-                <button onClick={handleConfirm} disabled={confirming || previewData?.to_promote?.length === 0}
+                </motion.button>
+                <motion.button
+                  whileHover={!confirming && previewData?.to_promote?.length ? { scale:1.03 } : {}}
+                  whileTap={!confirming && previewData?.to_promote?.length ? { scale:0.96 } : {}}
+                  transition={{ duration:0.12 }}
+                  onClick={handleConfirm} disabled={confirming || previewData?.to_promote?.length === 0}
                   style={{ padding:"9px 22px", background: (confirming || !previewData?.to_promote?.length) ? "#f0c4c4" : "linear-gradient(135deg,#2e6b0d,#1a5c05)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (confirming || !previewData?.to_promote?.length) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:7 }}>
                   {confirming
                     ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Promoting…</>
                     : <><i className="ti ti-arrow-up-right" style={{ fontSize:13 }} />Confirm & Promote {previewData?.to_promote?.length ? `(${previewData.to_promote.length})` : ""}</>}
-                </button>
+                </motion.button>
               </>
             )}
             {step === "result" && (
-              <button onClick={onClose} style={{ padding:"9px 22px", background:"linear-gradient(135deg,#2e6b0d,#1a5c05)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+              <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:0.96 }} transition={{ duration:0.12 }}
+                onClick={onClose} style={{ padding:"9px 22px", background:"linear-gradient(135deg,#2e6b0d,#1a5c05)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                 Done
-              </button>
+              </motion.button>
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -910,6 +1098,8 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
 export default function EnrollmentsPage() {
   const navigate = useNavigate();
   const token = sessionStorage.getItem("access_token");
+  const hasAnimated  = useRef(false);
+  const rowsAnimated = useRef(false);
   const [enrollments,    setEnrollments]    = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [page,           setPage]           = useState(1);
@@ -946,6 +1136,7 @@ export default function EnrollmentsPage() {
       setEnrollments(data.results ?? []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(pg);
+      rowsAnimated.current = true;
     } catch (err) {
       console.error(err);
     } finally {
@@ -963,6 +1154,10 @@ export default function EnrollmentsPage() {
 
   const hasFilters = schoolYear || schoolLevel || gradeLevel || statusFilter || search;
   const totalPages = Math.ceil(pageMeta.count / 20);
+
+  const isFirstRender    = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRowRender = !rowsAnimated.current;
 
   return (
     <>
@@ -986,12 +1181,7 @@ export default function EnrollmentsPage() {
         @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes rowIn   { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
-        .new-btn { transition:all .16s; }
-        .new-btn:hover { background:#c92a2a !important; box-shadow:0 8px 28px rgba(224,49,49,0.32) !important; transform:translateY(-1px); }
-
-        .page-btn:hover:not(:disabled) { background:#fff0f0 !important; border-color:#e03131 !important; color:#e03131 !important; }
         .page-btn:disabled { opacity:.3; cursor:not-allowed; }
 
         .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
@@ -999,7 +1189,11 @@ export default function EnrollmentsPage() {
 
 
           {/* Topbar */}
-          <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
+          <motion.div
+            initial={isFirstRender ? { opacity: 0, y: -10 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
             <div>
               <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>Enrollments</div>
               <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
@@ -1007,33 +1201,46 @@ export default function EnrollmentsPage() {
               </div>
             </div>
             <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <button
-                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
                 onClick={() => setShowPromote(true)}
                 onMouseEnter={(e) => { e.currentTarget.style.background="#eff6ff"; e.currentTarget.style.borderColor="#2563eb"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#93c5fd"; }}>
                 <i className="ti ti-arrow-up-right" style={{ fontSize:15 }} />Promote Section
-              </button>
-              <button
-                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
                 onClick={() => setShowMassEnroll(true)}
                 onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.borderColor="#e03131"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#fca5a5"; }}>
                 <i className="ti ti-users-plus" style={{ fontSize:15 }} />Mass Enroll
-              </button>
-              <button className="new-btn"
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.12 }}
                 style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)", letterSpacing:"0.01em" }}
                 onClick={() => navigate("/enrollments/new")}>
                 <i className="ti ti-clipboard-plus" style={{ fontSize:15 }} />New Enrollment
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Content */}
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
 
             {/* ── Filter panel ── */}
-            <div style={{ background:"white", border:"1px solid #f5eaea", borderRadius:14, padding:"18px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:14 }}>
+            <motion.div
+              initial={isFirstRender ? { opacity: 0, y: 12 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
+              style={{ background:"white", border:"1px solid #f5eaea", borderRadius:14, padding:"18px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:14 }}>
 
               {/* Row 1: Search + School Year */}
               <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
@@ -1064,12 +1271,20 @@ export default function EnrollmentsPage() {
                   {schoolYearOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
 
-                {hasFilters && (
-                  <button onClick={clearFilters}
-                    style={{ height:40, padding:"0 14px", border:"1.5px solid #f0e4e4", borderRadius:10, fontSize:12, color:"#a07070", cursor:"pointer", background:"white", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-                    <i className="ti ti-x" style={{ fontSize:13 }} />Clear
-                  </button>
-                )}
+                <AnimatePresence>
+                  {hasFilters && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.88 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.88 }}
+                      transition={{ duration: 0.14 }}
+                      whileTap={{ scale: 0.93 }}
+                      onClick={clearFilters}
+                      style={{ height:40, padding:"0 14px", border:"1.5px solid #f0e4e4", borderRadius:10, fontSize:12, color:"#a07070", cursor:"pointer", background:"white", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:6 }}>
+                      <i className="ti ti-x" style={{ fontSize:13 }} />Clear
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Row 2: School level chips */}
@@ -1077,11 +1292,15 @@ export default function EnrollmentsPage() {
                 <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {SCHOOL_LEVELS.map((lvl) => (
-                    <button key={lvl.value} className={`filter-chip${schoolLevel === lvl.value ? " active" : ""}`}
+                    <motion.button key={lvl.value}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.93 }}
+                      transition={{ duration: 0.12 }}
+                      className={`filter-chip${schoolLevel === lvl.value ? " active" : ""}`}
                       onClick={() => setSchoolLevel(lvl.value)}
                       style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
                       {lvl.label}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </div>
@@ -1093,11 +1312,15 @@ export default function EnrollmentsPage() {
                   {gradeOptions.map((g) => {
                     const val = g === "All Grades" ? "" : g;
                     return (
-                      <button key={g} className={`filter-chip${gradeLevel === val ? " active" : ""}`}
+                      <motion.button key={g}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.93 }}
+                        transition={{ duration: 0.12 }}
+                        className={`filter-chip${gradeLevel === val ? " active" : ""}`}
                         onClick={() => setGradeLevel(val)}
                         style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
                         {g}
-                      </button>
+                      </motion.button>
                     );
                   })}
                 </div>
@@ -1108,24 +1331,32 @@ export default function EnrollmentsPage() {
                 <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {[{ value:"", label:"All" }, ...Object.entries(STATUS_META).map(([v, m]) => ({ value: v, label: m.label }))].map((s) => (
-                    <button key={s.value} className={`filter-chip${statusFilter === s.value ? " active" : ""}`}
+                    <motion.button key={s.value}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.93 }}
+                      transition={{ duration: 0.12 }}
+                      className={`filter-chip${statusFilter === s.value ? " active" : ""}`}
                       onClick={() => setStatusFilter(s.value)}
                       style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
                       {s.value && <span style={{ width:7, height:7, borderRadius:"50%", background: statusFilter === s.value ? "#e03131" : STATUS_META[s.value]?.dot, flexShrink:0 }} />}
                       {s.label}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* ── Table ── */}
-              <div style={{
+              <motion.div
+                initial={isFirstRender ? { opacity: 0, y: 12 } : false}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
+                style={{
                 background: "white", border: "1px solid #f5eaea",
                 borderRadius: 16, overflow: "hidden",
                 boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
-                maxHeight: "calc(100vh - 340px)",   // ← add this
-                overflowY: "auto",                  // ← add this (overrides the hidden)
+                maxHeight: "calc(100vh - 340px)",
+                overflowY: "auto",
               }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                 <thead>
@@ -1143,6 +1374,7 @@ export default function EnrollmentsPage() {
                     ))}
                   </tr>
                 </thead>
+                <AnimatePresence mode="popLayout">
                 <tbody>
                   {loading
                     ? Array.from({ length: 8 }).map((_, i) => (
@@ -1182,8 +1414,12 @@ export default function EnrollmentsPage() {
                           const pill = STATUS_META[en.enrollment_status] ?? STATUS_META.pending;
                           const levelIcon = LEVEL_ICONS[en.school_level] ?? "ti-school";
                           return (
-                            <tr key={en.enrollment_id} className="enroll-row"
-                              style={{ animation:`rowIn 0.2s ease both`, animationDelay:`${idx * 20}ms`, cursor: "pointer" }}
+                            <motion.tr key={en.enrollment_id} className="enroll-row"
+                              initial={isFirstRowRender ? { opacity: 0, x: -6 } : false}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 6 }}
+                              transition={{ duration: 0.18, ease: "easeOut", delay: isFirstRowRender ? Math.min(idx * 0.025, 0.3) : 0 }}
+                              style={{ cursor: "pointer" }}
                               onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}>
 
                               {/* Student */}
@@ -1240,13 +1476,14 @@ export default function EnrollmentsPage() {
                                   <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                 </button>
                               </td>
-                            </tr>
+                            </motion.tr>
                           );
                         })
                   }
                 </tbody>
+                </AnimatePresence>
               </table>
-            </div>
+            </motion.div>
 
             {/* ── Pagination ── */}
             {!loading && pageMeta.count > 0 && (
@@ -1256,46 +1493,68 @@ export default function EnrollmentsPage() {
                   &nbsp;·&nbsp;{pageMeta.count.toLocaleString()} total records
                 </span>
                 <div style={{ display:"flex", gap:4 }}>
-                  <button className="page-btn" style={pgBtn} disabled={!pageMeta.previous} onClick={() => fetchEnrollments(page - 1)}>
+                  <motion.button
+                    whileHover={pageMeta.previous ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                    whileTap={pageMeta.previous ? { scale: 0.93 } : {}}
+                    transition={{ duration: 0.12 }}
+                    style={{ ...pgBtn, opacity: pageMeta.previous ? 1 : 0.3, cursor: pageMeta.previous ? "pointer" : "not-allowed" }}
+                    disabled={!pageMeta.previous}
+                    onClick={() => fetchEnrollments(page - 1)}>
                     <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
-                  </button>
+                  </motion.button>
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
                     const start = Math.max(1, page - 2);
                     const p = start + i;
                     if (p > totalPages) return null;
                     const isActive = p === page;
                     return (
-                      <button key={p} className="page-btn" style={{ ...pgBtn, ...(isActive ? pgActive : {}) }} onClick={() => fetchEnrollments(p)}>{p}</button>
+                      <motion.button key={p}
+                        whileHover={!isActive ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                        whileTap={{ scale: 0.93 }}
+                        transition={{ duration: 0.12 }}
+                        style={{ ...pgBtn, ...(isActive ? pgActive : {}) }}
+                        onClick={() => fetchEnrollments(p)}>{p}
+                      </motion.button>
                     );
                   })}
-                  <button className="page-btn" style={pgBtn} disabled={!pageMeta.next} onClick={() => fetchEnrollments(page + 1)}>
+                  <motion.button
+                    whileHover={pageMeta.next ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                    whileTap={pageMeta.next ? { scale: 0.93 } : {}}
+                    transition={{ duration: 0.12 }}
+                    style={{ ...pgBtn, opacity: pageMeta.next ? 1 : 0.3, cursor: pageMeta.next ? "pointer" : "not-allowed" }}
+                    disabled={!pageMeta.next}
+                    onClick={() => fetchEnrollments(page + 1)}>
                     <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
-                  </button>
+                  </motion.button>
                 </div>
               </div>
             )}
 
           </div>
     </AppLayout>
-    {showMassEnroll && (
-      <MassEnrollModal
-        onClose={() => setShowMassEnroll(false)}
-        onSuccess={() => fetchEnrollments(page)}
-        initSchoolYear={schoolYear   || undefined}
-        initSchoolLevel={schoolLevel || undefined}
-        initGradeLevel={gradeLevel   || undefined}
-      />
-    )}
-    {showPromote && (
-      <PromoteSectionModal
-        onClose={() => setShowPromote(false)}
-        onSuccess={() => fetchEnrollments(page)}
-        initSchoolYear={schoolYear  || undefined}
-        initSchoolLevel={schoolLevel || undefined}
-        initGradeLevel={gradeLevel  || undefined}
-        initSection={undefined}
-      />
-    )}
+    <AnimatePresence>
+      {showMassEnroll && (
+        <MassEnrollModal
+          onClose={() => setShowMassEnroll(false)}
+          onSuccess={() => fetchEnrollments(page)}
+          initSchoolYear={schoolYear   || undefined}
+          initSchoolLevel={schoolLevel || undefined}
+          initGradeLevel={gradeLevel   || undefined}
+        />
+      )}
+    </AnimatePresence>
+    <AnimatePresence>
+      {showPromote && (
+        <PromoteSectionModal
+          onClose={() => setShowPromote(false)}
+          onSuccess={() => fetchEnrollments(page)}
+          initSchoolYear={schoolYear  || undefined}
+          initSchoolLevel={schoolLevel || undefined}
+          initGradeLevel={gradeLevel  || undefined}
+          initSection={undefined}
+        />
+      )}
+    </AnimatePresence>
     </>
   );
 }
