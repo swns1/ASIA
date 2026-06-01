@@ -23,6 +23,7 @@ import RequirementsPage   from "./pages/RequirementsPage";
 import UsersPage          from "./pages/UsersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AcademicCalendarPage from "./pages/AcademicCalendarPage";
+import ReportCardPage from "./pages/ReportCardPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/users"                 element={<P><UsersPage /></P>} />
         <Route path="/analytics"             element={<P><AnalyticsPage /></P>} />
         <Route path="/academic-calendar"     element={<P><AcademicCalendarPage /></P>} />
+        <Route path="/report-card/:enrollmentId" element={<P><ReportCardPage /></P>} />
       </Routes>
     </BrowserRouter>
   );

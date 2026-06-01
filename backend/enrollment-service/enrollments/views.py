@@ -151,6 +151,198 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             status=status.HTTP_207_MULTI_STATUS if failed_records else status.HTTP_201_CREATED,
         )
 
+    @action(detail=False, methods=["post"], url_path="promote/preview")
+    def promote_preview(self, request):
+        """
+        POST /api/enrollments/promote/preview/
+
+        Dry-run: returns which students will be promoted and which will be
+        skipped (failed grades or already enrolled in the destination year).
+        No enrollment records are created.
+
+        Body:
+          {
+            "from_school_year": "2024-2025",
+            "from_grade_level": "Grade 7",
+            "from_section":     "Rizal",
+            "to_school_year":   "2025-2026",
+            "to_section":       "Rizal"   // optional, defaults to from_section
+          }
+        """
+        return self._promote_logic(request, dry_run=True)
+
+    @action(detail=False, methods=["post"], url_path="promote/confirm")
+    def promote_confirm(self, request):
+        """
+        POST /api/enrollments/promote/confirm/
+
+        Same body as preview — runs identical logic but commits the records.
+        Idempotent: students already enrolled in to_school_year are silently
+        skipped rather than duplicated.
+        """
+        return self._promote_logic(request, dry_run=False)
+
+    def _promote_logic(self, request, dry_run):
+        from grades.models import Grade
+
+        from_school_year = request.data.get("from_school_year", "").strip()
+        from_grade_level = request.data.get("from_grade_level", "").strip()
+        from_section     = request.data.get("from_section", "").strip()
+        to_school_year   = request.data.get("to_school_year", "").strip()
+        to_section       = request.data.get("to_section", "").strip() or from_section
+
+        missing = [f for f, v in [
+            ("from_school_year", from_school_year),
+            ("from_grade_level", from_grade_level),
+            ("from_section",     from_section),
+            ("to_school_year",   to_school_year),
+        ] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        to_grade_level = get_next_grade_level(from_grade_level)
+        if to_grade_level is None:
+            return Response(
+                {"detail": f"No grade level follows '{from_grade_level}' in the progression order."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Determine destination school_level from to_grade_level
+        from .serializers import GRADE_ORDER
+        LEVEL_MAP = {}
+        for g in ["Nursery"]:                                              LEVEL_MAP[g] = "nursery"
+        for g in ["Kindergarten"]:                                         LEVEL_MAP[g] = "kindergarten"
+        for g in ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"]: LEVEL_MAP[g] = "elementary"
+        for g in ["Grade 7","Grade 8","Grade 9","Grade 10"]:               LEVEL_MAP[g] = "junior_highschool"
+        for g in ["Grade 11","Grade 12"]:                                  LEVEL_MAP[g] = "senior_highschool"
+        to_school_level = LEVEL_MAP.get(to_grade_level, "junior_highschool")
+
+        # Source: all completed enrollments in the from-section
+        source_qs = Enrollment.objects.filter(
+            school_year=from_school_year,
+            grade_level=from_grade_level,
+            section__iexact=from_section,
+            enrollment_status="completed",
+        ).select_related("student")
+
+        if not source_qs.exists():
+            return Response(
+                {"detail": "No completed enrollments found for the specified section and school year."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Students already in the destination year (any active status)
+        already_enrolled_ids = set(
+            Enrollment.objects.filter(
+                school_year=to_school_year,
+                enrollment_status__in=("enrolled", "pending"),
+            ).values_list("student_id", flat=True)
+        )
+
+        to_promote = []
+        to_skip    = []
+
+        for enrollment in source_qs:
+            student = enrollment.student
+            student_name = f"{student.last_name}, {student.first_name}"
+            avg = None
+
+            # Compute subject average for display
+            grades = Grade.objects.filter(enrollment=enrollment).select_related("subject")
+            if grades.exists():
+                vals = [float(g.numeric_grade) for g in grades if g.numeric_grade is not None]
+                avg = round(sum(vals) / len(vals), 2) if vals else None
+
+            # Skip if already enrolled in destination year
+            if student.student_id in already_enrolled_ids:
+                to_skip.append({
+                    "student_id":   student.student_id,
+                    "student_name": student_name,
+                    "reason":       f"Already has an active enrollment in {to_school_year}.",
+                    "average":      avg,
+                })
+                continue
+
+            # Skip if failed/incomplete subjects
+            failed = grades.filter(remarks__in=["failed", "incomplete"])
+            if failed.exists():
+                failed_names = ", ".join(
+                    f"{g.subject.subject_name} ({g.numeric_grade})" for g in failed
+                )
+                to_skip.append({
+                    "student_id":   student.student_id,
+                    "student_name": student_name,
+                    "reason":       f"Failed/incomplete: {failed_names}",
+                    "average":      avg,
+                })
+                continue
+
+            to_promote.append({
+                "student_id":   student.student_id,
+                "student_name": student_name,
+                "average":      avg,
+                # carry object reference for actual creation (not serialized)
+                "_student_obj": student,
+            })
+
+        if dry_run:
+            # Strip internal references before returning
+            return Response({
+                "to_grade_level":  to_grade_level,
+                "to_school_level": to_school_level,
+                "to_section":      to_section,
+                "to_school_year":  to_school_year,
+                "to_promote": [
+                    {k: v for k, v in s.items() if not k.startswith("_")}
+                    for s in to_promote
+                ],
+                "to_skip": to_skip,
+            })
+
+        # ── Commit ─────────────────────────────────────────────────────────────
+        created  = []
+        failed_c = []
+
+        with transaction.atomic():
+            for entry in to_promote:
+                student_obj = entry["_student_obj"]
+                try:
+                    enr = Enrollment.objects.create(
+                        student=student_obj,
+                        school_year=to_school_year,
+                        school_level=to_school_level,
+                        grade_level=to_grade_level,
+                        section=to_section,
+                        enrollment_status="pending",
+                    )
+                    created.append({
+                        "enrollment_id": enr.enrollment_id,
+                        "student_id":    student_obj.student_id,
+                        "student_name":  entry["student_name"],
+                    })
+                except Exception as exc:
+                    failed_c.append({
+                        "student_id":   student_obj.student_id,
+                        "student_name": entry["student_name"],
+                        "reason":       str(exc),
+                    })
+
+        return Response(
+            {
+                "to_grade_level":  to_grade_level,
+                "to_school_level": to_school_level,
+                "to_section":      to_section,
+                "to_school_year":  to_school_year,
+                "created":  created,
+                "skipped":  to_skip,
+                "failed":   failed_c,
+            },
+            status=status.HTTP_207_MULTI_STATUS if (to_skip or failed_c) else status.HTTP_201_CREATED,
+        )
+
     @action(detail=True, methods=["get"], url_path="grades")
     def grades(self, request, pk=None):
         """GET /api/enrollments/{id}/grades/ — convenience for grade panels."""

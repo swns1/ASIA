@@ -182,4 +182,15 @@ export const getStudentRequirementSubmissions = (params = {}) =>
     .get("/student-requirement-submissions/", { params })
     .then((r) => r.data);
 
+// ── Section promotion ─────────────────────────────────────────────────────────
+export const promotePreview = (payload) =>
+  enrollmentClient.post("/enrollments/promote/preview/", payload).then((r) => r.data);
+
+export const promoteConfirm = (payload) =>
+  enrollmentClient.post("/enrollments/promote/confirm/", payload).then((r) => r.data);
+
+// ── Report card ───────────────────────────────────────────────────────────────
+export const getReportCard = (enrollmentId) =>
+  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`).then((r) => r.data);
+
 export { enrollmentClient };

@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from enrollments.views import EnrollmentViewSet
 from enrollments.email_views import send_enrollment_email
+from enrollments.report_views import report_card
 
 router = DefaultRouter()
 router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
@@ -12,6 +13,7 @@ router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 urlpatterns = [
     path("admin/", admin.site.urls),
 
+    path("api/enrollments/<int:enrollment_id>/report-card/", report_card, name="report_card"),
     path("api/", include("enrollments.urls")),
     path("api/", include("requirements.urls")),
     path("api/", include("subjects.urls")),

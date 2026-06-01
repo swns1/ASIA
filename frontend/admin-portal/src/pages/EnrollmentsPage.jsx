@@ -9,6 +9,8 @@ import {
   getEnrollmentEligibility as apiGetEligibility,
   updateEnrollment as apiPatchEnrollment,
   bulkCreateEnrollments as apiBulkEnroll,
+  promotePreview,
+  promoteConfirm,
 } from "../api/enrollmentApi";
 import { getStudents as apiGetStudents } from "../api/studentApi";
 
@@ -582,6 +584,327 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// PROMOTE SECTION MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel, initSection }) {
+  // Step: "input" → "preview" → "result"
+  const [step, setStep] = useState("input");
+
+  const [fromSchoolYear,  setFromSchoolYear]  = useState(initSchoolYear  || "");
+  const [fromGradeLevel,  setFromGradeLevel]  = useState(initGradeLevel  || "Grade 7");
+  const [fromSection,     setFromSection]     = useState(initSection     || "");
+  const [toSchoolYear,    setToSchoolYear]    = useState("");
+  const [toSection,       setToSection]       = useState(initSection     || "");
+
+  const [previewing,  setPreviewing]  = useState(false);
+  const [previewData, setPreviewData] = useState(null); // { to_grade_level, to_promote, to_skip, ... }
+  const [confirming,  setConfirming]  = useState(false);
+  const [resultData,  setResultData]  = useState(null);
+  const [error,       setError]       = useState("");
+
+  // Auto-populate toSection when fromSection changes (can be overridden)
+  useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
+
+  const schoolYearOpts = (() => {
+    const d = new Date();
+    const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+    return Array.from({ length: 5 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
+  })();
+
+  const allGrades = [
+    "Nursery","Kindergarten",
+    "Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6",
+    "Grade 7","Grade 8","Grade 9","Grade 10","Grade 11",
+    // Grade 12 excluded — nothing follows it
+  ];
+
+  const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear;
+
+  async function handlePreview() {
+    setError("");
+    setPreviewing(true);
+    try {
+      const data = await promotePreview({
+        from_school_year: fromSchoolYear,
+        from_grade_level: fromGradeLevel,
+        from_section:     fromSection.trim(),
+        to_school_year:   toSchoolYear,
+        to_section:       toSection.trim() || fromSection.trim(),
+      });
+      setPreviewData(data);
+      setStep("preview");
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Preview failed.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function handleConfirm() {
+    setError("");
+    setConfirming(true);
+    try {
+      const data = await promoteConfirm({
+        from_school_year: fromSchoolYear,
+        from_grade_level: fromGradeLevel,
+        from_section:     fromSection.trim(),
+        to_school_year:   toSchoolYear,
+        to_section:       toSection.trim() || fromSection.trim(),
+      });
+      setResultData(data);
+      setStep("result");
+      onSuccess?.();
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Promotion failed.");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200, backdropFilter:"blur(4px)", animation:"fadeIn 0.15s ease" }}>
+      <div style={{ background:"white", borderRadius:20, width:"min(780px,96vw)", maxHeight:"88vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease", overflow:"hidden" }}>
+
+        {/* Header */}
+        <div style={{ padding:"20px 26px 16px", borderBottom:"1px solid #f5eaea", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:"#e8f0fd", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <i className="ti ti-arrow-up-right" style={{ fontSize:17, color:"#2563eb" }} />
+            </div>
+            <div>
+              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Promote Section</div>
+              <div style={{ fontSize:11.5, color:"#b09090" }}>
+                {step === "input"   && "Move a completed section to the next grade level"}
+                {step === "preview" && `Preview · ${previewData?.to_promote?.length ?? 0} to promote, ${previewData?.to_skip?.length ?? 0} to skip`}
+                {step === "result"  && `Done · ${resultData?.created?.length ?? 0} promoted`}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#9a7070"; }}>
+            <i className="ti ti-x" style={{ fontSize:14 }} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 26px" }}>
+
+          {/* ── Step 1: Input ── */}
+          {step === "input" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+              <div style={{ background:"#f0f5ff", border:"1px solid #c7d9f8", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#1455a0", display:"flex", gap:10, alignItems:"flex-start" }}>
+                <i className="ti ti-info-circle" style={{ fontSize:15, flexShrink:0, marginTop:1 }} />
+                Only students with <strong>completed</strong> status and <strong>no failed/incomplete subjects</strong> will be promoted. You'll see a preview before anything is saved.
+              </div>
+
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>From (Source Section)</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                    <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
+                      <option value="">— Select —</option>
+                      {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Grade Level <span style={{ color:"#e03131" }}>*</span></label>
+                    <select value={fromGradeLevel} onChange={(e) => setFromGradeLevel(e.target.value)} style={sel}>
+                      {allGrades.map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
+                    <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ borderTop:"1px dashed #f0e4e4", paddingTop:18 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                    <select value={toSchoolYear} onChange={(e) => setToSchoolYear(e.target.value)} style={sel}>
+                      <option value="">— Select —</option>
+                      {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Grade Level</label>
+                    <input
+                      value={fromGradeLevel ? (getNextGrade(fromGradeLevel) ?? "—") : "—"}
+                      readOnly
+                      style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }}
+                    />
+                    <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Auto-computed from source grade</div>
+                  </div>
+                  <div>
+                    <label style={lbl}>Section</label>
+                    <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
+                    <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Defaults to source section name</div>
+                  </div>
+                </div>
+              </div>
+
+              {error && <div style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>{error}</div>}
+            </div>
+          )}
+
+          {/* ── Step 2: Preview ── */}
+          {step === "preview" && previewData && (
+            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              {/* Summary strip */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
+                {[
+                  { label:"From",           value:`${fromGradeLevel} · ${fromSection}`,          color:"#1a0a0a" },
+                  { label:"To",             value:`${previewData.to_grade_level} · ${previewData.to_section}`, color:"#1a0a0a" },
+                  { label:"Will Promote",   value:previewData.to_promote.length,                 color:"#2e6b0d" },
+                  { label:"Will Skip",      value:previewData.to_skip.length,                    color: previewData.to_skip.length ? "#c92a2a" : "#7a5050" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ background:"#fff8f6", border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
+                    <div style={{ fontSize:15, fontWeight:700, color, marginTop:4 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {previewData.to_promote.length === 0 && (
+                <div style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"14px 18px", fontSize:13, color:"#7a4a00" }}>
+                  <i className="ti ti-alert-triangle" style={{ marginRight:7 }} />
+                  No students are eligible for promotion from this section.
+                </div>
+              )}
+
+              {/* Promote list */}
+              {previewData.to_promote.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#2e6b0d", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                    Will be promoted ({previewData.to_promote.length})
+                  </div>
+                  <div style={{ border:"1px solid #d4edda", borderRadius:10, overflow:"hidden" }}>
+                    {previewData.to_promote.map((s, i) => (
+                      <div key={s.student_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background: i % 2 === 0 ? "white" : "#f8fff8", borderBottom: i < previewData.to_promote.length - 1 ? "1px solid #e8f5e0" : "none" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <div style={{ width:28, height:28, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#2e6b0d", flexShrink:0 }}>
+                            {s.student_name.charAt(0)}
+                          </div>
+                          <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
+                        </div>
+                        {s.average != null && (
+                          <span style={{ fontSize:12, fontWeight:700, color:"#2e6b0d", background:"#e8f5e0", padding:"2px 10px", borderRadius:50 }}>
+                            Avg: {s.average.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Skip list */}
+              {previewData.to_skip.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#c92a2a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                    Will be skipped ({previewData.to_skip.length})
+                  </div>
+                  <div style={{ border:"1px solid #fca5a5", borderRadius:10, overflow:"hidden" }}>
+                    {previewData.to_skip.map((s, i) => (
+                      <div key={s.student_id} style={{ padding:"10px 16px", background: i % 2 === 0 ? "white" : "#fff8f8", borderBottom: i < previewData.to_skip.length - 1 ? "1px solid #fde8e8" : "none" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:3 }}>
+                          <div style={{ width:28, height:28, borderRadius:"50%", background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#c92a2a", flexShrink:0 }}>
+                            {s.student_name.charAt(0)}
+                          </div>
+                          <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
+                        </div>
+                        <div style={{ fontSize:11.5, color:"#9a5050", marginLeft:38 }}>{s.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {error && <div style={{ color:"#c92a2a", fontSize:13, background:"#fde8e8", borderRadius:8, padding:"10px 14px" }}>{error}</div>}
+            </div>
+          )}
+
+          {/* ── Step 3: Result ── */}
+          {step === "result" && resultData && (
+            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              <div style={{ textAlign:"center", padding:"20px 0 8px" }}>
+                <div style={{ width:56, height:56, borderRadius:"50%", background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+                  <i className="ti ti-circle-check" style={{ fontSize:28, color:"#2e6b0d" }} />
+                </div>
+                <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a" }}>Promotion Complete</div>
+                <div style={{ fontSize:13, color:"#7a5050", marginTop:4 }}>
+                  {resultData.created.length} student{resultData.created.length !== 1 ? "s" : ""} promoted to{" "}
+                  <strong>{resultData.to_grade_level}</strong> · {resultData.to_section} · SY {resultData.to_school_year}
+                  {" "}as <strong>Pending</strong>
+                </div>
+              </div>
+
+              {resultData.skipped?.length > 0 && (
+                <div style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#7a4a00" }}>
+                  <strong>{resultData.skipped.length}</strong> student{resultData.skipped.length !== 1 ? "s were" : " was"} skipped — check the preview list for reasons.
+                </div>
+              )}
+              {resultData.failed?.length > 0 && (
+                <div style={{ background:"#fde8e8", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#9a2020" }}>
+                  <strong>{resultData.failed.length}</strong> student{resultData.failed.length !== 1 ? "s" : ""} failed to create — check server logs.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"14px 26px 18px", borderTop:"1px solid #f5eaea", flexShrink:0, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ fontSize:11, color:"#b09090", fontStyle:"italic" }}>
+            {step === "input"   && "Promoted students are created as Pending — activate to Enrolled after documents."}
+            {step === "preview" && "Review the lists above, then click Confirm to create the enrollment records."}
+            {step === "result"  && "You can find the new enrollments under the destination school year."}
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            {step === "input" && (
+              <>
+                <button onClick={onClose} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                  Cancel
+                </button>
+                <button onClick={handlePreview} disabled={!inputReady || previewing}
+                  style={{ padding:"9px 22px", background: (!inputReady || previewing) ? "#f0c4c4" : "linear-gradient(135deg,#2563eb,#1d4ed8)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (!inputReady || previewing) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:7 }}>
+                  {previewing
+                    ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Loading…</>
+                    : <><i className="ti ti-eye" style={{ fontSize:13 }} />Preview</>}
+                </button>
+              </>
+            )}
+            {step === "preview" && (
+              <>
+                <button onClick={() => { setStep("input"); setError(""); }} style={{ padding:"9px 22px", background:"white", border:"1.5px solid #fde2de", borderRadius:99, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                  Back
+                </button>
+                <button onClick={handleConfirm} disabled={confirming || previewData?.to_promote?.length === 0}
+                  style={{ padding:"9px 22px", background: (confirming || !previewData?.to_promote?.length) ? "#f0c4c4" : "linear-gradient(135deg,#2e6b0d,#1a5c05)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor: (confirming || !previewData?.to_promote?.length) ? "not-allowed" : "pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:7 }}>
+                  {confirming
+                    ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Promoting…</>
+                    : <><i className="ti ti-arrow-up-right" style={{ fontSize:13 }} />Confirm & Promote {previewData?.to_promote?.length ? `(${previewData.to_promote.length})` : ""}</>}
+                </button>
+              </>
+            )}
+            {step === "result" && (
+              <button onClick={onClose} style={{ padding:"9px 22px", background:"linear-gradient(135deg,#2e6b0d,#1a5c05)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
 export default function EnrollmentsPage() {
@@ -591,7 +914,8 @@ export default function EnrollmentsPage() {
   const [loading,        setLoading]        = useState(true);
   const [page,           setPage]           = useState(1);
   const [pageMeta,       setPageMeta]       = useState({ count: 0, next: null, previous: null });
-  const [showMassEnroll, setShowMassEnroll] = useState(false);
+  const [showMassEnroll,  setShowMassEnroll]  = useState(false);
+  const [showPromote,     setShowPromote]     = useState(false);
 
   // Filters
   const [schoolYear,   setSchoolYear]   = useState("");
@@ -683,6 +1007,13 @@ export default function EnrollmentsPage() {
               </div>
             </div>
             <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+              <button
+                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}
+                onClick={() => setShowPromote(true)}
+                onMouseEnter={(e) => { e.currentTarget.style.background="#eff6ff"; e.currentTarget.style.borderColor="#2563eb"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#93c5fd"; }}>
+                <i className="ti ti-arrow-up-right" style={{ fontSize:15 }} />Promote Section
+              </button>
               <button
                 style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}
                 onClick={() => setShowMassEnroll(true)}
@@ -953,6 +1284,16 @@ export default function EnrollmentsPage() {
         initSchoolYear={schoolYear   || undefined}
         initSchoolLevel={schoolLevel || undefined}
         initGradeLevel={gradeLevel   || undefined}
+      />
+    )}
+    {showPromote && (
+      <PromoteSectionModal
+        onClose={() => setShowPromote(false)}
+        onSuccess={() => fetchEnrollments(page)}
+        initSchoolYear={schoolYear  || undefined}
+        initSchoolLevel={schoolLevel || undefined}
+        initGradeLevel={gradeLevel  || undefined}
+        initSection={undefined}
       />
     )}
     </>

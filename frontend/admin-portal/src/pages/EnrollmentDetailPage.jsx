@@ -209,6 +209,10 @@ export default function EnrollmentDetailPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <Badge label={statusMeta.label} color={statusMeta.color} bg={statusMeta.bg} />
+              <button onClick={() => navigate(`/report-card/${id}`)}
+                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card
+              </button>
               <button onClick={() => navigate(`/enrollments/${id}/edit`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-edit" style={{ fontSize: 11, marginRight: 4 }} />Edit
