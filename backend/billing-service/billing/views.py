@@ -180,6 +180,117 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         return Response(result)
 
 
+    @action(detail=False, methods=["get"], url_path="student-ledger")
+    def student_ledger(self, request):
+        """
+        GET /api/invoices/student-ledger/?student_id=X
+
+        Returns all invoices for a student across all school years, grouped by
+        school year. Each invoice includes its items, payments, and totals.
+        Also returns cross-year totals (total billed, total paid, total balance).
+        """
+        from django.db.models import Sum
+        from .enrollment_mirror import EnrollmentMirror
+        from .serializers import StudentInvoiceSerializer
+
+        student_id = request.query_params.get("student_id")
+        if not student_id:
+            return Response({"detail": "student_id is required."}, status=400)
+
+        try:
+            student_id = int(student_id)
+        except ValueError:
+            return Response({"detail": "student_id must be an integer."}, status=400)
+
+        # Fetch all enrollment IDs for this student via mirror
+        enrollment_rows = (
+            EnrollmentMirror.objects
+            .filter(student_id=student_id)
+            .values("enrollment_id", "school_year", "grade_level", "school_level", "enrollment_status")
+            .order_by("-school_year", "-enrollment_id")
+        )
+
+        enrollment_map = {r["enrollment_id"]: r for r in enrollment_rows}
+        enrollment_ids = list(enrollment_map.keys())
+
+        if not enrollment_ids:
+            return Response({
+                "student_id":     student_id,
+                "school_years":   [],
+                "total_billed":   "0.00",
+                "total_paid":     "0.00",
+                "total_balance":  "0.00",
+            })
+
+        invoices_qs = (
+            StudentInvoice.objects
+            .filter(enrollment_id__in=enrollment_ids)
+            .prefetch_related("items", "discounts", "payments", "installments")
+            .order_by("-invoice_date", "-invoice_id")
+        )
+
+        # Serialize and annotate each invoice with computed totals
+        serializer = StudentInvoiceSerializer(invoices_qs, many=True)
+        invoices_data = serializer.data
+
+        # Group by school year using the enrollment mirror
+        year_map = {}
+        for inv in invoices_data:
+            eid = inv["enrollment_id"]
+            enr = enrollment_map.get(eid, {})
+            sy  = enr.get("school_year", "Unknown")
+
+            if sy not in year_map:
+                year_map[sy] = {
+                    "school_year":       sy,
+                    "grade_level":       enr.get("grade_level", ""),
+                    "school_level":      enr.get("school_level", ""),
+                    "enrollment_status": enr.get("enrollment_status", ""),
+                    "enrollment_id":     eid,
+                    "invoices":          [],
+                    "year_billed":       Decimal("0"),
+                    "year_paid":         Decimal("0"),
+                }
+
+            net    = Decimal(str(inv.get("net_amount",   0) or 0))
+            paid   = Decimal(str(inv.get("total_paid",   0) or 0))
+            year_map[sy]["invoices"].append(inv)
+            year_map[sy]["year_billed"] += net
+            year_map[sy]["year_paid"]   += paid
+
+        # Convert Decimals to strings for JSON and compute balance
+        school_years = []
+        total_billed  = Decimal("0")
+        total_paid    = Decimal("0")
+
+        for sy in sorted(year_map.keys(), reverse=True):
+            entry = year_map[sy]
+            billed  = entry["year_billed"]
+            paid    = entry["year_paid"]
+            balance = billed - paid
+            total_billed += billed
+            total_paid   += paid
+            school_years.append({
+                "school_year":       entry["school_year"],
+                "grade_level":       entry["grade_level"],
+                "school_level":      entry["school_level"],
+                "enrollment_status": entry["enrollment_status"],
+                "enrollment_id":     entry["enrollment_id"],
+                "invoices":          entry["invoices"],
+                "year_billed":       f"{billed:.2f}",
+                "year_paid":         f"{paid:.2f}",
+                "year_balance":      f"{balance:.2f}",
+            })
+
+        return Response({
+            "student_id":    student_id,
+            "school_years":  school_years,
+            "total_billed":  f"{total_billed:.2f}",
+            "total_paid":    f"{total_paid:.2f}",
+            "total_balance": f"{total_billed - total_paid:.2f}",
+        })
+
+
 # ── Payments ─────────────────────────────────────────────────────────────────
 
 class StudentPaymentViewSet(viewsets.ModelViewSet):

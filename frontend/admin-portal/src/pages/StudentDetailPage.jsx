@@ -6,6 +6,7 @@ import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
+import { getStudentLedger } from "../api/billingApi";
 
 
 
@@ -157,6 +158,8 @@ export default function StudentDetailPage() {
   const [siblings,      setSiblings]      = useState([]);
   const [schools,       setSchools]       = useState([]);
   const [enrollments,   setEnrollments]   = useState([]);
+  const [ledger,        setLedger]        = useState(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
 
@@ -178,6 +181,16 @@ export default function StudentDetailPage() {
     }).finally(() => setLoading(false));
   }, [id]);
 
+  // Lazy-load ledger only when the tab is first opened
+  useEffect(() => {
+    if (activeTab !== "ledger" || ledger !== null || !id) return;
+    setLedgerLoading(true);
+    getStudentLedger(id)
+      .then(setLedger)
+      .catch(() => setLedger({ error: true }))
+      .finally(() => setLedgerLoading(false));
+  }, [activeTab, id, ledger]);
+
   const TABS = [
     { id: "personal",    label: "Personal",     icon: "ti-user"           },
     { id: "household",   label: "Household",     icon: "ti-home"           },
@@ -185,6 +198,7 @@ export default function StudentDetailPage() {
     { id: "family",      label: "Siblings",      icon: "ti-heart",   count: siblings.length    },
     { id: "schools",     label: "Prev. Schools", icon: "ti-school",  count: schools.length     },
     { id: "enrollments", label: "Enrollments",   icon: "ti-clipboard-list", count: enrollments.length },
+    { id: "ledger",      label: "Financial History", icon: "ti-receipt"   },
   ];
 
   const palette   = getPalette(student?.last_name ?? "");
@@ -683,6 +697,146 @@ export default function StudentDetailPage() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {activeTab === "ledger" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.22s ease both" }}>
+
+                    {/* Loading skeleton */}
+                    {ledgerLoading && (
+                      <SectionCard title="Financial History" icon="ti-receipt">
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 0" }}>
+                          {[1,2,3].map((k) => <Sk key={k} h={52} r={10} />)}
+                        </div>
+                      </SectionCard>
+                    )}
+
+                    {/* Error state */}
+                    {!ledgerLoading && ledger?.error && (
+                      <SectionCard title="Financial History" icon="ti-receipt">
+                        <EmptySection message="Failed to load financial history. Check that the billing service is running." />
+                      </SectionCard>
+                    )}
+
+                    {/* Empty state */}
+                    {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length === 0 && (
+                      <SectionCard title="Financial History" icon="ti-receipt">
+                        <EmptySection message="No invoices found for this student." />
+                      </SectionCard>
+                    )}
+
+                    {/* Totals summary strip */}
+                    {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length > 0 && (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                          {[
+                            { label: "Total Billed",    value: ledger.total_billed,   color: "#1a0a0a", bg: "#fff8f6", border: "#f5eaea" },
+                            { label: "Total Paid",      value: ledger.total_paid,     color: "#2e6b0d", bg: "#f0faf0", border: "#d4edda" },
+                            { label: "Total Balance",   value: ledger.total_balance,  color: parseFloat(ledger.total_balance) > 0 ? "#c92a2a" : "#2e6b0d", bg: parseFloat(ledger.total_balance) > 0 ? "#fff0f0" : "#f0faf0", border: parseFloat(ledger.total_balance) > 0 ? "#fca5a5" : "#d4edda" },
+                          ].map(({ label, value, color, bg, border }) => (
+                            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: "14px 18px" }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
+                              <div style={{ fontSize: 18, fontWeight: 800, color }}>
+                                ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Per-year sections */}
+                        {ledger.school_years.map((yr) => {
+                          const balanceAmt = parseFloat(yr.year_balance);
+                          const yrStatusColor = balanceAmt > 0 ? "#c92a2a" : "#2e6b0d";
+                          const yrStatusBg    = balanceAmt > 0 ? "#fde8e8" : "#e8f5e0";
+                          const levelLabel    = yr.school_level?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+                          return (
+                            <SectionCard
+                              key={yr.school_year}
+                              title={`SY ${yr.school_year} — ${yr.grade_level}`}
+                              icon="ti-calendar"
+                              badge={
+                                <span style={{ fontSize: 11, fontWeight: 700, color: yrStatusColor, background: yrStatusBg, padding: "2px 10px", borderRadius: 50 }}>
+                                  {balanceAmt > 0 ? `Balance ₱${balanceAmt.toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : "Settled"}
+                                </span>
+                              }
+                            >
+                              <div style={{ fontSize: 11, color: "#b09090", marginBottom: 10 }}>
+                                {levelLabel}{yr.section ? ` · ${yr.section}` : ""} ·{" "}
+                                <span style={{ fontWeight: 600 }}>{yr.enrollment_status}</span>
+                              </div>
+
+                              {yr.invoices.length === 0 ? (
+                                <EmptySection message="No invoices for this school year." />
+                              ) : yr.invoices.map((inv) => {
+                                const INV_STATUS = {
+                                  unpaid:         { label: "Unpaid",   color: "#a32d2d", bg: "#fde8e8" },
+                                  partially_paid: { label: "Partial",  color: "#854f0b", bg: "#faeeda" },
+                                  paid:           { label: "Paid",     color: "#2e6b0d", bg: "#e8f5e0" },
+                                  void:           { label: "Void",     color: "#5c5752", bg: "#f0ede8" },
+                                };
+                                const isMeta = INV_STATUS[inv.status] ?? INV_STATUS.unpaid;
+                                const netAmt  = parseFloat(inv.net_amount  || 0);
+                                const paidAmt = parseFloat(inv.total_paid  || 0);
+                                const balAmt  = netAmt - paidAmt;
+
+                                return (
+                                  <div
+                                    key={inv.invoice_id}
+                                    onClick={() => navigate(`/invoices`)}
+                                    style={{ border: "1px solid #f5eaea", borderRadius: 10, padding: "12px 16px", marginBottom: 8, cursor: "pointer", transition: "box-shadow .14s" }}
+                                    onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 3px 12px rgba(224,49,49,0.10)"}
+                                    onMouseLeave={(e) => e.currentTarget.style.boxShadow = "none"}
+                                  >
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{inv.invoice_no}</span>
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: isMeta.color, background: isMeta.bg, padding: "2px 8px", borderRadius: 50 }}>{isMeta.label}</span>
+                                      </div>
+                                      <span style={{ fontSize: 11, color: "#b09090" }}>
+                                        {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                                        {" · "}{inv.payment_plan?.replace(/_/g, " ")}
+                                      </span>
+                                    </div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                                      {[
+                                        { label: "Billed",  value: netAmt,  color: "#1a0a0a" },
+                                        { label: "Paid",    value: paidAmt, color: "#2e6b0d" },
+                                        { label: "Balance", value: balAmt,  color: balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                      ].map(({ label, value, color }) => (
+                                        <div key={label}>
+                                          <div style={{ fontSize: 9.5, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+                                          <div style={{ fontSize: 13, fontWeight: 700, color }}>
+                                            ₱{value.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Year subtotals */}
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 20, paddingTop: 8, borderTop: "1px dashed #f0e4e4", marginTop: 4 }}>
+                                {[
+                                  { label: "Year Billed", value: yr.year_billed  },
+                                  { label: "Year Paid",   value: yr.year_paid    },
+                                  { label: "Year Balance",value: yr.year_balance, bold: true, color: balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                ].map(({ label, value, bold, color }) => (
+                                  <div key={label} style={{ textAlign: "right" }}>
+                                    <div style={{ fontSize: 9.5, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
+                                    <div style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: color || "#1a0a0a" }}>
+                                      ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </SectionCard>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
 

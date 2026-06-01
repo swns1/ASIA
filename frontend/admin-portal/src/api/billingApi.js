@@ -116,6 +116,10 @@ export const updatePayment = (id, payload) =>
 export const getInstallments = (params = {}) =>
   billingClient.get("/installments/", { params }).then((r) => r.data);
 
+// ── Student ledger ────────────────────────────────────────────────────────────
+export const getStudentLedger = (studentId) =>
+  billingClient.get("/invoices/student-ledger/", { params: { student_id: studentId } }).then((r) => r.data);
+
 // ── School settings ───────────────────────────────────────────────────────────
 export const getSchoolSettings = () =>
   billingClient.get("/school-settings/current/").then((r) => r.data);
