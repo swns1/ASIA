@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
+import { modalVariants, springTransition } from "../utils/motion";
 import { createStudent, getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
@@ -189,17 +191,41 @@ function StepBar({ current, onStepClick }) {
               onClick={() => clickable && onStepClick(i)}
               title={clickable ? `Go to ${s.label}` : undefined}
             >
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%",
-                background: done ? C.red : active ? C.redLight : "#f3e8e8",
-                border: `2px solid ${done || active ? C.red : C.redMid}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: done ? 14 : 16,
-                color: done ? "#fff" : active ? C.red : C.muted,
-                fontWeight: 700, transition: "all .2s",
-              }}>
-                {done ? "✓" : <i className={`ti ${s.icon}`} style={{ fontSize: 16 }} />}
-              </div>
+              <motion.div
+                animate={active ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                transition={active ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
+                whileHover={clickable ? { scale: 1.1 } : {}}
+                whileTap={clickable ? { scale: 0.93 } : {}}
+                style={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: done ? C.red : active ? C.redLight : "#f3e8e8",
+                  border: `2px solid ${done || active ? C.red : C.redMid}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: done ? 14 : 16,
+                  color: done ? "#fff" : active ? C.red : C.muted,
+                  fontWeight: 700,
+                }}
+              >
+                <AnimatePresence mode="wait">
+                  {done ? (
+                    <motion.span
+                      key="check"
+                      initial={{ scale: 0.5, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                    >✓</motion.span>
+                  ) : (
+                    <motion.i
+                      key="icon"
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.15 }}
+                      className={`ti ${s.icon}`}
+                      style={{ fontSize: 16 }}
+                    />
+                  )}
+                </AnimatePresence>
+              </motion.div>
               <span style={{
                 fontSize: 9, fontWeight: active ? 700 : 500,
                 color: active ? C.red : done ? C.muted : "#c4a4a0",
@@ -381,7 +407,9 @@ function HouseholdStep({ data, onChange }) {
       </div>
 
       <Divider label="Government Programs" />
-      <div
+      <motion.div
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.1 }}
         onClick={() => onChange({ ...data, is_4ps_beneficiary: !data.is_4ps_beneficiary })}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -411,7 +439,7 @@ function HouseholdStep({ data, onChange }) {
           }} />
         </div>
         <input type="checkbox" name="is_4ps_beneficiary" checked={data.is_4ps_beneficiary} onChange={h} style={{ display: "none" }} />
-      </div>
+      </motion.div>
 
       {data.is_4ps_beneficiary && (
         <Field label="4Ps ID *">
@@ -455,8 +483,17 @@ function GuardiansStep({ data, onChange }) {
         </div>
       )}
 
+      <AnimatePresence>
       {data.map((g, i) => (
-        <div key={i} style={{ ...cardStyle, marginBottom: 14, position: "relative", overflow: "hidden" }}>
+        <motion.div
+          key={g.guardian_id ?? `new-${i}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          style={{ marginBottom: 14 }}
+        >
+        <div style={{ ...cardStyle, marginBottom: 0, position: "relative", overflow: "hidden" }}>
           {/* colored left accent */}
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: g.is_primary_contact ? C.red : C.redMid, borderRadius: "16px 0 0 16px" }} />
           <div style={{ paddingLeft: 12 }}>
@@ -502,7 +539,9 @@ function GuardiansStep({ data, onChange }) {
               </Field>
             </div>
 
-            <div
+            <motion.div
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.1 }}
               onClick={() => update(i, "is_primary_contact", !g.is_primary_contact)}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
@@ -514,12 +553,24 @@ function GuardiansStep({ data, onChange }) {
                 transition: "all .15s",
               }}
             >
-              <i className={`ti ${g.is_primary_contact ? "ti-star-filled" : "ti-star"}`} style={{ fontSize: 13 }} />
+              <AnimatePresence mode="wait">
+                <motion.i
+                  key={g.is_primary_contact ? "filled" : "empty"}
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.6, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className={`ti ${g.is_primary_contact ? "ti-star-filled" : "ti-star"}`}
+                  style={{ fontSize: 13 }}
+                />
+              </AnimatePresence>
               {g.is_primary_contact ? "Primary Contact" : "Set as Primary Contact"}
-            </div>
+            </motion.div>
           </div>
         </div>
+        </motion.div>
       ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -553,8 +604,16 @@ function SiblingsStep({ data, onChange }) {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <AnimatePresence>
         {data.map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, background: C.white, border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "14px 16px" }}>
+          <motion.div
+            key={s.sibling_id ?? `new-sib-${i}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+          <div style={{ display: "flex", alignItems: "center", gap: 14, background: C.white, border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "14px 16px" }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.red }}>
               {i + 1}
             </div>
@@ -579,7 +638,9 @@ function SiblingsStep({ data, onChange }) {
               <i className="ti ti-x" style={{ fontSize: 12 }} />
             </button>
           </div>
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -613,8 +674,17 @@ function SchoolsStep({ data, onChange }) {
         </div>
       )}
 
+      <AnimatePresence>
       {data.map((s, i) => (
-        <div key={i} style={{ ...cardStyle, marginBottom: 14, overflow: "hidden", position: "relative" }}>
+        <motion.div
+          key={s.previous_school_id ?? `new-sch-${i}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          style={{ marginBottom: 14 }}
+        >
+        <div style={{ ...cardStyle, marginBottom: 0, overflow: "hidden", position: "relative" }}>
           <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: C.red, borderRadius: "16px 0 0 16px" }} />
           <div style={{ paddingLeft: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -639,7 +709,9 @@ function SchoolsStep({ data, onChange }) {
             </Field>
           </div>
         </div>
+        </motion.div>
       ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -683,8 +755,18 @@ function DocStatusBadge({ submitted }) {
 
 function DocRemoveModal({ name, onConfirm, onCancel }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(4px)" }}>
-      <div style={{ background: C.white, borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onCancel}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
+      />
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ position: "relative", background: C.white, borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
+      >
         <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: C.red }} />
         </div>
@@ -693,10 +775,10 @@ function DocRemoveModal({ name, onConfirm, onCancel }) {
           You're about to remove <strong style={{ color: C.dark }}>{name}</strong>. This cannot be undone.
         </div>
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: C.red, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Yes, remove</button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onCancel} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: C.red, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Yes, remove</motion.button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -740,8 +822,18 @@ function DocUploadModal({ req, isEdit, studentId, pendingEntry, onClose, onFileS
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1099, backdropFilter: "blur(4px)", padding: 16 }}>
-      <div style={{ background: C.white, borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden" }}>
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1099, padding: 16 }}>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.45)", backdropFilter: "blur(4px)" }}
+      />
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ position: "relative", background: C.white, borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden" }}
+      >
         <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${DC.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>
@@ -816,17 +908,18 @@ function DocUploadModal({ req, isEdit, studentId, pendingEntry, onClose, onFileS
         </div>
 
         <div style={{ padding: "16px 24px", borderTop: `1px solid ${DC.border}`, display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-          <button
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onClose} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</motion.button>
+          <motion.button
+            whileTap={file ? { scale: 0.97 } : {}}
             onClick={handleConfirm}
             disabled={!file}
             style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: !file ? "#f0dada" : C.red, color: !file ? C.muted : C.white, fontSize: 13, fontWeight: 700, cursor: !file ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
             <i className="ti ti-upload" style={{ fontSize: 14 }} />
             {isReplace || hasPending ? "Replace Document" : "Upload Document"}
-          </button>
+          </motion.button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -865,16 +958,19 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
   const isScanningOcr = ocrState === "scanning";
 
   return (
-    <div style={{
-      background: C.white,
-      border: `1.5px solid ${isSubmitted ? DC.greenBorder : DC.border}`,
-      borderRadius: 16,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      boxShadow: isSubmitted ? "0 2px 16px rgba(46,125,50,0.08)" : "0 2px 12px rgba(224,49,49,0.05)",
-      transition: "box-shadow 0.15s, transform 0.15s",
-    }}>
+    <motion.div
+      whileHover={{ y: -2, boxShadow: isSubmitted ? "0 4px 20px rgba(46,125,50,0.14)" : "0 4px 20px rgba(224,49,49,0.10)" }}
+      transition={{ duration: 0.15 }}
+      style={{
+        background: C.white,
+        border: `1.5px solid ${isSubmitted ? DC.greenBorder : DC.border}`,
+        borderRadius: 16,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: isSubmitted ? "0 2px 16px rgba(46,125,50,0.08)" : "0 2px 12px rgba(224,49,49,0.05)",
+      }}
+    >
       <div style={{ height: 4, background: isSubmitted ? `linear-gradient(90deg,${DC.green},#43a047)` : `linear-gradient(90deg,#e0d0d0,#f0e4e4)` }} />
 
       <div
@@ -950,7 +1046,7 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
           </button>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -1132,26 +1228,32 @@ function DocumentsStep({
         </div>
       )}
 
-      {uploadModal && (
-        <DocUploadModal
-          req={uploadModal}
-          isEdit={isEdit}
-          studentId={studentId}
-          pendingEntry={pendingUploads.find((p) => p.requirementTypeId === uploadModal.requirement_type_id) || null}
-          onClose={() => setUploadModal(null)}
-          onFileSelected={(tid, code, name, file, remarks) => {
-            handleFileSelected(tid, code, name, file, remarks);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {uploadModal && (
+          <DocUploadModal
+            key="upload-modal"
+            req={uploadModal}
+            isEdit={isEdit}
+            studentId={studentId}
+            pendingEntry={pendingUploads.find((p) => p.requirementTypeId === uploadModal.requirement_type_id) || null}
+            onClose={() => setUploadModal(null)}
+            onFileSelected={(tid, code, name, file, remarks) => {
+              handleFileSelected(tid, code, name, file, remarks);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
-      {removeModal && (
-        <DocRemoveModal
-          name={removeModal.requirement_name}
-          onConfirm={handleRemoveConfirm}
-          onCancel={() => setRemoveModal(null)}
-        />
-      )}
+      <AnimatePresence>
+        {removeModal && (
+          <DocRemoveModal
+            key="remove-modal"
+            name={removeModal.requirement_name}
+            onConfirm={handleRemoveConfirm}
+            onCancel={() => setRemoveModal(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1573,8 +1675,20 @@ export default function StudentFormPage() {
     setSchools(d.schools);
   }
 
-  const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  const prev = () => setStep((s) => Math.max(s - 1, 0));
+  const hasAnimated  = useRef(false);
+  const stepDir      = useRef(1); // 1 = forward, -1 = backward
+  const prevStepRef  = useRef(step);
+
+  const next = () => {
+    stepDir.current = 1;
+    prevStepRef.current = step;
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  };
+  const prev = () => {
+    stepDir.current = -1;
+    prevStepRef.current = step;
+    setStep((s) => Math.max(s - 1, 0));
+  };
 
   // Detect whether the household section has any meaningful content
   const householdHasContent = (h) =>
@@ -1793,6 +1907,16 @@ export default function StudentFormPage() {
 
   const isLastStep = step === STEPS.length - 1;
 
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+
+  const dir = stepDir.current;
+  const stepVariants = {
+    enter:  { x: dir * 32, opacity: 0 },
+    center: { x: 0, opacity: 1 },
+    exit:   { x: dir * -32, opacity: 0 },
+  };
+
   const sideNavBtn = {
     position: "absolute", top: "50%", transform: "translateY(-50%)",
     width: 44, height: 44, borderRadius: "50%", border: "none",
@@ -1812,13 +1936,23 @@ export default function StudentFormPage() {
       <div style={{ maxWidth: 780, margin: "0 auto", position: "relative" }}>
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
-          <button
+          <motion.button
+            initial={isFirstRender ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2, delay: isFirstRender ? 0.06 : 0 }}
+            whileHover={{ x: -2 }}
+            whileTap={{ scale: 0.96 }}
             onClick={() => { clearDraft(); navigate("/students"); }}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
           >
             ← Back to Students
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          </motion.button>
+          <motion.div
+            initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
+            style={{ display: "flex", alignItems: "center", gap: 14 }}
+          >
             <h2 style={{ margin: 0, fontSize: 28, color: C.dark }}>
               {id ? "Edit Student" : "New Student Registration"}
             </h2>
@@ -1838,14 +1972,33 @@ export default function StudentFormPage() {
                 Dev Fill
               </button>
             )}
-          </div>
+          </motion.div>
         </div>
 
         {/* Step bar */}
-        <StepBar current={step} onStepClick={setStep} />
+        <motion.div
+          initial={isFirstRender ? { opacity: 0, y: 8 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
+        >
+        <StepBar current={step} onStepClick={(i) => {
+          stepDir.current = i > step ? 1 : -1;
+          prevStepRef.current = step;
+          setStep(i);
+        }} />
+        </motion.div>
 
         {/* Error */}
+        <AnimatePresence>
         {error && (
+          <motion.div
+            key="error-banner"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            style={{ overflow: "hidden" }}
+          >
           <div style={{
             background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
             padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20,
@@ -1862,13 +2015,18 @@ export default function StudentFormPage() {
               <i className="ti ti-x" style={{ fontSize: 14 }} />
             </button>
           </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Step content with side nav buttons */}
         <div style={{ position: "relative" }}>
 
           {/* Previous button — left of card */}
-          <button
+          <motion.button
+            whileHover={step !== 0 ? { scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.22)" } : {}}
+            whileTap={step !== 0 ? { scale: 0.92 } : {}}
+            transition={{ duration: 0.12 }}
             onClick={prev}
             disabled={step === 0}
             type="button"
@@ -1882,11 +2040,19 @@ export default function StudentFormPage() {
             }}
           >
             <i className="ti ti-chevron-left" />
-          </button>
+          </motion.button>
 
           {/* Next / Submit button — right of card */}
+          <AnimatePresence mode="wait">
           {isLastStep ? (
-            <button
+            <motion.button
+              key="submit"
+              initial={{ scale: 0.88, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.88, opacity: 0 }}
+              whileHover={isFormValid && !loading ? { scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.28)" } : {}}
+              whileTap={isFormValid && !loading ? { scale: 0.92 } : {}}
+              transition={{ duration: 0.12 }}
               onClick={handleSubmit}
               disabled={loading || !isFormValid}
               type="button"
@@ -1904,60 +2070,89 @@ export default function StudentFormPage() {
               }}
             >
               {loading ? <i className="ti ti-loader-2" style={{ animation: "spin 0.8s linear infinite" }} /> : <i className="ti ti-check" />}
-            </button>
+            </motion.button>
           ) : (
-            <button
+            <motion.button
+              key="next"
+              initial={{ scale: 0.88, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.88, opacity: 0 }}
+              whileHover={{ scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.28)" }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ duration: 0.12 }}
               onClick={next}
               type="button"
               title="Next"
               style={{ ...sideNavBtn, right: -60, background: C.red, color: "#fff" }}
             >
               <i className="ti ti-chevron-right" />
-            </button>
+            </motion.button>
           )}
+          </AnimatePresence>
 
-          <div style={{ ...cardStyle, padding: 0, overflow: "hidden", minHeight: 320 }}>
+          <motion.div
+            layout
+            initial={isFirstRender ? { opacity: 0, y: 16 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0, layout: { duration: 0.28, ease: "easeOut" } }}
+            style={{ ...cardStyle, padding: 0, overflow: "hidden" }}
+          >
             <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-            <div style={{ padding: "24px 28px" }}>
-            {step === 0 && (
-              <DocumentsStep
-                isEdit={!!id}
-                requirementTypes={requirementTypes}
-                pendingUploads={pendingUploads}
-                setPendingUploads={setPendingUploads}
-                existingDocs={existingDocs}
-                setExistingDocs={setExistingDocs}
-                studentId={id}
-                onOcrExtracted={handleOcrExtracted}
-                onViewDoc={(url, name) => setDocViewModal({ url, name })}
-              />
-            )}
-            {step === 1 && <StudentStep data={student} onChange={setStudent} />}
-            {step === 2 && <HouseholdStep data={household} onChange={setHousehold} />}
-            {step === 3 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
-            {step === 4 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
-            {step === 5 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
-            {step === 6 && (
-              <ReviewStep
-                student={student} household={household}
-                guardians={guardians} siblings={siblings} schools={schools}
-                pendingUploads={pendingUploads}
-                existingDocs={existingDocs}
-                isEdit={!!id}
-              />
-            )}
+            <div style={{ overflow: "hidden" }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={step}
+                variants={stepVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                style={{ padding: "24px 28px" }}
+              >
+              {step === 0 && (
+                <DocumentsStep
+                  isEdit={!!id}
+                  requirementTypes={requirementTypes}
+                  pendingUploads={pendingUploads}
+                  setPendingUploads={setPendingUploads}
+                  existingDocs={existingDocs}
+                  setExistingDocs={setExistingDocs}
+                  studentId={id}
+                  onOcrExtracted={handleOcrExtracted}
+                  onViewDoc={(url, name) => setDocViewModal({ url, name })}
+                />
+              )}
+              {step === 1 && <StudentStep data={student} onChange={setStudent} />}
+              {step === 2 && <HouseholdStep data={household} onChange={setHousehold} />}
+              {step === 3 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+              {step === 4 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+              {step === 5 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
+              {step === 6 && (
+                <ReviewStep
+                  student={student} household={household}
+                  guardians={guardians} siblings={siblings} schools={schools}
+                  pendingUploads={pendingUploads}
+                  existingDocs={existingDocs}
+                  isEdit={!!id}
+                />
+              )}
+              </motion.div>
+            </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
 
-      {docViewModal && (
-        <DocViewModal
-          url={docViewModal.url}
-          name={docViewModal.name}
-          onClose={() => setDocViewModal(null)}
-        />
-      )}
+      <AnimatePresence>
+        {docViewModal && (
+          <DocViewModal
+            key="doc-view"
+            url={docViewModal.url}
+            name={docViewModal.name}
+            onClose={() => setDocViewModal(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

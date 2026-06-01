@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
+import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API calls ─────────────────────────────────────────────────────────────
 import {
@@ -157,9 +159,13 @@ function Textarea({ style, ...props }) {
   );
 }
 
-function SectionCard({ title, icon, badge, children }) {
+function SectionCard({ title, icon, badge, children, motionProps = {} }) {
   return (
-    <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, marginBottom: 0 }}>
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 8px 32px rgba(224,49,49,0.13)" }}
+      transition={{ duration: 0.18 }}
+      {...motionProps}
+      style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, marginBottom: 0, overflow: "hidden", ...motionProps.style }}>
       <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${C.redMid}`, background: "#fff8f8" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -173,7 +179,7 @@ function SectionCard({ title, icon, badge, children }) {
         )}
       </div>
       <div style={{ padding: "18px 22px" }}>{children}</div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -440,6 +446,7 @@ export default function EnrollmentFormPage() {
   const navigate = useNavigate();
   const isEdit   = Boolean(id);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
+  const hasAnimated = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
@@ -650,25 +657,35 @@ export default function EnrollmentFormPage() {
       }
     };
 
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+
   const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
 
   return (
     <>
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`
-        @keyframes fadeUp { from{opacity:0} to{opacity:1} }
-        @keyframes spin   { to{transform:rotate(360deg)} }
+        @keyframes spin { to{transform:rotate(360deg)} }
         * { box-sizing:border-box; }
       `}</style>
 
       <div style={{ maxWidth: 820, margin: "0 auto" }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
-          <button onClick={() => navigate("/enrollments")}
+        <motion.div
+          initial={isFirstRender ? { opacity: 0, y: -10 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          style={{ marginBottom: 24 }}>
+          <motion.button
+            whileHover={{ x: -2 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            onClick={() => navigate("/enrollments")}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
             <i className="ti ti-arrow-left" style={{ fontSize: 13 }} />Back to Enrollments
-          </button>
+          </motion.button>
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 28, color: C.dark, fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>
@@ -682,13 +699,21 @@ export default function EnrollmentFormPage() {
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusMeta.dot }} />{statusMeta.label}
             </span>
           </div>
-        </div>
+        </motion.div>
 
-        {error && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 18, display: "flex", alignItems: "center", gap: 8 }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
-          </div>
-        )}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              key="error-banner"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 18, display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {loading ? (
           <div style={{ background: C.white, borderRadius: 16, padding: 60, textAlign: "center", color: C.muted, border: `1px solid ${C.redMid}`, boxShadow: C.shadow }}>Loading enrollment…</div>
@@ -696,7 +721,8 @@ export default function EnrollmentFormPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
             {/* 1. Student */}
-            <SectionCard title="Student" icon="ti-user-search">
+            <SectionCard title="Student" icon="ti-user-search"
+              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.06 : 0 } }}>
               {isEdit ? (
                 <>
                   <Field label="Enrolling Student"><StudentPicker value={student} onChange={() => {}} disabled /></Field>
@@ -710,20 +736,30 @@ export default function EnrollmentFormPage() {
             </SectionCard>
 
             {/* Eligibility panel — new enrollments only */}
-            {!isEdit && student && (
-              <EligibilityPanel
-                eligibility={eligibility}
-                loading={eligibilityLoading}
-                overrideMode={overrideMode}
-                overrideReason={overrideReason}
-                onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
-                onChangeReason={setOverrideReason}
-                isAdmin={isAdmin}
-              />
-            )}
+            <AnimatePresence>
+              {!isEdit && student && (
+                <motion.div
+                  key="eligibility"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}>
+                  <EligibilityPanel
+                    eligibility={eligibility}
+                    loading={eligibilityLoading}
+                    overrideMode={overrideMode}
+                    overrideReason={overrideReason}
+                    onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
+                    onChangeReason={setOverrideReason}
+                    isAdmin={isAdmin}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 2. Term */}
-            <SectionCard title="Academic Term" icon="ti-calendar-event">
+            <SectionCard title="Academic Term" icon="ti-calendar-event"
+              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.1 : 0 } }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
                 <Field label="School Year" required
                   hint={isEdit && !gradePlacementUnlocked ? "Locked — unlock grade placement to change." : undefined}>
@@ -748,14 +784,13 @@ export default function EnrollmentFormPage() {
 
             {/* 3. Class Assignment */}
             <SectionCard title="Class Assignment" icon="ti-school"
-              badge={isEdit && gradePlacementChanged ? "Modified" : null}>
+              badge={isEdit && gradePlacementChanged ? "Modified" : null}
+              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.14 : 0 } }}>
 
               {/* Edit-mode: lock banner + unlock toggle */}
               {isEdit && (
                 <div style={{
-                  marginBottom: 16,
-                  padding: "12px 16px",
-                  borderRadius: 10,
+                  marginBottom: 16, padding: "12px 16px", borderRadius: 10,
                   background: gradePlacementUnlocked ? "#fffbeb" : "#f8fafc",
                   border: `1px solid ${gradePlacementUnlocked ? "#fde68a" : "#e2e8f0"}`,
                   display: "flex", alignItems: "flex-start", gap: 12,
@@ -771,27 +806,34 @@ export default function EnrollmentFormPage() {
                         ? "You may now change grade level, school level, strand, or semester. A reason is required."
                         : "School level, grade level, strand, and semester cannot be changed without admin override."}
                     </div>
-                    {gradePlacementUnlocked && (
-                      <div style={{ marginTop: 10 }}>
-                        <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
-                          Reason for change <span style={{ color: C.red }}>*</span>
-                        </label>
-                        <textarea
-                          value={gradePlacementReason}
-                          onChange={(e) => setGradePlacementReason(e.target.value)}
-                          placeholder="Explain why the grade placement is being corrected (e.g. data entry error, transferee re-classification)…"
-                          rows={2}
-                          style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
-                        />
-                      </div>
-                    )}
+                    <AnimatePresence>
+                      {gradePlacementUnlocked && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.18 }}
+                          style={{ marginTop: 10 }}>
+                          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
+                            Reason for change <span style={{ color: C.red }}>*</span>
+                          </label>
+                          <textarea
+                            value={gradePlacementReason}
+                            onChange={(e) => setGradePlacementReason(e.target.value)}
+                            placeholder="Explain why the grade placement is being corrected (e.g. data entry error, transferee re-classification)…"
+                            rows={2}
+                            style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} transition={{ duration: 0.12 }}
                     type="button"
                     onClick={() => {
                       setGradePlacementUnlocked((v) => !v);
                       setGradePlacementReason("");
-                      // Reset grade fields to original when re-locking
                       if (gradePlacementUnlocked && originalGradeFields) {
                         setForm((f) => ({ ...f, ...originalGradeFields }));
                       }
@@ -804,7 +846,7 @@ export default function EnrollmentFormPage() {
                       cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                     }}>
                     {gradePlacementUnlocked ? "Re-lock" : "Unlock"}
-                  </button>
+                  </motion.button>
                 </div>
               )}
 
@@ -814,11 +856,14 @@ export default function EnrollmentFormPage() {
                     const active = form.school_level === lvl.value;
                     const locked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(nextAllowedGrade));
                     return (
-                      <button key={lvl.value} type="button"
+                      <motion.button key={lvl.value} type="button"
+                        whileHover={!locked ? { scale: 1.04 } : {}}
+                        whileTap={!locked ? { scale: 0.93 } : {}}
+                        transition={{ duration: 0.12 }}
                         onClick={() => !locked && setField("school_level", lvl.value)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: locked ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s", opacity: locked && !active ? 0.45 : 1 }}>
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: locked ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: locked && !active ? 0.45 : 1 }}>
                         <i className={`ti ${lvl.icon}`} style={{ fontSize: 14 }} />{lvl.label}
-                      </button>
+                      </motion.button>
                     );
                   })}
                 </div>
@@ -840,43 +885,51 @@ export default function EnrollmentFormPage() {
                   <Input value={form.section} onChange={(e) => setField("section", e.target.value)} placeholder="e.g. Sampaguita, Section A" />
                 </Field>
               </div>
-              {isSHS && (
-                <div style={{ marginTop: 6, padding: "16px 18px", background: "linear-gradient(to right, #fff8f6, #fff)", border: `1px dashed ${C.redBorder}`, borderRadius: 12 }}>
-                  <div style={{ fontSize: 11, color: C.red, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Senior HS specifics</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-                    <Field label="Strand" required>
-                      {isEdit && !gradePlacementUnlocked ? (
-                        <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                          <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
-                          {form.strand || "—"}
-                        </div>
-                      ) : (
-                        <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
-                          <option value="">— Select strand —</option>
-                          {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </Select>
-                      )}
-                    </Field>
-                    <Field label="Semester" required>
-                      {isEdit && !gradePlacementUnlocked ? (
-                        <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                          <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
-                          {form.semester || "—"}
-                        </div>
-                      ) : (
-                        <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
-                          {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </Select>
-                      )}
-                    </Field>
-                  </div>
-                </div>
-              )}
+              <AnimatePresence>
+                {isSHS && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ marginTop: 6, padding: "16px 18px", background: "linear-gradient(to right, #fff8f6, #fff)", border: `1px dashed ${C.redBorder}`, borderRadius: 12 }}>
+                    <div style={{ fontSize: 11, color: C.red, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Senior HS specifics</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+                      <Field label="Strand" required>
+                        {isEdit && !gradePlacementUnlocked ? (
+                          <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                            {form.strand || "—"}
+                          </div>
+                        ) : (
+                          <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
+                            <option value="">— Select strand —</option>
+                            {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </Select>
+                        )}
+                      </Field>
+                      <Field label="Semester" required>
+                        {isEdit && !gradePlacementUnlocked ? (
+                          <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
+                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                            {form.semester || "—"}
+                          </div>
+                        ) : (
+                          <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
+                            {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          </Select>
+                        )}
+                      </Field>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </SectionCard>
 
             {/* 4. Scholarships (create only) */}
             {!isEdit && (
-              <SectionCard title="Scholarships" icon="ti-discount" badge={selectedScholarships.length > 0 ? selectedScholarships.length : null}>
+              <SectionCard title="Scholarships" icon="ti-discount" badge={selectedScholarships.length > 0 ? selectedScholarships.length : null}
+                motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.18 : 0 } }}>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontStyle: "italic" }}>Optional. Attach any scholarships this enrollment qualifies for.</div>
                 {scholarshipTypes.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>No active scholarship types available.</div>
@@ -887,8 +940,12 @@ export default function EnrollmentFormPage() {
                         const active = selectedScholarships.includes(sc.scholarship_type_id);
                         const valLabel = sc.discount_mode === "percentage" ? `${parseFloat(sc.discount_value)}%` : `₱ ${parseFloat(sc.discount_value).toLocaleString()}`;
                         return (
-                          <div key={sc.scholarship_type_id} onClick={() => toggleScholarship(sc.scholarship_type_id)}
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "#fffbfb", cursor: "pointer", transition: "all .14s" }}>
+                          <motion.div key={sc.scholarship_type_id}
+                            whileHover={{ y: -1, boxShadow: "0 4px 16px rgba(224,49,49,0.10)" }}
+                            whileTap={{ scale: 0.985 }}
+                            transition={{ duration: 0.14 }}
+                            onClick={() => toggleScholarship(sc.scholarship_type_id)}
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "#fffbfb", cursor: "pointer" }}>
                             <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${active ? C.red : "#d0b8b8"}`, background: active ? C.red : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               {active && <i className="ti ti-check" style={{ fontSize: 12, color: "white" }} />}
                             </div>
@@ -897,29 +954,45 @@ export default function EnrollmentFormPage() {
                               {sc.description && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sc.description}</div>}
                             </div>
                             <span style={{ fontSize: 12, fontWeight: 700, color: active ? C.red : C.muted, background: active ? "white" : "#f9f4f4", padding: "4px 10px", borderRadius: 99, whiteSpace: "nowrap" }}>{valLabel} off</span>
-                          </div>
+                          </motion.div>
                         );
                       })}
                     </div>
-                    {selectedScholarships.length > 0 && (
-                      <div style={{ marginTop: 14 }}>
-                        <Field label="Notes" hint="Optional remarks applied to all selected scholarships.">
-                          <Textarea value={scholarshipNotes} onChange={(e) => setScholarshipNotes(e.target.value)} placeholder="e.g. Approved by registrar on 2026-06-10" />
-                        </Field>
-                      </div>
-                    )}
+                    <AnimatePresence>
+                      {selectedScholarships.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.18 }}
+                          style={{ marginTop: 14 }}>
+                          <Field label="Notes" hint="Optional remarks applied to all selected scholarships.">
+                            <Textarea value={scholarshipNotes} onChange={(e) => setScholarshipNotes(e.target.value)} placeholder="e.g. Approved by registrar on 2026-06-10" />
+                          </Field>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </>
                 )}
               </SectionCard>
             )}
 
             {/* Actions */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 12 }}>
-              <button type="button" onClick={() => navigate("/enrollments")}
+            <motion.div
+              initial={isFirstRender ? { opacity: 0, y: 14 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 12 }}>
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                type="button" onClick={() => navigate("/enrollments")}
                 style={{ background: "transparent", color: C.muted, border: `1.5px solid ${C.redMid}`, borderRadius: 50, padding: "10px 24px", fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
                 Cancel
-              </button>
-              <button type="button" onClick={handleSubmit} disabled={saving || Boolean(validationError)}
+              </motion.button>
+              <motion.button
+                whileHover={!validationError && !saving ? { scale: 1.03 } : {}}
+                whileTap={!validationError && !saving ? { scale: 0.96 } : {}}
+                transition={{ duration: 0.12 }}
+                type="button" onClick={handleSubmit} disabled={saving || Boolean(validationError)}
                 style={{ background: validationError ? "#f0c4c4" : "linear-gradient(135deg, #e03131, #c92a2a)", color: "#fff", border: "none", borderRadius: 50, padding: "11px 28px", fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: validationError ? "not-allowed" : "pointer", letterSpacing: ".02em", boxShadow: validationError ? "none" : "0 6px 20px rgba(224,49,49,0.28)", display: "inline-flex", alignItems: "center", gap: 8, opacity: saving ? 0.7 : 1 }}
                 title={validationError || ""}>
                 {saving ? (
@@ -929,22 +1002,24 @@ export default function EnrollmentFormPage() {
                 ) : (
                   <><i className="ti ti-check" style={{ fontSize: 15 }} />Submit Enrollment</>
                 )}
-              </button>
-            </div>
+              </motion.button>
+            </motion.div>
           </div>
         )}
       </div>
     </div>
 
     {/* ── Invoice Prompt Modal ─────────────────────────────────────────────── */}
-    {invoicePrompt && (
-      <InvoicePromptModal
-        enrollmentId={invoicePrompt.enrollmentId}
-        studentName={invoicePrompt.studentName}
-        onClose={() => { setInvoicePrompt(null); navigate("/enrollments"); }}
-        onGoToInvoices={() => navigate(`/invoices?enrollment_id=${invoicePrompt.enrollmentId}`)}
-      />
-    )}
+    <AnimatePresence>
+      {invoicePrompt && (
+        <InvoicePromptModal
+          enrollmentId={invoicePrompt.enrollmentId}
+          studentName={invoicePrompt.studentName}
+          onClose={() => { setInvoicePrompt(null); navigate("/enrollments"); }}
+          onGoToInvoices={() => navigate(`/invoices?enrollment_id=${invoicePrompt.enrollmentId}`)}
+        />
+      )}
+    </AnimatePresence>
     </>
   );
 }
@@ -969,56 +1044,82 @@ function InvoicePromptModal({ enrollmentId, studentName, onClose, onGoToInvoices
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
-        {done ? (
-          <>
-            <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+        onClick={!generating ? onClose : undefined}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.5)", backdropFilter: "blur(4px)" }}
+      />
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
+        style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
+        <AnimatePresence mode="wait">
+          {done ? (
+            <motion.div key="done" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <motion.div
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 22 }}
+                  style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                  <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
+                </motion.div>
+                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Invoice Generated</h3>
+                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</p>
               </div>
-              <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Invoice Generated</h3>
-              <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</p>
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer" }}>
-                Back to Enrollments
-              </button>
-              <button onClick={onGoToInvoices} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                View Invoices
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ marginBottom: 20 }}>
-              <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Generate Invoice?</h3>
-              <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
-                <strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?
-              </p>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#5a3a3a", display: "block", marginBottom: 6 }}>Payment Plan</label>
-              <select value={plan} onChange={(e) => setPlan(e.target.value)}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #fca5a5", fontSize: 14, background: "#fff8f6", color: "#1a0a0a" }}>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="semi_annual">Semi-Annual</option>
-                <option value="annual">Annual (Full Year)</option>
-              </select>
-            </div>
-            {error && <p style={{ color: "#e03131", fontSize: 13, marginBottom: 12 }}>{error}</p>}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={onClose} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer" }}>
-                Skip for Now
-              </button>
-              <button onClick={handleGenerate} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: generating ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: generating ? "not-allowed" : "pointer" }}>
-                {generating ? "Generating…" : "Generate Invoice"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                  onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Back to Enrollments
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                  onClick={onGoToInvoices} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  View Invoices
+                </motion.button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="prompt" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+              <div style={{ marginBottom: 20 }}>
+                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Generate Invoice?</h3>
+                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
+                  <strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?
+                </p>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "#5a3a3a", display: "block", marginBottom: 6 }}>Payment Plan</label>
+                <select value={plan} onChange={(e) => setPlan(e.target.value)}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #fca5a5", fontSize: 14, background: "#fff8f6", color: "#1a0a0a" }}>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="semi_annual">Semi-Annual</option>
+                  <option value="annual">Annual (Full Year)</option>
+                </select>
+              </div>
+              <AnimatePresence>
+                {error && (
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
+                    style={{ color: "#e03131", fontSize: 13, marginBottom: 12 }}>{error}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                  onClick={onClose} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Skip for Now
+                </motion.button>
+                <motion.button
+                  whileHover={!generating ? { scale: 1.03 } : {}}
+                  whileTap={!generating ? { scale: 0.96 } : {}}
+                  transition={{ duration: 0.12 }}
+                  onClick={handleGenerate} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: generating ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  {generating ? "Generating…" : "Generate Invoice"}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

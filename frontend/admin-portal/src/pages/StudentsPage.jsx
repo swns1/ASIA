@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 import { deleteStudent, getStudents } from "../api/studentApi";
+import { modalVariants, springTransition } from "../utils/motion";
 
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -79,15 +81,16 @@ const Skeleton = ({ w = "100%", h = 14, r = 6 }) => (
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon, color, bg, loading }) {
   return (
-    <div style={{
-      background: "white", borderRadius: 14, padding: "16px 20px",
-      border: "1px solid #f5eaea", flex: 1, minWidth: 0,
-      display: "flex", alignItems: "center", gap: 14,
-      boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
-      transition: "transform 0.18s, box-shadow 0.18s",
-    }}
-      onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(224,49,49,0.12)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 2px 12px rgba(224,49,49,0.06)"; }}
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.16 }}
+      style={{
+        background: "white", borderRadius: 14, padding: "16px 20px",
+        border: "1px solid #f5eaea", width: "100%",
+        display: "flex", alignItems: "center", gap: 14,
+        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
+      }}
     >
       <div style={{
         width: 42, height: 42, borderRadius: 12, background: bg,
@@ -102,31 +105,41 @@ function StatCard({ label, value, icon, color, bg, loading }) {
         }
         <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ── Delete confirm modal ───────────────────────────────────────────────────────
 function ConfirmModal({ student, onConfirm, onCancel }) {
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(26,10,10,0.35)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      zIndex: 999, backdropFilter: "blur(4px)", animation: "fadeIn 0.15s ease",
-    }}>
-      <div style={{
-        background: "white", borderRadius: 20, padding: "32px 36px",
-        width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
-        animation: "slideUp 0.2s ease",
-      }}>
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onCancel}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.35)", backdropFilter: "blur(4px)" }}
+      />
+      <motion.div
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={springTransition}
+        style={{
+          position: "relative", background: "white", borderRadius: 20, padding: "32px 36px",
+          width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+        }}
+      >
         <div style={{
           width: 60, height: 60, borderRadius: 16, background: "#fff0f0",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a"}}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a" }}>
           Delete Student?
         </div>
         <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
@@ -135,30 +148,32 @@ function ConfirmModal({ student, onConfirm, onCancel }) {
           and all their associated records. This cannot be undone.
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 6, width: "100%" }}>
-          <button
+          <motion.button
+            whileHover={{ background: "#fdf8f8" }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.12 }}
             style={{
               flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10,
               background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer",
-              fontWeight: 600, fontFamily: "'DM Sans', sans-serif", transition: "background 0.15s",
+              fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
             }}
-            onMouseEnter={e => e.currentTarget.style.background = "#fdf8f8"}
-            onMouseLeave={e => e.currentTarget.style.background = "white"}
             onClick={onCancel}
-          >Cancel</button>
-          <button
+          >Cancel</motion.button>
+          <motion.button
+            whileHover={{ opacity: 0.88 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.12 }}
             style={{
               flex: 1, height: 42, border: "none", borderRadius: 10,
               background: "linear-gradient(135deg, #e03131, #c92a2a)",
               fontSize: 13, color: "white", cursor: "pointer",
               fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
-              boxShadow: "0 4px 16px rgba(224,49,49,0.3)", transition: "opacity 0.15s",
+              boxShadow: "0 4px 16px rgba(224,49,49,0.3)",
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
             onClick={onConfirm}
-          >Yes, delete</button>
+          >Yes, delete</motion.button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -187,7 +202,9 @@ export default function StudentsPage() {
   // Per-status counts for stat cards
   const [statusCounts, setStatusCounts] = useState({});
 
-  const searchRef = useRef();
+  const searchRef   = useRef();
+  const hasAnimated = useRef(false);
+  const rowsAnimated = useRef(false); // rows only animate on the very first load
   const token = sessionStorage.getItem("access_token");
 
   // Fetch students — all filter/sort params threaded through
@@ -211,6 +228,7 @@ export default function StudentsPage() {
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(nextPage);
+      rowsAnimated.current = true;
     } catch (err) {
       console.error(err);
     } finally {
@@ -303,6 +321,10 @@ export default function StudentsPage() {
 
   const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
 
+  const isFirstRender    = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRowRender = !rowsAnimated.current;
+
   return (
     <AppLayout>
 
@@ -335,8 +357,10 @@ export default function StudentsPage() {
                 }} />
                 
               </button> */}
-              <button
-                className="new-btn"
+              <motion.button
+                whileHover={{ y: -1, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.14 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 8,
                   background: "linear-gradient(135deg, #e03131, #c92a2a)",
@@ -350,7 +374,7 @@ export default function StudentsPage() {
               >
                 <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
                 New Student
-              </button>
+              </motion.button>
             </div>
           </div>
 
@@ -359,40 +383,32 @@ export default function StudentsPage() {
 
             {/* ── Stat cards ── */}
             <div style={{ display: "flex", gap: 12 }}>
-              <StatCard
-                label="Total Students"
-                icon="ti-users"
-                value={statusCounts.all} loading={loading}
-                color="#e03131" bg="#fff0f0"
-              />
-              <StatCard
-                label="Active"
-                icon="ti-user-check"
-                value={statusCounts.active} loading={loading}
-                color="#2e6b0d" bg="#e8f5e0"
-              />
-              <StatCard
-                label="Graduated"
-                icon="ti-certificate"
-                value={statusCounts.graduated} loading={loading}
-                color="#1455a0" bg="#e3f0fd"
-              />
-              <StatCard
-                label="Transferred"
-                icon="ti-transfer"
-                value={statusCounts.transferred} loading={loading}
-                color="#7a4a08" bg="#fef3e2"
-              />
-              <StatCard
-                label="Dropped"
-                icon="ti-user-x"
-                value={statusCounts.dropped} loading={loading}
-                color="#9b2020" bg="#fde8e8"
-              />
+              {[
+                { label: "Total Students", icon: "ti-users",       value: statusCounts.all,         color: "#e03131", bg: "#fff0f0" },
+                { label: "Active",         icon: "ti-user-check",  value: statusCounts.active,      color: "#2e6b0d", bg: "#e8f5e0" },
+                { label: "Graduated",      icon: "ti-certificate", value: statusCounts.graduated,   color: "#1455a0", bg: "#e3f0fd" },
+                { label: "Transferred",    icon: "ti-transfer",    value: statusCounts.transferred, color: "#7a4a08", bg: "#fef3e2" },
+                { label: "Dropped",        icon: "ti-user-x",      value: statusCounts.dropped,     color: "#9b2020", bg: "#fde8e8" },
+              ].map((card, i) => (
+                <motion.div
+                  key={card.label}
+                  initial={isFirstRender ? { y: 14, opacity: 0 } : false}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <StatCard {...card} loading={loading} />
+                </motion.div>
+              ))}
             </div>
 
             {/* ── Search + filters ── */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <motion.div
+              initial={isFirstRender ? { opacity: 0, y: 8 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            >
 
               {/* Row 1: search + sort + clear */}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -469,36 +485,46 @@ export default function StudentsPage() {
                 </button>
 
                 {/* Clear all filters */}
-                {hasActiveFilters && (
-                  <button
-                    onClick={handleClearAll}
-                    title="Clear all filters"
-                    style={{
-                      height: 42, padding: "0 14px", background: "white",
-                      border: "1.5px solid #fca5a5", borderRadius: 12,
-                      fontSize: 12, fontWeight: 600, color: "#b91c1c",
-                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                      display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
-                    }}
-                  >
-                    <i className="ti ti-filter-off" style={{ fontSize: 13 }} />
-                    Clear
-                  </button>
-                )}
+                <AnimatePresence>
+                  {hasActiveFilters && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.88 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.88 }}
+                      transition={{ duration: 0.14 }}
+                      whileTap={{ scale: 0.93 }}
+                      onClick={handleClearAll}
+                      title="Clear all filters"
+                      style={{
+                        height: 42, padding: "0 14px", background: "white",
+                        border: "1.5px solid #fca5a5", borderRadius: 12,
+                        fontSize: 12, fontWeight: 600, color: "#b91c1c",
+                        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                        display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+                      }}
+                    >
+                      <i className="ti ti-filter-off" style={{ fontSize: 13 }} />
+                      Clear
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Row 2: quick filters — Recents | Status chips | Sex chips */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
 
                 {/* Recents quick-filter */}
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.93 }}
+                  transition={{ duration: 0.12 }}
                   className={`chip-btn${isRecents ? " active" : ""}`}
                   onClick={handleRecents}
                   title="Show most recently registered students"
                 >
                   <i className="ti ti-clock" style={{ fontSize: 12 }} />
                   Recents
-                </button>
+                </motion.button>
 
                 <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
 
@@ -507,8 +533,11 @@ export default function StudentsPage() {
                   const meta = STATUS_META[val];
                   const isActive = statusFilter === val;
                   return (
-                    <button
+                    <motion.button
                       key={val}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.93 }}
+                      transition={{ duration: 0.12 }}
                       className={`chip-btn${isActive ? " active" : ""}`}
                       onClick={() => handleStatusFilter(val)}
                     >
@@ -520,15 +549,24 @@ export default function StudentsPage() {
                         }} />
                       )}
                       {val === "all" ? "All" : meta?.label}
-                      {isActive && !loading && statusCounts[val] !== undefined && (
-                        <span style={{
-                          background: "#e03131", color: "white", borderRadius: 99,
-                          fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2,
-                        }}>
-                          {statusCounts[val]}
-                        </span>
-                      )}
-                    </button>
+                      <AnimatePresence>
+                        {isActive && !loading && statusCounts[val] !== undefined && (
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.14 }}
+                            style={{
+                              display: "inline-block",
+                              background: "#e03131", color: "white", borderRadius: 99,
+                              fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2,
+                            }}
+                          >
+                            {statusCounts[val]}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </motion.button>
                   );
                 })}
 
@@ -538,27 +576,35 @@ export default function StudentsPage() {
                 {SEX_FILTERS.map((sf) => {
                   const isActive = sexFilter === sf.value;
                   return (
-                    <button
+                    <motion.button
                       key={sf.value}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.93 }}
+                      transition={{ duration: 0.12 }}
                       className={`chip-btn${isActive ? " active" : ""}`}
                       onClick={() => handleSexFilter(sf.value)}
                     >
                       {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12, color: isActive ? "#e03131" : sf.color }} />}
                       {sf.label}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
-            </div>
+            </motion.div>
 
             {/* ── Table ── */}
-            <div style={{
-              background: "white", border: "1px solid #f5eaea",
-              borderRadius: 16, overflow: "hidden",
-              boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
-              maxHeight: "calc(100vh - 340px)",   
-              overflowY: "auto", 
-            }}>
+            <motion.div
+              initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.34 : 0 }}
+              style={{
+                background: "white", border: "1px solid #f5eaea",
+                borderRadius: 16, overflow: "hidden",
+                boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+                maxHeight: "calc(100vh - 340px)",
+                overflowY: "auto",
+              }}
+            >
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#fdfafa" }}>
@@ -587,6 +633,7 @@ export default function StudentsPage() {
                     ))}
                   </tr>
                 </thead>
+                <AnimatePresence mode="popLayout">
                 <tbody>
                   {loading
                     ? Array.from({ length: 7 }).map((_, i) => (
@@ -609,7 +656,13 @@ export default function StudentsPage() {
                       ))
                     : students.length === 0
                       ? (
-                        <tr>
+                        <motion.tr
+                          key="empty"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.18 }}
+                        >
                           <td colSpan={7} style={{ textAlign: "center", padding: "64px 16px" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                               <div style={{
@@ -626,7 +679,7 @@ export default function StudentsPage() {
                               </div>
                             </div>
                           </td>
-                        </tr>
+                        </motion.tr>
                       )
                       : students.map((st, idx) => {
                           const palette = getAvatarPalette(st.last_name);
@@ -637,10 +690,13 @@ export default function StudentsPage() {
                           const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
 
                           return (
-                            <tr
+                            <motion.tr
                               key={st.student_id}
+                              initial={isFirstRowRender ? { opacity: 0, x: -6 } : false}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 6 }}
+                              transition={{ duration: 0.18, ease: "easeOut", delay: isFirstRowRender ? Math.min(idx * 0.025, 0.3) : 0 }}
                               className="student-row"
-                              style={{ animation: `rowIn 0.22s ease both`, animationDelay: `${idx * 25}ms` }}
                               onClick={() => navigate(`/students/${st.student_id}`)}
                             >
                               {/* Student name + email */}
@@ -744,13 +800,14 @@ export default function StudentsPage() {
                                   </button>
                                 </div>
                               </td>
-                            </tr>
+                            </motion.tr>
                           );
                         })
                   }
                 </tbody>
+                </AnimatePresence>
               </table>
-            </div>
+            </motion.div>
 
             {/* ── Pagination ── */}
             {!loading && pageMeta.count > 0 && (
@@ -761,14 +818,16 @@ export default function StudentsPage() {
                   &nbsp;·&nbsp; {pageMeta.count.toLocaleString()} total records
                 </span>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ duration: 0.1 }}
                     className="page-btn"
                     style={pgBtn}
                     disabled={!pageMeta.previous}
                     onClick={() => fetchStudents(page - 1, search, statusFilter, sexFilter, ordering)}
                   >
                     <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-                  </button>
+                  </motion.button>
                   {(() => {
                     const windowSize = Math.min(totalPages, 5);
                     const start = Math.min(
@@ -779,24 +838,28 @@ export default function StudentsPage() {
                   })().map((p) => {
                     const isActive = p === page;
                     return (
-                      <button
+                      <motion.button
                         key={p}
+                        whileTap={{ scale: 0.92 }}
+                        transition={{ duration: 0.1 }}
                         className="page-btn"
                         style={{ ...pgBtn, ...(isActive ? pgBtnActive : {}) }}
                         onClick={() => fetchStudents(p, search, statusFilter, sexFilter, ordering)}
                       >
                         {p}
-                      </button>
+                      </motion.button>
                     );
                   })}
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ duration: 0.1 }}
                     className="page-btn"
                     style={pgBtn}
                     disabled={!pageMeta.next}
                     onClick={() => fetchStudents(page + 1, search, statusFilter, sexFilter, ordering)}
                   >
                     <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-                  </button>
+                  </motion.button>
                 </div>
               </div>
             )}
@@ -804,13 +867,15 @@ export default function StudentsPage() {
           </div>
 
       {/* Delete modal */}
-      {toDelete && (
-        <ConfirmModal
-          student={toDelete}
-          onConfirm={handleDelete}
-          onCancel={() => setToDelete(null)}
-        />
-      )}
+      <AnimatePresence>
+        {toDelete && (
+          <ConfirmModal
+            student={toDelete}
+            onConfirm={handleDelete}
+            onCancel={() => setToDelete(null)}
+          />
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }

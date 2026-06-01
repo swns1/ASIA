@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate, useParams } from "react-router-dom";
+import { modalVariants, springTransition } from "../utils/motion";
 import { getStudent } from "../api/studentApi";
 import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
@@ -93,13 +95,16 @@ function InfoRow({ icon, label, value, mono = false }) {
 }
 
 // ── Section card wrapper ──────────────────────────────────────────────────────
-function SectionCard({ title, icon, children, badge }) {
+function SectionCard({ title, icon, children, badge, motionProps = {} }) {
   return (
-    <div style={{
-      background: "white", borderRadius: 16, border: "1px solid #f5eaea",
-      boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
-      animation: "fadeUp 0.3s ease both",
-    }}>
+    <motion.div
+      {...motionProps}
+      style={{
+        background: "white", borderRadius: 16, border: "1px solid #f5eaea",
+        boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
+        ...motionProps.style,
+      }}
+    >
       {/* Accent strip — matches the hero card's top gradient */}
       <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
       <div style={{
@@ -131,7 +136,7 @@ function SectionCard({ title, icon, children, badge }) {
       <div style={{ padding: "6px 22px 14px" }}>
         {children}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -149,6 +154,8 @@ function EmptySection({ message }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 
+const TAB_ORDER = ["personal", "household", "guardians", "family", "schools", "enrollments", "ledger"];
+
 export default function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -162,6 +169,20 @@ export default function StudentDetailPage() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
+
+  const hasAnimated   = useRef(false);
+  const prevTabRef    = useRef("personal");
+  const visitedTabs   = useRef(new Set(["personal"]));
+  const tabDirection  = useRef(1); // 1 = right, -1 = left
+
+  function handleTabChange(tabId) {
+    const prevIdx = TAB_ORDER.indexOf(prevTabRef.current);
+    const nextIdx = TAB_ORDER.indexOf(tabId);
+    tabDirection.current = nextIdx > prevIdx ? 1 : -1;
+    prevTabRef.current = tabId;
+    visitedTabs.current.add(tabId);
+    setActiveTab(tabId);
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -201,13 +222,23 @@ export default function StudentDetailPage() {
     { id: "ledger",      label: "Financial History", icon: "ti-receipt"   },
   ];
 
-  const palette   = getPalette(student?.last_name ?? "");
+  const palette    = getPalette(student?.last_name ?? "");
   const statusMeta = STATUS_META[student?.status] ?? STATUS_META.inactive;
-  const age       = calcAge(student?.birth_date);
-  const fullName  = student
+  const age        = calcAge(student?.birth_date);
+  const fullName   = student
     ? [student.first_name, student.middle_name, student.last_name, student.suffix]
         .filter(Boolean).join(" ")
     : "";
+
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+
+  const dir = tabDirection.current;
+  const tabVariants = {
+    enter:  { x: dir * 18, opacity: 0 },
+    center: { x: 0, opacity: 1 },
+    exit:   { x: dir * -18, opacity: 0 },
+  };
 
   return (
     <AppLayout>
@@ -220,14 +251,16 @@ export default function StudentDetailPage() {
             boxShadow:"0 1px 8px rgba(224,49,49,0.04)",
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <button
-                className="action-btn action-back"
-                style={{ display:"flex", alignItems:"center", gap:6, height:34, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:9, background:"white", fontSize:13, color:"#9a7070", fontFamily:"'DM Sans', sans-serif", fontWeight:500 }}
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{ display:"flex", alignItems:"center", gap:6, height:34, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:9, background:"white", fontSize:13, color:"#9a7070", fontFamily:"'DM Sans', sans-serif", fontWeight:500, cursor:"pointer" }}
                 onClick={() => navigate("/students")}
               >
                 <i className="ti ti-arrow-left" style={{ fontSize:13 }} />
                 Students
-              </button>
+              </motion.button>
               <i className="ti ti-chevron-right" style={{ fontSize:12, color:"#d0b8b8" }} />
               <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:600 }}>
                 {loading ? "Loading…" : fullName}
@@ -238,16 +271,23 @@ export default function StudentDetailPage() {
                 <i className="ti ti-bell" style={{ fontSize:16 }} />
                 <span style={{ width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" }} />
               </button> */}
-              {!loading && student && (
-                <button
-                  className="action-btn action-edit"
-                  style={{ display:"flex", alignItems:"center", gap:8, height:36, padding:"0 16px", border:"1.5px solid #f0e4e4", borderRadius:10, background:"white", fontSize:13, color:"#9a7070", fontFamily:"'DM Sans', sans-serif", fontWeight:600 }}
-                  onClick={() => navigate(`/students/${student.student_id}/edit`)}
-                >
-                  <i className="ti ti-pencil" style={{ fontSize:13 }} />
-                  Edit Student
-                </button>
-              )}
+              <AnimatePresence>
+                {!loading && student && (
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.92 }}
+                    transition={{ duration: 0.16 }}
+                    whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+                    whileTap={{ scale: 0.96 }}
+                    style={{ display:"flex", alignItems:"center", gap:8, height:36, padding:"0 16px", border:"1.5px solid #f0e4e4", borderRadius:10, background:"white", fontSize:13, color:"#9a7070", fontFamily:"'DM Sans', sans-serif", fontWeight:600, cursor:"pointer" }}
+                    onClick={() => navigate(`/students/${student.student_id}/edit`)}
+                  >
+                    <i className="ti ti-pencil" style={{ fontSize:13 }} />
+                    Edit Student
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -284,13 +324,17 @@ export default function StudentDetailPage() {
             ) : (
               <>
                 {/* ── Hero profile card ── */}
-                <div style={{
-                  background:"white", borderRadius:20,
-                  border:"1px solid #f5eaea",
-                  boxShadow:"0 4px 24px rgba(224,49,49,0.07)",
-                  overflow:"hidden",
-                  animation:"heroIn 0.3s ease both",
-                }}>
+                <motion.div
+                  initial={isFirstRender ? { y: 16, opacity: 0 } : false}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
+                  style={{
+                    background:"white", borderRadius:20,
+                    border:"1px solid #f5eaea",
+                    boxShadow:"0 4px 24px rgba(224,49,49,0.07)",
+                    overflow:"hidden",
+                  }}
+                >
                   {/* Top accent strip */}
                   <div style={{
                     height:6,
@@ -299,17 +343,22 @@ export default function StudentDetailPage() {
 
                   <div style={{ padding:"26px 28px", display:"flex", alignItems:"flex-start", gap:22, flexWrap:"wrap" }}>
                     {/* Avatar */}
-                    <div style={{
-                      width:76, height:76, borderRadius:"50%",
-                      background:`linear-gradient(135deg, ${palette.bg}, ${palette.color}22)`,
-                      border:`3px solid ${palette.color}33`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:26, fontWeight:700, color:palette.color,
-                      flexShrink:0, letterSpacing:"0.02em",
-                      boxShadow:`0 4px 20px ${palette.color}22`,
-                    }}>
+                    <motion.div
+                      initial={isFirstRender ? { scale: 0.82, opacity: 0 } : false}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.32, ease: [0.34, 1.56, 0.64, 1], delay: isFirstRender ? 0.12 : 0 }}
+                      style={{
+                        width:76, height:76, borderRadius:"50%",
+                        background:`linear-gradient(135deg, ${palette.bg}, ${palette.color}22)`,
+                        border:`3px solid ${palette.color}33`,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:26, fontWeight:700, color:palette.color,
+                        flexShrink:0, letterSpacing:"0.02em",
+                        boxShadow:`0 4px 20px ${palette.color}22`,
+                      }}
+                    >
                       {`${student.first_name?.[0] ?? ""}${student.last_name?.[0] ?? ""}`.toUpperCase()}
-                    </div>
+                    </motion.div>
 
                     {/* Name + identifiers */}
                     <div style={{ flex:1, minWidth:200 }}>
@@ -410,36 +459,56 @@ export default function StudentDetailPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </motion.div>
 
                 {/* ── Tab bar ── */}
-                <div style={{
-                  display:"flex", gap:2,
-                  background:"white", borderRadius:14,
-                  border:"1px solid #f5eaea", padding:6,
-                  boxShadow:"0 2px 10px rgba(224,49,49,0.04)",
-                }}>
+                <motion.div
+                  initial={isFirstRender ? { opacity: 0, y: 8 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
+                  style={{
+                    display:"flex", gap:2,
+                    background:"white", borderRadius:14,
+                    border:"1px solid #f5eaea", padding:6,
+                    boxShadow:"0 2px 10px rgba(224,49,49,0.04)",
+                  }}
+                >
                   {TABS.map((tab) => {
                     const isActive = activeTab === tab.id;
                     return (
-                      <button
+                      <motion.button
                         key={tab.id}
-                        className={`tab-btn${isActive ? " tab-active" : ""}`}
+                        whileTap={{ scale: 0.96 }}
+                        transition={{ duration: 0.1 }}
                         style={{
-                          flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-                          gap:7, height:38, borderRadius:10, border:"none",
-                          background: isActive ? "linear-gradient(135deg, #e03131, #c92a2a)" : "transparent",
+                          position:"relative", flex:1, display:"flex", alignItems:"center",
+                          justifyContent:"center", gap:7, height:38, borderRadius:10, border:"none",
+                          background:"transparent",
                           color: isActive ? "white" : "#9a7070",
                           fontSize:12.5, fontWeight: isActive ? 700 : 500,
                           fontFamily:"'DM Sans', sans-serif",
-                          boxShadow: isActive ? "0 4px 14px rgba(224,49,49,0.24)" : "none",
+                          cursor:"pointer", zIndex:1,
                         }}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => handleTabChange(tab.id)}
                       >
-                        <i className={`ti ${tab.icon}`} style={{ fontSize:14 }} />
-                        {tab.label}
+                        {/* Sliding active pill */}
+                        {isActive && (
+                          <motion.div
+                            layoutId="tab-active-pill"
+                            style={{
+                              position:"absolute", inset:0, borderRadius:10,
+                              background:"linear-gradient(135deg, #e03131, #c92a2a)",
+                              boxShadow:"0 4px 14px rgba(224,49,49,0.24)",
+                              zIndex:-1,
+                            }}
+                            transition={{ type:"spring", stiffness:420, damping:36 }}
+                          />
+                        )}
+                        <i className={`ti ${tab.icon}`} style={{ fontSize:14, position:"relative" }} />
+                        <span style={{ position:"relative" }}>{tab.label}</span>
                         {tab.count != null && tab.count > 0 && (
                           <span style={{
+                            position:"relative",
                             background: isActive ? "rgba(255,255,255,0.25)" : "#fff0f0",
                             color: isActive ? "white" : "#e03131",
                             borderRadius:99, fontSize:10, fontWeight:700,
@@ -448,386 +517,347 @@ export default function StudentDetailPage() {
                             {tab.count}
                           </span>
                         )}
-                      </button>
+                      </motion.button>
                     );
                   })}
-                </div>
+                </motion.div>
 
                 {/* ── Tab content ── */}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    variants={tabVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    style={{ display:"flex", flexDirection:"column", gap:16 }}
+                  >
 
-                {/* PERSONAL TAB */}
-                {activeTab === "personal" && (
-                  <div style={{ display:"flex", flexDirection:"column", gap:16, animation:"fadeUp 0.22s ease both" }}>
-                    <SectionCard title="Basic Information" icon="ti-user">
-                      <InfoRow icon="ti-calendar"    label="Date of Birth"   value={fmtDate(student.birth_date)} />
-                      <InfoRow icon="ti-clock"       label="Age"             value={age !== null ? `${age} years old` : null} />
-                      <InfoRow icon="ti-gender-bigender" label="Sex"         value={capitalize(student.sex)} />
-                      <InfoRow icon="ti-star"        label="Religion"        value={student.religion} />
-                    </SectionCard>
-
-                    <SectionCard title="Contact Information" icon="ti-address-book">
-                      <InfoRow icon="ti-mail"        label="Email Address"   value={student.email} />
-                      <InfoRow icon="ti-phone"       label="Mobile Number"   value={student.mobile_number} />
-                    </SectionCard>
-
-                    <SectionCard title="Address" icon="ti-map-pin">
-                      <InfoRow icon="ti-home"        label="Current Address"   value={student.current_address} />
-                      <InfoRow icon="ti-map-2"       label="Permanent Address" value={student.permanent_address} />
-                    </SectionCard>
-
-                    <SectionCard title="System Information" icon="ti-info-circle">
-                      <InfoRow icon="ti-id-badge"    label="Student Number"  value={student.student_number} mono />
-                      <InfoRow icon="ti-fingerprint" label="LRN"             value={student.lrn} mono />
-                      <InfoRow icon="ti-toggle-right" label="Status"         value={capitalize(student.status)} />
-                    </SectionCard>
-                  </div>
-                )}
-
-                {/* HOUSEHOLD TAB */}
-                {activeTab === "household" && (
-                  <div style={{ animation:"fadeUp 0.22s ease both" }}>
-                    {(!student.household_id && !student.parent_marital_status && !student.living_arrangement) ? (
-                      <SectionCard title="Household Information" icon="ti-home">
-                        <EmptySection message="No household information recorded for this student." />
+                    {/* PERSONAL TAB */}
+                    {activeTab === "personal" && (<>
+                      <SectionCard title="Basic Information" icon="ti-user"
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0,    duration:0.22 } }}>
+                        <InfoRow icon="ti-calendar"        label="Date of Birth"   value={fmtDate(student.birth_date)} />
+                        <InfoRow icon="ti-clock"           label="Age"             value={age !== null ? `${age} years old` : null} />
+                        <InfoRow icon="ti-gender-bigender" label="Sex"             value={capitalize(student.sex)} />
+                        <InfoRow icon="ti-star"            label="Religion"        value={student.religion} />
                       </SectionCard>
-                    ) : (
-                      <SectionCard title="Household Information" icon="ti-home">
-                        <InfoRow icon="ti-heart"       label="Parent Marital Status"  value={capitalize(student.parent_marital_status || "")} />
-                        <InfoRow icon="ti-building-community" label="Living Arrangement" value={capitalize(student.living_arrangement || "")} />
-                        <InfoRow icon="ti-badge"       label="4Ps Beneficiary"        value={student.is_4ps_beneficiary ? "Yes" : student.is_4ps_beneficiary === false ? "No" : null} />
-                        <InfoRow icon="ti-hash"        label="4Ps ID"                 value={student.four_ps_id} mono />
+                      <SectionCard title="Contact Information" icon="ti-address-book"
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0.06, duration:0.22 } }}>
+                        <InfoRow icon="ti-mail"  label="Email Address" value={student.email} />
+                        <InfoRow icon="ti-phone" label="Mobile Number" value={student.mobile_number} />
                       </SectionCard>
-                    )}
-                  </div>
-                )}
+                      <SectionCard title="Address" icon="ti-map-pin"
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0.12, duration:0.22 } }}>
+                        <InfoRow icon="ti-home"  label="Current Address"   value={student.current_address} />
+                        <InfoRow icon="ti-map-2" label="Permanent Address" value={student.permanent_address} />
+                      </SectionCard>
+                      <SectionCard title="System Information" icon="ti-info-circle"
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0.18, duration:0.22 } }}>
+                        <InfoRow icon="ti-id-badge"    label="Student Number" value={student.student_number} mono />
+                        <InfoRow icon="ti-fingerprint" label="LRN"            value={student.lrn} mono />
+                        <InfoRow icon="ti-toggle-right" label="Status"        value={capitalize(student.status)} />
+                      </SectionCard>
+                    </>)}
 
-                {/* GUARDIANS TAB */}
-                {activeTab === "guardians" && (
-                  <div style={{ display:"flex", flexDirection:"column", gap:14, animation:"fadeUp 0.22s ease both" }}>
-                    {guardians.length === 0 ? (
-                      <SectionCard title="Guardians" icon="ti-users">
-                        <EmptySection message="No guardians have been linked to this student." />
-                      </SectionCard>
-                    ) : guardians.map((g, i) => (
-                      <div
-                        key={g.guardian_id ?? i}
-                        className="guardian-card"
-                        style={{
-                          background:"white", borderRadius:16,
-                          border:`1px solid ${g.is_primary_contact ? "#fca5a5" : "#f5eaea"}`,
-                          boxShadow: g.is_primary_contact ? "0 2px 16px rgba(224,49,49,0.10)" : "0 2px 10px rgba(224,49,49,0.04)",
-                          overflow:"hidden",
-                        }}
-                      >
-                        {/* Accent strip */}
-                        <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-                        {/* Card header */}
-                        <div style={{
-                          padding:"14px 22px",
-                          background: g.is_primary_contact
-                            ? "linear-gradient(to right, #fff0f0, #fdfafa)"
-                            : "linear-gradient(to right, #fff8f8, white)",
-                          borderBottom:"1px solid #f9f0f0",
-                          display:"flex", alignItems:"center", justifyContent:"space-between",
-                        }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                            <div style={{
-                              width:38, height:38, borderRadius:"50%",
-                              background: getPalette(g.full_name ?? "").bg,
-                              display:"flex", alignItems:"center", justifyContent:"center",
-                              fontSize:14, fontWeight:700,
-                              color: getPalette(g.full_name ?? "").color,
-                            }}>
-                              {(g.full_name ?? "?")[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
-                              <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
-                            </div>
-                          </div>
-                          {g.is_primary_contact && (
-                            <span style={{
-                              display:"inline-flex", alignItems:"center", gap:5,
-                              padding:"4px 11px", borderRadius:99,
-                              background:"#fff0f0", color:"#e03131",
-                              fontSize:11, fontWeight:700, border:"1px solid #fca5a5",
-                            }}>
-                              <i className="ti ti-star-filled" style={{ fontSize:10 }} />
-                              Primary Contact
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ padding:"4px 22px 14px" }}>
-                          <InfoRow icon="ti-briefcase"  label="Occupation"     value={g.occupation} />
-                          <InfoRow icon="ti-phone"      label="Mobile Number"  value={g.mobile_number} />
-                          <InfoRow icon="ti-mail"       label="Email Address"  value={g.email_address} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* SIBLINGS TAB */}
-                {activeTab === "family" && (
-                  <div style={{ animation:"fadeUp 0.22s ease both" }}>
-                    {siblings.length === 0 ? (
-                      <SectionCard title="Siblings" icon="ti-heart" badge={0}>
-                        <EmptySection message="No siblings have been recorded for this student." />
-                      </SectionCard>
-                    ) : (
-                      <SectionCard title="Siblings" icon="ti-heart" badge={siblings.length}>
-                        <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
-                          {siblings.map((s, i) => (
-                            <div key={s.sibling_id ?? i} style={{
-                              display:"flex", alignItems:"center", gap:14,
-                              padding:"12px 0", borderBottom: i < siblings.length - 1 ? "1px solid #f9f0f0" : "none",
-                            }}>
-                              <div style={{
-                                width:36, height:36, borderRadius:"50%",
-                                background: getPalette(s.full_name ?? "").bg,
-                                display:"flex", alignItems:"center", justifyContent:"center",
-                                fontSize:13, fontWeight:700, color: getPalette(s.full_name ?? "").color,
-                                flexShrink:0,
-                              }}>
-                                {(s.full_name ?? "?")[0].toUpperCase()}
-                              </div>
-                              <div style={{ flex:1 }}>
-                                <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.full_name}</div>
-                                {s.age && <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>{s.age} years old</div>}
-                              </div>
-                              <div style={{ fontSize:11, color:"#c0a0a0", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
-                                Sibling {i + 1}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                    {/* HOUSEHOLD TAB */}
+                    {activeTab === "household" && (
+                      <SectionCard title="Household Information" icon="ti-home"
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                        {(!student.household_id && !student.parent_marital_status && !student.living_arrangement) ? (
+                          <EmptySection message="No household information recorded for this student." />
+                        ) : (<>
+                          <InfoRow icon="ti-heart"              label="Parent Marital Status" value={capitalize(student.parent_marital_status || "")} />
+                          <InfoRow icon="ti-building-community" label="Living Arrangement"    value={capitalize(student.living_arrangement || "")} />
+                          <InfoRow icon="ti-badge"              label="4Ps Beneficiary"       value={student.is_4ps_beneficiary ? "Yes" : student.is_4ps_beneficiary === false ? "No" : null} />
+                          <InfoRow icon="ti-hash"               label="4Ps ID"                value={student.four_ps_id} mono />
+                        </>)}
                       </SectionCard>
                     )}
-                  </div>
-                )}
 
-                {/* PREVIOUS SCHOOLS TAB */}
-                {activeTab === "schools" && (
-                  <div style={{ display:"flex", flexDirection:"column", gap:14, animation:"fadeUp 0.22s ease both" }}>
-                    {schools.length === 0 ? (
-                      <SectionCard title="Previous Schools" icon="ti-school">
-                        <EmptySection message="No previous schools have been recorded." />
-                      </SectionCard>
-                    ) : schools.map((s, i) => (
-                      <div
-                        key={s.previous_school_id ?? i}
-                        className="school-card"
-                        style={{
-                          background:"white", borderRadius:16,
-                          border:"1px solid #f5eaea",
-                          boxShadow:"0 2px 10px rgba(224,49,49,0.04)",
-                          overflow:"hidden",
-                        }}
-                      >
-                        {/* Accent strip */}
-                        <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-                        <div style={{
-                          padding:"14px 22px",
-                          background:"linear-gradient(to right, #fff8f8, white)",
-                          borderBottom:"1px solid #f9f0f0",
-                          display:"flex", alignItems:"center", gap:12,
-                        }}>
+                    {/* GUARDIANS TAB */}
+                    {activeTab === "guardians" && (
+                      guardians.length === 0 ? (
+                        <SectionCard title="Guardians" icon="ti-users"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                          <EmptySection message="No guardians have been linked to this student." />
+                        </SectionCard>
+                      ) : guardians.map((g, i) => (
+                        <motion.div
+                          key={g.guardian_id ?? i}
+                          initial={{ opacity:0, y:10 }}
+                          animate={{ opacity:1, y:0 }}
+                          transition={{ delay: i * 0.07, duration:0.22 }}
+                          whileHover={{ y:-2, boxShadow: g.is_primary_contact ? "0 6px 22px rgba(224,49,49,0.16)" : "0 6px 18px rgba(224,49,49,0.10)" }}
+                          style={{
+                            background:"white", borderRadius:16,
+                            border:"1px solid #f5eaea",
+                            boxShadow: g.is_primary_contact ? "0 2px 16px rgba(224,49,49,0.10)" : "0 2px 10px rgba(224,49,49,0.04)",
+                            overflow:"hidden",
+                          }}
+                        >
+                          <div style={{ height:4, background: g.is_primary_contact ? "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" : "linear-gradient(to right, #f5eaea, #fde8e8, #f5eaea)" }} />
                           <div style={{
-                            width:38, height:38, borderRadius:10,
-                            background:"#e8f0fd",
-                            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                            padding:"14px 22px",
+                            background: g.is_primary_contact ? "linear-gradient(to right, #fff0f0, #fdfafa)" : "linear-gradient(to right, #fff8f8, white)",
+                            borderBottom:"1px solid #f9f0f0",
+                            display:"flex", alignItems:"center", justifyContent:"space-between",
                           }}>
-                            <i className="ti ti-school" style={{ fontSize:17, color:"#2563eb" }} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>
-                              {s.school_name}
+                            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                              <div style={{ width:38, height:38, borderRadius:"50%", background:getPalette(g.full_name ?? "").bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, color:getPalette(g.full_name ?? "").color }}>
+                                {(g.full_name ?? "?")[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
+                                <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
+                              </div>
                             </div>
-                            <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>School {i + 1}</div>
+                            {g.is_primary_contact && (
+                              <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#e03131", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
+                                <i className="ti ti-star-filled" style={{ fontSize:10 }} />
+                                Primary Contact
+                              </span>
+                            )}
                           </div>
-                        </div>
-                        <div style={{ padding:"4px 22px 14px" }}>
-                          <InfoRow icon="ti-map-pin" label="School Address" value={s.school_address} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                          <div style={{ padding:"4px 22px 14px" }}>
+                            <InfoRow icon="ti-briefcase" label="Occupation"    value={g.occupation} />
+                            <InfoRow icon="ti-phone"     label="Mobile Number" value={g.mobile_number} />
+                            <InfoRow icon="ti-mail"      label="Email Address" value={g.email_address} />
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
 
-                {activeTab === "enrollments" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: "fadeUp 0.22s ease both" }}>
-                    {enrollments.length === 0 ? (
-                      <SectionCard title="Enrollment History" icon="ti-clipboard-list">
-                        <EmptySection message="No enrollment records found for this student." />
-                      </SectionCard>
-                    ) : enrollments.map((en) => {
-                      const statusColors = {
-                        enrolled:  { color: "#2e6b0d", bg: "#e8f5e0" },
-                        pending:   { color: "#854f0b", bg: "#faeeda" },
-                        completed: { color: "#1455a0", bg: "#e3f0fd" },
-                        cancelled: { color: "#5c5752", bg: "#f0ede8" },
-                      };
-                      const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
-                      return (
-                        <div key={en.enrollment_id}
-                          onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
-                          style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", boxShadow: "0 2px 10px rgba(224,49,49,0.04)", transition: "box-shadow .15s" }}
-                          onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(224,49,49,0.12)"}
-                          onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 2px 10px rgba(224,49,49,0.04)"}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{ width: 38, height: 38, borderRadius: 10, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              <i className="ti ti-clipboard-list" style={{ fontSize: 16, color: "#e03131" }} />
+                    {/* SIBLINGS TAB */}
+                    {activeTab === "family" && (
+                      siblings.length === 0 ? (
+                        <SectionCard title="Siblings" icon="ti-heart" badge={0}
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                          <EmptySection message="No siblings have been recorded for this student." />
+                        </SectionCard>
+                      ) : (
+                        <SectionCard title="Siblings" icon="ti-heart" badge={siblings.length}
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+                            {siblings.map((s, i) => (
+                              <div key={s.sibling_id ?? i} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom: i < siblings.length - 1 ? "1px solid #f9f0f0" : "none" }}>
+                                <div style={{ width:36, height:36, borderRadius:"50%", background:getPalette(s.full_name ?? "").bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:getPalette(s.full_name ?? "").color, flexShrink:0 }}>
+                                  {(s.full_name ?? "?")[0].toUpperCase()}
+                                </div>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.full_name}</div>
+                                  {s.age && <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>{s.age} years old</div>}
+                                </div>
+                                <div style={{ fontSize:11, color:"#c0a0a0", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
+                                  Sibling {i + 1}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </SectionCard>
+                      )
+                    )}
+
+                    {/* PREVIOUS SCHOOLS TAB */}
+                    {activeTab === "schools" && (
+                      schools.length === 0 ? (
+                        <SectionCard title="Previous Schools" icon="ti-school"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                          <EmptySection message="No previous schools have been recorded." />
+                        </SectionCard>
+                      ) : schools.map((s, i) => (
+                        <motion.div
+                          key={s.previous_school_id ?? i}
+                          initial={{ opacity:0, y:10 }}
+                          animate={{ opacity:1, y:0 }}
+                          transition={{ delay: i * 0.07, duration:0.22 }}
+                          whileHover={{ y:-2, boxShadow:"0 6px 18px rgba(224,49,49,0.10)" }}
+                          style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", boxShadow:"0 2px 10px rgba(224,49,49,0.04)", overflow:"hidden" }}
+                        >
+                          <div style={{ height:4, background:"linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
+                          <div style={{ padding:"14px 22px", background:"linear-gradient(to right, #fff8f8, white)", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:12 }}>
+                            <div style={{ width:38, height:38, borderRadius:10, background:"#e8f0fd", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                              <i className="ti ti-school" style={{ fontSize:17, color:"#2563eb" }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>
-                                {en.grade_level} — {en.section}
-                              </div>
-                              <div style={{ fontSize: 12, color: "#b09090", marginTop: 2 }}>
-                                {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}
-                                {en.strand ? ` · ${en.strand}` : ""}
-                              </div>
+                              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{s.school_name}</div>
+                              <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>School {i + 1}</div>
                             </div>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: sc.color, background: sc.bg, padding: "2px 10px", borderRadius: 50 }}>
-                              {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
-                            </span>
-                            <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#b09090" }} />
+                          <div style={{ padding:"4px 22px 14px" }}>
+                            <InfoRow icon="ti-map-pin" label="School Address" value={s.school_address} />
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {activeTab === "ledger" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.22s ease both" }}>
-
-                    {/* Loading skeleton */}
-                    {ledgerLoading && (
-                      <SectionCard title="Financial History" icon="ti-receipt">
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 0" }}>
-                          {[1,2,3].map((k) => <Sk key={k} h={52} r={10} />)}
-                        </div>
-                      </SectionCard>
+                        </motion.div>
+                      ))
                     )}
 
-                    {/* Error state */}
-                    {!ledgerLoading && ledger?.error && (
-                      <SectionCard title="Financial History" icon="ti-receipt">
-                        <EmptySection message="Failed to load financial history. Check that the billing service is running." />
-                      </SectionCard>
+                    {/* ENROLLMENTS TAB */}
+                    {activeTab === "enrollments" && (
+                      enrollments.length === 0 ? (
+                        <SectionCard title="Enrollment History" icon="ti-clipboard-list"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
+                          <EmptySection message="No enrollment records found for this student." />
+                        </SectionCard>
+                      ) : enrollments.map((en, i) => {
+                        const statusColors = {
+                          enrolled:  { color:"#2e6b0d", bg:"#e8f5e0" },
+                          pending:   { color:"#854f0b", bg:"#faeeda" },
+                          completed: { color:"#1455a0", bg:"#e3f0fd" },
+                          cancelled: { color:"#5c5752", bg:"#f0ede8" },
+                        };
+                        const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
+                        return (
+                          <motion.div
+                            key={en.enrollment_id}
+                            initial={{ opacity:0, y:10 }}
+                            animate={{ opacity:1, y:0 }}
+                            transition={{ delay: i * 0.05, duration:0.22 }}
+                            whileHover={{ y:-2, boxShadow:"0 4px 16px rgba(224,49,49,0.12)" }}
+                            whileTap={{ scale:0.99 }}
+                            onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
+                            style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", boxShadow:"0 2px 10px rgba(224,49,49,0.04)" }}
+                          >
+                            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                              <div style={{ width:38, height:38, borderRadius:10, background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#e03131" }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{en.grade_level} — {en.section}</div>
+                                <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>
+                                  {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}{en.strand ? ` · ${en.strand}` : ""}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
+                                {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
+                              </span>
+                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#b09090" }} />
+                            </div>
+                          </motion.div>
+                        );
+                      })
                     )}
 
-                    {/* Empty state */}
-                    {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length === 0 && (
-                      <SectionCard title="Financial History" icon="ti-receipt">
-                        <EmptySection message="No invoices found for this student." />
-                      </SectionCard>
-                    )}
-
-                    {/* Totals summary strip */}
-                    {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length > 0 && (
-                      <>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    {/* LEDGER TAB */}
+                    {activeTab === "ledger" && (<>
+                      {ledgerLoading && (
+                        <SectionCard title="Financial History" icon="ti-receipt"
+                          motionProps={{ initial:{ opacity:0 }, animate:{ opacity:1 }, transition:{ duration:0.18 } }}>
+                          <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"8px 0" }}>
+                            {[1,2,3].map((k) => <Sk key={k} h={52} r={10} />)}
+                          </div>
+                        </SectionCard>
+                      )}
+                      {!ledgerLoading && ledger?.error && (
+                        <SectionCard title="Financial History" icon="ti-receipt"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ duration:0.22 } }}>
+                          <EmptySection message="Failed to load financial history. Check that the billing service is running." />
+                        </SectionCard>
+                      )}
+                      {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length === 0 && (
+                        <SectionCard title="Financial History" icon="ti-receipt"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ duration:0.22 } }}>
+                          <EmptySection message="No invoices found for this student." />
+                        </SectionCard>
+                      )}
+                      {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length > 0 && (<>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                           {[
-                            { label: "Total Billed",    value: ledger.total_billed,   color: "#1a0a0a", bg: "#fff8f6", border: "#f5eaea" },
-                            { label: "Total Paid",      value: ledger.total_paid,     color: "#2e6b0d", bg: "#f0faf0", border: "#d4edda" },
-                            { label: "Total Balance",   value: ledger.total_balance,  color: parseFloat(ledger.total_balance) > 0 ? "#c92a2a" : "#2e6b0d", bg: parseFloat(ledger.total_balance) > 0 ? "#fff0f0" : "#f0faf0", border: parseFloat(ledger.total_balance) > 0 ? "#fca5a5" : "#d4edda" },
-                          ].map(({ label, value, color, bg, border }) => (
-                            <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: "14px 18px" }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
-                              <div style={{ fontSize: 18, fontWeight: 800, color }}>
-                                ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            { label:"Total Billed",  value:ledger.total_billed,   color:"#1a0a0a", bg:"#fff8f6", border:"#f5eaea" },
+                            { label:"Total Paid",    value:ledger.total_paid,     color:"#2e6b0d", bg:"#f0faf0", border:"#d4edda" },
+                            { label:"Total Balance", value:ledger.total_balance,  color:parseFloat(ledger.total_balance) > 0 ? "#c92a2a" : "#2e6b0d", bg:parseFloat(ledger.total_balance) > 0 ? "#fff0f0" : "#f0faf0", border:parseFloat(ledger.total_balance) > 0 ? "#fca5a5" : "#d4edda" },
+                          ].map(({ label, value, color, bg, border }, i) => (
+                            <motion.div
+                              key={label}
+                              initial={{ opacity:0, y:10 }}
+                              animate={{ opacity:1, y:0 }}
+                              transition={{ delay: i * 0.06, duration:0.22 }}
+                              style={{ background:bg, border:`1px solid ${border}`, borderRadius:12, padding:"14px 18px" }}
+                            >
+                              <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:18, fontWeight:800, color }}>
+                                ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                               </div>
-                            </div>
+                            </motion.div>
                           ))}
                         </div>
-
-                        {/* Per-year sections */}
-                        {ledger.school_years.map((yr) => {
+                        {ledger.school_years.map((yr, yi) => {
                           const balanceAmt = parseFloat(yr.year_balance);
                           const yrStatusColor = balanceAmt > 0 ? "#c92a2a" : "#2e6b0d";
                           const yrStatusBg    = balanceAmt > 0 ? "#fde8e8" : "#e8f5e0";
                           const levelLabel    = yr.school_level?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
                           return (
                             <SectionCard
                               key={yr.school_year}
                               title={`SY ${yr.school_year} — ${yr.grade_level}`}
                               icon="ti-calendar"
+                              motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay: 0.18 + yi * 0.07, duration:0.22 } }}
                               badge={
-                                <span style={{ fontSize: 11, fontWeight: 700, color: yrStatusColor, background: yrStatusBg, padding: "2px 10px", borderRadius: 50 }}>
-                                  {balanceAmt > 0 ? `Balance ₱${balanceAmt.toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : "Settled"}
+                                <span style={{ fontSize:11, fontWeight:700, color:yrStatusColor, background:yrStatusBg, padding:"2px 10px", borderRadius:50 }}>
+                                  {balanceAmt > 0 ? `Balance ₱${balanceAmt.toLocaleString("en-PH", { minimumFractionDigits:2 })}` : "Settled"}
                                 </span>
                               }
                             >
-                              <div style={{ fontSize: 11, color: "#b09090", marginBottom: 10 }}>
-                                {levelLabel}{yr.section ? ` · ${yr.section}` : ""} ·{" "}
-                                <span style={{ fontWeight: 600 }}>{yr.enrollment_status}</span>
+                              <div style={{ fontSize:11, color:"#b09090", marginBottom:10 }}>
+                                {levelLabel}{yr.section ? ` · ${yr.section}` : ""} · <span style={{ fontWeight:600 }}>{yr.enrollment_status}</span>
                               </div>
-
                               {yr.invoices.length === 0 ? (
                                 <EmptySection message="No invoices for this school year." />
                               ) : yr.invoices.map((inv) => {
                                 const INV_STATUS = {
-                                  unpaid:         { label: "Unpaid",   color: "#a32d2d", bg: "#fde8e8" },
-                                  partially_paid: { label: "Partial",  color: "#854f0b", bg: "#faeeda" },
-                                  paid:           { label: "Paid",     color: "#2e6b0d", bg: "#e8f5e0" },
-                                  void:           { label: "Void",     color: "#5c5752", bg: "#f0ede8" },
+                                  unpaid:         { label:"Unpaid",  color:"#a32d2d", bg:"#fde8e8" },
+                                  partially_paid: { label:"Partial", color:"#854f0b", bg:"#faeeda" },
+                                  paid:           { label:"Paid",    color:"#2e6b0d", bg:"#e8f5e0" },
+                                  void:           { label:"Void",    color:"#5c5752", bg:"#f0ede8" },
                                 };
                                 const isMeta = INV_STATUS[inv.status] ?? INV_STATUS.unpaid;
-                                const netAmt  = parseFloat(inv.net_amount  || 0);
-                                const paidAmt = parseFloat(inv.total_paid  || 0);
+                                const netAmt  = parseFloat(inv.net_amount || 0);
+                                const paidAmt = parseFloat(inv.total_paid || 0);
                                 const balAmt  = netAmt - paidAmt;
-
                                 return (
-                                  <div
+                                  <motion.div
                                     key={inv.invoice_id}
-                                    onClick={() => navigate(`/invoices`)}
-                                    style={{ border: "1px solid #f5eaea", borderRadius: 10, padding: "12px 16px", marginBottom: 8, cursor: "pointer", transition: "box-shadow .14s" }}
-                                    onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 3px 12px rgba(224,49,49,0.10)"}
-                                    onMouseLeave={(e) => e.currentTarget.style.boxShadow = "none"}
+                                    whileHover={{ boxShadow:"0 3px 12px rgba(224,49,49,0.10)" }}
+                                    onClick={() => navigate("/invoices")}
+                                    style={{ border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px", marginBottom:8, cursor:"pointer" }}
                                   >
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{inv.invoice_no}</span>
-                                        <span style={{ fontSize: 10, fontWeight: 700, color: isMeta.color, background: isMeta.bg, padding: "2px 8px", borderRadius: 50 }}>{isMeta.label}</span>
+                                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                        <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>{inv.invoice_no}</span>
+                                        <span style={{ fontSize:10, fontWeight:700, color:isMeta.color, background:isMeta.bg, padding:"2px 8px", borderRadius:50 }}>{isMeta.label}</span>
                                       </div>
-                                      <span style={{ fontSize: 11, color: "#b09090" }}>
-                                        {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                                      <span style={{ fontSize:11, color:"#b09090" }}>
+                                        {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—"}
                                         {" · "}{inv.payment_plan?.replace(/_/g, " ")}
                                       </span>
                                     </div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
                                       {[
-                                        { label: "Billed",  value: netAmt,  color: "#1a0a0a" },
-                                        { label: "Paid",    value: paidAmt, color: "#2e6b0d" },
-                                        { label: "Balance", value: balAmt,  color: balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                        { label:"Billed",  value:netAmt,  color:"#1a0a0a" },
+                                        { label:"Paid",    value:paidAmt, color:"#2e6b0d" },
+                                        { label:"Balance", value:balAmt,  color:balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                       ].map(({ label, value, color }) => (
                                         <div key={label}>
-                                          <div style={{ fontSize: 9.5, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-                                          <div style={{ fontSize: 13, fontWeight: 700, color }}>
-                                            ₱{value.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                                          </div>
+                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+                                          <div style={{ fontSize:13, fontWeight:700, color }}>₱{value.toLocaleString("en-PH", { minimumFractionDigits:2 })}</div>
                                         </div>
                                       ))}
                                     </div>
-                                  </div>
+                                  </motion.div>
                                 );
                               })}
-
-                              {/* Year subtotals */}
-                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 20, paddingTop: 8, borderTop: "1px dashed #f0e4e4", marginTop: 4 }}>
+                              <div style={{ display:"flex", justifyContent:"flex-end", gap:20, paddingTop:8, borderTop:"1px dashed #f0e4e4", marginTop:4 }}>
                                 {[
-                                  { label: "Year Billed", value: yr.year_billed  },
-                                  { label: "Year Paid",   value: yr.year_paid    },
-                                  { label: "Year Balance",value: yr.year_balance, bold: true, color: balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                  { label:"Year Billed",  value:yr.year_billed  },
+                                  { label:"Year Paid",    value:yr.year_paid    },
+                                  { label:"Year Balance", value:yr.year_balance, bold:true, color:balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                 ].map(({ label, value, bold, color }) => (
-                                  <div key={label} style={{ textAlign: "right" }}>
-                                    <div style={{ fontSize: 9.5, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
-                                    <div style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: color || "#1a0a0a" }}>
-                                      ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                  <div key={label} style={{ textAlign:"right" }}>
+                                    <div style={{ fontSize:9.5, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
+                                    <div style={{ fontSize:13, fontWeight:bold ? 800 : 600, color:color || "#1a0a0a" }}>
+                                      ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                                     </div>
                                   </div>
                                 ))}
@@ -835,10 +865,11 @@ export default function StudentDetailPage() {
                             </SectionCard>
                           );
                         })}
-                      </>
-                    )}
-                  </div>
-                )}
+                      </>)}
+                    </>)}
+
+                  </motion.div>
+                </AnimatePresence>
 
               </>
             )}
