@@ -1,7 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
+import { pageVariants, listVariants } from "../utils/motion";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -14,6 +17,16 @@ import {
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
+
+// ── Animated count display ────────────────────────────────────────────────────
+function AnimatedCount({ target, loading }) {
+  const motionVal = useMotionValue(0);
+  const spring    = useSpring(motionVal, { stiffness: 90, damping: 18 });
+  const display   = useTransform(spring, (v) => Math.round(v).toLocaleString());
+  useEffect(() => { if (!loading) motionVal.set(target ?? 0); }, [loading, target]);
+  if (loading) return null;
+  return <motion.span style={{ fontVariantNumeric: "tabular-nums" }}>{display}</motion.span>;
+}
 
 // ── Filter constants ──────────────────────────────────────────────────────────
 const SCHOOL_YEARS = (() => {
@@ -90,7 +103,7 @@ const Sk = ({ w = "100%", h = 18, r = 6 }) => (
 );
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, chipText, chipType, loading, filters, filterValues, onFilterChange }) {
+function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters, filterValues, onFilterChange }) {
   const [showFilters, setShowFilters] = useState(false);
   const chips = {
     up:      { bg: "#eaf3de", color: "#3b6d11" },
@@ -98,7 +111,7 @@ function StatCard({ label, value, icon, chipText, chipType, loading, filters, fi
     neutral: { bg: "#f1efe8", color: "#5f5e5a" },
     info:    { bg: "#e3f0fd", color: "#1455a0" },
   };
-  const chip = chips[chipType] ?? chips.neutral;
+  const chip            = chips[chipType] ?? chips.neutral;
   const hasActiveFilter = filters?.some((f) => filterValues?.[f.key]);
   const selStyle = {
     flex: 1, padding: "4px 6px", borderRadius: 6, border: "1px solid #f0e0e0",
@@ -113,7 +126,9 @@ function StatCard({ label, value, icon, chipText, chipType, loading, filters, fi
           <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
         </div>
       </div>
-      {loading ? <Sk h={30} w="60%" /> : <div style={s.statValue}>{value}</div>}
+      <div style={s.statValue}>
+        {loading ? <Sk h={30} w="60%" /> : <AnimatedCount target={rawValue ?? 0} loading={loading} />}
+      </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {loading
           ? <Sk h={16} w="70%" />
@@ -155,23 +170,33 @@ function StatCard({ label, value, icon, chipText, chipType, loading, filters, fi
           </div>
         )}
       </div>
-      {showFilters && filters?.length > 0 && (
-        <div style={{ display: "flex", gap: 4, paddingTop: 6, borderTop: "1px solid #f9f0f0", marginTop: 2 }}>
-          {filters.map((f) => (
-            <select
-              key={f.key}
-              value={filterValues?.[f.key] ?? ""}
-              onChange={(e) => onFilterChange(f.key, e.target.value || null)}
-              style={selStyle}
-            >
-              <option value="">{f.placeholder ?? "All"}</option>
-              {f.options.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+      <AnimatePresence initial={false}>
+        {showFilters && filters?.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={{ display: "flex", gap: 4, paddingTop: 6, borderTop: "1px solid #f9f0f0", marginTop: 2 }}>
+              {filters.map((f) => (
+                <select
+                  key={f.key}
+                  value={filterValues?.[f.key] ?? ""}
+                  onChange={(e) => onFilterChange(f.key, e.target.value || null)}
+                  style={selStyle}
+                >
+                  <option value="">{f.placeholder ?? "All"}</option>
+                  {f.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               ))}
-            </select>
-          ))}
-        </div>
-      )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -193,9 +218,9 @@ function Panel({ title, action, onAction, children }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
-  const navigate     = useNavigate();
-  const currentUser  = getCurrentUser();
-  const now          = useClock();
+  const navigate    = useNavigate();
+  const currentUser = getCurrentUser();
+  const now         = useClock();
 
   // ── per-card filter state ──
   const [studentsFilters,    setStudentsFilters]    = useState({ level: null, grade: null });
@@ -474,7 +499,7 @@ export default function DashboardPage() {
                       </div>
                       <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</span>
                     </div>
-                    {loading || !financialSummary
+                    {loading
                       ? <Sk h={22} w="70%" />
                       : <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em" }}>
                           ₱{raw.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -485,23 +510,26 @@ export default function DashboardPage() {
                 );
               })}
               {/* Collection rate bar */}
-              {!loading && financialSummary && (() => {
-                const net = parseFloat(financialSummary.net_billed ?? 0);
-                const col = parseFloat(financialSummary.total_collected ?? 0);
+              {(() => {
+                const net = parseFloat(financialSummary?.net_billed ?? 0);
+                const col = parseFloat(financialSummary?.total_collected ?? 0);
                 const pct = net > 0 ? Math.min(100, Math.round((col / net) * 100)) : 0;
                 return (
-                  <div style={{ ...s.revenueCell, borderLeft: "1px solid #f5eaea", justifyContent: "center" }}>
+                  <div style={{ ...s.revenueCell, justifyContent: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f0e8fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <i className="ti ti-chart-pie" style={{ fontSize: 14, color: "#7c3aed" }} />
                       </div>
                       <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Collection Rate</span>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d" }}>
-                      {pct}%
-                    </div>
+                    {loading
+                      ? <Sk h={22} w="50%" />
+                      : <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d" }}>
+                          {pct}%
+                        </div>
+                    }
                     <div style={{ height: 5, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${pct}%`, background: pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131", borderRadius: 99, transition: "width 0.4s ease" }} />
+                      {!loading && <div style={{ height: "100%", width: `${pct}%`, background: pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131", borderRadius: 99, transition: "width 0.4s ease" }} />}
                     </div>
                   </div>
                 );
@@ -509,11 +537,16 @@ export default function DashboardPage() {
             </div>
 
             {/* ── Stat cards ── */}
-            <div style={s.statGrid}>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.28, delay: 0.08, ease: "easeOut" }}
+              style={s.statGrid}
+            >
               <StatCard
                 label="Total Students"
                 icon="ti-users"
-                value={totalStudents.toLocaleString()}
+                rawValue={totalStudents}
                 chipText={`${activeStudents.toLocaleString()} active`}
                 chipType="up"
                 loading={loading}
@@ -527,7 +560,7 @@ export default function DashboardPage() {
               <StatCard
                 label="Enrolled this S.Y."
                 icon="ti-calendar-event"
-                value={enrolledCount.toLocaleString()}
+                rawValue={enrolledCount}
                 chipText={`S.Y. ${enrolledFilters.year ?? schoolYear}`}
                 chipType="neutral"
                 loading={loading}
@@ -542,7 +575,7 @@ export default function DashboardPage() {
               <StatCard
                 label="Pending Enrollment"
                 icon="ti-clipboard-list"
-                value={pendingCount.toLocaleString()}
+                rawValue={pendingCount}
                 chipText={pendingCount > 0 ? "needs action" : "all clear"}
                 chipType={pendingCount > 0 ? "down" : "up"}
                 loading={loading}
@@ -557,7 +590,7 @@ export default function DashboardPage() {
               <StatCard
                 label="Scholarships Awarded"
                 icon="ti-award"
-                value={scholarshipCount.toLocaleString()}
+                rawValue={scholarshipCount}
                 chipText={`S.Y. ${scholarshipFilters.year ?? schoolYear}`}
                 chipType="info"
                 loading={loading}
@@ -569,10 +602,15 @@ export default function DashboardPage() {
                 filterValues={scholarshipFilters}
                 onFilterChange={updateFilter(setScholarshipFilters)}
               />
-            </div>
+            </motion.div>
 
             {/* ── Recent enrollments + Funnel + Level breakdown ── */}
-            <div style={{ ...s.twoCol, gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr)" }}>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.28, delay: 0.16, ease: "easeOut" }}
+              style={{ ...s.twoCol, gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr)" }}
+            >
 
               <Panel title="Recent Enrollments" action="View all →" onAction={() => navigate("/enrollments")}>
                 <table style={s.table}>
@@ -598,9 +636,15 @@ export default function DashboardPage() {
                             const pill = pillStyle(en.enrollment_status);
                             const name = en.student_name ?? `Student #${en.student}`;
                             return (
-                              <tr key={en.enrollment_id} className="enroll-row"
-                                style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*30}ms` }}
-                                onClick={() => navigate(`/enrollments`)}>
+                              <motion.tr
+                                key={en.enrollment_id}
+                                className="enroll-row"
+                                variants={listVariants.item}
+                                initial="hidden"
+                                animate="visible"
+                                transition={{ delay: idx * 0.04 }}
+                                onClick={() => navigate(`/enrollments`)}
+                              >
                                 <td style={{ ...s.td, fontWeight:600 }}>{name}</td>
                                 <td style={s.td}>
                                   <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
@@ -615,7 +659,7 @@ export default function DashboardPage() {
                                     {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
                                   </span>
                                 </td>
-                              </tr>
+                              </motion.tr>
                             );
                           })
                     }
@@ -685,19 +729,31 @@ export default function DashboardPage() {
                       ))
                     : levelBreakdown.length === 0
                       ? <div style={{ padding:"24px 18px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No enrollment data yet</div>
-                      : levelBreakdown.map((lv) => {
+                      : levelBreakdown.map((lv, idx) => {
                           const lc = LEVEL_COLORS[lv.school_level] ?? { color:"#9a7070", bg:"#f0ede8" };
+                          const pct = Math.round((lv.count / maxLevel) * 100);
                           return (
-                            <div key={lv.school_level} style={s.levelRow}>
+                            <motion.div
+                              key={lv.school_level}
+                              style={s.levelRow}
+                              initial={{ x: -10, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              transition={{ delay: idx * 0.06, duration: 0.28, ease: "easeOut" }}
+                            >
                               <div style={{ ...s.levelIcon, background:lc.bg }}>
                                 <i className={`ti ${LEVEL_ICONS[lv.school_level] ?? "ti-school"}`} style={{ fontSize:14, color:lc.color }} />
                               </div>
                               <span style={s.levelName}>{LEVEL_LABELS[lv.school_level] ?? lv.school_level}</span>
                               <div style={s.barWrap}>
-                                <div style={{ ...s.bar, width:`${Math.round((lv.count / maxLevel) * 100)}%`, background:lc.color }} />
+                                <motion.div
+                                  style={{ ...s.bar, background:lc.color }}
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${pct}%` }}
+                                  transition={{ delay: idx * 0.06 + 0.1, duration: 0.4, ease: "easeOut" }}
+                                />
                               </div>
                               <span style={{ ...s.levelCount, color:lc.color }}>{lv.count.toLocaleString()}</span>
-                            </div>
+                            </motion.div>
                           );
                         })
                   }
@@ -709,10 +765,15 @@ export default function DashboardPage() {
                   )}
                 </div>
               </Panel>
-            </div>
+            </motion.div>
 
             {/* ── Quick actions + Recent students + Scholarships ── */}
-            <div style={s.threeCol}>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
+              style={s.threeCol}
+            >
 
               <Panel title="Quick Actions">
                 <div style={s.qaGrid}>
@@ -723,14 +784,22 @@ export default function DashboardPage() {
                     { label: "Scholarships",   icon: "ti-award",          path: "/scholarships"    },
                     { label: "Invoices",       icon: "ti-receipt",        path: "/invoices"        },
                     { label: "Payments",       icon: "ti-cash",           path: "/payments"        },
-                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements"   },
+                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements"    },
                     { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics"       },
                     { label: "Subjects",       icon: "ti-book",           path: "/subjects"        },
                   ].map((qa) => (
-                    <button key={qa.label} className="qa-btn" style={s.qaBtn} onClick={() => navigate(qa.path)}>
+                    <motion.button
+                      key={qa.label}
+                      className="qa-btn"
+                      style={s.qaBtn}
+                      whileHover={{ y: -2, boxShadow: "0 6px 20px rgba(224,49,49,0.12)" }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.14 }}
+                      onClick={() => { toast.success(`Opening ${qa.label}…`); navigate(qa.path); }}
+                    >
                       <i className={`ti ${qa.icon}`} style={{ fontSize:16, color:"#e03131" }} />
                       {qa.label}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </Panel>
@@ -757,11 +826,15 @@ export default function DashboardPage() {
                             { bg:"#f0e8fd", color:"#7c3aed" },
                           ][st.student_id % 5];
                           return (
-                            <div key={st.student_id}
-                              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", transition:"background 0.12s", animation:`rowIn 0.18s ease both`, animationDelay:`${idx*30}ms` }}
-                              onClick={() => navigate(`/students/${st.student_id}`)}
-                              onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                              onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
+                            <motion.div
+                              key={st.student_id}
+                              variants={listVariants.item}
+                              initial="hidden"
+                              animate="visible"
+                              transition={{ delay: idx * 0.04 }}
+                              whileHover={{ backgroundColor: "#fff8f6" }}
+                              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", borderBottom:"1px solid #f9f0f0", cursor:"pointer" }}
+                              onClick={() => navigate(`/students/${st.student_id}`)}>
                               <div style={{ width:32, height:32, borderRadius:"50%", background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
                                 {initials}
                               </div>
@@ -776,7 +849,7 @@ export default function DashboardPage() {
                                   </span>
                                 </div>
                               </div>
-                            </div>
+                            </motion.div>
                           );
                         })
                   }
@@ -824,7 +897,7 @@ export default function DashboardPage() {
                   }
                 </div>
               </Panel>
-            </div>
+            </motion.div>
 
           </div>
     </AppLayout>
@@ -852,8 +925,8 @@ const s = {
   chip:        { fontSize:11, padding:"2px 7px", borderRadius:99, fontWeight:500 },
 
   twoCol:      { display:"grid", gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)", gap:12 },
-  revenueStrip: { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:0, background:"white", border:"1px solid #f5eaea", borderRadius:14, overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.06)" },
-  revenueCell:  { display:"flex", flexDirection:"column", gap:6, padding:"14px 18px", borderRight:"1px solid #f5eaea", transition:"background 0.12s" },
+  revenueStrip: { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 },
+  revenueCell:  { display:"flex", flexDirection:"column", gap:6, padding:"14px 18px", background:"white", border:"1px solid #f5eaea", borderRadius:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)", transition:"background 0.12s" },
   threeCol:    { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 },
 
   panel:       { background:"white", border:"1px solid #f5eaea", borderRadius:16, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" },

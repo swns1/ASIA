@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import Sidebar from "./Sidebar";
 import { isTokenValid, clearAuthSession } from "../utils/auth";
 import { refreshToken } from "../api/identityApi";
@@ -136,6 +137,14 @@ export default function AppLayout({ children, user }) {
         </div>
       </div>
       <SessionTimeoutWarning />
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: { fontFamily: "'DM Sans', sans-serif", fontSize: 13, borderRadius: 10 },
+          success: { style: { border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#15803d" } },
+          error:   { style: { border: "1px solid #fca5a5", background: "#fff0f0", color: "#b91c1c" } },
+        }}
+      />
     </>
   );
 }

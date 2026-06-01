@@ -1,6 +1,30 @@
+# ── Core Framework ────────────────────────────────────────────────────────────
 Django>=5.0
 djangorestframework
 djangorestframework-simplejwt
+
+# ── Database ──────────────────────────────────────────────────────────────────
 psycopg2-binary
+
+# ── API Utilities ─────────────────────────────────────────────────────────────
 django-cors-headers
+django-filter
+
+# ── Auth & Security ───────────────────────────────────────────────────────────
 django-axes
+PyJWT
+
+# ── Environment ───────────────────────────────────────────────────────────────
+python-dotenv
+
+# ── HTTP / Networking ─────────────────────────────────────────────────────────
+requests
+
+# ── AI & External APIs ────────────────────────────────────────────────────────
+google-genai
+resend
+
+# ── Data Science (enrollment-service analytics) ───────────────────────────────
+numpy
+scikit-learn
+
