@@ -5,24 +5,19 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
+import {
+  getSubjects as _getSubjects,
+  createSubject as _createSubject,
+  updateSubject as _updateSubject,
+  deleteSubject as _deleteSubject,
+  getGradingTemplates as _getTemplates,
+} from "../api/enrollmentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  return res.json();
-}
-
-const getSubjects         = (p = {}) => apiCall("GET",    `${API_BASE}/subjects/?${new URLSearchParams(p)}`);
-const createSubject       = (p)      => apiCall("POST",   `${API_BASE}/subjects/`, p);
-const updateSubject       = (id, p)  => apiCall("PATCH",  `${API_BASE}/subjects/${id}/`, p);
-const deleteSubject       = (id)     => apiCall("DELETE", `${API_BASE}/subjects/${id}/`).catch(() => null);
-const getTemplates        = ()       => apiCall("GET",    `${API_BASE}/grading-templates/?is_active=true`);
+const getSubjects   = (p = {}) => _getSubjects(p);
+const createSubject = (p)      => _createSubject(p);
+const updateSubject = (id, p)  => _updateSubject(id, p);
+const deleteSubject = (id)     => _deleteSubject(id).catch(() => null);
+const getTemplates  = ()       => _getTemplates({ is_active: true });
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

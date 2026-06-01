@@ -6,24 +6,17 @@ import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
-const AUTH_API = "http://localhost:8000";
+import {
+  getEnrollments as _getEnrollments,
+  getGrades as _getGrades,
+  getSubjects as _getSubjects,
+} from "../api/enrollmentApi";
+import { getStudents as _getStudents } from "../api/studentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  return res.json();
-}
-
-const getStudents    = (p = {}) => apiCall("GET", `${AUTH_API}/api/students/?${new URLSearchParams(p)}`);
-const getEnrollments = (p = {}) => apiCall("GET", `${API_BASE}/enrollments/?${new URLSearchParams(p)}`);
-const getGrades      = (p = {}) => apiCall("GET", `${API_BASE}/grades/?${new URLSearchParams(p)}`);
-const getSubjects    = (p = {}) => apiCall("GET", `${API_BASE}/subjects/?${new URLSearchParams(p)}`);
+const getStudents    = (p = {}) => _getStudents(p);
+const getEnrollments = (p = {}) => _getEnrollments(p);
+const getGrades      = (p = {}) => _getGrades(p);
+const getSubjects    = (p = {}) => _getSubjects(p);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

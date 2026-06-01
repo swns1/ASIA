@@ -1,18 +1,13 @@
 import { useState, useEffect } from "react";
 
-const BILLING_API = "http://localhost:8002/api";
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  return res.json();
-}
-const getInvoice   = (id)  => apiCall("GET",  `${BILLING_API}/invoices/${id}/`);
-const getInvoices  = (p={})=> apiCall("GET",  `${BILLING_API}/invoices/?${new URLSearchParams(p)}`);
-const createPayment= (p)   => apiCall("POST", `${BILLING_API}/payments/`, p);
+import {
+  getInvoice as _getInvoice,
+  getInvoices as _getInvoices,
+  createPayment as _createPayment,
+} from "../api/billingApi";
+const getInvoice    = (id)  => _getInvoice(id);
+const getInvoices   = (p={})=> _getInvoices(p);
+const createPayment = (p)   => _createPayment(p);
 
 const PAYMENT_METHODS = [
   { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0" },

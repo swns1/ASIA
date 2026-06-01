@@ -38,6 +38,17 @@ export function clearAuthSession() {
   sessionStorage.removeItem(CURRENT_USER_KEY);
 }
 
+export function isTokenValid() {
+  const token = sessionStorage.getItem("access_token");
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 export function isAdminRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return ["admin", "super_admin", "superadmin"].includes(normalized);

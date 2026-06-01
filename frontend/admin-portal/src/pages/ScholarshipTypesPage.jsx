@@ -5,24 +5,17 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
+import {
+  getScholarshipTypes as _getScholarshipTypes,
+  createScholarshipType as _createScholarshipType,
+  updateScholarshipType as _updateScholarshipType,
+  deleteScholarshipType as _deleteScholarshipType,
+} from "../api/enrollmentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getScholarshipTypes  = (p = {}) => apiCall("GET",    `${API_BASE}/scholarship-types/?${new URLSearchParams(p)}`);
-const createScholarshipType = (p)     => apiCall("POST",   `${API_BASE}/scholarship-types/`, p);
-const updateScholarshipType = (id, p) => apiCall("PATCH",  `${API_BASE}/scholarship-types/${id}/`, p);
-const deleteScholarshipType = (id)    => apiCall("DELETE", `${API_BASE}/scholarship-types/${id}/`);
+const getScholarshipTypes   = (p = {}) => _getScholarshipTypes(p);
+const createScholarshipType = (p)      => _createScholarshipType(p);
+const updateScholarshipType = (id, p)  => _updateScholarshipType(id, p);
+const deleteScholarshipType = (id)     => _deleteScholarshipType(id);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

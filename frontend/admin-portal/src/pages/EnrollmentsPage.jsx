@@ -4,53 +4,13 @@ import AppLayout from "../components/AppLayout";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE    = "http://localhost:8003/api";
-const AUTH_API    = "http://localhost:8000";
-
-function getToken() {
-  return sessionStorage.getItem("access_token") || "";
-}
-
-async function parseApiError(res) {
-  const text = await res.text();
-  try {
-    const json = JSON.parse(text);
-    const msgs = Object.values(json).flatMap((v) =>
-      Array.isArray(v) ? v.map(String) : [String(v)]
-    );
-    return msgs.join(" | ") || `HTTP ${res.status}`;
-  } catch {
-    return text || `HTTP ${res.status}`;
-  }
-}
-
-async function apiCall(url) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) throw new Error(await parseApiError(res));
-  return res.json();
-}
-
-async function apiPost(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await parseApiError(res));
-  return res.json();
-}
-
-async function apiPatch(url, body) {
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await parseApiError(res));
-  return res.json();
-}
+import {
+  getEnrollments as apiGetEnrollments,
+  getEnrollmentEligibility as apiGetEligibility,
+  updateEnrollment as apiPatchEnrollment,
+  bulkCreateEnrollments as apiBulkEnroll,
+} from "../api/enrollmentApi";
+import { getStudents as apiGetStudents } from "../api/studentApi";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -209,7 +169,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
       school_year: schoolYear, school_level: schoolLevel,
       grade_level: gradeLevel, section: section.trim(), page_size: 200,
     });
-    apiCall(`${API_BASE}/enrollments/?${params}`)
+    apiGetEnrollments(Object.fromEntries(params))
       .then((d) => setEnrolled((d.results ?? []).filter((e) => e.enrollment_status !== "cancelled")))
       .catch(() => setEnrolled([]))
       .finally(() => setEnrollLoading(false));
@@ -232,7 +192,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
       try {
         const params = new URLSearchParams({ status: "active", page_size: 100 });
         if (searchQuery.trim()) params.set("search", searchQuery.trim());
-        const data = await apiCall(`${AUTH_API}/api/students/?${params}`);
+        const data = await apiGetStudents(Object.fromEntries(params));
         const students = data.results ?? [];
 
         const enrolledIds = new Set(enrolled.map((e) => e.student_id ?? e.student));
@@ -242,9 +202,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           students.map(async (st) => {
             if (enrolledIds.has(st.student_id)) return null; // already in this class
             try {
-              const d = await apiCall(
-                `${API_BASE}/enrollments/?student=${st.student_id}&enrollment_status=completed&page_size=100`
-              );
+              const d = await apiGetEnrollments({
+                student: st.student_id, enrollment_status: "completed", page_size: 100,
+              });
               const completed = d.results ?? [];
               if (!completed.length) return { ...st, lastGrade: null }; // new student
               const latest = completed.reduce((a, b) =>
@@ -267,7 +227,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
         await Promise.all(
           eligible.map(async (st) => {
             try {
-              const e = await apiCall(`${API_BASE}/enrollments/eligibility/?student_id=${st.student_id}`);
+              const e = await apiGetEligibility(st.student_id);
               eligMap[st.student_id] = e;
             } catch { /* non-critical */ }
           })
@@ -295,7 +255,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
     setSaveResult(null);
     setSaving(true);
     try {
-      const result = await apiPost(`${API_BASE}/enrollments/bulk/`, {
+      const result = await apiBulkEnroll({
         students:          [...selected],
         school_year:       schoolYear,
         school_level:      schoolLevel,
@@ -323,7 +283,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
     const eid = en.enrollment_id;
     setRemoving((prev) => new Set([...prev, eid]));
     try {
-      await apiPatch(`${API_BASE}/enrollments/${eid}/`, { enrollment_status: "cancelled" });
+      await apiPatchEnrollment(eid, { enrollment_status: "cancelled" });
       setEnrolled((prev) => prev.filter((e) => e.enrollment_id !== eid));
       onSuccess?.();
     } catch { setError("Failed to remove student from class."); }
@@ -658,7 +618,7 @@ export default function EnrollmentsPage() {
       if (statusFilter) params.set("enrollment_status",  statusFilter);
       if (search)       params.set("search",             search);
 
-      const data = await apiCall(`${API_BASE}/enrollments/?${params}`);
+      const data = await apiGetEnrollments(Object.fromEntries(params));
       setEnrollments(data.results ?? []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(pg);
@@ -892,8 +852,8 @@ export default function EnrollmentsPage() {
                           const levelIcon = LEVEL_ICONS[en.school_level] ?? "ti-school";
                           return (
                             <tr key={en.enrollment_id} className="enroll-row"
-                              style={{ animation:`rowIn 0.2s ease both`, animationDelay:`${idx * 20}ms` }}
-                              onClick={() => navigate(`/enrollments/${en.enrollment_id}/edit`)}>
+                              style={{ animation:`rowIn 0.2s ease both`, animationDelay:`${idx * 20}ms`, cursor: "pointer" }}
+                              onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}>
 
                               {/* Student */}
                               <td style={{ padding:"13px 18px", borderBottom:"1px solid #f9f0f0", verticalAlign:"middle" }}>

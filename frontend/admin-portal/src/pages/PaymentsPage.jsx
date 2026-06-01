@@ -4,18 +4,8 @@ import RecordPaymentModal from "../components/RecordPaymentModal";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 
-const BILLING_API = "http://localhost:8002/api";
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-const getPayments = (p = {}) => apiCall("GET", `${BILLING_API}/payments/?${new URLSearchParams(p)}`);
+import { getPayments as _getPayments } from "../api/billingApi";
+const getPayments = (p = {}) => _getPayments(p);
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const PAYMENT_METHODS = [

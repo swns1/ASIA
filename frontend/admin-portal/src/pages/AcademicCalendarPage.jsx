@@ -5,26 +5,19 @@ import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 // ── API ───────────────────────────────────────────────────────────────────────
+import {
+  getCalendarEvents as _getEvents,
+  createCalendarEvent as _createEvent,
+  updateCalendarEvent as _updateEvent,
+  deleteCalendarEvent as _deleteEvent,
+} from "../api/enrollmentApi";
+import { getSchoolSettings as _getSchoolSettings } from "../api/billingApi";
 
-const ENROLLMENT_API = "http://localhost:8003/api";
-
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getEvents      = (sy)    => apiCall("GET",   `${ENROLLMENT_API}/calendar-events/?school_year=${sy}&page_size=200`);
-const createEvent    = (p)     => apiCall("POST",  `${ENROLLMENT_API}/calendar-events/`, p);
-const updateEvent    = (id, p) => apiCall("PATCH", `${ENROLLMENT_API}/calendar-events/${id}/`, p);
-const deleteEvent    = (id)    => apiCall("DELETE",`${ENROLLMENT_API}/calendar-events/${id}/`);
-const getSchoolSettings = ()   => apiCall("GET",   "http://localhost:8002/api/school-settings/current/");
+const getEvents         = (sy)    => _getEvents({ school_year: sy, page_size: 200 });
+const createEvent       = (p)     => _createEvent(p);
+const updateEvent       = (id, p) => _updateEvent(id, p);
+const deleteEvent       = (id)    => _deleteEvent(id);
+const getSchoolSettings = ()      => _getSchoolSettings();
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 

@@ -5,6 +5,7 @@ import { getStudent } from "../api/studentApi";
 import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
+import { getEnrollments } from "../api/enrollmentApi";
 
 
 
@@ -155,6 +156,7 @@ export default function StudentDetailPage() {
   const [guardians,     setGuardians]     = useState([]);
   const [siblings,      setSiblings]      = useState([]);
   const [schools,       setSchools]       = useState([]);
+  const [enrollments,   setEnrollments]   = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
 
@@ -166,20 +168,23 @@ export default function StudentDetailPage() {
       getGuardiansByStudent(id).catch(() => []),
       getSiblingsByStudent(id).catch(() => []),
       getPreviousSchoolsByStudent(id).catch(() => []),
-    ]).then(([s, g, sib, sch]) => {
+      getEnrollments({ student: id, page_size: 100, ordering: "-school_year,-enrollment_id" }).catch(() => ({})),
+    ]).then(([s, g, sib, sch, enrData]) => {
       setStudent(s);
       setGuardians(Array.isArray(g) ? g : g?.results ?? []);
       setSiblings(Array.isArray(sib) ? sib : sib?.results ?? []);
       setSchools(Array.isArray(sch) ? sch : sch?.results ?? []);
+      setEnrollments(Array.isArray(enrData) ? enrData : enrData?.results ?? []);
     }).finally(() => setLoading(false));
   }, [id]);
 
   const TABS = [
-    { id: "personal",  label: "Personal",   icon: "ti-user"       },
-    { id: "household", label: "Household",   icon: "ti-home"       },
-    { id: "guardians", label: "Guardians",   icon: "ti-users",     count: guardians.length },
-    { id: "family",    label: "Siblings",    icon: "ti-heart",     count: siblings.length  },
-    { id: "schools",   label: "Prev. Schools", icon: "ti-school",  count: schools.length   },
+    { id: "personal",    label: "Personal",     icon: "ti-user"           },
+    { id: "household",   label: "Household",     icon: "ti-home"           },
+    { id: "guardians",   label: "Guardians",     icon: "ti-users",   count: guardians.length   },
+    { id: "family",      label: "Siblings",      icon: "ti-heart",   count: siblings.length    },
+    { id: "schools",     label: "Prev. Schools", icon: "ti-school",  count: schools.length     },
+    { id: "enrollments", label: "Enrollments",   icon: "ti-clipboard-list", count: enrollments.length },
   ];
 
   const palette   = getPalette(student?.last_name ?? "");
@@ -632,6 +637,52 @@ export default function StudentDetailPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {activeTab === "enrollments" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: "fadeUp 0.22s ease both" }}>
+                    {enrollments.length === 0 ? (
+                      <SectionCard title="Enrollment History" icon="ti-clipboard-list">
+                        <EmptySection message="No enrollment records found for this student." />
+                      </SectionCard>
+                    ) : enrollments.map((en) => {
+                      const statusColors = {
+                        enrolled:  { color: "#2e6b0d", bg: "#e8f5e0" },
+                        pending:   { color: "#854f0b", bg: "#faeeda" },
+                        completed: { color: "#1455a0", bg: "#e3f0fd" },
+                        cancelled: { color: "#5c5752", bg: "#f0ede8" },
+                      };
+                      const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
+                      return (
+                        <div key={en.enrollment_id}
+                          onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
+                          style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", boxShadow: "0 2px 10px rgba(224,49,49,0.04)", transition: "box-shadow .15s" }}
+                          onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(224,49,49,0.12)"}
+                          onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 2px 10px rgba(224,49,49,0.04)"}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <div style={{ width: 38, height: 38, borderRadius: 10, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <i className="ti ti-clipboard-list" style={{ fontSize: 16, color: "#e03131" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>
+                                {en.grade_level} — {en.section}
+                              </div>
+                              <div style={{ fontSize: 12, color: "#b09090", marginTop: 2 }}>
+                                {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}
+                                {en.strand ? ` · ${en.strand}` : ""}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: sc.color, background: sc.bg, padding: "2px 10px", borderRadius: 50 }}>
+                              {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
+                            </span>
+                            <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#b09090" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

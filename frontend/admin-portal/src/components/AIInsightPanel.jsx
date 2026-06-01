@@ -8,26 +8,11 @@
 
 import { useState, useEffect } from "react";
 
-const API_BASE = "http://localhost:8003/api";
-
-function getToken() {
-  return sessionStorage.getItem("access_token") || "";
-}
+import { enrollmentClient } from "../api/enrollmentApi";
 
 export async function callGemini(context_type, payload) {
-  const res = await fetch(`${API_BASE}/ai/interpret/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken()}`,
-    },
-    body: JSON.stringify({ context_type, payload }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Request failed: ${res.status}`);
-  }
-  return res.json(); // { interpretation: string }
+  const res = await enrollmentClient.post("/ai/interpret/", { context_type, payload });
+  return res.data; // { interpretation: string }
 }
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────

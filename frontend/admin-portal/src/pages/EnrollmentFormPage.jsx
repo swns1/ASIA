@@ -3,47 +3,29 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 
 // ── API calls ─────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
-const AUTH_API = "http://localhost:8000";
+import {
+  getEnrollment as _getEnrollment,
+  createEnrollment as _createEnrollment,
+  updateEnrollment as _updateEnrollment,
+  getEnrollments as _getEnrollments,
+  getEnrollmentEligibility as _getEligibility,
+  getScholarshipTypes as _getScholarshipTypes,
+  createEnrollmentScholarship as _createEnrollmentScholarship,
+  sendEnrollmentEmail as _sendEnrollmentEmail,
+} from "../api/enrollmentApi";
+import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
+import { generateInvoice as _generateInvoice } from "../api/billingApi";
 
-function getToken() {
-  return sessionStorage.getItem("access_token") || "";
-}
-
-async function parseApiError(res) {
-  const text = await res.text();
-  try {
-    const json = JSON.parse(text);
-    const msgs = Object.values(json).flatMap((v) =>
-      Array.isArray(v) ? v.map(String) : [String(v)]
-    );
-    return msgs.join(" | ") || `HTTP ${res.status}`;
-  } catch {
-    return text || `HTTP ${res.status}`;
-  }
-}
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json" };
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(await parseApiError(res));
-  return res.json();
-}
-
-const getStudents                 = (p = {}) => apiCall("GET",   `${AUTH_API}/api/students/?${new URLSearchParams(p)}`);
-const getStudent                  = (id)     => apiCall("GET",   `${AUTH_API}/api/students/${id}/`);
-const createEnrollment            = (p)      => apiCall("POST",  `${API_BASE}/enrollments/`, p);
-const getEnrollment               = (id)     => apiCall("GET",   `${API_BASE}/enrollments/${id}/`);
-const updateEnrollment            = (id, p)  => apiCall("PATCH", `${API_BASE}/enrollments/${id}/`, p);
-const getScholarshipTypes         = ()       => apiCall("GET",   `${API_BASE}/scholarship-types/?is_active=true`);
-const createEnrollmentScholarship = (p)      => apiCall("POST",  `${API_BASE}/enrollment-scholarships/`, p);
-const sendEnrollmentEmail         = (p)      => apiCall("POST",  `http://localhost:8003/api/send-enrollment-email/`, p);
-const getStudentEnrollments       = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/?student=${sid}&page_size=100`);
-const getStudentEligibility       = (sid)    => apiCall("GET",   `${API_BASE}/enrollments/eligibility/?student_id=${sid}`);
+const getStudents                 = (p = {}) => _getStudents(p);
+const getStudent                  = (id)     => _getStudent(id);
+const createEnrollment            = (p)      => _createEnrollment(p);
+const getEnrollment               = (id)     => _getEnrollment(id);
+const updateEnrollment            = (id, p)  => _updateEnrollment(id, p);
+const getScholarshipTypes         = ()       => _getScholarshipTypes({ is_active: true });
+const createEnrollmentScholarship = (p)      => _createEnrollmentScholarship(p);
+const sendEnrollmentEmail         = (p)      => _sendEnrollmentEmail(p);
+const getStudentEnrollments       = (sid)    => _getEnrollments({ student: sid, page_size: 100 });
+const getStudentEligibility       = (sid)    => _getEligibility(sid);
 
 // ─── Style tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -462,6 +444,7 @@ export default function EnrollmentFormPage() {
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
+  const [invoicePrompt, setInvoicePrompt] = useState(null); // { enrollmentId, studentName }
   const [student, setStudent] = useState(null);
   const [studentLastGrade, setStudentLastGrade] = useState(null);
 
@@ -597,6 +580,8 @@ export default function EnrollmentFormPage() {
     if (!form.section.trim())         return "Section is required.";
     if (isSHS && !form.semester)      return "Semester is required for Senior HS.";
     if (isSHS && !form.strand.trim()) return "Strand is required for Senior HS.";
+    if (!isEdit && eligibility && !eligibility.is_eligible && !overrideMode)
+      return "Student is not eligible for enrollment. Review the eligibility panel above.";
     if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade && !overrideMode)
       return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
     if (!isEdit && overrideMode && !overrideReason.trim())
@@ -604,7 +589,7 @@ export default function EnrollmentFormPage() {
     if (isEdit && gradePlacementChanged && !gradePlacementReason.trim())
       return "A reason is required when changing grade placement on an existing enrollment.";
     return "";
-  }, [student, form, isSHS, isEdit, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason]);
+  }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason]);
 
     const handleSubmit = async () => {
       setError("");
@@ -646,6 +631,14 @@ export default function EnrollmentFormPage() {
               school_level: form.school_level,
             }).catch((e) => console.warn("Enrollment email failed (non-critical):", e));
           }
+
+          // Prompt to generate invoice when enrollment status is enrolled
+          if (form.enrollment_status === "enrolled") {
+            const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ");
+            setInvoicePrompt({ enrollmentId: created.enrollment_id, studentName: fullName || `Enrollment #${created.enrollment_id}` });
+            setSaving(false);
+            return;
+          }
         }
 
         navigate("/enrollments");
@@ -660,6 +653,7 @@ export default function EnrollmentFormPage() {
   const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
 
   return (
+    <>
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`
         @keyframes fadeUp { from{opacity:0} to{opacity:1} }
@@ -938,6 +932,91 @@ export default function EnrollmentFormPage() {
               </button>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+
+    {/* ── Invoice Prompt Modal ─────────────────────────────────────────────── */}
+    {invoicePrompt && (
+      <InvoicePromptModal
+        enrollmentId={invoicePrompt.enrollmentId}
+        studentName={invoicePrompt.studentName}
+        onClose={() => { setInvoicePrompt(null); navigate("/enrollments"); }}
+        onGoToInvoices={() => navigate(`/invoices?enrollment_id=${invoicePrompt.enrollmentId}`)}
+      />
+    )}
+    </>
+  );
+}
+
+function InvoicePromptModal({ enrollmentId, studentName, onClose, onGoToInvoices }) {
+  const [generating, setGenerating] = useState(false);
+  const [plan, setPlan] = useState("monthly");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError("");
+    try {
+      await _generateInvoice({ enrollment_id: enrollmentId, payment_plan: plan });
+      setDone(true);
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Failed to generate invoice.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
+        {done ? (
+          <>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
+              </div>
+              <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Invoice Generated</h3>
+              <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</p>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer" }}>
+                Back to Enrollments
+              </button>
+              <button onClick={onGoToInvoices} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                View Invoices
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Generate Invoice?</h3>
+              <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
+                <strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?
+              </p>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#5a3a3a", display: "block", marginBottom: 6 }}>Payment Plan</label>
+              <select value={plan} onChange={(e) => setPlan(e.target.value)}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #fca5a5", fontSize: 14, background: "#fff8f6", color: "#1a0a0a" }}>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="semi_annual">Semi-Annual</option>
+                <option value="annual">Annual (Full Year)</option>
+              </select>
+            </div>
+            {error && <p style={{ color: "#e03131", fontSize: 13, marginBottom: 12 }}>{error}</p>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={onClose} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer" }}>
+                Skip for Now
+              </button>
+              <button onClick={handleGenerate} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: generating ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: generating ? "not-allowed" : "pointer" }}>
+                {generating ? "Generating…" : "Generate Invoice"}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>

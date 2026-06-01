@@ -3,9 +3,15 @@ import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, isAdminRole } from "../utils/auth";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────
+import {
+  getUsers as _getUsers,
+  createUser as _createUser,
+  updateUser as _updateUser,
+  deleteUser as _deleteUser,
+} from "../api/identityApi";
 
-const IDENTITY_API = "http://localhost:8001/api/auth";
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 
 const ROLES = ["admin", "super_admin", "registrar", "cashier", "teacher"];
@@ -139,13 +145,14 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
 
     setSaving(true);
     try {
-      const res = await fetch(`${IDENTITY_API}/users/${user.user_id}/`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Failed to save changes."); setSaving(false); return; }
+      let data;
+      try {
+        data = await _updateUser(user.user_id, body);
+      } catch (err) {
+        setError(err?.response?.data?.detail || "Failed to save changes.");
+        setSaving(false);
+        return;
+      }
 
       // If editing self, update session user
       if (isSelf) {
@@ -344,17 +351,11 @@ function CreateUserModal({ onClose, onCreated }) {
 
     setSaving(true);
     try {
-      const res = await fetch(`${IDENTITY_API}/users/`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), role, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Failed to create user."); setSaving(false); return; }
+      const data = await _createUser({ name: name.trim(), email: email.trim(), role, password });
       onCreated(data);
       onClose();
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Network error. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -431,14 +432,11 @@ function DeleteModal({ user, onClose, onDeleted }) {
   async function handleDelete() {
     setDeleting(true);
     try {
-      const res = await fetch(`${IDENTITY_API}/users/${user.user_id}/`, {
-        method: "DELETE", headers: authHeaders(),
-      });
-      if (res.status === 204 || res.ok) { onDeleted(user.user_id); onClose(); return; }
-      const data = await res.json();
-      setError(data.detail || "Failed to delete user.");
-    } catch {
-      setError("Network error. Please try again.");
+      await _deleteUser(user.user_id);
+      onDeleted(user.user_id);
+      onClose();
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Network error. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -542,10 +540,7 @@ export default function UsersPage() {
   async function fetchUsers() {
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${IDENTITY_API}/users/`, { headers: authHeaders() });
-      if (res.status === 401) { navigate("/login"); return; }
-      if (!res.ok) { setError("Failed to load users."); return; }
-      const data = await res.json();
+      const data = await _getUsers();
       setUsers(data);
     } catch {
       setError("Network error. Please check your connection.");

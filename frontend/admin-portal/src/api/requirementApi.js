@@ -1,6 +1,6 @@
 const ENROLLMENT_BASE = (
-  import.meta.env.VITE_ENROLLMENT_API_URL || "http://localhost:8003"
-).replace(/\/+$/, "");
+  import.meta.env.VITE_ENROLLMENT_API_URL || "http://localhost:8003/api"
+).replace(/\/api\/?$/, "").replace(/\/+$/, "");
 
 function authHeaders() {
   const token = sessionStorage.getItem("access_token") || "";

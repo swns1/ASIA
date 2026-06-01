@@ -272,9 +272,25 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
     /api/installments/{id}/                   GET
 
     Read-only — installments are generated automatically.
+    Overdue installments are auto-flagged on every read.
     """
     queryset = InvoiceInstallment.objects.all().order_by("invoice_id", "sequence")
     serializer_class = InvoiceInstallmentSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("invoice", "status")
+
+    def _flag_overdue(self):
+        today = timezone.now().date()
+        InvoiceInstallment.objects.filter(
+            due_date__lt=today,
+            status__in=("pending", "partially_paid"),
+        ).update(status="overdue")
+
+    def list(self, request, *args, **kwargs):
+        self._flag_overdue()
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        self._flag_overdue()
+        return super().retrieve(request, *args, **kwargs)

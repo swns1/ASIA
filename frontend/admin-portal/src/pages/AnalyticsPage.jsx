@@ -4,17 +4,7 @@ import { useNavigate } from "react-router-dom";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const ENROLLMENT_API = "http://localhost:8003/api";
-
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiFetch(url) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  return res.json();
-}
+import { getSubjects as _getSubjects, getAiCluster as _getAiCluster } from "../api/enrollmentApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -416,9 +406,10 @@ export default function AnalyticsPage() {
   const [loading,         setLoading]         = useState(false);
   const [error,           setError]           = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [cooldown,        setCooldown]        = useState(0);   // seconds remaining
 
   useEffect(() => {
-    apiFetch(`${ENROLLMENT_API}/subjects/`).then((data) => {
+    _getSubjects().then((data) => {
       const list = Array.isArray(data) ? data : data.results || [];
       setSubjects(list);
     }).catch(() => {});
@@ -439,16 +430,10 @@ export default function AnalyticsPage() {
     if (gradeLevel) params.set("grade_level", gradeLevel);
 
     try {
-      const data = await apiFetch(`${ENROLLMENT_API}/ai/cluster/?${params}`);
+      const data = await _getAiCluster(Object.fromEntries(params));
       setResult(data);
     } catch (e) {
-      const msg = e.message || "Clustering failed.";
-      try {
-        const parsed = JSON.parse(msg.split(": ").slice(1).join(": "));
-        setError(parsed.error || msg);
-      } catch {
-        setError(msg);
-      }
+      setError(e.response?.data?.error || e.message || "Clustering failed.");
     } finally {
       setLoading(false);
     }

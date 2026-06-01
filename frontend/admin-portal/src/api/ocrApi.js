@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const STUDENT_API = "http://localhost:8000/api";
+const STUDENT_API = import.meta.env.VITE_STUDENT_API_URL || "http://localhost:8000/api";
 
 /**
  * Sends a document image to the OCR endpoint and returns extracted fields.

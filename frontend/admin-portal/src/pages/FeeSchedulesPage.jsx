@@ -5,27 +5,23 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BILLING_API = "http://localhost:8002/api";
+import {
+  getFeeSchedules as _getFeeSchedules,
+  createFeeSchedule as _createFeeSchedule,
+  updateFeeSchedule as _updateFeeSchedule,
+  createFeeScheduleItem as _createItem,
+  updateFeeScheduleItem as _updateItem,
+  deleteFeeScheduleItem as _deleteItem,
+  recalculateFeeSchedule as _recalculateSchedule,
+} from "../api/billingApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getFeeSchedules     = (p = {}) => apiCall("GET",    `${BILLING_API}/fee-schedules/?${new URLSearchParams(p)}`);
-const createFeeSchedule   = (p)      => apiCall("POST",   `${BILLING_API}/fee-schedules/`, p);
-const updateFeeSchedule   = (id, p)  => apiCall("PATCH",  `${BILLING_API}/fee-schedules/${id}/`, p);
-const createItem          = (p)      => apiCall("POST",   `${BILLING_API}/fee-schedule-items/`, p);
-const updateItem          = (id, p)  => apiCall("PATCH",  `${BILLING_API}/fee-schedule-items/${id}/`, p);
-const deleteItem          = (id)     => apiCall("DELETE", `${BILLING_API}/fee-schedule-items/${id}/`);
-const recalculateSchedule = (id)     => apiCall("POST",   `${BILLING_API}/fee-schedules/${id}/recalculate/`);
+const getFeeSchedules     = (p = {}) => _getFeeSchedules(p);
+const createFeeSchedule   = (p)      => _createFeeSchedule(p);
+const updateFeeSchedule   = (id, p)  => _updateFeeSchedule(id, p);
+const createItem          = (p)      => _createItem(p);
+const updateItem          = (id, p)  => _updateItem(id, p);
+const deleteItem          = (id)     => _deleteItem(id);
+const recalculateSchedule = (id)     => _recalculateSchedule(id);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

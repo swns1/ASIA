@@ -1,14 +1,17 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import PrivateRoute from "./components/PrivateRoute";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import StudentsPage from "./pages/StudentsPage";
 import StudentFormPage from "./pages/StudentFormPage";
 import StudentDetailPage from "./pages/StudentDetailPage";
 import EnrollmentFormPage from "./pages/EnrollmentFormPage";
+import EnrollmentDetailPage from "./pages/EnrollmentDetailPage";
 import EnrollmentsPage from "./pages/EnrollmentsPage";
 import SubjectsPage from "./pages/SubjectsPage";
 import GradingTemplatesPage from "./pages/GradingTemplatesPage";
 import GradesPage from "./pages/GradesPage";
+import GradeEntryPage from "./pages/GradeEntryPage";
 import ScholarshipTypesPage from "./pages/ScholarshipTypesPage";
 import ScholarshipsPage from "./pages/ScholarshipsPage";
 import SchoolSettingsPage from "./pages/SchoolSettingsPage";
@@ -22,36 +25,39 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import AcademicCalendarPage from "./pages/AcademicCalendarPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
+const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/students" element={<StudentsPage />} />
-        <Route path="/students/new" element={<StudentFormPage />} />
-        <Route path="/students/:id" element={<StudentDetailPage />} />
-        <Route path="/students/:id/edit" element={<StudentFormPage />} />
-        <Route path="/enrollments" element={<EnrollmentsPage />} />
-        <Route path="/enrollments/new" element={<EnrollmentFormPage />} />
-        <Route path="/enrollments/:id/edit" element={<EnrollmentFormPage />} />
-        <Route path="/subjects" element={<SubjectsPage />} />
-        <Route path="/grading-templates" element={<GradingTemplatesPage />} />
-        <Route path="/grades"         element={<GradesPage />} />
-        <Route path="/grades/summary" element={<GradesPage />} />
-        <Route path="/grades/entry"   element={<GradesPage />} />
-        <Route path="/scholarship-types" element={<ScholarshipTypesPage />} />
-        <Route path="/scholarships" element={<ScholarshipsPage />} />
-        <Route path="/settings"      element={<SchoolSettingsPage />} />
-        <Route path="/fee-schedules" element={<FeeSchedulesPage />} />
-        <Route path="/invoices"      element={<InvoicesPage />} />
-        <Route path="/payments"      element={<PaymentsPage />} />
-        <Route path="/audit-trail"   element={<AuditTrailPage />} />
-        <Route path="/requirements"  element={<RequirementsPage />} />
-        <Route path="/users"         element={<UsersPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/academic-calendar" element={<AcademicCalendarPage />} />
+        <Route path="/dashboard"              element={<P><DashboardPage /></P>} />
+        <Route path="/students"               element={<P><StudentsPage /></P>} />
+        <Route path="/students/new"           element={<P><StudentFormPage /></P>} />
+        <Route path="/students/:id"           element={<P><StudentDetailPage /></P>} />
+        <Route path="/students/:id/edit"      element={<P><StudentFormPage /></P>} />
+        <Route path="/enrollments"            element={<P><EnrollmentsPage /></P>} />
+        <Route path="/enrollments/new"        element={<P><EnrollmentFormPage /></P>} />
+        <Route path="/enrollments/:id"        element={<P><EnrollmentDetailPage /></P>} />
+        <Route path="/enrollments/:id/edit"   element={<P><EnrollmentFormPage /></P>} />
+        <Route path="/subjects"               element={<P><SubjectsPage /></P>} />
+        <Route path="/grading-templates"      element={<P><GradingTemplatesPage /></P>} />
+        <Route path="/grades"                 element={<P><GradesPage /></P>} />
+        <Route path="/grades/summary"         element={<P><GradesPage /></P>} />
+        <Route path="/grades/entry"           element={<P><GradeEntryPage /></P>} />
+        <Route path="/scholarship-types"      element={<P><ScholarshipTypesPage /></P>} />
+        <Route path="/scholarships"           element={<P><ScholarshipsPage /></P>} />
+        <Route path="/settings"              element={<P><SchoolSettingsPage /></P>} />
+        <Route path="/fee-schedules"         element={<P><FeeSchedulesPage /></P>} />
+        <Route path="/invoices"              element={<P><InvoicesPage /></P>} />
+        <Route path="/payments"              element={<P><PaymentsPage /></P>} />
+        <Route path="/audit-trail"           element={<P><AuditTrailPage /></P>} />
+        <Route path="/requirements"          element={<P><RequirementsPage /></P>} />
+        <Route path="/users"                 element={<P><UsersPage /></P>} />
+        <Route path="/analytics"             element={<P><AnalyticsPage /></P>} />
+        <Route path="/academic-calendar"     element={<P><AcademicCalendarPage /></P>} />
       </Routes>
     </BrowserRouter>
   );

@@ -4,27 +4,22 @@ import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
-const AUTH_API = "http://localhost:8000";
+import {
+  getEnrollmentScholarships as _getEnrollmentScholarships,
+  getScholarshipTypes as _getScholarshipTypes,
+  getEnrollments as _getEnrollments,
+  getGrades as _getGrades,
+  createEnrollmentScholarship as _createEnrollmentScholarship,
+  deleteEnrollmentScholarship as _deleteEnrollmentScholarship,
+} from "../api/enrollmentApi";
+import { getStudents as _getStudents } from "../api/studentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getEnrollmentScholarships   = (p = {}) => apiCall("GET",    `${API_BASE}/enrollment-scholarships/?${new URLSearchParams(p)}`);
-const getScholarshipTypes         = ()       => apiCall("GET",    `${API_BASE}/scholarship-types/?is_active=true&page_size=100`);
-const getEnrollments              = (p = {}) => apiCall("GET",    `${API_BASE}/enrollments/?${new URLSearchParams(p)}`);
-const getGrades                   = (p = {}) => apiCall("GET",    `${API_BASE}/grades/?${new URLSearchParams(p)}`);
-const createEnrollmentScholarship = (p)      => apiCall("POST",   `${API_BASE}/enrollment-scholarships/`, p);
-const deleteEnrollmentScholarship = (id)     => apiCall("DELETE", `${API_BASE}/enrollment-scholarships/${id}/`);
+const getEnrollmentScholarships   = (p = {}) => _getEnrollmentScholarships(p);
+const getScholarshipTypes         = ()       => _getScholarshipTypes({ is_active: true, page_size: 100 });
+const getEnrollments              = (p = {}) => _getEnrollments(p);
+const getGrades                   = (p = {}) => _getGrades(p);
+const createEnrollmentScholarship = (p)      => _createEnrollmentScholarship(p);
+const deleteEnrollmentScholarship = (id)     => _deleteEnrollmentScholarship(id);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

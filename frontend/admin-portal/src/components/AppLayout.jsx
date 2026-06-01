@@ -1,4 +1,84 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import { isTokenValid, clearAuthSession } from "../utils/auth";
+import { refreshToken } from "../api/identityApi";
+
+const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
+function SessionTimeoutWarning() {
+  const navigate = useNavigate();
+  const [show, setShow]       = useState(false);
+  const [extending, setExtend] = useState(false);
+  const timerRef = useRef(null);
+
+  function scheduleCheck() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const token = sessionStorage.getItem("access_token");
+    if (!token) return;
+    try {
+      const exp = JSON.parse(atob(token.split(".")[1])).exp * 1000;
+      const msLeft = exp - Date.now();
+      if (msLeft <= 0) { setShow(true); return; }
+      if (msLeft <= WARN_BEFORE_MS) { setShow(true); return; }
+      timerRef.current = setTimeout(() => setShow(true), msLeft - WARN_BEFORE_MS);
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    scheduleCheck();
+    const id = setInterval(scheduleCheck, 60_000);
+    return () => { clearTimeout(timerRef.current); clearInterval(id); };
+  }, []);
+
+  async function handleExtend() {
+    setExtend(true);
+    try {
+      const data = await refreshToken();
+      if (data?.access) {
+        sessionStorage.setItem("access_token", data.access);
+        setShow(false);
+        scheduleCheck();
+      }
+    } catch {
+      clearAuthSession();
+      navigate("/login");
+    } finally {
+      setExtend(false);
+    }
+  }
+
+  function handleLogout() {
+    clearAuthSession();
+    navigate("/login");
+  }
+
+  if (!show) return null;
+
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 2000, maxWidth: 340, background: "white", borderRadius: 14, boxShadow: "0 8px 32px rgba(224,49,49,0.18)", border: "1.5px solid #fca5a5", padding: "16px 20px", fontFamily: "'DM Sans', sans-serif", animation: "slideUp 0.22s ease" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="ti ti-clock" style={{ fontSize: 18, color: "#e03131" }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>Session expiring soon</div>
+          <div style={{ fontSize: 12, color: "#7a5050" }}>Your session will expire in less than 5 minutes.</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={handleLogout}
+          style={{ flex: 1, padding: "8px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+          Log Out
+        </button>
+        <button onClick={handleExtend} disabled={extending}
+          style={{ flex: 1, padding: "8px 0", borderRadius: 50, border: "none", background: extending ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, fontSize: 12, cursor: extending ? "not-allowed" : "pointer" }}>
+          {extending ? "Extending…" : "Stay Logged In"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AppLayout({ children, user }) {
   return (
@@ -55,6 +135,7 @@ export default function AppLayout({ children, user }) {
           {children}
         </div>
       </div>
+      <SessionTimeoutWarning />
     </>
   );
 }

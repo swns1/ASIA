@@ -3,27 +3,23 @@ import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8003/api";
+import {
+  getGradingTemplates as _getTemplates,
+  createGradingTemplate as _createTemplate,
+  updateGradingTemplate as _updateTemplate,
+  deleteGradingTemplate as _deleteTemplate,
+  createGradingComponent as _createComponent,
+  updateGradingComponent as _updateComponent,
+  deleteGradingComponent as _deleteComponent,
+} from "../api/enrollmentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getTemplates    = (p = {}) => apiCall("GET",    `${API_BASE}/grading-templates/?${new URLSearchParams(p)}`);
-const createTemplate  = (p)      => apiCall("POST",   `${API_BASE}/grading-templates/`, p);
-const updateTemplate  = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-templates/${id}/`, p);
-const deleteTemplate  = (id)     => apiCall("DELETE", `${API_BASE}/grading-templates/${id}/`);
-const createComponent = (p)      => apiCall("POST",   `${API_BASE}/grading-components/`, p);
-const updateComponent = (id, p)  => apiCall("PATCH",  `${API_BASE}/grading-components/${id}/`, p);
-const deleteComponent = (id)     => apiCall("DELETE", `${API_BASE}/grading-components/${id}/`);
+const getTemplates    = (p = {}) => _getTemplates(p);
+const createTemplate  = (p)      => _createTemplate(p);
+const updateTemplate  = (id, p)  => _updateTemplate(id, p);
+const deleteTemplate  = (id)     => _deleteTemplate(id);
+const createComponent = (p)      => _createComponent(p);
+const updateComponent = (id, p)  => _updateComponent(id, p);
+const deleteComponent = (id)     => _deleteComponent(id);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const studentClient = axios.create({
-  baseURL: import.meta.env.VITE_STUDENT_API_URL || "http://127.0.0.1:8000/api",
+  baseURL: import.meta.env.VITE_STUDENT_API_URL || "http://localhost:8000/api",
   timeout: 10000,
 });
 
@@ -26,7 +26,7 @@ studentClient.interceptors.response.use(
 
       try {
         const res = await axios.post(
-          "http://localhost:8001/api/auth/refresh/",
+          (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth") + "/refresh/",
           {},
           { withCredentials: true }
         );

@@ -5,21 +5,13 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BILLING_API = "http://localhost:8002/api";
+import {
+  getSchoolSettings as _getSettings,
+  updateSchoolSettings as _updateSettings,
+} from "../api/billingApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  return res.json();
-}
-
-const getSettings    = ()       => apiCall("GET",   `${BILLING_API}/school-settings/current/`);
-const updateSettings = (id, p)  => apiCall("PATCH", `${BILLING_API}/school-settings/${id}/`, p);
+const getSettings    = ()       => _getSettings();
+const updateSettings = (id, p)  => _updateSettings(id, p);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

@@ -1367,6 +1367,39 @@ export default function StudentFormPage() {
   // Track the original household id (if any) so we know whether to PUT or POST
   const [householdId, setHouseholdId] = useState(null);
 
+  const DRAFT_KEY = "student_form_draft";
+  const isNewStudent = !id;
+
+  // ── Draft persistence (new student only) ─────────────────────────────────────
+  // Restore draft on mount
+  useEffect(() => {
+    if (!isNewStudent) return;
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.student)   setStudent(draft.student);
+      if (draft.household) setHousehold(draft.household);
+      if (draft.guardians) setGuardians(draft.guardians);
+      if (draft.siblings)  setSiblings(draft.siblings);
+      if (draft.schools)   setSchools(draft.schools);
+      if (draft.step != null) setStep(draft.step);
+    } catch { /* ignore corrupted draft */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save draft whenever form data changes
+  useEffect(() => {
+    if (!isNewStudent) return;
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ student, household, guardians, siblings, schools, step }));
+    } catch { /* ignore quota errors */ }
+  }, [student, household, guardians, siblings, schools, step, isNewStudent]);
+
+  function clearDraft() {
+    sessionStorage.removeItem(DRAFT_KEY);
+  }
+
   function handleOcrExtracted(fields) {
     const studentFields = {
       lrn:               fields.lrn,
@@ -1738,6 +1771,7 @@ export default function StudentFormPage() {
         }
       }
 
+      clearDraft();
       navigate("/students");
     } catch (err) {
       const data = err?.response?.data;
@@ -1779,7 +1813,7 @@ export default function StudentFormPage() {
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <button
-            onClick={() => navigate("/students")}
+            onClick={() => { clearDraft(); navigate("/students"); }}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
           >
             ← Back to Students

@@ -6,28 +6,23 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BILLING_API    = "http://localhost:8002/api";
-const ENROLLMENT_API = "http://localhost:8003/api";
+import {
+  getInvoices as _getInvoices,
+  getInvoice as _getInvoice,
+  getInvoiceBreakdown as _getBreakdown,
+  getInvoiceSummary as _getInvoiceSummary,
+  generateInvoice as _generateInvoice,
+  voidInvoice as _voidInvoice,
+} from "../api/billingApi";
+import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
 
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiCall(method, url, body = null) {
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` };
-  const opts = { method, headers };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) { const e = await res.text(); throw new Error(`${res.status}: ${e}`); }
-  if (method === "DELETE") return null;
-  return res.json();
-}
-
-const getInvoices     = (p = {}) => apiCall("GET",  `${BILLING_API}/invoices/?${new URLSearchParams(p)}`);
-const getInvoice      = (id)     => apiCall("GET",  `${BILLING_API}/invoices/${id}/`);
-const getBreakdown    = (id)     => apiCall("GET",  `${BILLING_API}/invoices/${id}/breakdown/`);
-const getInvoiceSummary = (p={}) => apiCall("GET",  `${BILLING_API}/invoices/summary/?${new URLSearchParams(p)}`);
-const generateInvoice = (p)      => apiCall("POST", `${BILLING_API}/invoices/generate/`, p);
-const voidInvoice     = (id)     => apiCall("PATCH",`${BILLING_API}/invoices/${id}/`, { status: "void" });
-const getEnrollments  = (p = {}) => apiCall("GET",  `${ENROLLMENT_API}/enrollments/?${new URLSearchParams(p)}`);
+const getInvoices       = (p = {}) => _getInvoices(p);
+const getInvoice        = (id)     => _getInvoice(id);
+const getBreakdown      = (id)     => _getBreakdown(id);
+const getInvoiceSummary = (p = {}) => _getInvoiceSummary(p);
+const generateInvoice   = (p)      => _generateInvoice(p);
+const voidInvoice       = (id)     => _voidInvoice(id);
+const getEnrollments    = (p = {}) => _getEnrollments(p);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 

@@ -5,18 +5,13 @@ import { getCurrentUser } from "../utils/auth";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const STUDENT_API    = "http://localhost:8000";
-const ENROLLMENT_API = "http://localhost:8003";
-
-function getToken() { return sessionStorage.getItem("access_token") || ""; }
-
-async function apiFetch(url) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return res.json();
-}
+import { getStudents as _getStudents } from "../api/studentApi";
+import {
+  getEnrollments as _getEnrollments,
+  getEnrollmentScholarships as _getEnrollmentScholarships,
+  getSubjects as _getSubjects,
+} from "../api/enrollmentApi";
+import { getInvoices as _getInvoices } from "../api/billingApi";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
@@ -232,6 +227,9 @@ export default function DashboardPage() {
   const [recentStudents,    setRecentStudents]    = useState([]);
   const [scholarships,      setScholarships]      = useState([]);
 
+  // ── Alert state ──
+  const [alerts, setAlerts] = useState([]);
+
   const schoolYear = currentSchoolYear();
 
   useEffect(() => {
@@ -257,6 +255,7 @@ export default function DashboardPage() {
         fetchRecentStudents(),
         fetchScholarships(),
         fetchSubjectCount(),
+        fetchAlerts(),
       ]);
     } catch (e) {
       console.error("Dashboard fetch error:", e);
@@ -272,11 +271,17 @@ export default function DashboardPage() {
     return "";
   }
 
+  function parseGp(f) {
+    if (f.grade) return { grade_level: f.grade };
+    if (f.level) return { school_level: f.level };
+    return {};
+  }
+
   async function fetchStudentStats() {
-    const gp = buildGp(studentsFilters);
+    const gpParams = parseGp(studentsFilters);
     const [data, active] = await Promise.all([
-      apiFetch(`${STUDENT_API}/api/students/?page_size=1${gp}`),
-      apiFetch(`${STUDENT_API}/api/students/?status=active&page_size=1${gp}`),
+      _getStudents({ page_size: 1, ...gpParams }),
+      _getStudents({ status: "active", page_size: 1, ...gpParams }),
     ]);
     setTotalStudents(data.count ?? 0);
     setActiveStudents(active.count ?? 0);
@@ -284,20 +289,18 @@ export default function DashboardPage() {
 
   async function fetchEnrollmentStats() {
     const sy = enrolledFilters.year ?? schoolYear;
-    const gp = buildGp(enrolledFilters);
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=enrolled&school_year=${sy}&page_size=1${gp}`);
+    const data = await _getEnrollments({ enrollment_status: "enrolled", school_year: sy, page_size: 1, ...parseGp(enrolledFilters) });
     setEnrolledCount(data.count ?? 0);
   }
 
   async function fetchPendingStats() {
     const sy = pendingFilters.year ?? schoolYear;
-    const gp = buildGp(pendingFilters);
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?enrollment_status=pending&school_year=${sy}&page_size=1${gp}`);
+    const data = await _getEnrollments({ enrollment_status: "pending", school_year: sy, page_size: 1, ...parseGp(pendingFilters) });
     setPendingCount(data.count ?? 0);
   }
 
   async function fetchRecentEnrollments() {
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollments/?school_year=${schoolYear}&page_size=10&ordering=-enrollment_id`);
+    const data = await _getEnrollments({ school_year: schoolYear, page_size: 10, ordering: "-enrollment_id" });
     setRecentEnrollments((data.results ?? []).slice(0, 5));
   }
 
@@ -305,7 +308,7 @@ export default function DashboardPage() {
     const levels = ["nursery","kindergarten","elementary","junior_highschool","senior_highschool"];
     const counts = await Promise.all(
       levels.map((lv) =>
-        apiFetch(`${ENROLLMENT_API}/api/enrollments/?school_level=${lv}&school_year=${schoolYear}&enrollment_status=enrolled&page_size=1`)
+        _getEnrollments({ school_level: lv, school_year: schoolYear, enrollment_status: "enrolled", page_size: 1 })
           .then((d) => ({ school_level: lv, count: d.count ?? 0 }))
           .catch(() => ({ school_level: lv, count: 0 }))
       )
@@ -314,22 +317,38 @@ export default function DashboardPage() {
   }
 
   async function fetchRecentStudents() {
-    const data = await apiFetch(`${STUDENT_API}/api/students/?page_size=5&ordering=-student_id`);
+    const data = await _getStudents({ page_size: 5, ordering: "-student_id" });
     setRecentStudents((data.results ?? []).slice(0, 5));
   }
 
   async function fetchScholarships() {
     const sy = scholarshipFilters.year ?? schoolYear;
-    const gp = buildGp(scholarshipFilters);
-    const data = await apiFetch(`${ENROLLMENT_API}/api/enrollment-scholarships/?page_size=100&school_year=${sy}${gp}`);
+    const data = await _getEnrollmentScholarships({ page_size: 100, school_year: sy, ...parseGp(scholarshipFilters) });
     const results = Array.isArray(data) ? data : data.results ?? [];
     setScholarships(results);
     setScholarshipCount(results.length);
   }
 
   async function fetchSubjectCount() {
-    const data = await apiFetch(`${ENROLLMENT_API}/api/subjects/?page_size=1`);
+    const data = await _getSubjects({ page_size: 1 });
     setSubjectCount(data.count ?? 0);
+  }
+
+  async function fetchAlerts() {
+    const newAlerts = [];
+    try {
+      const [unpaidData, pendingEnrData] = await Promise.all([
+        _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null),
+        _getEnrollments({ enrollment_status: "pending", school_year: currentSchoolYear(), page_size: 1 }).catch(() => null),
+      ]);
+      if (unpaidData?.count > 0) {
+        newAlerts.push({ id: "unpaid", icon: "ti-receipt-off", color: "#a32d2d", bg: "#fde8e8", message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`, link: "/invoices" });
+      }
+      if (pendingEnrData?.count > 0) {
+        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: "/enrollments" });
+      }
+    } catch { /* alerts are non-critical */ }
+    setAlerts(newAlerts);
   }
 
   // ── derived ──
@@ -378,6 +397,21 @@ export default function DashboardPage() {
             {error && (
               <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"10px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
                 <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
+              </div>
+            )}
+
+            {/* ── Alert cards ── */}
+            {alerts.length > 0 && (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+                {alerts.map((al) => (
+                  <div key={al.id}
+                    onClick={() => navigate(al.link)}
+                    style={{ display:"flex", alignItems:"center", gap:10, background:al.bg, border:`1px solid ${al.color}33`, borderRadius:10, padding:"9px 16px", cursor:"pointer", fontSize:13, fontWeight:600, color:al.color, flex:"1 1 220px", minWidth:200 }}>
+                    <i className={`ti ${al.icon}`} style={{ fontSize:16 }} />
+                    {al.message}
+                    <i className="ti ti-arrow-right" style={{ fontSize:12, marginLeft:"auto" }} />
+                  </div>
+                ))}
               </div>
             )}
 

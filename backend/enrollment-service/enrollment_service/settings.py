@@ -138,11 +138,13 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon":    "30/minute",   # unauthenticated (should be rare)
         "user":    "120/minute",  # authenticated — grades/enrollments need frequent reads
-        "cluster": "6/minute",    # clustering is CPU-heavy — tighter cap
+        "cluster": "20/minute",   # clustering is CPU-heavy but needs room for iteration
     },
     # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    "PAGE_SIZE_QUERY_PARAM": "page_size",
+    "MAX_PAGE_SIZE": 500,
 }
 
 
