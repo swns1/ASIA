@@ -9,7 +9,10 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t'
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t",
+)
 
 DEBUG = True
 
@@ -85,13 +88,13 @@ SIMPLE_JWT = {
 }
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        "NAME": "SLIS THESIS FINAL",
-        "USER": "postgres",
-        "PASSWORD": "admin123",
-        "HOST": "localhost",
-        "PORT": "5432",
+    "default": {
+        "ENGINE":   "django.db.backends.postgresql",
+        "NAME":     os.environ.get("DB_NAME",     "SLIS THESIS FINAL"),
+        "USER":     os.environ.get("DB_USER",     "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "admin123"),
+        "HOST":     os.environ.get("DB_HOST",     "localhost"),
+        "PORT":     os.environ.get("DB_PORT",     "5432"),
     }
 }
 

@@ -1,6 +1,9 @@
 from django.db import models
 from django.utils import timezone
 
+# Canonical schema owner for requirement_types and student_requirement_submissions.
+# The student-service has unmanaged mirror models pointing at the same tables.
+# All schema changes (new columns, indexes) must originate here.
 
 class RequirementType(models.Model):
     requirement_type_id = models.BigAutoField(primary_key=True)

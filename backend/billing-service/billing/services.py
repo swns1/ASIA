@@ -38,9 +38,9 @@ def _generate_invoice_number(invoice_id: int) -> str:
 
 
 def _get_school_settings():
-    """Lazy import — avoids circular deps and works even if school_settings empty."""
+    """Return the singleton SchoolSetting row, or None if not yet configured."""
     from school_settings.models import SchoolSetting
-    return SchoolSetting.objects.first()
+    return SchoolSetting.objects.filter(pk=1).first()
 
 
 def _get_discount_type(code: str):
@@ -234,50 +234,38 @@ def _is_early_bird(invoice_date: date) -> bool:
 
 
 def _fetch_enrollment(enrollment_id: int):
-    """
-    The enrollment lives in the enrollments table (shared DB). Read it raw
-    via Django's connection since our service doesn't define an Enrollment model.
-    """
-    from django.db import connection
-    with connection.cursor() as cur:
-        cur.execute(
-            """
-            SELECT enrollment_id, student_id, school_level, grade_level,
-                   school_year, enrollment_status
-              FROM enrollments
-             WHERE enrollment_id = %s
-            """,
-            [enrollment_id],
-        )
-        row = cur.fetchone()
-        if not row:
-            return None
+    """Return enrollment data from the shared DB using the ORM mirror model."""
+    from .enrollment_mirror import EnrollmentMirror
+    try:
+        e = EnrollmentMirror.objects.get(pk=enrollment_id)
         return {
-            "enrollment_id":     row[0],
-            "student_id":        row[1],
-            "school_level":      row[2],
-            "grade_level":       row[3],
-            "school_year":       row[4],
-            "enrollment_status": row[5],
+            "enrollment_id":     e.enrollment_id,
+            "student_id":        e.student_id,
+            "school_level":      e.school_level,
+            "grade_level":       e.grade_level,
+            "school_year":       e.school_year,
+            "enrollment_status": e.enrollment_status,
         }
+    except EnrollmentMirror.DoesNotExist:
+        return None
+
 
 def _fetch_enrollment_scholarships(enrollment_id: int):
     """Returns list of {discount_mode, discount_value, scholarship_name}."""
-    from django.db import connection
-    with connection.cursor() as cur:
-        cur.execute(
-            """
-            SELECT st.discount_mode, st.discount_value, st.scholarship_name
-              FROM enrollment_scholarships es
-              JOIN scholarship_types st ON st.scholarship_type_id = es.scholarship_type_id
-             WHERE es.enrollment_id = %s
-            """,
-            [enrollment_id],
-        )
-        return [
-            {"discount_mode": r[0], "discount_value": r[1], "scholarship_name": r[2]}
-            for r in cur.fetchall()
-        ]
+    from .enrollment_mirror import EnrollmentScholarshipMirror
+    rows = (
+        EnrollmentScholarshipMirror.objects
+        .filter(enrollment_id=enrollment_id)
+        .select_related("scholarship_type")
+    )
+    return [
+        {
+            "discount_mode":  r.scholarship_type.discount_mode,
+            "discount_value": r.scholarship_type.discount_value,
+            "scholarship_name": r.scholarship_type.scholarship_name,
+        }
+        for r in rows
+    ]
 
 
 def _scholarship_discount_on_tuition(tuition: Decimal, scholarships: list) -> Decimal:

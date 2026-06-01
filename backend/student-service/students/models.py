@@ -184,6 +184,9 @@ class PreviousSchool(models.Model):
         managed = False
 
 
+# Schema owner: enrollment-service (manages requirement_types table).
+# This is a read/write mirror — student-service uses it to record document
+# submissions with a proper Student FK. Do NOT add migrations here for these tables.
 class RequirementType(models.Model):
     requirement_type_id = models.BigAutoField(primary_key=True)
     requirement_code = models.CharField(max_length=50, unique=True)
@@ -194,12 +197,20 @@ class RequirementType(models.Model):
     class Meta:
         db_table = "requirement_types"
         managed = False
+        ordering = ("requirement_name",)
 
 
+# Schema owner: enrollment-service (manages student_requirement_submissions table).
+# Student-service uses a proper Student FK here because it owns the students table.
+# Enrollment-service mirrors this with a plain BigIntegerField instead.
 class StudentRequirementSubmission(models.Model):
     student_requirement_submission_id = models.BigAutoField(primary_key=True)
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
-    requirement_type = models.ForeignKey(RequirementType, on_delete=models.RESTRICT)
+    requirement_type = models.ForeignKey(
+        RequirementType,
+        on_delete=models.RESTRICT,
+        db_column="requirement_type_id",
+    )
     is_submitted = models.BooleanField(default=False)
     image_url = models.TextField(null=True, blank=True)
     remarks = models.TextField(null=True, blank=True)

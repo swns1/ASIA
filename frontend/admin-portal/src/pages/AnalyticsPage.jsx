@@ -415,7 +415,15 @@ export default function AnalyticsPage() {
     }).catch(() => {});
   }, []);
 
+  // Tick the cooldown counter down every second
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
+
   const runClustering = useCallback(async () => {
+    if (cooldown > 0) return;
     setLoading(true);
     setError("");
     setResult(null);
@@ -432,12 +440,22 @@ export default function AnalyticsPage() {
     try {
       const data = await _getAiCluster(Object.fromEntries(params));
       setResult(data);
+      setCooldown(4); // brief cooldown after a successful request
     } catch (e) {
-      setError(e.response?.data?.error || e.message || "Clustering failed.");
+      const httpStatus = e.response?.status;
+      if (httpStatus === 429) {
+        setError("Too many requests — please wait a moment before running again.");
+        setCooldown(15);
+      } else if (httpStatus === 400) {
+        const msg = e.response?.data?.error || "Not enough grade data for the selected filters.";
+        setError(msg);
+      } else {
+        setError(e.response?.data?.error || e.message || "Clustering failed.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters]);
+  }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters, cooldown]);
 
   return (
     <AppLayout>
@@ -515,12 +533,12 @@ export default function AnalyticsPage() {
 
               <button
                 onClick={runClustering}
-                disabled={loading}
+                disabled={loading || cooldown > 0}
                 className="new-btn"
                 style={{
                   ...s.runBtn,
-                  opacity: loading ? 0.6 : 1,
-                  cursor:  loading ? "not-allowed" : "pointer",
+                  opacity: loading || cooldown > 0 ? 0.6 : 1,
+                  cursor:  loading || cooldown > 0 ? "not-allowed" : "pointer",
                   marginBottom: 0,
                   alignSelf: "flex-end",
                 }}
@@ -529,6 +547,11 @@ export default function AnalyticsPage() {
                   <>
                     <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
                     Running…
+                  </>
+                ) : cooldown > 0 ? (
+                  <>
+                    <i className="ti ti-clock" style={{ fontSize: 14 }} />
+                    Wait {cooldown}s
                   </>
                 ) : (
                   <>

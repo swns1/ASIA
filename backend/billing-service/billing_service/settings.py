@@ -3,11 +3,13 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = 'django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t'
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t",
+)
 
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
@@ -62,11 +64,11 @@ WSGI_APPLICATION = "billing_service.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE":   "django.db.backends.postgresql",
-        "NAME":     "SLIS THESIS FINAL",
-        "USER":     "postgres",
-        "PASSWORD": "admin123",
-        "HOST":     "localhost",
-        "PORT":     "5432",
+        "NAME":     os.environ.get("DB_NAME",     "SLIS THESIS FINAL"),
+        "USER":     os.environ.get("DB_USER",     "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "admin123"),
+        "HOST":     os.environ.get("DB_HOST",     "localhost"),
+        "PORT":     os.environ.get("DB_PORT",     "5432"),
     }
 }
 
