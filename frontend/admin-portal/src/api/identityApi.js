@@ -13,6 +13,32 @@ identityClient.interceptors.request.use((config) => {
   return config;
 });
 
+// ── 401 auto-refresh ──────────────────────────────────────────────────────────
+identityClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status === 401 && !original._retry) {
+      original._retry = true;
+      try {
+        const res = await axios.post(
+          (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth") + "/refresh/",
+          {},
+          { withCredentials: true }
+        );
+        const newToken = res.data.access;
+        sessionStorage.setItem("access_token", newToken);
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return identityClient(original);
+      } catch {
+        sessionStorage.removeItem("access_token");
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login({ identifier, password, rememberMe }) {
   const res = await identityClient.post("/login/", {

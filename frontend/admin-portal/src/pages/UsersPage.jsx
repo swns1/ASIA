@@ -542,8 +542,11 @@ export default function UsersPage() {
     try {
       const data = await _getUsers();
       setUsers(data);
-    } catch {
-      setError("Network error. Please check your connection.");
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401) setError("Session expired. Please log in again.");
+      else if (status === 403) setError("You don't have permission to view users.");
+      else setError("Failed to load users. Please try again.");
     } finally {
       setLoading(false);
     }

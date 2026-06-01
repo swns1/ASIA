@@ -174,6 +174,7 @@ export default function StudentsPage() {
   const [students, setStudents]   = useState([]);
   const [search, setSearch]       = useState("");
   const [inputVal, setInputVal]   = useState("");
+  const PAGE_SIZE = 20;
   const [page, setPage]           = useState(1);
   const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading]     = useState(true);
@@ -201,6 +202,7 @@ export default function StudentsPage() {
     try {
       const data = await getStudents({
         page: nextPage,
+        page_size: PAGE_SIZE,
         search: term,
         status: status === "all" ? "" : status,
         sex,
@@ -299,7 +301,7 @@ export default function StudentsPage() {
     fetchCounts();
   };
 
-  const totalPages = Math.ceil(pageMeta.count / 50);
+  const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
 
   return (
     <AppLayout>
@@ -767,10 +769,14 @@ export default function StudentsPage() {
                   >
                     <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
                   </button>
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    const start = Math.max(1, page - 2);
-                    const p = start + i;
-                    if (p > totalPages) return null;
+                  {(() => {
+                    const windowSize = Math.min(totalPages, 5);
+                    const start = Math.min(
+                      Math.max(1, page - 2),
+                      Math.max(1, totalPages - windowSize + 1)
+                    );
+                    return Array.from({ length: windowSize }, (_, i) => start + i);
+                  })().map((p) => {
                     const isActive = p === page;
                     return (
                       <button
