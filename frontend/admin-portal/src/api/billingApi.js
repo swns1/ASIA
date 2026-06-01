@@ -93,6 +93,9 @@ export const getInvoiceBreakdown = (id) =>
 export const getInvoiceSummary = (params = {}) =>
   billingClient.get("/invoices/summary/", { params }).then((r) => r.data);
 
+export const getFinancialSummary = (schoolYear) =>
+  billingClient.get("/invoices/financial-summary/", { params: schoolYear ? { school_year: schoolYear } : {} }).then((r) => r.data);
+
 export const generateInvoice = (payload) =>
   billingClient.post("/invoices/generate/", payload).then((r) => r.data);
 

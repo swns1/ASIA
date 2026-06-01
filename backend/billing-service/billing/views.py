@@ -145,6 +145,67 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             result["total"] += row["n"]
         return Response(result)
 
+    @action(detail=False, methods=["get"], url_path="financial-summary")
+    def financial_summary(self, request):
+        """
+        GET /api/invoices/financial-summary/?school_year=2024-2025
+
+        Returns aggregate monetary totals for non-void invoices in a school year:
+          gross_billed   — sum of all invoice line items
+          total_discounts — sum of all discount amounts applied
+          net_billed     — gross minus discounts
+          total_collected — sum of all payments received
+          outstanding    — net_billed minus total_collected
+          invoice_count  — number of non-void invoices
+        """
+        from django.db.models import Sum
+        from .enrollment_mirror import EnrollmentMirror
+
+        school_year = request.query_params.get("school_year")
+
+        invoice_qs = StudentInvoice.objects.exclude(status="void")
+
+        if school_year:
+            enr_ids = (
+                EnrollmentMirror.objects
+                .filter(school_year=school_year)
+                .values_list("enrollment_id", flat=True)
+            )
+            invoice_qs = invoice_qs.filter(enrollment_id__in=enr_ids)
+
+        from django.db.models import Count
+        invoice_ids = invoice_qs.values_list("invoice_id", flat=True)
+
+        gross = (
+            StudentInvoiceItem.objects
+            .filter(invoice_id__in=invoice_ids)
+            .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        )
+        discounts = (
+            StudentInvoiceDiscount.objects
+            .filter(invoice_id__in=invoice_ids)
+            .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        )
+        collected = (
+            StudentPayment.objects
+            .filter(invoice_id__in=invoice_ids)
+            .aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+        )
+
+        net = gross - discounts
+        outstanding = net - collected
+        count = invoice_qs.aggregate(n=Count("invoice_id"))["n"] or 0
+
+        return Response({
+            "school_year":      school_year or "all",
+            "invoice_count":    count,
+            "gross_billed":     f"{gross:.2f}",
+            "total_discounts":  f"{discounts:.2f}",
+            "net_billed":       f"{net:.2f}",
+            "total_collected":  f"{collected:.2f}",
+            "outstanding":      f"{outstanding:.2f}",
+        })
+
     @action(detail=True, methods=["get"], url_path="breakdown")
     def breakdown(self, request, pk=None):
         """Return the discount waterfall as a step-by-step breakdown for the UI."""

@@ -67,7 +67,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
   const currentSY = (() => {
     const now = new Date();
     const yr = now.getFullYear();
-    return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+    return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
   })();
 
   useEffect(() => {
@@ -564,7 +564,7 @@ function EligibilityTab({ scholarshipTypes }) {
 
   const syOptions = useMemo(() => {
     const d = new Date();
-    const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+    const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
     return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y+1}`; });
   }, []);
 

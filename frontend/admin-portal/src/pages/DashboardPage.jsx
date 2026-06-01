@@ -11,14 +11,14 @@ import {
   getEnrollmentScholarships as _getEnrollmentScholarships,
   getSubjects as _getSubjects,
 } from "../api/enrollmentApi";
-import { getInvoices as _getInvoices } from "../api/billingApi";
+import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
 // ── Filter constants ──────────────────────────────────────────────────────────
 const SCHOOL_YEARS = (() => {
   const now = new Date();
-  const cur = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+  const cur = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
   return Array.from({ length: 5 }, (_, i) => {
     const y = cur - i;
     return `${y}-${y + 1}`;
@@ -81,7 +81,7 @@ function useClock() {
 function currentSchoolYear() {
   const now = new Date();
   const yr  = now.getFullYear();
-  return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+  return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -227,6 +227,9 @@ export default function DashboardPage() {
   const [recentStudents,    setRecentStudents]    = useState([]);
   const [scholarships,      setScholarships]      = useState([]);
 
+  const [financialSummary,  setFinancialSummary]  = useState(null);
+  const [completedCount,    setCompletedCount]    = useState(0);
+
   // ── Alert state ──
   const [alerts, setAlerts] = useState([]);
 
@@ -256,6 +259,8 @@ export default function DashboardPage() {
         fetchScholarships(),
         fetchSubjectCount(),
         fetchAlerts(),
+        fetchFinancialSummary(),
+        fetchCompletedCount(),
       ]);
     } catch (e) {
       console.error("Dashboard fetch error:", e);
@@ -332,6 +337,20 @@ export default function DashboardPage() {
   async function fetchSubjectCount() {
     const data = await _getSubjects({ page_size: 1 });
     setSubjectCount(data.count ?? 0);
+  }
+
+  async function fetchFinancialSummary() {
+    try {
+      const data = await _getFinancialSummary(schoolYear);
+      setFinancialSummary(data);
+    } catch { /* non-critical */ }
+  }
+
+  async function fetchCompletedCount() {
+    try {
+      const data = await _getEnrollments({ enrollment_status: "completed", school_year: schoolYear, page_size: 1 });
+      setCompletedCount(data.count ?? 0);
+    } catch { /* non-critical */ }
   }
 
   async function fetchAlerts() {
@@ -415,6 +434,80 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* ── Revenue strip ── */}
+            <div style={s.revenueStrip}>
+              {[
+                {
+                  label: "Net Billed",
+                  key: "net_billed",
+                  icon: "ti-receipt",
+                  color: "#1455a0",
+                  bg: "#e3f0fd",
+                },
+                {
+                  label: "Collected",
+                  key: "total_collected",
+                  icon: "ti-cash",
+                  color: "#2e6b0d",
+                  bg: "#e8f5e0",
+                },
+                {
+                  label: "Outstanding",
+                  key: "outstanding",
+                  icon: "ti-alert-circle",
+                  color: "#a32d2d",
+                  bg: "#fde8e8",
+                },
+              ].map((item) => {
+                const raw = financialSummary ? parseFloat(financialSummary[item.key] ?? 0) : 0;
+                return (
+                  <div
+                    key={item.key}
+                    onClick={() => navigate("/invoices")}
+                    style={{ ...s.revenueCell, cursor: "pointer" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</span>
+                    </div>
+                    {loading || !financialSummary
+                      ? <Sk h={22} w="70%" />
+                      : <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em" }}>
+                          ₱{raw.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                    }
+                    <div style={{ fontSize: 11, color: "#b09090" }}>S.Y. {schoolYear}</div>
+                  </div>
+                );
+              })}
+              {/* Collection rate bar */}
+              {!loading && financialSummary && (() => {
+                const net = parseFloat(financialSummary.net_billed ?? 0);
+                const col = parseFloat(financialSummary.total_collected ?? 0);
+                const pct = net > 0 ? Math.min(100, Math.round((col / net) * 100)) : 0;
+                return (
+                  <div style={{ ...s.revenueCell, borderLeft: "1px solid #f5eaea", justifyContent: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f0e8fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className="ti ti-chart-pie" style={{ fontSize: 14, color: "#7c3aed" }} />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Collection Rate</span>
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d" }}>
+                      {pct}%
+                    </div>
+                    <div style={{ height: 5, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131", borderRadius: 99, transition: "width 0.4s ease" }} />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* ── Stat cards ── */}
             <div style={s.statGrid}>
               <StatCard
@@ -478,8 +571,8 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* ── Recent enrollments + Level breakdown ── */}
-            <div style={s.twoCol}>
+            {/* ── Recent enrollments + Funnel + Level breakdown ── */}
+            <div style={{ ...s.twoCol, gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr)" }}>
 
               <Panel title="Recent Enrollments" action="View all →" onAction={() => navigate("/enrollments")}>
                 <table style={s.table}>
@@ -528,6 +621,55 @@ export default function DashboardPage() {
                     }
                   </tbody>
                 </table>
+              </Panel>
+
+              <Panel title="Enrollment Funnel" action="View →" onAction={() => navigate("/enrollments")}>
+                {(() => {
+                  const total = pendingCount + enrolledCount + completedCount;
+                  const steps = [
+                    { label: "Pending",   count: pendingCount,   color: "#854f0b", bg: "#faeeda", icon: "ti-clock" },
+                    { label: "Enrolled",  count: enrolledCount,  color: "#1455a0", bg: "#e3f0fd", icon: "ti-calendar-event" },
+                    { label: "Completed", count: completedCount, color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-circle-check" },
+                  ];
+                  return (
+                    <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 11, color: "#b09090", marginBottom: 2 }}>S.Y. {schoolYear} · {total.toLocaleString()} total</div>
+                      {steps.map((step, i) => {
+                        const pct = total > 0 ? Math.round((step.count / total) * 100) : 0;
+                        return (
+                          <div key={step.label}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                              <div style={{ width: 26, height: 26, borderRadius: 7, background: step.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <i className={`ti ${step.icon}`} style={{ fontSize: 13, color: step.color }} />
+                              </div>
+                              <span style={{ fontSize: 12.5, color: "#1a0a0a", flex: 1, fontWeight: 500 }}>{step.label}</span>
+                              {loading
+                                ? <Sk w={40} h={13} />
+                                : <span style={{ fontSize: 13, fontWeight: 700, color: step.color }}>{step.count.toLocaleString()}</span>
+                              }
+                            </div>
+                            <div style={{ height: 6, background: "#f5eaea", borderRadius: 99, overflow: "hidden" }}>
+                              {!loading && (
+                                <div style={{ height: "100%", width: `${pct}%`, background: step.color, borderRadius: 99, transition: "width 0.45s ease", opacity: 0.85 }} />
+                              )}
+                            </div>
+                            {i < steps.length - 1 && (
+                              <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
+                                <i className="ti ti-chevron-down" style={{ fontSize: 12, color: "#d0b0b0" }} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {!loading && total > 0 && (
+                        <div style={{ marginTop: 4, padding: "8px 0", borderTop: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 11.5, color: "#b09090" }}>Enrollment rate</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: enrollmentRate >= 70 ? "#2e6b0d" : "#854f0b" }}>{enrollmentRate}%</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </Panel>
 
               <Panel title="Students by Level" action="View →" onAction={() => navigate("/enrollments")}>
@@ -710,6 +852,8 @@ const s = {
   chip:        { fontSize:11, padding:"2px 7px", borderRadius:99, fontWeight:500 },
 
   twoCol:      { display:"grid", gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)", gap:12 },
+  revenueStrip: { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:0, background:"white", border:"1px solid #f5eaea", borderRadius:14, overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.06)" },
+  revenueCell:  { display:"flex", flexDirection:"column", gap:6, padding:"14px 18px", borderRight:"1px solid #f5eaea", transition:"background 0.12s" },
   threeCol:    { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 },
 
   panel:       { background:"white", border:"1px solid #f5eaea", borderRadius:16, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" },

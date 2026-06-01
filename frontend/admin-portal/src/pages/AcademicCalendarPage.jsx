@@ -101,7 +101,7 @@ function eventMeta(type) {
 
 const SCHOOL_YEARS = (() => {
   const now = new Date();
-  const cur = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+  const cur = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
   return Array.from({ length: 5 }, (_, i) => { const y = cur - 1 + i; return `${y}-${y + 1}`; });
 })();
 

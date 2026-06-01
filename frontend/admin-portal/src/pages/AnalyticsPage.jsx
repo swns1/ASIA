@@ -38,7 +38,7 @@ const GRADE_LEVEL_OPTIONS = [
 function currentSchoolYear() {
   const now = new Date();
   const yr  = now.getFullYear();
-  return now.getMonth() >= 5 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+  return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
 }
 
 // ── Shared style tokens (aligned with system design) ──────────────────────────

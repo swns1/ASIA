@@ -95,12 +95,12 @@ const nullify = (obj, fields) => {
 
 function defaultSchoolYear() {
   const d = new Date(), y = d.getFullYear();
-  return d.getMonth() >= 5 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  return d.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
 
 function buildSchoolYearOptions() {
   const d = new Date();
-  const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
   return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
 }
 

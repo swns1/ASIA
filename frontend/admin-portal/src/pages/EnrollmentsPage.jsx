@@ -76,7 +76,7 @@ const LEVEL_ICONS = {
 
 function buildSchoolYearOptions() {
   const d = new Date();
-  const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
   const opts = [{ value: "", label: "All Years" }];
   for (let i = 1; i >= -2; i--) {
     const y = base + i;
@@ -349,7 +349,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                 <option value="">— Select year —</option>
                 {(() => {
                   const d = new Date();
-                  const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+                  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
                   return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y+1}`; });
                 })().map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
@@ -607,7 +607,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
 
   const schoolYearOpts = (() => {
     const d = new Date();
-    const base = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+    const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
     return Array.from({ length: 5 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
   })();
 
