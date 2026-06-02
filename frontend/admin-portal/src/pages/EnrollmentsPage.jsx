@@ -1446,7 +1446,7 @@ export default function EnrollmentsPage() {
                         return (
                           <motion.button key={`${schoolLevel}-${g}`}
                             layout
-                            initial={{ opacity: 0, y: 6 }}
+                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
                             animate={{
                               opacity: 1, y: 0,
                               backgroundColor: active ? "#fff0f0" : "#ffffff",

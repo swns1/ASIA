@@ -378,30 +378,34 @@ export default function SubjectsPage() {
   const currentUser = getCurrentUser();
   const hasAnimated = useRef(false);
 
-  const [subjects,    setSubjects]    = useState([]);
-  const [templates,   setTemplates]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [search,      setSearch]      = useState("");
-  const [inputVal,    setInputVal]    = useState("");
-  const [levelFilter, setLevelFilter] = useState("all");
-  const [page,        setPage]        = useState(1);
-  const [pageMeta,    setPageMeta]    = useState({ count: 0, next: null, previous: null });
-  const [modal,       setModal]       = useState(null);
-  const [toDelete,    setToDelete]    = useState(null);
+  const [subjects,     setSubjects]    = useState([]);
+  const [templates,    setTemplates]   = useState([]);
+  const [loading,      setLoading]     = useState(true);
+  const [search,       setSearch]      = useState("");
+  const [inputVal,     setInputVal]    = useState("");
+  const [levelFilter,  setLevelFilter] = useState("all");
+  const [gradeFilter,  setGradeFilter] = useState("");
+  const [page,         setPage]        = useState(1);
+  const [pageMeta,     setPageMeta]    = useState({ count: 0, next: null, previous: null });
+  const [modal,        setModal]       = useState(null);
+  const [toDelete,     setToDelete]    = useState(null);
 
-  const fetchSubjects = useCallback(async (p = 1, term = search, level = levelFilter) => {
+  const gradeOptions = levelFilter !== "all" ? (GRADE_LEVELS_BY_LEVEL[levelFilter] ?? []) : [];
+
+  const fetchSubjects = useCallback(async (p = 1, term = search, level = levelFilter, grade = gradeFilter) => {
     setLoading(true);
     try {
       const params = { page: p };
-      if (term) params.search = term;
-      if (level !== "all") params.school_level = level;
+      if (term)              params.search       = term;
+      if (level !== "all")   params.school_level = level;
+      if (grade)             params.grade_level  = grade;
       const data = await getSubjects(params);
       setSubjects(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(p);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [search, levelFilter]);
+  }, [search, levelFilter, gradeFilter]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
@@ -414,14 +418,14 @@ export default function SubjectsPage() {
     if (id) await updateSubject(id, payload);
     else    await createSubject(payload);
     setModal(null);
-    fetchSubjects(page, search, levelFilter);
+    fetchSubjects(page, search, levelFilter, gradeFilter);
   };
 
   const handleDelete = async () => {
     if (!toDelete) return;
     await deleteSubject(toDelete.subject_id);
     setToDelete(null);
-    fetchSubjects(page, search, levelFilter);
+    fetchSubjects(page, search, levelFilter, gradeFilter);
   };
 
   const totalPages = Math.ceil(pageMeta.count / 20);
@@ -491,13 +495,13 @@ export default function SubjectsPage() {
                 placeholder="Search by code or name…"
                 value={inputVal}
                 onChange={(e) => setInputVal(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter); } }}
+                onKeyDown={(e) => { if (e.key === "Enter") { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter, gradeFilter); } }}
                 style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
               />
               {inputVal && (
                 <button
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
-                  onClick={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter); }}
+                  onClick={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter, gradeFilter); }}
                 >
                   <i className="ti ti-x" style={{ fontSize: 13 }} />
                 </button>
@@ -507,46 +511,110 @@ export default function SubjectsPage() {
               style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
-              onClick={() => { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter); }}
+              onClick={() => { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter, gradeFilter); }}
             >
               Search
             </button>
           </div>
 
-          {/* Level filter chips */}
-          <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
-              const active = levelFilter === lvl.value;
-              return (
-                <motion.button
-                  key={lvl.value}
-                  layout
-                  initial={false}
-                  animate={{
-                    backgroundColor: active ? lvl.bg    : "#ffffff",
-                    color:           active ? lvl.color : "#9a7070",
-                    borderColor:     active ? lvl.color : "#f0e4e4",
-                  }}
-                  transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                  onClick={() => { setLevelFilter(lvl.value); fetchSubjects(1, inputVal, lvl.value); }}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    height: 32, padding: "0 14px", borderRadius: 99,
-                    border: "1.5px solid", fontSize: 12, fontWeight: 600,
-                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                  }}
-                >
-                  <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
-                  {lvl.label}
-                  {active && lvl.value === "all" && !loading && (
-                    <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
-                      {pageMeta.count}
-                    </span>
-                  )}
-                </motion.button>
-              );
-            })}
-          </motion.div>
+          {/* Filter chip panel */}
+          <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+              {/* School Level chips */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
+                <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
+                    const active = levelFilter === lvl.value;
+                    return (
+                      <motion.button
+                        key={lvl.value}
+                        layout
+                        initial={false}
+                        animate={{
+                          backgroundColor: active ? lvl.bg    : "#ffffff",
+                          color:           active ? lvl.color : "#9a7070",
+                          borderColor:     active ? lvl.color : "#f0e4e4",
+                        }}
+                        transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                        onClick={() => {
+                          setLevelFilter(lvl.value);
+                          setGradeFilter("");
+                          fetchSubjects(1, inputVal, lvl.value, "");
+                        }}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          height: 32, padding: "0 14px", borderRadius: 99,
+                          border: "1.5px solid", fontSize: 12, fontWeight: 600,
+                          cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                        }}
+                      >
+                        <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
+                        {lvl.label}
+                        {active && !loading && (
+                          <span style={{ display: "inline-block", background: lvl.color, color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
+                            {pageMeta.count}
+                          </span>
+                        )}
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
+              </div>
+
+              {/* Grade Level chips — cascades from level selection */}
+              <div style={{
+                maxHeight: levelFilter !== "all" ? 200 : 0,
+                overflow: "hidden",
+                opacity: levelFilter !== "all" ? 1 : 0,
+                marginTop: levelFilter !== "all" ? 0 : -12,
+                transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
+                pointerEvents: levelFilter !== "all" ? "auto" : "none",
+              }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
+                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {["All Grades", ...gradeOptions].map((g, idx) => {
+                      const val = g === "All Grades" ? "" : g;
+                      const active = gradeFilter === val;
+                      return (
+                        <motion.button
+                          key={`${levelFilter}-${g}`}
+                          layout
+                          initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                          animate={{
+                            opacity: 1, y: 0,
+                            backgroundColor: active ? "#fff0f0" : "#ffffff",
+                            color:           active ? "#e03131" : "#9a7070",
+                            borderColor:     active ? "#e03131" : "#f0e4e4",
+                          }}
+                          transition={{
+                            opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                            y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                            backgroundColor: { duration: 0.18, ease: "easeOut" },
+                            color:           { duration: 0.18, ease: "easeOut" },
+                            borderColor:     { duration: 0.18, ease: "easeOut" },
+                            layout:          { type: "spring", stiffness: 400, damping: 36 },
+                          }}
+                          onClick={() => { setGradeFilter(val); fetchSubjects(1, inputVal, levelFilter, val); }}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            height: 32, padding: "0 14px", borderRadius: 99,
+                            border: "1.5px solid", fontSize: 12, fontWeight: 600,
+                            cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                          }}
+                        >
+                          {g}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                </div>
+              </div>
+
+            </div>
+          </div>
         </motion.div>
 
         {/* Table */}
@@ -622,6 +690,7 @@ export default function SubjectsPage() {
                             exit={{ opacity: 0, x: 6 }}
                             transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(idx * 0.025, 0.3) }}
                             className="sub-row"
+                            onClick={() => setModal({ mode: "edit", subject: sub })}
                           >
                             {/* Subject name */}
                             <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
@@ -705,7 +774,7 @@ export default function SubjectsPage() {
                 className="page-btn"
                 style={pgBtn}
                 disabled={!pageMeta.previous}
-                onClick={() => fetchSubjects(page - 1, search, levelFilter)}
+                onClick={() => fetchSubjects(page - 1, search, levelFilter, gradeFilter)}
               >
                 <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
               </motion.button>
@@ -722,7 +791,7 @@ export default function SubjectsPage() {
                     transition={{ duration: 0.1 }}
                     className="page-btn"
                     style={{ ...pgBtn, ...(isActive ? pgBtnActive : {}) }}
-                    onClick={() => fetchSubjects(p, search, levelFilter)}
+                    onClick={() => fetchSubjects(p, search, levelFilter, gradeFilter)}
                   >
                     {p}
                   </motion.button>
