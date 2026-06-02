@@ -358,9 +358,9 @@ export default function StudentsPage() {
                 
               </button> */}
               <motion.button
-                whileHover={{ y: -1, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
+                whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
                 whileTap={{ scale: 0.97 }}
-                transition={{ duration: 0.14 }}
+                transition={{ duration: 0.13 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 8,
                   background: "linear-gradient(135deg, #e03131, #c92a2a)",

@@ -97,8 +97,7 @@ export default function AppLayout({ children, user }) {
         body { font-family:'DM Sans',sans-serif; }
         ::-webkit-scrollbar { width:5px; }
         ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-        .nav-item { transition:background 0.12s,color 0.12s; }
-        .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
+        .nav-item { }
         .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
         .enroll-row:hover td { background:#fff8f6 !important; cursor:pointer; }
         .qa-btn:hover { background:#fde8e8 !important; }
