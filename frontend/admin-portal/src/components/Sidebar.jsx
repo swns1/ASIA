@@ -172,8 +172,13 @@ export default function Sidebar({ user: userProp }) {
                     {active && (
                       <motion.div
                         layoutId="nav-active-pill"
+                        initial={{ opacity: 0.4 }}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          layout:  { type: "spring", stiffness: 380, damping: 34 },
+                          opacity: { duration: 0.18, delay: 0.22, ease: "easeOut" },
+                        }}
                         style={{ position: "absolute", inset: 0, borderRadius: 9, background: "#fff0f0" }}
-                        transition={{ type: "spring", stiffness: 380, damping: 34 }}
                       />
                     )}
                     {/* Hover pill */}

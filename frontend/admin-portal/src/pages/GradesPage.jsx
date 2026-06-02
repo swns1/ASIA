@@ -59,7 +59,7 @@ const OVERVIEW_GRADE_LEVELS = {
 };
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
-function OverviewTab() {
+function OverviewTab({ onNavigate }) {
   const hasAnimated = useRef(false);
 
   const [schoolYear,    setSchoolYear]    = useState("");
@@ -125,7 +125,7 @@ function OverviewTab() {
           const failed = grades.filter((g) => parseFloat(g.numeric_grade) <  75 && !isNaN(parseFloat(g.numeric_grade))).length;
           const sd     = en.student_detail ?? {};
           const name   = sd.full_name ?? [sd.first_name, sd.middle_name, sd.last_name, sd.suffix].filter(Boolean).join(" ");
-          return { enrollment_id: en.enrollment_id, name, lrn: sd.lrn, student_number: sd.student_number, grade_level: en.grade_level, section: en.section, school_year: en.school_year, school_level: en.school_level, avg, passed, failed, total: grades.length };
+          return { enrollment_id: en.enrollment_id, name, lrn: sd.lrn, student_number: sd.student_number, grade_level: en.grade_level, section: en.section, school_year: en.school_year, school_level: en.school_level, avg, passed, failed, total: grades.length, _student: sd, _enrollment: en };
         });
 
         if (remarks) {
@@ -524,14 +524,38 @@ function OverviewTab() {
                       transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(idx * 0.018, 0.28) }}
                       onMouseEnter={(e) => Array.from(e.currentTarget.cells).forEach((c) => c.style.background = "#fff8f6")}
                       onMouseLeave={(e) => Array.from(e.currentTarget.cells).forEach((c, i) => c.style.background = i === 5 ? "#fdfafa" : "")}
-                      style={{ cursor: "default" }}
+                      style={{ cursor: "pointer" }}
                     >
                       <td style={{ ...tdStyle, textAlign: "left", paddingLeft: 20 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{ width: 32, height: 32, borderRadius: 8, background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{ini}</div>
-                          <div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{r.name}</div>
                             <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>LRN {r.lrn} · {r.student_number}</div>
+                          </div>
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                            <motion.button
+                              initial={false}
+                              whileHover={{ scale: 1.06, backgroundColor: "#e3f0fd", color: "#1455a0", borderColor: "#1455a0" }}
+                              whileTap={{ scale: 0.94 }}
+                              transition={{ duration: 0.12 }}
+                              onClick={(e) => { e.stopPropagation(); onNavigate("summary", r._student, r._enrollment); }}
+                              title="View Grade Summary"
+                              style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 8px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", fontSize: 11, fontWeight: 600, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                            >
+                              <i className="ti ti-table" style={{ fontSize: 11 }} />Summary
+                            </motion.button>
+                            <motion.button
+                              initial={false}
+                              whileHover={{ scale: 1.06, backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#e03131" }}
+                              whileTap={{ scale: 0.94 }}
+                              transition={{ duration: 0.12 }}
+                              onClick={(e) => { e.stopPropagation(); onNavigate("entry", r._student, r._enrollment); }}
+                              title="Go to Grade Entry"
+                              style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 8px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", fontSize: 11, fontWeight: 600, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                            >
+                              <i className="ti ti-pencil" style={{ fontSize: 11 }} />Entry
+                            </motion.button>
                           </div>
                         </div>
                       </td>
@@ -817,6 +841,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
 
   return (
     <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)", animation:"fadeUp 0.25s ease both" }}>
+      <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
       <div style={{ padding:"18px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, background:"linear-gradient(to right,#fdfafa,white)" }}>
         <div>
           <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>
@@ -1200,217 +1225,288 @@ export default function GradesPage() {
   const failedCount = sumGrades.filter((g) => parseFloat(g.numeric_grade) < 75).length;
   const overallAvg  = gradeCount > 0 ? sumGrades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / gradeCount : null;
 
+  // ── Shared enrollment chip renderer (used in both summary + entry left panels) ─
+  const EnrollmentChip = ({ en, onClick }) => {
+    const lvlMeta = SCHOOL_LEVEL_META[en.school_level] ?? SCHOOL_LEVEL_META.elementary;
+    const active  = enrollment?.enrollment_id === en.enrollment_id;
+    return (
+      <motion.button
+        onClick={onClick}
+        whileHover={{ backgroundColor: active ? lvlMeta.bg : "#fff8f6" }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.12 }}
+        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${active ? lvlMeta.color : "#f0e4e4"}`, background: active ? lvlMeta.bg : "white", cursor:"pointer", textAlign:"left", fontFamily:"'DM Sans',sans-serif", transition:"border-color 0.14s" }}
+      >
+        <div style={{ width:34, height:34, borderRadius:9, background: active ? lvlMeta.color + "22" : "#f5f0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <i className="ti ti-clipboard-list" style={{ fontSize:15, color: active ? lvlMeta.color : "#9a7070" }} />
+        </div>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:13, fontWeight:700, color: active ? lvlMeta.color : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>S.Y. {en.school_year}</div>
+          <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>{en.grade_level} · {en.section}</div>
+        </div>
+        <span style={{ fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:99, background: lvlMeta.bg, color: lvlMeta.color, flexShrink:0 }}>
+          {lvlMeta.label}
+        </span>
+      </motion.button>
+    );
+  };
+
   // ── Left panel (shared) ───────────────────────────────────────────────────
   const leftPanel = (
-    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
       {/* Student picker */}
-      <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
+      <motion.div
+        initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+        transition={{ duration:0.22, ease:"easeOut" }}
+        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+      >
         <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
-          {tab === "entry"
-            ? <div style={{ width:24, height:24, borderRadius:"50%", background:"#e03131", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"white", flexShrink:0 }}>1</div>
-            : <i className="ti ti-user-search" style={{ fontSize:15, color:"#e03131" }} />
-          }
+          <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <i className="ti ti-user-search" style={{ fontSize:14, color:"#e03131" }} />
+          </div>
           <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select Student</span>
         </div>
         <div style={{ padding:"14px 18px" }}>
           <StudentPicker value={student} onChange={(s) => { setStudent(s); setEnrollment(null); setSubject(null); setComputation(null); }} />
         </div>
-      </div>
+      </motion.div>
 
       {/* Student profile card */}
-      {student && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
-          <div style={{ padding:"16px 18px", display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ width:48, height:48, borderRadius:"50%", background:palette.bg, color:palette.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:17, flexShrink:0, border:`2px solid ${palette.color}33` }}>{initials}</div>
-            <div>
-              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a"}}>{fullName}</div>
-              <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>LRN {student.lrn}</div>
-              <span style={{ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:99, background: student.status==="active"?"#e8f5e0":"#f0ede8", color: student.status==="active"?"#2e6b0d":"#5c5752", marginTop:4, display:"inline-block" }}>
-                {student.status}
+      <AnimatePresence>
+        {student && (
+          <motion.div
+            key="profile"
+            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
+            transition={{ duration:0.2, ease:"easeOut" }}
+            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+          >
+            <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
+            <div style={{ padding:"16px 18px", display:"flex", alignItems:"center", gap:14 }}>
+              <div style={{ width:48, height:48, borderRadius:"50%", background:palette.bg, color:palette.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:17, flexShrink:0, border:`2px solid ${palette.color}33` }}>{initials}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fullName}</div>
+                <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>LRN {student.lrn}</div>
+                <span style={{ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:99, background: student.status==="active"?"#e8f5e0":"#f0ede8", color: student.status==="active"?"#2e6b0d":"#5c5752", marginTop:4, display:"inline-block" }}>
+                  {student.status}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Enrollment picker — same card style for both tabs */}
+      <AnimatePresence>
+        {student && (
+          <motion.div
+            key="enrollments"
+            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
+            transition={{ duration:0.2, ease:"easeOut", delay:0.05 }}
+            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+          >
+            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#e03131" }} />
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>
+                {tab === "entry" ? "Select Enrollment" : "Select School Year"}
               </span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Enrollment picker (summary tab only — entry has its own step-numbered version) */}
-      {tab === "summary" && student && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:8 }}>
-            <i className="ti ti-clipboard-list" style={{ fontSize:15, color:"#e03131" }} />
-            <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select School Year</span>
-          </div>
-          <div style={{ padding:"14px 18px", display:"flex", flexDirection:"column", gap:6 }}>
-            {loadingEnr
-              ? [1,2].map((i) => <div key={i} style={{ padding:"10px 14px", borderRadius:10, border:"1px solid #f5eaea" }}><Sk w="80%" h={14} /><div style={{ marginTop:6 }}><Sk w="50%" h={11} /></div></div>)
-              : enrollments.length === 0
-                ? <div style={{ fontSize:13, color:"#b09090", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>No enrollments found.</div>
-                : enrollments.map((en) => {
-                    const lvlMeta = SCHOOL_LEVEL_META[en.school_level] ?? SCHOOL_LEVEL_META.elementary;
-                    const active  = enrollment?.enrollment_id === en.enrollment_id;
-                    return (
-                      <button key={en.enrollment_id} className={`enr-chip${active?" active":""}`}
-                        onClick={() => { setEnrollment(en); setSubject(null); setComputation(null); }}
-                        style={{ display:"flex", alignItems:"center", gap:10 }}>
-                        <div style={{ width:32, height:32, borderRadius:8, background:active?lvlMeta.bg:"#f9f4f4", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          <i className="ti ti-clipboard-list" style={{ fontSize:14, color:active?lvlMeta.color:"#9a7070" }} />
-                        </div>
-                        <div style={{ minWidth:0, flex:1 }}>
-                          <div style={{ fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>S.Y. {en.school_year}</div>
-                          <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>{en.grade_level} · {en.section}</div>
-                        </div>
-                        <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:99, background:lvlMeta.bg, color:lvlMeta.color, flexShrink:0 }}>
-                          {lvlMeta.label}
-                        </span>
-                      </button>
-                    );
-                  })
-            }
-          </div>
-        </div>
-      )}
-
-      {/* Stats (summary tab only) */}
-      {tab === "summary" && enrollment && !loadingSum && sumGrades.length > 0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, animation:"fadeUp 0.2s ease both" }}>
-          {[
-            { label:"Recorded", value:gradeCount,              color:"#e03131", bg:"#fff0f0", icon:"ti-clipboard-check" },
-            { label:"Passed",   value:passedCount,             color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-circle-check"   },
-            { label:"Failed",   value:failedCount,             color:"#9b2020", bg:"#fde8e8", icon:"ti-circle-x"       },
-            { label:"Average",  value:overallAvg?.toFixed(2)??"—", color:"#1455a0", bg:"#e3f0fd", icon:"ti-chart-bar" },
-          ].map((s) => (
-            <div key={s.label} style={{ background:"white", borderRadius:12, border:"1px solid #f5eaea", padding:"12px 14px", display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:32, height:32, borderRadius:8, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize:15, color:s.color }} />
-              </div>
-              <div>
-                <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>
-                <div style={{ fontSize:10, color:"#a07878", marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:500 }}>{s.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Entry: enrollment (step 2) */}
-      {tab === "entry" && student && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ padding:"10px 14px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:20, height:20, borderRadius:"50%", background:"#e03131", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:"white", flexShrink:0 }}>2</div>
-            <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Select Enrollment</span>
-          </div>
-          <div style={{ padding:"8px 10px", display:"flex", flexDirection:"column", gap:4 }}>
-            {loadingEnr
-              ? [1,2].map((i) => <div key={i} style={{ padding:"8px 10px", borderRadius:8, border:"1px solid #f5eaea" }}><Sk w="80%" h={12} /><div style={{ marginTop:4 }}><Sk w="50%" h={10} /></div></div>)
-              : enrollments.length === 0
-                ? <div style={{ fontSize:12, color:"#b09090", textAlign:"center", padding:"10px 0", fontStyle:"italic" }}>No active enrollments found.</div>
-                : enrollments.map((en) => {
-                    const lvlMeta = SCHOOL_LEVEL_META[en.school_level] ?? SCHOOL_LEVEL_META.elementary;
-                    const active  = enrollment?.enrollment_id === en.enrollment_id;
-                    return (
-                      <button key={en.enrollment_id} className={`enr-chip${active?" active":""}`}
-                        onClick={() => { setEnrollment(en); setSubject(null); setComputation(null); }}
-                        style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px" }}>
-                        <div style={{ width:26, height:26, borderRadius:6, background:active?lvlMeta.bg:"#f9f4f4", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          <i className="ti ti-clipboard-list" style={{ fontSize:12, color:active?lvlMeta.color:"#9a7070" }} />
-                        </div>
-                        <div style={{ minWidth:0, flex:1 }}>
-                          <div style={{ fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>S.Y. {en.school_year}</div>
-                          <div style={{ fontSize:10, color:"#b09090", marginTop:1 }}>{en.grade_level} · {en.section}</div>
-                        </div>
-                        <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:99, background:lvlMeta.bg, color:lvlMeta.color, flexShrink:0 }}>
-                          {lvlMeta.label}
-                        </span>
-                      </button>
-                    );
-                  })
-            }
-          </div>
-        </div>
-      )}
-
-      {/* Entry: subject (step 3) */}
-      {tab === "entry" && enrollment && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ padding:"10px 14px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:20, height:20, borderRadius:"50%", background:"#e03131", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:"white", flexShrink:0 }}>3</div>
-            <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Select Subject</span>
-          </div>
-          <div style={{ padding:"8px 10px", display:"flex", flexDirection:"column", gap:4, maxHeight:200, overflowY:"auto" }}>
-            {entSubjects.length === 0
-              ? <div style={{ fontSize:12, color:"#b09090", textAlign:"center", padding:"10px 0", fontStyle:"italic" }}>No subjects for this level.</div>
-              : entSubjects.map((sub) => (
-                  <button key={sub.subject_id} className={`subject-chip${subject?.subject_id===sub.subject_id?" active":""}`}
-                    onClick={() => { setSubject(sub); setComputation(null); }}
-                    style={{ padding:"7px 10px", textAlign:"left" }}>
-                    <div style={{ minWidth:0, width:"100%" }}>
-                      <div style={{ fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub.subject_name}</div>
-                      <div style={{ fontSize:10, color:"#b09090", marginTop:1 }}>
-                        {sub.subject_code}
-                        {sub.grading_template_detail ? ` · ${sub.grading_template_detail.template_name}` : " · No template"}
-                      </div>
+            <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8, maxHeight:260, overflowY:"auto" }}>
+              {loadingEnr
+                ? [1,2].map((i) => (
+                    <div key={i} style={{ padding:"10px 14px", borderRadius:12, border:"1px solid #f5eaea" }}>
+                      <Sk w="80%" h={14} /><div style={{ marginTop:6 }}><Sk w="50%" h={11} /></div>
                     </div>
-                  </button>
-                ))
-            }
-          </div>
-        </div>
-      )}
+                  ))
+                : enrollments.length === 0
+                  ? <div style={{ fontSize:13, color:"#b09090", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>
+                      {tab === "entry" ? "No active enrollments found." : "No enrollments found."}
+                    </div>
+                  : enrollments.map((en) => (
+                      <EnrollmentChip
+                        key={en.enrollment_id}
+                        en={en}
+                        onClick={() => { setEnrollment(en); setSubject(null); setComputation(null); }}
+                      />
+                    ))
+              }
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Entry: period (step 4) */}
-      {tab === "entry" && subject && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ padding:"10px 14px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:20, height:20, borderRadius:"50%", background:"#e03131", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:"white", flexShrink:0 }}>4</div>
-            <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Grading Period</span>
-          </div>
-          <div style={{ padding:"10px 14px", display:"flex", flexWrap:"wrap", gap:6 }}>
-            {periods.map((p) => (
-              <button key={p} className={`period-chip${gradingPeriod===p?" active":""}`}
-                onClick={() => { setGradingPeriod(p); setComputation(null); }}>
-                {PERIOD_LABELS[p]}
-              </button>
+      {/* Summary: mini stat cards */}
+      <AnimatePresence>
+        {tab === "summary" && enrollment && !loadingSum && sumGrades.length > 0 && (
+          <motion.div
+            key="sum-stats"
+            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
+            transition={{ duration:0.2, ease:"easeOut" }}
+            style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}
+          >
+            {[
+              { label:"Recorded", value:gradeCount,                   color:"#e03131", bg:"#fff0f0", icon:"ti-clipboard-check" },
+              { label:"Passed",   value:passedCount,                  color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-circle-check"   },
+              { label:"Failed",   value:failedCount,                  color:"#9b2020", bg:"#fde8e8", icon:"ti-circle-x"       },
+              { label:"Average",  value:overallAvg?.toFixed(2) ?? "—", color:"#1455a0", bg:"#e3f0fd", icon:"ti-chart-bar"     },
+            ].map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
+                transition={{ duration:0.18, ease:"easeOut", delay: i * 0.05 }}
+                whileHover={{ y:-2, boxShadow:"0 6px 18px rgba(224,49,49,0.10)" }}
+                style={{ background:"white", borderRadius:12, border:"1px solid #f5eaea", padding:"12px 14px", display:"flex", alignItems:"center", gap:10, boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}
+              >
+                <div style={{ width:32, height:32, borderRadius:8, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <i className={`ti ${s.icon}`} style={{ fontSize:15, color:s.color }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>
+                  <div style={{ fontSize:10, color:"#a07878", marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:500 }}>{s.label}</div>
+                </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Entry: subject picker (step 3) */}
+      <AnimatePresence>
+        {tab === "entry" && enrollment && (
+          <motion.div
+            key="subjects"
+            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
+            transition={{ duration:0.2, ease:"easeOut" }}
+            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+          >
+            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <i className="ti ti-book" style={{ fontSize:14, color:"#e03131" }} />
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select Subject</span>
+            </div>
+            <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:6, maxHeight:240, overflowY:"auto" }}>
+              {entSubjects.length === 0
+                ? <div style={{ fontSize:13, color:"#b09090", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>No subjects for this level.</div>
+                : entSubjects.map((sub) => {
+                    const active = subject?.subject_id === sub.subject_id;
+                    const hasTpl = Boolean(sub.grading_template_detail);
+                    return (
+                      <motion.button
+                        key={sub.subject_id}
+                        onClick={() => { setSubject(sub); setComputation(null); }}
+                        whileHover={{ backgroundColor: active ? "#fff0f0" : "#fff8f6" }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.12 }}
+                        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`, background: active ? "#fff0f0" : "white", cursor:"pointer", textAlign:"left", fontFamily:"'DM Sans',sans-serif", transition:"border-color 0.14s" }}
+                      >
+                        <div style={{ width:34, height:34, borderRadius:9, background: active ? "#fde8e8" : "#f5f0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          <i className="ti ti-book" style={{ fontSize:15, color: active ? "#e03131" : "#9a7070" }} />
+                        </div>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          <div style={{ fontSize:13, fontWeight:700, color: active ? "#e03131" : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub.subject_name}</div>
+                          <div style={{ fontSize:11, color:"#b09090", marginTop:2, display:"flex", alignItems:"center", gap:5 }}>
+                            <span style={{ fontFamily:"monospace" }}>{sub.subject_code}</span>
+                            {hasTpl
+                              ? <span style={{ color:"#2e6b0d", fontSize:10, fontWeight:600 }}>· {sub.grading_template_detail.template_name}</span>
+                              : <span style={{ color:"#c0a0a0", fontSize:10, fontStyle:"italic" }}>· No template</span>
+                            }
+                          </div>
+                        </div>
+                      </motion.button>
+                    );
+                  })
+              }
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Entry: grading period (step 4) */}
+      <AnimatePresence>
+        {tab === "entry" && subject && (
+          <motion.div
+            key="periods"
+            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
+            transition={{ duration:0.2, ease:"easeOut" }}
+            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+          >
+            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <i className="ti ti-calendar-event" style={{ fontSize:14, color:"#e03131" }} />
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Grading Period</span>
+            </div>
+            <div style={{ padding:"14px 18px", display:"flex", flexWrap:"wrap", gap:8 }}>
+              {periods.map((p) => {
+                const active = gradingPeriod === p;
+                return (
+                  <motion.button
+                    key={p}
+                    initial={false}
+                    animate={{ backgroundColor: active ? "#e3f0fd" : "#ffffff", color: active ? "#1455a0" : "#9a7070", borderColor: active ? "#1455a0" : "#f0e4e4" }}
+                    transition={{ duration:0.16, ease:"easeOut" }}
+                    whileTap={{ scale:0.96 }}
+                    onClick={() => { setGradingPeriod(p); setComputation(null); }}
+                    style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                  >
+                    {PERIOD_LABELS[p]}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 
   // ── Summary right panel ───────────────────────────────────────────────────
   const summaryPanel = !student ? (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2, ease:"easeOut" }}
+      style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
       <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
         <i className="ti ti-table" style={{ fontSize:28, color:"#e08080" }} />
       </div>
       <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>No student selected</div>
       <div style={{ fontSize:13, color:"#b09090", marginTop:6 }}>Search for a student on the left to view their grade report.</div>
-    </div>
+    </motion.div>
   ) : !enrollment ? (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2, ease:"easeOut" }}
+      style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
       <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
         <i className="ti ti-clipboard-list" style={{ fontSize:28, color:"#e08080" }} />
       </div>
       <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>Select a school year</div>
       <div style={{ fontSize:13, color:"#b09090", marginTop:6 }}>Pick an enrollment from the left to see the grade table.</div>
-    </div>
+    </motion.div>
   ) : (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+    <motion.div
+      key={enrollment.enrollment_id}
+      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+      transition={{ duration:0.22, ease:"easeOut" }}
+      style={{ display:"flex", flexDirection:"column", gap:14 }}
+    >
       <SummaryTable enrollment={enrollment} grades={sumGrades} subjects={sumSubjects} loading={loadingSum} />
 
       {!loadingSum && sumGrades.length === 0 && (
-        <div style={{ background:"#fef3e2", border:"1px solid #f6c96a", borderRadius:16, padding:"24px 28px", display:"flex", alignItems:"flex-start", gap:14, animation:"fadeUp 0.2s ease both" }}>
+        <motion.div initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.18 }}
+          style={{ background:"#fef3e2", border:"1px solid #f6c96a", borderRadius:16, padding:"24px 28px", display:"flex", alignItems:"flex-start", gap:14 }}>
           <i className="ti ti-alert-triangle" style={{ fontSize:22, color:"#854f0b", flexShrink:0, marginTop:2 }} />
           <div>
             <div style={{ fontSize:14, fontWeight:700, color:"#854f0b" }}>No grades recorded yet</div>
             <div style={{ fontSize:13, color:"#7a4a08", marginTop:4, lineHeight:1.6 }}>Use the Grade Entry tab to start recording scores.</div>
-            <button onClick={() => setTab("entry")}
+            <motion.button
+              onClick={() => setTab("entry")}
+              whileHover={{ opacity:0.88 }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
               style={{ marginTop:12, display:"inline-flex", alignItems:"center", gap:6, background:"#854f0b", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
               <i className="ti ti-pencil" style={{ fontSize:12 }} />Go to Grade Entry
-            </button>
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {!loadingSum && sumGrades.length > 0 && (
@@ -1442,7 +1538,7 @@ export default function GradesPage() {
           }}
         />
       )}
-    </div>
+    </motion.div>
   );
 
   // ── Entry right panel ─────────────────────────────────────────────────────
@@ -1474,52 +1570,102 @@ export default function GradesPage() {
     </div>
   ) : (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Notifications */}
-      {entryError && (
-        <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
-          <i className="ti ti-alert-circle" style={{ fontSize:15 }} />{entryError}
-          <button onClick={() => setEntryError("")} style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#b91c1c" }}><i className="ti ti-x" style={{ fontSize:13 }} /></button>
-        </div>
-      )}
-      {savedMsg && (
-        <div style={{ background:"#e8f5e0", border:"1px solid #a3d977", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#2e6b0d", display:"flex", alignItems:"center", gap:8 }}>
-          <i className="ti ti-circle-check" style={{ fontSize:15 }} />{savedMsg}
-        </div>
-      )}
 
-      {/* Subject header */}
-      <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"18px 22px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
-        <div>
-          <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a"}}>{subject.subject_name}</div>
-          <div style={{ fontSize:12, color:"#b09090", marginTop:3 }}>{subject.subject_code} · {template.template_name} · {PERIOD_LABELS[gradingPeriod]}</div>
-        </div>
-        {existingGrade && (
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:11, color:"#b09090" }}>Saved grade:</span>
-            <span style={{ fontSize:18, fontWeight:700, padding:"4px 14px", borderRadius:99, ...gradeColor(existingGrade.numeric_grade) }}>
-              {parseFloat(existingGrade.numeric_grade).toFixed(2)}
-            </span>
+      {/* ── Subject header card — mirrors SummaryTable header ── */}
+      <motion.div
+        initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+        transition={{ duration:0.22, ease:"easeOut" }}
+        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
+      >
+        <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
+        <div style={{ padding:"18px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, background:"linear-gradient(to right,#fdfafa,white)" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>{subject.subject_name}</div>
+            <div style={{ fontSize:12, color:"#b09090", marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <span style={{ fontFamily:"monospace", background:"#f5f0f0", padding:"1px 7px", borderRadius:5, fontSize:11 }}>{subject.subject_code}</span>
+              <span>·</span>
+              <span>{template.template_name}</span>
+              <span>·</span>
+              <span style={{ fontWeight:600, color:"#1455a0" }}>{PERIOD_LABELS[gradingPeriod]}</span>
+            </div>
           </div>
+          {existingGrade && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:11, color:"#b09090", marginBottom:4, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>Saved Grade</div>
+              <div style={{ fontSize:28, fontWeight:700, padding:"5px 18px", borderRadius:12, lineHeight:1, ...gradeColor(existingGrade.numeric_grade) }}>
+                {parseFloat(existingGrade.numeric_grade).toFixed(2)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mini stat cards inside header — scores entered, components, weight total */}
+        <div style={{ padding:"14px 22px", display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+          {[
+            { label:"Scores Entered",  value: scoreEntries.length,      color:"#e03131", bg:"#fff0f0", icon:"ti-list-numbers"   },
+            { label:"Components",      value: components.length,         color:"#1455a0", bg:"#e3f0fd", icon:"ti-layout-columns" },
+            { label:"Template Weight", value: template.total_weight != null ? `${template.total_weight}%` : "—", color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-percentage" },
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
+              transition={{ duration:0.18, ease:"easeOut", delay: i * 0.05 }}
+              style={{ background:"#fdfafa", borderRadius:10, border:"1px solid #f5eaea", padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}
+            >
+              <div style={{ width:28, height:28, borderRadius:7, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <i className={`ti ${s.icon}`} style={{ fontSize:13, color:s.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{loadingScores ? "—" : s.value}</div>
+                <div style={{ fontSize:9.5, color:"#a07878", marginTop:2, textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:500 }}>{s.label}</div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Notifications */}
+      <AnimatePresence>
+        {entryError && (
+          <motion.div key="err" initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
+            style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
+            <i className="ti ti-alert-circle" style={{ fontSize:15 }} />{entryError}
+            <button onClick={() => setEntryError("")} style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#b91c1c" }}><i className="ti ti-x" style={{ fontSize:13 }} /></button>
+          </motion.div>
         )}
-      </div>
+        {savedMsg && (
+          <motion.div key="ok" initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
+            style={{ background:"#e8f5e0", border:"1px solid #a3d977", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#2e6b0d", display:"flex", alignItems:"center", gap:8 }}>
+            <i className="ti ti-circle-check" style={{ fontSize:15 }} />{savedMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Grading components */}
       {loadingScores ? (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {[1,2,3].map((i) => <div key={i} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px" }}><Sk w="40%" h={16} /><div style={{ marginTop:12 }}><Sk w="100%" h={40} /></div></div>)}
+          {[1,2,3].map((i) => (
+            <div key={i} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px" }}>
+              <Sk w="40%" h={16} /><div style={{ marginTop:12 }}><Sk w="100%" h={40} /></div>
+            </div>
+          ))}
         </div>
       ) : (
         components.map((comp, ci) => {
-          const color   = COMPONENT_COLORS[ci % COMPONENT_COLORS.length];
-          const entries = scoresByComponent[comp.grading_component_id] ?? [];
-          const avgPct  = entries.length > 0 ? entries.reduce((s, e) => s + (e.score / e.max_score) * 100, 0) / entries.length : null;
+          const color    = COMPONENT_COLORS[ci % COMPONENT_COLORS.length];
+          const entries  = scoresByComponent[comp.grading_component_id] ?? [];
+          const avgPct   = entries.length > 0 ? entries.reduce((s, e) => s + (e.score / e.max_score) * 100, 0) / entries.length : null;
           const weighted = avgPct !== null ? (avgPct * comp.weight) / 100 : null;
-
           return (
-            <div key={comp.grading_component_id} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:`fadeUp 0.2s ease ${ci*60}ms both` }}>
+            <motion.div
+              key={comp.grading_component_id}
+              initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+              transition={{ duration:0.22, ease:"easeOut", delay: ci * 0.06 }}
+              style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+            >
               <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background:color }} />
+                  <div style={{ width:10, height:10, borderRadius:"50%", background:color, flexShrink:0 }} />
                   <span style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{comp.component_name}</span>
                   <span style={{ fontSize:11, color:"#b09090", background:"#f9f4f4", padding:"2px 8px", borderRadius:6 }}>{comp.weight}% weight</span>
                   <span style={{ fontSize:11, color:"#b09090" }}>{entries.length} score{entries.length !== 1 ? "s" : ""}</span>
@@ -1550,15 +1696,19 @@ export default function GradesPage() {
                   <span style={{ fontSize:13, fontWeight:700, ...gradeColor(avgPct), padding:"2px 10px", borderRadius:6 }}>{avgPct.toFixed(2)}%</span>
                 </div>
               )}
-            </div>
+            </motion.div>
           );
         })
       )}
 
       {/* Compute & save */}
       {!loadingScores && scoreEntries.length > 0 && (
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", animation:"fadeUp 0.2s ease both" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:14 }}>
+        <motion.div
+          initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+          transition={{ duration:0.22, ease:"easeOut" }}
+          style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+        >
+          <div style={{ padding:"16px 22px", borderBottom: computation ? "1px solid #f5eaea" : "none", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:14, background:"linear-gradient(to right,#fdfafa,white)" }}>
             <div>
               <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>Final Grade</div>
               <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>Compute weighted grade from all scores above</div>
@@ -1572,25 +1722,33 @@ export default function GradesPage() {
                   </span>
                 </div>
               )}
-              <button onClick={handleCompute} disabled={computing}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:computing?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s" }}
-                onMouseEnter={(e) => { if(!computing){ e.currentTarget.style.background="#fff0f0"; }}}
-                onMouseLeave={(e) => { e.currentTarget.style.background="white"; }}>
+              <motion.button
+                onClick={handleCompute} disabled={computing}
+                whileHover={!computing ? { backgroundColor:"#fff0f0" } : {}}
+                whileTap={!computing ? { scale:0.97 } : {}}
+                transition={{ duration:0.12 }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:computing?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif" }}
+              >
                 {computing ? <i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-calculator" style={{ fontSize:14 }} />}
                 {computing ? "Computing…" : "Compute"}
-              </button>
+              </motion.button>
               {computation && (
-                <button onClick={handleSaveFinal} disabled={savingFinal}
-                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:savingFinal?"#e87474":"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:savingFinal?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)", transition:"all 0.14s" }}>
+                <motion.button
+                  onClick={handleSaveFinal} disabled={savingFinal}
+                  whileHover={!savingFinal ? { opacity:0.88 } : {}}
+                  whileTap={!savingFinal ? { scale:0.97 } : {}}
+                  transition={{ duration:0.12 }}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:savingFinal?"#e87474":"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:savingFinal?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
+                >
                   {savingFinal ? <i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-device-floppy" style={{ fontSize:14 }} />}
                   {savingFinal ? "Saving…" : existingGrade ? "Update Grade" : "Save Grade"}
-                </button>
+                </motion.button>
               )}
             </div>
           </div>
 
           {computation && (
-            <div style={{ marginTop:16, borderTop:"1px solid #f5eaea", paddingTop:14 }}>
+            <div style={{ padding:"16px 22px" }}>
               <div style={{ fontSize:11, color:"#b09090", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:10 }}>Grade Breakdown</div>
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {computation.components.map((comp, i) => (
@@ -1609,7 +1767,7 @@ export default function GradesPage() {
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
     </div>
   );
@@ -1665,7 +1823,13 @@ export default function GradesPage() {
         </div>
 
         {tab === "overview" ? (
-          <OverviewTab />
+          <OverviewTab onNavigate={(targetTab, studentObj, enrollmentObj) => {
+            setStudent(studentObj);
+            setEnrollment(enrollmentObj);
+            setSubject(null);
+            setComputation(null);
+            setTab(targetTab);
+          }} />
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"300px 1fr", gap:16, alignItems:"start" }}>
             {leftPanel}
