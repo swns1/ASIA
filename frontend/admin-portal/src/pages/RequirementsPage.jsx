@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { getStudents } from "../api/studentApi";
 import {
@@ -25,6 +26,20 @@ const C = {
   bg: "#fdf8f6", white: "#ffffff",
 };
 
+// ── Avatar palette ────────────────────────────────────────────────────────────
+const AVATAR_PALETTES = [
+  { bg: "#fde8e8", color: "#c0392b" },
+  { bg: "#e8f0fd", color: "#2563eb" },
+  { bg: "#e8fdf0", color: "#16a34a" },
+  { bg: "#fdf5e8", color: "#d97706" },
+  { bg: "#f0e8fd", color: "#7c3aed" },
+  { bg: "#fde8f8", color: "#be185d" },
+  { bg: "#e8fdfd", color: "#0891b2" },
+];
+function getAvatarPalette(name = "X") {
+  return AVATAR_PALETTES[name.charCodeAt(0) % AVATAR_PALETTES.length];
+}
+
 // ── Requirement-type icon map ─────────────────────────────────────────────────
 const REQ_ICONS = {
   birth_certificate:           "ti-certificate",
@@ -43,6 +58,25 @@ const REQ_ICONS = {
 };
 
 function reqIcon(code) { return REQ_ICONS[code] || "ti-file"; }
+
+// ── Filter constants ──────────────────────────────────────────────────────────
+const SCHOOL_LEVELS = [
+  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#e03131" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#c27a12" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          bg: "#f0e8fd", color: "#7c3aed" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          bg: "#e8f0fd", color: "#2563eb" },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#16a34a" },
+  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   bg: "#fde8f8", color: "#be185d" },
+];
+
+const GRADE_LEVELS_BY_LEVEL = {
+  "":                ["All Grades"],
+  nursery:           ["All Grades", "Nursery"],
+  kindergarten:      ["All Grades", "Kindergarten"],
+  elementary:        ["All Grades", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
+  junior_highschool: ["All Grades", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
+  senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
+};
 
 function isImageUrl(url) {
   if (!url) return false;
@@ -339,6 +373,16 @@ export default function RequirementsPage() {
   const currentUser = getCurrentUser();
   const isAdmin = canViewAuditTrail(currentUser);
 
+  // Filter state
+  const [levelFilter, setLevelFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const gradeOptions = GRADE_LEVELS_BY_LEVEL[levelFilter] ?? ["All Grades"];
+
+  // Reset grade when level changes
+  useEffect(() => { setGradeFilter(""); }, [levelFilter]);
+
+  const hasFilters = levelFilter || gradeFilter;
+
   // Search state
   const [searchInput,   setSearchInput]   = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -367,14 +411,17 @@ export default function RequirementsPage() {
     if (!sessionStorage.getItem("access_token")) navigate("/");
   }, [navigate]);
 
-  // Load recently enrolled students on mount
+  // Load recent students — re-fetches when filters change
   useEffect(() => {
     setRecentStudentsLoading(true);
-    getStudents({ ordering: "-created_at", page: 1 })
+    const params = { ordering: "-created_at", page: 1 };
+    if (levelFilter) params.school_level = levelFilter;
+    if (gradeFilter) params.grade_level  = gradeFilter;
+    getStudents(params)
       .then((data) => setRecentStudents(Array.isArray(data) ? data.slice(0, 10) : (data?.results ?? []).slice(0, 10)))
       .catch(() => {})
       .finally(() => setRecentStudentsLoading(false));
-  }, []);
+  }, [levelFilter, gradeFilter]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -501,31 +548,41 @@ export default function RequirementsPage() {
 
           <div style={s.content}>
 
-            {/* ── Student search ── */}
-            <section style={{ ...s.panel, position: "relative", zIndex: 100 }}>
-              <div style={{ padding: "18px 22px" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12}}>
-                  <i className="ti ti-search" style={{ fontSize: 15, color: C.red, marginRight: 8 }} />Search Student
-                  <span style={{ fontSize: 11, fontWeight: 400, color: C.pale, marginLeft: 8 }}>or select from the list below</span>
-                </div>
-
-                {/* Search input — live debounced, no form submit needed */}
-                <div style={{ position: "relative" }} ref={searchRef}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: `1.5px solid #f0ceca`, borderRadius: 10, padding: "0 14px", height: 44 }}>
-                    <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
+            {/* ── Filter + Search panel ── */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.26, ease: "easeOut" }}
+              style={{
+                background: "white", border: `1px solid ${C.border}`,
+                borderRadius: 14, padding: "18px 20px",
+                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
+                display: "flex", flexDirection: "column", gap: 0,
+                position: "relative", zIndex: 100,
+              }}
+            >
+              {/* Search row */}
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <div style={{ flex: 1, position: "relative" }} ref={searchRef}>
+                  <div
+                    className="search-wrap"
+                    style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border .15s, box-shadow .15s" }}
+                  >
+                    <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
                     <input
                       value={searchInput}
                       onChange={(e) => {
                         setSearchInput(e.target.value);
                         if (!e.target.value) { setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }
                       }}
-                      placeholder="Type name, LRN, or student number…"
+                      placeholder="Search student name, LRN, or student number…"
                       style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", color: C.text }}
                     />
                     {searchInput && (
                       <button
                         onClick={() => { setSearchInput(""); setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2 }}>
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
+                      >
                         <i className="ti ti-x" style={{ fontSize: 13 }} />
                       </button>
                     )}
@@ -543,12 +600,14 @@ export default function RequirementsPage() {
                       {!searchLoading && searchResults.length === 0 && (
                         <div style={{ padding: "14px 16px", color: C.pale, fontSize: 13 }}>No students found.</div>
                       )}
-                      {!searchLoading && searchResults.map((st) => (
+                      {!searchLoading && searchResults.map((st) => {
+                        const ap = getAvatarPalette(st.last_name ?? "X");
+                        return (
                         <div key={st.student_id}
                           className="dropdown-item"
                           onClick={() => selectStudent(st)}
                           style={{ padding: "11px 16px", cursor: "pointer", borderBottom: `1px solid ${C.softBorder}`, display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red, flexShrink: 0 }}>
+                          <div style={{ width: 34, height: 34, borderRadius: "50%", background: ap.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: ap.color, flexShrink: 0 }}>
                             {st.first_name?.[0]}{st.last_name?.[0]}
                           </div>
                           <div>
@@ -558,18 +617,118 @@ export default function RequirementsPage() {
                             <div style={{ fontSize: 11, color: C.pale }}>LRN: {st.lrn} · {st.student_number}</div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+
+                <AnimatePresence>
+                  {hasFilters && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.88 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.88 }}
+                      transition={{ duration: 0.14 }}
+                      whileTap={{ scale: 0.93 }}
+                      onClick={() => { setLevelFilter(""); setGradeFilter(""); }}
+                      style={{ height: 42, padding: "0 14px", background: "white", border: "1.5px solid #fca5a5", borderRadius: 12, fontSize: 12, fontWeight: 600, color: "#b91c1c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}
+                    >
+                      <i className="ti ti-filter-off" style={{ fontSize: 13 }} />Clear
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
-            </section>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
+
+              {/* Chip rows */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+                {/* School Level chips */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
+                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {SCHOOL_LEVELS.map((lvl) => {
+                      const active = levelFilter === lvl.value;
+                      return (
+                        <motion.button
+                          key={lvl.value}
+                          layout
+                          initial={false}
+                          animate={{
+                            backgroundColor: active ? lvl.bg    : "#ffffff",
+                            color:           active ? lvl.color : "#9a7070",
+                            borderColor:     active ? lvl.color : "#f0e4e4",
+                          }}
+                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                          onClick={() => setLevelFilter(lvl.value)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                        >
+                          <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
+                          {lvl.label}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                </div>
+
+                {/* Grade Level chips — CSS max-height cascade */}
+                <div style={{
+                  maxHeight: levelFilter !== "" ? 200 : 0,
+                  overflow: "hidden",
+                  opacity: levelFilter !== "" ? 1 : 0,
+                  marginTop: levelFilter !== "" ? 0 : -12,
+                  transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
+                  pointerEvents: levelFilter !== "" ? "auto" : "none",
+                }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
+                    <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      {gradeOptions.map((g, idx) => {
+                        const val = g === "All Grades" ? "" : g;
+                        const active = gradeFilter === val;
+                        return (
+                          <motion.button
+                            key={`${levelFilter}-${g}`}
+                            layout
+                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                            animate={{
+                              opacity: 1, y: 0,
+                              backgroundColor: active ? "#fff0f0" : "#ffffff",
+                              color:           active ? "#e03131" : "#9a7070",
+                              borderColor:     active ? "#e03131" : "#f0e4e4",
+                            }}
+                            transition={{
+                              opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                              y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                              backgroundColor: { duration: 0.18, ease: "easeOut" },
+                              color:           { duration: 0.18, ease: "easeOut" },
+                              borderColor:     { duration: 0.18, ease: "easeOut" },
+                              layout:          { type: "spring", stiffness: 400, damping: 36 },
+                            }}
+                            onClick={() => setGradeFilter(val)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                          >
+                            {g}
+                          </motion.button>
+                        );
+                      })}
+                    </motion.div>
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
 
             {/* ── Selected student stats ── */}
-            {selectedStudent && (
+            {selectedStudent && (() => {
+              const selAp = getAvatarPalette(selectedStudent.last_name ?? "X");
+              return (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
                 <div style={{ ...s.statCard, flexDirection: "row", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: `linear-gradient(135deg,${C.redLight},${C.redBorder})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: C.red, flexShrink: 0 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: selAp.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: selAp.color, flexShrink: 0 }}>
                     {selectedStudent.first_name?.[0]}{selectedStudent.last_name?.[0]}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -590,7 +749,8 @@ export default function RequirementsPage() {
                 <StatCard label="Submitted"          value={submitted}           icon="ti-circle-check" color={C.green} loading={reqLoading} />
                 <StatCard label="Pending"            value={pending}             icon="ti-clock"        loading={reqLoading} />
               </div>
-            )}
+              );
+            })()}
 
             {/* ── Document completeness bar ── */}
             {selectedStudent && !reqLoading && requirements.length > 0 && (
@@ -739,14 +899,16 @@ export default function RequirementsPage() {
                       No students found.
                     </div>
                   ) : (
-                    recentStudents.map((st) => (
+                    recentStudents.map((st) => {
+                      const rap = getAvatarPalette(st.last_name ?? "X");
+                      return (
                       <div
                         key={st.student_id}
                         className="dropdown-item"
                         onClick={() => selectStudent(st)}
                         style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.softBorder}`, cursor: "pointer", transition: "background 0.12s" }}
                       >
-                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg,${C.redLight},${C.redBorder})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red, flexShrink: 0 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: rap.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: rap.color, flexShrink: 0 }}>
                           {st.first_name?.[0]}{st.last_name?.[0]}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -757,7 +919,8 @@ export default function RequirementsPage() {
                         </div>
                         <i className="ti ti-chevron-right" style={{ fontSize: 13, color: C.pale, flexShrink: 0 }} />
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </section>
@@ -804,6 +967,7 @@ const baseCss = `
   .req-card:hover { box-shadow:0 4px 20px rgba(224,49,49,0.10) !important; transform:translateY(-1px); }
   .dropdown-item:hover { background:#fff8f6; }
   .dropdown-item:last-child { border-bottom:none !important; }
+  .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
 `;
 
 const s = {
