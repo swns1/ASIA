@@ -351,7 +351,7 @@ class UserDetailView(APIView):
 class AuditLogPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
-    max_page_size = 500
+    max_page_size = 10000
 
 
 class AuditLogListView(APIView):

@@ -1,120 +1,93 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs } from "../api/auditTrailApi";
+import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
-
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const C = {
-  red: "#e03131",
-  redDark: "#c92a2a",
-  redLight: "#fff0f0",
-  redBorder: "#fca5a5",
-  border: "#f5eaea",
-  softBorder: "#f9f0f0",
-  text: "#1a0a0a",
-  muted: "#7a5050",
-  pale: "#b09090",
-  bg: "#fdf8f6",
-  white: "#ffffff",
+  red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
+  border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
+  muted: "#7a5050", pale: "#b09090", micro: "#c0a0a0", bg: "#fdf8f6", white: "#ffffff",
 };
 
-const statusMeta = {
-  success: { label: "Success", bg: "#e8f5e0", color: "#2e6b0d", icon: "ti-circle-check" },
-  failed:  { label: "Failed",  bg: "#fde8e8", color: "#9b2020", icon: "ti-circle-x" },
-  warning: { label: "Warning", bg: "#fef3e2", color: "#7a4a08", icon: "ti-alert-triangle" },
-  pending: { label: "Pending", bg: "#e3f0fd", color: "#1455a0", icon: "ti-clock" },
+const baseCss = `
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @keyframes spin    { to{transform:rotate(360deg)} }
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
+`;
+
+const STATUS_META = {
+  success: { label: "Success", bg: "#e8f5e0", color: "#2e6b0d", border: "#86efac", icon: "ti-circle-check" },
+  failed:  { label: "Failed",  bg: "#fde8e8", color: "#9b2020", border: "#fca5a5", icon: "ti-circle-x"    },
+  warning: { label: "Warning", bg: "#fef3e2", color: "#7a4a08", border: "#fcd34d", icon: "ti-alert-triangle" },
+  pending: { label: "Pending", bg: "#e3f0fd", color: "#1455a0", border: "#93c5fd", icon: "ti-clock"       },
 };
+
+const STAT_DEFS = [
+  { key: "total",   label: "Total Logs",      icon: "ti-list-details", color: C.red,     bg: C.redLight },
+  { key: "visible", label: "Visible Records",  icon: "ti-filter-check", color: "#1455a0", bg: "#e3f0fd"  },
+  { key: "failed",  label: "Failed Actions",   icon: "ti-circle-x",     color: "#9b2020", bg: "#fde8e8"  },
+  { key: "invalid", label: "Invalid Dates",    icon: "ti-calendar-x",   color: "#7a4a08", bg: "#fef3e2"  },
+];
+
+// ── Data helpers ──────────────────────────────────────────────────────────────
 
 function normalizeRole(role) {
-  return String(role || "unknown").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  return String(role || "unknown").replaceAll("_", " ").replace(/\b\w/g, m => m.toUpperCase());
 }
 
 const legacyDetailSubjects = {
-  "students": "student record",
-  "households": "household record",
-  "guardians": "guardian record",
-  "student_siblings": "student sibling record",
-  "siblings": "sibling record",
-  "previous_schools": "previous school record",
-  "requirement_types": "requirement type",
-  "student_requirement_submissions": "student requirement submission",
-  "enrollments": "enrollment record",
-  "subjects": "subject",
-  "grades": "grade record",
-  "grading-templates": "grading template",
-  "grading-components": "grading component",
-  "score-entries": "score entry",
-  "scholarship-types": "scholarship type",
-  "enrollment-scholarships": "scholarship award",
-  "school-settings": "school settings",
-  "fee-schedules": "fee schedule",
-  "fee-schedule-items": "fee schedule item",
-  "discount-types": "discount type",
-  "invoices": "invoice",
-  "payments": "payment",
+  "students": "student record", "households": "household record", "guardians": "guardian record",
+  "student_siblings": "student sibling record", "siblings": "sibling record",
+  "previous_schools": "previous school record", "requirement_types": "requirement type",
+  "student_requirement_submissions": "student requirement submission", "enrollments": "enrollment record",
+  "subjects": "subject", "grades": "grade record", "grading-templates": "grading template",
+  "grading-components": "grading component", "score-entries": "score entry",
+  "scholarship-types": "scholarship type", "enrollment-scholarships": "scholarship award",
+  "school-settings": "school settings", "fee-schedules": "fee schedule",
+  "fee-schedule-items": "fee schedule item", "discount-types": "discount type",
+  "invoices": "invoice", "payments": "payment",
 };
 
 const moduleSubjects = {
-  Students: "student record",
-  Households: "household record",
-  Guardians: "guardian record",
-  "Student Siblings": "student sibling record",
-  Siblings: "sibling record",
-  "Previous Schools": "previous school record",
-  Requirements: "requirement record",
-  Enrollments: "enrollment record",
-  Subjects: "subject",
-  Grades: "grade record",
-  Scholarships: "scholarship award",
-  "Scholarship Types": "scholarship type",
-  "School Settings": "school settings",
-  "Fee Schedules": "fee schedule",
-  "Fee Schedule Items": "fee schedule item",
-  "Discount Types": "discount type",
-  Invoices: "invoice",
-  Payments: "payment",
+  Students: "student record", Households: "household record", Guardians: "guardian record",
+  "Student Siblings": "student sibling record", Siblings: "sibling record",
+  "Previous Schools": "previous school record", Requirements: "requirement record",
+  Enrollments: "enrollment record", Subjects: "subject", Grades: "grade record",
+  Scholarships: "scholarship award", "Scholarship Types": "scholarship type",
+  "School Settings": "school settings", "Fee Schedules": "fee schedule",
+  "Fee Schedule Items": "fee schedule item", "Discount Types": "discount type",
+  Invoices: "invoice", Payments: "payment",
 };
 
 const legacyMethodWords = {
-  POST: ["Created", "created", "create"],
-  PUT: ["Updated", "updated", "update"],
-  PATCH: ["Updated", "updated", "update"],
+  POST:   ["Created", "created", "create"],
+  PUT:    ["Updated", "updated", "update"],
+  PATCH:  ["Updated", "updated", "update"],
   DELETE: ["Deleted", "deleted", "delete"],
 };
 
-function sentenceCase(value) {
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
-}
+function sentenceCase(v) { return v ? v.charAt(0).toUpperCase() + v.slice(1) : v; }
 
 function parseTechnicalDetail(value, metadata = {}) {
   const detail = String(value || "").trim();
-  const metadataPath = metadata?.path;
-  const metadataMethod = metadata?.method;
-  const metadataStatus = metadata?.status_code;
+  const { path: metadataPath, method: metadataMethod, status_code: metadataStatus } = metadata;
 
   if (metadataPath && metadataMethod && metadataStatus !== undefined) {
     const parts = String(metadataPath).split("/").filter(Boolean);
     const key = parts[0] === "api" ? parts[1] : parts[0];
-    return {
-      method: String(metadataMethod).toUpperCase(),
-      key: key || "system",
-      path: String(metadataPath),
-      success: Number(metadataStatus) < 400,
-    };
+    return { method: String(metadataMethod).toUpperCase(), key: key || "system", path: String(metadataPath), success: Number(metadataStatus) < 400 };
   }
 
   const match = detail.match(/^([A-Z]+)\s+(\/api\/[^\s]+)\s+returned HTTP\s+(\d+)\.?$/i);
   if (!match) return null;
-
   const parts = match[2].split("/").filter(Boolean);
-  return {
-    method: match[1].toUpperCase(),
-    key: parts[0] === "api" ? parts[1] : parts[0],
-    path: match[2],
-    success: Number(match[3]) < 400,
-  };
+  return { method: match[1].toUpperCase(), key: parts[0] === "api" ? parts[1] : parts[0], path: match[2], success: Number(match[3]) < 400 };
 }
 
 function actionFromTechnicalInfo(info) {
@@ -124,48 +97,30 @@ function actionFromTechnicalInfo(info) {
   if (info.key === "enrollment-scholarships" && info.method === "POST") return "Awarded scholarship";
   if (info.key === "invoices" && info.path.includes("/generate")) return "Generated invoice";
   if (info.key === "students" && info.path.includes("/bulk-create")) return "Saved student information";
-
-  const [titleVerb] = legacyMethodWords[info.method] || ["Changed", "changed", "change"];
+  const [titleVerb] = legacyMethodWords[info.method] || ["Changed"];
   const subject = legacyDetailSubjects[info.key] || `${info.key.replaceAll("-", " ").replaceAll("_", " ")} record`;
   return `${titleVerb} ${subject}`;
 }
 
 function detailsFromTechnicalInfo(info) {
-  if (info.key === "payments" && info.method === "POST") {
-    return info.success ? "Payment was recorded successfully." : "Payment could not be recorded. Please review the payment details.";
-  }
-  if (info.key === "score-entries" && info.method === "POST") {
-    return info.success ? "Score entry was added successfully." : "Score entry could not be added. Please review the grade details.";
-  }
-  if (info.key === "send-enrollment-email" && info.method === "POST") {
-    return info.success ? "Enrollment email was sent successfully." : "Enrollment email could not be sent. Please review the student's email address.";
-  }
-  if (info.key === "enrollment-scholarships" && info.method === "POST") {
-    return info.success ? "Scholarship was awarded successfully." : "Scholarship could not be awarded. Please review the scholarship details.";
-  }
-  if (info.key === "invoices" && info.path.includes("/generate")) {
-    return info.success ? "Invoice was generated successfully." : "Invoice could not be generated. Please review the enrollment and payment plan.";
-  }
-  if (info.key === "students" && info.path.includes("/bulk-create")) {
-    return info.success ? "Student information was saved successfully." : "Student information could not be saved. Please review the student details.";
-  }
-
+  if (info.key === "payments" && info.method === "POST") return info.success ? "Payment was recorded successfully." : "Payment could not be recorded. Please review the payment details.";
+  if (info.key === "score-entries" && info.method === "POST") return info.success ? "Score entry was added successfully." : "Score entry could not be added. Please review the grade details.";
+  if (info.key === "send-enrollment-email" && info.method === "POST") return info.success ? "Enrollment email was sent successfully." : "Enrollment email could not be sent. Please review the student's email address.";
+  if (info.key === "enrollment-scholarships" && info.method === "POST") return info.success ? "Scholarship was awarded successfully." : "Scholarship could not be awarded. Please review the scholarship details.";
+  if (info.key === "invoices" && info.path.includes("/generate")) return info.success ? "Invoice was generated successfully." : "Invoice could not be generated. Please review the enrollment and payment plan.";
+  if (info.key === "students" && info.path.includes("/bulk-create")) return info.success ? "Student information was saved successfully." : "Student information could not be saved. Please review the student details.";
   const [, pastTense, baseVerb] = legacyMethodWords[info.method] || ["Changed", "changed", "change"];
   const subject = legacyDetailSubjects[info.key] || `${info.key.replaceAll("-", " ").replaceAll("_", " ")} record`;
   const beWord = info.key === "school-settings" ? "were" : "was";
-
-  if (info.success) return `${sentenceCase(subject)} ${beWord} ${pastTense} successfully.`;
-  return `${sentenceCase(subject)} could not be ${baseVerb}d. Please review the submitted information.`;
+  return info.success ? `${sentenceCase(subject)} ${beWord} ${pastTense} successfully.` : `${sentenceCase(subject)} could not be ${baseVerb}d. Please review the submitted information.`;
 }
 
 function humanizeAuditAction(value, details, metadata, module) {
   const info = parseTechnicalDetail(details, metadata);
   if (info) return actionFromTechnicalInfo(info);
-
   const action = String(value || "").trim();
   const awkward = action.match(/^(Created|Updated|Deleted|Changed)\s+(.+?)\s+record$/i);
   if (!awkward) return action || "System activity";
-
   const verb = sentenceCase(awkward[1].toLowerCase());
   if (verb === "Created" && module === "Scholarships") return "Awarded scholarship";
   const subject = moduleSubjects[module] || awkward[2].replaceAll("_", " ").replaceAll("-", " ").toLowerCase();
@@ -178,410 +133,582 @@ function humanizeTechnicalDetails(value, metadata = {}) {
   if (!info) return detail;
   return detailsFromTechnicalInfo(info);
 }
+
+const MODULE_NORMALIZE = {
+  // raw backend values → canonical display name
+  "ai": "Analytics", "Ai": "Analytics",
+  "auth": "Authentication", "Auth": "Authentication", "Identity": "Authentication",
+  "ocr": "OCR", "Ocr": "OCR",
+  "enrollments": "Enrollments", "Enrollments": "Enrollments",
+  "Enrollment Email": "Enrollments", "enrollment email": "Enrollments",
+  "grades": "Grades", "Grades": "Grades",
+  "students": "Students", "Students": "Students",
+  "invoices": "Invoices", "Invoices": "Invoices",
+  "payments": "Payments", "Payments": "Payments",
+  "scholarships": "Scholarships", "Scholarships": "Scholarships",
+  "Scholarship Types": "Scholarships",
+  "requirements": "Requirements", "Requirements": "Requirements",
+  "Guardians": "Students", "Households": "Students", "Siblings": "Students",
+  "Previous Schools": "Students", "Student Siblings": "Students",
+  "Grading Templates": "Grades", "Grading Components": "Grades",
+  "Fee Schedules": "Finance", "Fee Schedule Items": "Finance",
+  "Discount Types": "Finance",
+  "Calendar Events": "Academic Calendar",
+  "Subjects": "Subjects", "subjects": "Subjects",
+  "School Settings": "Settings",
+};
+
+function normalizeModule(raw) {
+  return MODULE_NORMALIZE[raw] ?? raw ?? "General";
+}
+
 function normalizeLog(row, index) {
   const date = row.occurred_at ? new Date(row.occurred_at) : null;
   const invalidDate = !date || Number.isNaN(date.getTime());
+  const rawModule = row.module ?? row.section ?? "General";
   return {
     id: row.id ?? row.log_id ?? row.audit_log_id ?? index + 1,
     userName: row.user_name ?? row.user?.name ?? "Unknown user",
     userRole: row.user_role ?? row.user?.role ?? "unknown",
-    action: humanizeAuditAction(row.action, row.details ?? row.remarks ?? "", row.metadata ?? {}, row.module ?? row.section ?? ""),
-    module: row.module ?? row.section ?? "General",
+    action: humanizeAuditAction(row.action, row.details ?? row.remarks ?? "", row.metadata ?? {}, rawModule),
+    module: normalizeModule(rawModule),
     occurredAt: row.occurred_at ?? "",
-    date,
-    invalidDate,
+    date, invalidDate,
     status: String(row.status ?? row.result ?? "success").toLowerCase(),
     details: humanizeTechnicalDetails(row.details ?? row.remarks ?? "", row.metadata ?? {}),
   };
 }
 
-function dateValue(log) {
-  return log.invalidDate ? "" : log.date.toISOString().slice(0, 10);
-}
-
-function timeValue(log) {
-  return log.invalidDate ? "" : log.date.toTimeString().slice(0, 5);
-}
-
+function dateValue(log) { return log.invalidDate ? "" : log.date.toISOString().slice(0, 10); }
+function timeValue(log) { return log.invalidDate ? "" : log.date.toTimeString().slice(0, 5); }
 function formatDate(log) {
   if (log.invalidDate) return "Missing";
   return log.date.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" });
 }
-
 function formatTime(log) {
   if (log.invalidDate) return "Missing";
   return log.date.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 }
-
 function compareValues(a, b, direction) {
   if (a < b) return direction === "asc" ? -1 : 1;
   if (a > b) return direction === "asc" ? 1 : -1;
   return 0;
 }
 
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
+function Sk({ w = "100%", h = 14, r = 6 }) {
+  return (
+    <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
+  );
+}
+
+// ── AnimatedCount ─────────────────────────────────────────────────────────────
+
+function AnimatedCount({ value }) {
+  const mv = useMotionValue(value);
+  const spring = useSpring(mv, { stiffness: 90, damping: 18 });
+  const display = useTransform(spring, v => Math.round(v));
+  const [shown, setShown] = useState(value);
+  useEffect(() => { mv.set(value); }, [value]);
+  useEffect(() => display.on("change", v => setShown(v)), [display]);
+  return <>{shown}</>;
+}
+
+// ── Chip ──────────────────────────────────────────────────────────────────────
+
+function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, delay = 0 }) {
+  return (
+    <motion.button
+      onClick={onClick}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{
+        opacity: 1, y: 0,
+        backgroundColor: active ? activeBg    : C.white,
+        color:           active ? activeColor : "#9a7070",
+        borderColor:     active ? activeBorder : "#f0e4e4",
+      }}
+      transition={{ duration: 0.18, ease: "easeOut", delay }}
+      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+      style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+    >
+      {label}
+    </motion.button>
+  );
+}
+
+// ── Sortable Th ───────────────────────────────────────────────────────────────
+
+function Th({ children, sortable, active, direction, onClick, align = "left" }) {
+  const thStyle = { textAlign: align, fontSize: 10.5, fontWeight: 600, color: C.micro, padding: "12px 18px", borderBottom: `1px solid ${C.border}`, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap", background: C.white };
+  if (!sortable) return <th style={thStyle}>{children}</th>;
+  return (
+    <th style={thStyle}>
+      <button onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", color: "inherit", font: "inherit", textTransform: "inherit", letterSpacing: "inherit", cursor: "pointer", padding: 0 }}>
+        {children}
+        <i className={`ti ${active && direction === "asc" ? "ti-sort-ascending" : "ti-sort-descending"}`} style={{ fontSize: 12, color: active ? C.red : C.micro }} />
+      </button>
+    </th>
+  );
+}
+
+// ── Log Row ───────────────────────────────────────────────────────────────────
+
+function LogRow({ log }) {
+  const [hovered, setHovered] = useState(false);
+  const status = STATUS_META[log.status] || STATUS_META.pending;
+
+  return (
+    <motion.tr
+      variants={listVariants.item}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      animate={{ backgroundColor: hovered ? "#fff8f6" : C.white }}
+      transition={{ duration: 0.12 }}
+      style={{ borderBottom: `1px solid ${C.softBorder}` }}
+    >
+      <td style={{ padding: "11px 18px" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap" }}>{log.userName}</div>
+      </td>
+      <td style={{ padding: "11px 18px" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 99, padding: "3px 10px", background: "#f7eeee", color: C.muted, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+          {normalizeRole(log.userRole)}
+        </span>
+      </td>
+      <td style={{ padding: "11px 18px", fontSize: 13, color: C.text, maxWidth: 240 }}>{log.action}</td>
+      <td style={{ padding: "11px 18px" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.muted }}>
+          <i className="ti ti-folder" style={{ fontSize: 13, color: C.red }} />{log.module}
+        </span>
+      </td>
+      <td style={{ padding: "11px 18px", fontSize: 13, color: log.invalidDate ? "#b91c1c" : C.text, fontWeight: log.invalidDate ? 700 : 400, whiteSpace: "nowrap" }}>
+        {formatDate(log)}
+      </td>
+      <td style={{ padding: "11px 18px", fontSize: 13, color: log.invalidDate ? "#b91c1c" : C.text, fontWeight: log.invalidDate ? 700 : 400, whiteSpace: "nowrap" }}>
+        {formatTime(log)}
+      </td>
+      <td style={{ padding: "11px 18px" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 99, padding: "3px 10px", fontSize: 11, fontWeight: 700, background: status.bg, color: status.color, whiteSpace: "nowrap" }}>
+          <i className={`ti ${status.icon}`} style={{ fontSize: 12 }} />{status.label}
+        </span>
+      </td>
+      <td style={{ padding: "11px 18px", fontSize: 12, color: C.muted, maxWidth: 260 }}>{log.details || "No remarks"}</td>
+    </motion.tr>
+  );
+}
+
+// ── Access Denied ─────────────────────────────────────────────────────────────
 
 function AccessDenied({ navigate }) {
   return (
     <AppLayout>
-      <div style={s.centerShell}>
-        <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:18, padding:"34px 38px", width:420, boxShadow:"0 18px 50px rgba(224,49,49,0.12)", textAlign:"center" }}>
-          <div style={{ width:58, height:58, borderRadius:16, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
-            <i className="ti ti-shield-lock" style={{ fontSize:26, color:C.red }} />
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <motion.div
+          variants={modalVariants} initial="hidden" animate="visible" transition={springTransition}
+          style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "34px 38px", width: 420, boxShadow: "0 18px 50px rgba(224,49,49,0.12)", textAlign: "center" }}
+        >
+          <div style={{ width: 58, height: 58, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+            <i className="ti ti-shield-lock" style={{ fontSize: 26, color: C.red }} />
           </div>
-          <div style={{ fontSize:18, fontWeight:700, color:C.text}}>Access denied</div>
-          <div style={{ fontSize:13, color:C.muted, lineHeight:1.7, marginTop:8 }}>Only Admin and Super Admin users can view log records.</div>
-          <button onClick={() => navigate("/dashboard")} style={{ ...s.primaryBtn, marginTop:22 }}>
-            <i className="ti ti-arrow-left" style={{ fontSize:14 }} />Back to Dashboard
-          </button>
-        </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Access Denied</div>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, marginTop: 8 }}>Only Admin and Super Admin users can view log records.</div>
+          <motion.button
+            onClick={() => navigate("/dashboard")}
+            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.97 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)", marginTop: 22 }}
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Back to Dashboard
+          </motion.button>
+        </motion.div>
       </div>
     </AppLayout>
   );
 }
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AuditTrailPage() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const allowed = canViewAuditTrail(currentUser);
+  const hasAnimated = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [logs, setLogs] = useState([]);
   const [source, setSource] = useState("");
+
+  const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [moduleFilter, setModuleFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
   const [timeFrom, setTimeFrom] = useState("");
   const [timeTo, setTimeTo] = useState("");
   const [sort, setSort] = useState({ key: "date", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const PAGE_SIZE = 10;
 
   const roles = useMemo(() => {
-    const unique = Array.from(new Set(logs.map((log) => log.userRole).filter(Boolean)));
+    const unique = Array.from(new Set(logs.map(l => l.userRole).filter(Boolean)));
     return unique.sort((a, b) => normalizeRole(a).localeCompare(normalizeRole(b)));
+  }, [logs]);
+
+  const modules = useMemo(() => {
+    const unique = Array.from(new Set(logs.map(l => l.module).filter(Boolean)));
+    return unique.sort((a, b) => a.localeCompare(b));
   }, [logs]);
 
   const filteredLogs = useMemo(() => {
     return logs
-      .filter((log) => roleFilter === "all" || log.userRole === roleFilter)
-      .filter((log) => !dateFilter || dateValue(log) === dateFilter)
-      .filter((log) => !timeFrom || (timeValue(log) && timeValue(log) >= timeFrom))
-      .filter((log) => !timeTo || (timeValue(log) && timeValue(log) <= timeTo))
+      .filter(l => statusFilter === "all" || l.status === statusFilter)
+      .filter(l => roleFilter === "all" || l.userRole === roleFilter)
+      .filter(l => moduleFilter === "all" || l.module === moduleFilter)
+      .filter(l => !dateFilter || dateValue(l) === dateFilter)
+      .filter(l => !timeFrom || (timeValue(l) && timeValue(l) >= timeFrom))
+      .filter(l => !timeTo || (timeValue(l) && timeValue(l) <= timeTo))
       .sort((a, b) => {
         if (sort.key === "role") return compareValues(normalizeRole(a.userRole), normalizeRole(b.userRole), sort.direction);
         if (sort.key === "time") return compareValues(timeValue(a), timeValue(b), sort.direction);
         return compareValues(a.invalidDate ? 0 : a.date.getTime(), b.invalidDate ? 0 : b.date.getTime(), sort.direction);
       });
-  }, [dateFilter, logs, roleFilter, sort, timeFrom, timeTo]);
+  }, [logs, statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
-  const pageLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
-  const invalidCount = logs.filter((log) => log.invalidDate).length;
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+  const pageLogs = filteredLogs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const invalidCount = logs.filter(l => l.invalidDate).length;
+
+  const hasActiveFilters = statusFilter !== "all" || roleFilter !== "all" || moduleFilter !== "all" || dateFilter || timeFrom || timeTo;
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
     if (!allowed) { setLoading(false); return; }
-
-    setLoading(true);
-    setError("");
-    fetchAuditLogs()
-      .then((data) => {
-        setLogs((data.results || []).map(normalizeLog));
-        setSource(data.source);
-      })
-      .catch((e) => setError(e.message || "Failed to load log records."))
-      .finally(() => setLoading(false));
+    loadLogs();
   }, [allowed, navigate]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [roleFilter, dateFilter, timeFrom, timeTo, pageSize]);
+  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo]);
+
+  async function loadLogs() {
+    setLoading(true); setError("");
+    try {
+      const data = await fetchAuditLogs();
+      setLogs((data.results || []).map(normalizeLog));
+      setSource(data.source);
+    } catch (e) {
+      setError(e.message || "Failed to load log records.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function toggleSort(key) {
-    setSort((current) => ({
-      key,
-      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
-    }));
+    setSort(cur => ({ key, direction: cur.key === key && cur.direction === "asc" ? "desc" : "asc" }));
   }
 
   function clearFilters() {
-    setRoleFilter("all");
-    setDateFilter("");
-    setTimeFrom("");
-    setTimeTo("");
+    setStatusFilter("all"); setRoleFilter("all"); setModuleFilter("all");
+    setDateFilter(""); setTimeFrom(""); setTimeTo("");
   }
 
-  if (!allowed && !loading) {
-    return <AccessDenied navigate={navigate} />;
-  }
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+
+  const stats = {
+    total: logs.length,
+    visible: filteredLogs.length,
+    failed: logs.filter(l => l.status === "failed").length,
+    invalid: invalidCount,
+  };
+
+  // Windowed page numbers
+  const pageWindow = useMemo(() => {
+    const delta = 2;
+    const range = [];
+    for (let i = Math.max(1, page - delta); i <= Math.min(totalPages, page + delta); i++) range.push(i);
+    return range;
+  }, [page, totalPages]);
+
+  if (!allowed && !loading) return <AccessDenied navigate={navigate} />;
 
   return (
     <AppLayout>
-          <div style={s.topbar}>
-            <div>
-              <div style={s.topbarTitle}>Audit Trail</div>
-              <div style={s.topbarSub}>Log Records / Administrative Review</div>
+      <style>{baseCss}</style>
+
+      {/* Topbar */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{ background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
+      >
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.01em" }}>Audit Trail</div>
+          <div style={{ fontSize: 11.5, color: C.pale, marginTop: 1 }}>
+            {loading ? "Loading…" : <><AnimatedCount value={logs.length} /> log record{logs.length !== 1 ? "s" : ""}</>}
+          </div>
+        </div>
+        <motion.button
+          onClick={loadLogs}
+          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.96 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+        >
+          <i className="ti ti-refresh" style={{ fontSize: 14 }} /> Refresh
+        </motion.button>
+      </motion.div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* Banners */}
+        <AnimatePresence>
+          {source === "sample" && (
+            <motion.div key="info" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              style={{ background: "#e3f0fd", border: "1px solid #a7c7ed", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#1455a0", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-info-circle" style={{ fontSize: 15 }} />
+              Showing local sample records until the audit API endpoint is connected.
+            </motion.div>
+          )}
+          {error && (
+            <motion.div key="error" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
+            </motion.div>
+          )}
+          {invalidCount > 0 && (
+            <motion.div key="warn" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              style={{ background: "#fef3e2", border: "1px solid #f4c27a", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#7a4a08", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: 15 }} />
+              {invalidCount} log record{invalidCount === 1 ? "" : "s"} contain missing or invalid date/time values.
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Stat cards */}
+        <motion.div
+          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.28, delay: 0.08, ease: "easeOut" }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}
+        >
+          {STAT_DEFS.map(s => (
+            <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className={`ti ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: C.text, lineHeight: 1 }}>
+                  {loading ? <Sk w={36} h={22} r={6} /> : <AnimatedCount value={stats[s.key]} />}
+                </div>
+                <div style={{ fontSize: 11, color: C.pale, marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+              </div>
             </div>
-            <button onClick={() => window.location.reload()} style={s.primaryBtn}>
-              <i className="ti ti-refresh" style={{ fontSize:14 }} />Refresh
-            </button>
+          ))}
+        </motion.div>
+
+        {/* Filter panel */}
+        <motion.div
+          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.28, delay: 0.14, ease: "easeOut" }}
+          style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 16 }}
+        >
+          {/* Status chips */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <Chip label="All" active={statusFilter === "all"} activeBg={C.redLight} activeColor={C.red} activeBorder={C.redBorder} onClick={() => setStatusFilter("all")} />
+              {Object.entries(STATUS_META).map(([key, meta], idx) => (
+                <Chip key={key} label={meta.label} active={statusFilter === key}
+                  activeBg={meta.bg} activeColor={meta.color} activeBorder={meta.border}
+                  onClick={() => setStatusFilter(key)} delay={idx * 0.03} />
+              ))}
+            </div>
           </div>
 
-          <div style={s.content}>
-            {source === "sample" && (
-              <div style={s.infoBanner}>
-                <i className="ti ti-info-circle" style={{ fontSize:15 }} />
-                Showing local sample records until the audit API endpoint is connected.
+          {/* Role chips */}
+          {roles.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Role</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                <Chip label="All" active={roleFilter === "all"} activeBg={C.redLight} activeColor={C.red} activeBorder={C.redBorder} onClick={() => setRoleFilter("all")} />
+                {roles.map((role, idx) => (
+                  <Chip key={role} label={normalizeRole(role)} active={roleFilter === role}
+                    activeBg="#f7eeee" activeColor={C.muted} activeBorder={C.border}
+                    onClick={() => setRoleFilter(role)} delay={idx * 0.03} />
+                ))}
               </div>
-            )}
-            {error && (
-              <div style={s.errorBanner}>
-                <i className="ti ti-alert-circle" style={{ fontSize:15 }} />
-                {error}
-              </div>
-            )}
-            {invalidCount > 0 && (
-              <div style={s.warningBanner}>
-                <i className="ti ti-alert-triangle" style={{ fontSize:15 }} />
-                {invalidCount} log record{invalidCount === 1 ? "" : "s"} contain missing or invalid date/time values.
-              </div>
-            )}
+            </div>
+          )}
 
-            <div style={s.statGrid}>
-              <SummaryCard label="Total Logs" value={logs.length} icon="ti-list-details" loading={loading} />
-              <SummaryCard label="Visible Records" value={filteredLogs.length} icon="ti-filter-check" loading={loading} />
-              <SummaryCard label="Failed Actions" value={logs.filter((log) => log.status === "failed").length} icon="ti-circle-x" loading={loading} />
-              <SummaryCard label="Invalid Dates" value={invalidCount} icon="ti-calendar-x" loading={loading} />
+          {/* Module + Date + time row */}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+            {modules.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Module</div>
+                <select
+                  value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
+                  style={{ height: 36, border: `1.5px solid ${moduleFilter !== "all" ? "#93c5fd" : "#f0e4e4"}`, borderRadius: 10, padding: "0 12px", background: moduleFilter !== "all" ? "#e3f0fd" : C.white, color: moduleFilter !== "all" ? "#1455a0" : C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", fontWeight: moduleFilter !== "all" ? 600 : 400, minWidth: 160 }}
+                >
+                  <option value="all">All modules</option>
+                  {modules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Date</div>
+              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>From</div>
+              <input type="time" value={timeFrom} onChange={e => setTimeFrom(e.target.value)}
+                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>To</div>
+              <input type="time" value={timeTo} onChange={e => setTimeTo(e.target.value)}
+                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
             </div>
 
-            <section style={s.panel}>
-              <div style={s.panelHeader}>
-                <div>
-                  <div style={s.panelTitle}>System Log Records</div>
-                  <div style={{ fontSize:11.5, color:C.pale, marginTop:2 }}>{filteredLogs.length} record{filteredLogs.length === 1 ? "" : "s"} found</div>
-                </div>
-                <button onClick={clearFilters} style={s.filterReset}>
-                  <i className="ti ti-eraser" style={{ fontSize:13 }} />Clear filters
-                </button>
-              </div>
+            <AnimatePresence>
+              {hasActiveFilters && (
+                <motion.button
+                  initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }}
+                  onClick={clearFilters}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  style={{ height: 36, padding: "0 14px", borderRadius: 99, border: `1.5px solid ${C.redBorder}`, background: C.redLight, color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: 12 }} /> Clear filters
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
 
-              <div style={s.filters}>
-                <Field label="Role">
-                  <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={s.input}>
-                    <option value="all">All roles</option>
-                    {roles.map((role) => <option key={role} value={role}>{normalizeRole(role)}</option>)}
-                  </select>
-                </Field>
-                <Field label="Date">
-                  <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={s.input} />
-                </Field>
-                <Field label="From">
-                  <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} style={s.input} />
-                </Field>
-                <Field label="To">
-                  <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} style={s.input} />
-                </Field>
-                <Field label="Rows">
-                  <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={s.input}>
-                    {[5, 10, 15, 25].map((size) => <option key={size} value={size}>{size}</option>)}
-                  </select>
-                </Field>
+        {/* Table panel */}
+        <motion.div
+          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.28, delay: 0.2, ease: "easeOut" }}
+          style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
+        >
+          {/* Panel header */}
+          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>System Log Records</div>
+              <div style={{ fontSize: 11.5, color: C.pale, marginTop: 2 }}>
+                {loading ? "Loading…" : <><AnimatedCount value={filteredLogs.length} /> record{filteredLogs.length !== 1 ? "s" : ""} found</>}
               </div>
+            </div>
+          </div>
 
-              <div style={{ overflowX:"auto" }}>
-                <table style={s.table}>
-                  <thead>
-                    <tr>
-                      <Th>User name</Th>
-                      <Th sortable active={sort.key === "role"} direction={sort.direction} onClick={() => toggleSort("role")}>Role</Th>
-                      <Th>Action performed</Th>
-                      <Th>Module</Th>
-                      <Th sortable active={sort.key === "date"} direction={sort.direction} onClick={() => toggleSort("date")}>Date</Th>
-                      <Th sortable active={sort.key === "time"} direction={sort.direction} onClick={() => toggleSort("time")}>Time</Th>
-                      <Th>Status</Th>
-                      <Th>Details</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading && Array.from({ length: pageSize }).map((_, idx) => (
-                      <tr key={idx}>
-                        {Array.from({ length: 8 }).map((__, cell) => (
-                          <td key={cell} style={s.td}><Sk h={14} /></td>
+          {/* Table */}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 1040 }}>
+              <thead>
+                <tr>
+                  <Th>User</Th>
+                  <Th sortable active={sort.key === "role"} direction={sort.direction} onClick={() => toggleSort("role")}>Role</Th>
+                  <Th>Action</Th>
+                  <Th>Module</Th>
+                  <Th sortable active={sort.key === "date"} direction={sort.direction} onClick={() => toggleSort("date")}>Date</Th>
+                  <Th sortable active={sort.key === "time"} direction={sort.direction} onClick={() => toggleSort("time")}>Time</Th>
+                  <Th>Status</Th>
+                  <Th>Details</Th>
+                </tr>
+              </thead>
+              <motion.tbody
+                variants={listVariants.container}
+                initial={isFirstRender ? "hidden" : false}
+                animate="visible"
+              >
+                {loading
+                  ? Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${C.softBorder}` }}>
+                        {[140, 80, 200, 90, 80, 60, 70, 180].map((w, c) => (
+                          <td key={c} style={{ padding: "11px 18px" }}><Sk w={w} h={13} /></td>
                         ))}
                       </tr>
-                    ))}
-                    {!loading && pageLogs.map((log) => {
-                      const status = statusMeta[log.status] || statusMeta.pending;
-                      return (
-                        <tr key={log.id} className="audit-row">
-                          <td style={s.td}>
-                            <div style={{ fontWeight:700, color:C.text }}>{log.userName}</div>
-                          </td>
-                          <td style={s.td}><span style={s.rolePill}>{normalizeRole(log.userRole)}</span></td>
-                          <td style={s.td}>{log.action}</td>
-                          <td style={s.td}>
-                            <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
-                              <i className="ti ti-folder" style={{ fontSize:13, color:C.red }} />
-                              {log.module}
-                            </span>
-                          </td>
-                          <td style={s.td}>
-                            <span style={log.invalidDate ? s.invalidText : undefined}>{formatDate(log)}</span>
-                          </td>
-                          <td style={s.td}>
-                            <span style={log.invalidDate ? s.invalidText : undefined}>{formatTime(log)}</span>
-                          </td>
-                          <td style={s.td}>
-                            <span style={{ ...s.statusPill, background:status.bg, color:status.color }}>
-                              <i className={`ti ${status.icon}`} style={{ fontSize:12 }} />
-                              {status.label}
-                            </span>
-                          </td>
-                          <td style={{ ...s.td, color:C.muted, minWidth:220 }}>{log.details || "No remarks"}</td>
-                        </tr>
-                      );
-                    })}
-                    {!loading && pageLogs.length === 0 && (
+                    ))
+                  : pageLogs.length === 0
+                  ? (
                       <tr>
-                        <td colSpan={8} style={{ padding:"38px 18px", textAlign:"center" }}>
-                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                            <i className="ti ti-file-search" style={{ fontSize:28, color:"#e08080" }} />
-                            <div style={{ fontSize:14, fontWeight:700, color:C.text }}>No log records found</div>
-                            <div style={{ fontSize:12, color:C.pale }}>Try changing the selected role, date, or time filters.</div>
+                        <td colSpan={8}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "56px 24px", textAlign: "center" }}>
+                            <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <i className="ti ti-file-search" style={{ fontSize: 24, color: "#e08080" }} />
+                            </div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>No log records found</div>
+                            <div style={{ fontSize: 13, color: C.pale }}>Try adjusting your status, role, module, or date filters.</div>
+                            {hasActiveFilters && (
+                              <motion.button onClick={clearFilters} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                                style={{ fontSize: 12, color: C.red, background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                                Clear filters
+                              </motion.button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div style={s.pagination}>
-                <div style={{ fontSize:12, color:C.pale }}>
-                  Page {page} of {totalPages}
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={page === 1 ? s.pageBtnDisabled : s.pageBtn}>
-                    <i className="ti ti-chevron-left" style={{ fontSize:13 }} />Previous
-                  </button>
-                  {Array.from({ length: totalPages }).slice(0, 5).map((_, i) => {
-                    const pageNumber = i + 1;
-                    return (
-                      <button key={pageNumber} onClick={() => setPage(pageNumber)} style={page === pageNumber ? s.pageBtnActive : s.pageBtn}>
-                        {pageNumber}
-                      </button>
-                    );
-                  })}
-                  <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={page === totalPages ? s.pageBtnDisabled : s.pageBtn}>
-                    Next<i className="ti ti-chevron-right" style={{ fontSize:13 }} />
-                  </button>
-                </div>
-              </div>
-            </section>
+                    )
+                  : pageLogs.map(log => <LogRow key={log.id} log={log} />)
+                }
+              </motion.tbody>
+            </table>
           </div>
+
+          {/* Pagination */}
+          {!loading && filteredLogs.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 12, color: C.pale }}>
+                Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filteredLogs.length)} of {filteredLogs.length}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <motion.button
+                  disabled={page === 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  whileHover={page !== 1 ? { scale: 1.04 } : {}} whileTap={page !== 1 ? { scale: 0.96 } : {}}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", border: `1px solid ${page === 1 ? "#f0eeee" : C.border}`, borderRadius: 8, background: page === 1 ? "#fbf8f8" : C.white, color: page === 1 ? "#d0bbbb" : C.muted, fontSize: 12, fontWeight: 600, cursor: page === 1 ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  <i className="ti ti-chevron-left" style={{ fontSize: 13 }} /> Prev
+                </motion.button>
+
+                {pageWindow[0] > 1 && (
+                  <>
+                    <motion.button onClick={() => setPage(1)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
+                      style={{ minWidth: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>1</motion.button>
+                    {pageWindow[0] > 2 && <span style={{ color: C.micro, fontSize: 12 }}>…</span>}
+                  </>
+                )}
+
+                {pageWindow.map(n => (
+                  <motion.button key={n} onClick={() => setPage(n)}
+                    whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
+                    style={{ minWidth: 32, height: 32, border: `1px solid ${n === page ? C.redBorder : C.border}`, borderRadius: 8, background: n === page ? C.redLight : C.white, color: n === page ? C.red : C.muted, fontSize: 12, fontWeight: n === page ? 800 : 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                    {n}
+                  </motion.button>
+                ))}
+
+                {pageWindow[pageWindow.length - 1] < totalPages && (
+                  <>
+                    {pageWindow[pageWindow.length - 1] < totalPages - 1 && <span style={{ color: C.micro, fontSize: 12 }}>…</span>}
+                    <motion.button onClick={() => setPage(totalPages)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
+                      style={{ minWidth: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>{totalPages}</motion.button>
+                  </>
+                )}
+
+                <motion.button
+                  disabled={page === totalPages}
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  whileHover={page !== totalPages ? { scale: 1.04 } : {}} whileTap={page !== totalPages ? { scale: 0.96 } : {}}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", border: `1px solid ${page === totalPages ? "#f0eeee" : C.border}`, borderRadius: 8, background: page === totalPages ? "#fbf8f8" : C.white, color: page === totalPages ? "#d0bbbb" : C.muted, fontSize: 12, fontWeight: 600, cursor: page === totalPages ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  Next <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
+                </motion.button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+      </div>
     </AppLayout>
   );
 }
-
-function SummaryCard({ label, value, icon, loading }) {
-  return (
-    <div style={s.statCard}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span style={s.statLabel}>{label}</span>
-        <div style={s.statIcon}><i className={`ti ${icon}`} style={{ fontSize:15, color:C.red }} /></div>
-      </div>
-      {loading ? <Sk h={30} w="60%" /> : <div style={s.statValue}>{value.toLocaleString()}</div>}
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label style={{ display:"flex", flexDirection:"column", gap:5 }}>
-      <span style={s.label}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function Th({ children, sortable, active, direction, onClick }) {
-  return (
-    <th style={s.th}>
-      {sortable ? (
-        <button onClick={onClick} style={s.sortBtn}>
-          {children}
-          <i className={`ti ${active && direction === "asc" ? "ti-sort-ascending" : "ti-sort-descending"}`} style={{ fontSize:12, color:active ? C.red : "#c0a0a0" }} />
-        </button>
-      ) : children}
-    </th>
-  );
-}
-
-const baseCss = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'DM Sans',sans-serif; }
-  ::-webkit-scrollbar { width:5px; height:5px; }
-  ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-  .nav-item { transition:background 0.12s,color 0.12s; }
-  .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
-  .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-  .audit-row:hover td { background:#fff8f6; }
-`;
-
-const s = {
-  shell: { display:"flex", height:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif", overflow:"hidden" },
-  centerShell: { minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", justifyContent:"center", padding:24 },
-  sidebar: { width:224, flexShrink:0, background:C.white, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", boxShadow:"2px 0 12px rgba(224,49,49,0.04)" },
-  brandWrap: { padding:"22px 18px 18px", borderBottom:`1px solid ${C.border}` },
-  nav: { flex:1, padding:"14px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" },
-  navSection: { fontSize:9.5, color:"#cdb0b0", letterSpacing:"0.1em", textTransform:"uppercase", padding:"10px 10px 4px", fontWeight:600 },
-  navItem: { display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:9, fontSize:13, cursor:"pointer" },
-  userBox: { display:"flex", alignItems:"center", gap:10, padding:"10px", borderRadius:10, background:"#fff8f6" },
-  avatar: { width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#fde8e8,#fca5a5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:C.red, flexShrink:0 },
-  userName: { fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
-  userRole: { fontSize:11, color:C.pale, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
-  logoutBtn: { width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:C.white, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#c09090" },
-  main: { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
-  topbar: { background:C.white, borderBottom:`1px solid ${C.border}`, padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize:16, fontWeight:700, color:C.text},
-  topbarSub: { fontSize:11.5, color:C.pale, marginTop:1 },
-  content: { flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 },
-  primaryBtn: { display:"inline-flex", alignItems:"center", justifyContent:"center", gap:8, background:`linear-gradient(135deg,${C.red},${C.redDark})`, color:C.white, border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.24)" },
-  secondaryBtn: { flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:C.white, fontSize:13, color:C.muted, cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" },
-  dangerBtn: { flex:1, height:42, border:"none", borderRadius:10, background:`linear-gradient(135deg,${C.red},${C.redDark})`, fontSize:13, color:C.white, cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif" },
-  statGrid: { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 },
-  statCard: { background:C.white, border:`1px solid ${C.border}`, borderRadius:14, padding:16, display:"flex", flexDirection:"column", gap:10, boxShadow:"0 2px 12px rgba(224,49,49,0.06)" },
-  statLabel: { fontSize:12, color:"#a07878", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" },
-  statIcon: { width:30, height:30, borderRadius:8, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center" },
-  statValue: { fontSize:26, fontWeight:700, color:C.text, lineHeight:1 },
-  panel: { background:C.white, border:`1px solid ${C.border}`, borderRadius:16, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" },
-  panelHeader: { padding:"16px 18px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" },
-  panelTitle: { fontSize:14, fontWeight:700, color:C.text},
-  filters: { display:"grid", gridTemplateColumns:"1.1fr repeat(4, minmax(110px, 0.7fr))", gap:10, padding:"14px 18px", borderBottom:`1px solid ${C.softBorder}`, background:"#fffdfd" },
-  label: { fontSize:10.5, color:"#9f7777", textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700 },
-  input: { width:"100%", height:36, border:"1.5px solid #f0ceca", borderRadius:10, padding:"0 10px", background:"#fffbfb", color:C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none" },
-  filterReset: { display:"inline-flex", alignItems:"center", gap:6, border:`1px solid ${C.border}`, borderRadius:9, background:C.white, color:C.muted, padding:"8px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
-  table: { width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:1040 },
-  th: { textAlign:"left", fontSize:10.5, fontWeight:700, color:"#c0a0a0", padding:"13px 18px", borderBottom:`1px solid ${C.border}`, textTransform:"uppercase", letterSpacing:"0.07em", background:C.white, whiteSpace:"nowrap" },
-  td: { padding:"12px 18px", borderBottom:`1px solid ${C.softBorder}`, color:C.text, verticalAlign:"middle" },
-  sortBtn: { display:"inline-flex", alignItems:"center", gap:5, border:"none", background:"transparent", color:"inherit", font:"inherit", textTransform:"inherit", letterSpacing:"inherit", cursor:"pointer", padding:0 },
-  rolePill: { display:"inline-flex", alignItems:"center", borderRadius:99, padding:"4px 9px", background:"#f7eeee", color:C.muted, fontSize:11, fontWeight:700, whiteSpace:"nowrap" },
-  statusPill: { display:"inline-flex", alignItems:"center", gap:5, borderRadius:99, padding:"4px 10px", fontSize:11, fontWeight:700, whiteSpace:"nowrap" },
-  invalidText: { color:"#b91c1c", fontWeight:700 },
-  pagination: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", borderTop:`1px solid ${C.border}` },
-  pageBtn: { display:"inline-flex", alignItems:"center", gap:5, minWidth:34, height:32, justifyContent:"center", padding:"0 10px", border:`1px solid ${C.border}`, borderRadius:8, background:C.white, color:C.muted, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
-  pageBtnActive: { display:"inline-flex", alignItems:"center", minWidth:34, height:32, justifyContent:"center", padding:"0 10px", border:`1px solid ${C.redBorder}`, borderRadius:8, background:C.redLight, color:C.red, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" },
-  pageBtnDisabled: { display:"inline-flex", alignItems:"center", gap:5, minWidth:34, height:32, justifyContent:"center", padding:"0 10px", border:"1px solid #f0eeee", borderRadius:8, background:"#fbf8f8", color:"#d0bbbb", fontSize:12, fontWeight:700, cursor:"not-allowed", fontFamily:"'DM Sans',sans-serif" },
-  infoBanner: { background:"#e3f0fd", border:"1px solid #a7c7ed", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#1455a0", display:"flex", alignItems:"center", gap:8 },
-  errorBanner: { background:"#fef2f2", border:`1px solid ${C.redBorder}`, borderRadius:10, padding:"12px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 },
-  warningBanner: { background:"#fef3e2", border:"1px solid #f4c27a", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#7a4a08", display:"flex", alignItems:"center", gap:8 },
-};
-
