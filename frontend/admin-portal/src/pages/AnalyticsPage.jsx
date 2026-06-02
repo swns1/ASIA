@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import { pageVariants, listVariants } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import { getSubjects as _getSubjects, getAiCluster as _getAiCluster } from "../api/enrollmentApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
-  { value: "overall",      label: "Overall (All Periods)" },
+  { value: "overall",      label: "Overall"      },
   { value: "1st_quarter",  label: "1st Quarter"  },
   { value: "2nd_quarter",  label: "2nd Quarter"  },
   { value: "3rd_quarter",  label: "3rd Quarter"  },
@@ -17,23 +19,32 @@ const PERIOD_OPTIONS = [
   { value: "2nd_semester", label: "2nd Semester" },
 ];
 
-const GRADE_LEVEL_OPTIONS = [
-  { value: "",         label: "All Grade Levels" },
-  { value: "Nursery",  label: "Nursery"      },
-  { value: "Kinder",   label: "Kindergarten" },
-  { value: "Grade 1",  label: "Grade 1"      },
-  { value: "Grade 2",  label: "Grade 2"      },
-  { value: "Grade 3",  label: "Grade 3"      },
-  { value: "Grade 4",  label: "Grade 4"      },
-  { value: "Grade 5",  label: "Grade 5"      },
-  { value: "Grade 6",  label: "Grade 6"      },
-  { value: "Grade 7",  label: "Grade 7"      },
-  { value: "Grade 8",  label: "Grade 8"      },
-  { value: "Grade 9",  label: "Grade 9"      },
-  { value: "Grade 10", label: "Grade 10"     },
-  { value: "Grade 11", label: "Grade 11"     },
-  { value: "Grade 12", label: "Grade 12"     },
+const SCHOOL_LEVELS = [
+  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#e03131" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#c27a12" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          bg: "#f0e8fd", color: "#7c3aed" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          bg: "#e8f0fd", color: "#2563eb" },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#16a34a" },
+  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   bg: "#fde8f8", color: "#be185d" },
 ];
+
+const GRADE_LEVELS_BY_LEVEL = {
+  "":                ["All Grades"],
+  nursery:           ["All Grades", "Nursery"],
+  kindergarten:      ["All Grades", "Kindergarten"],
+  elementary:        ["All Grades", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
+  junior_highschool: ["All Grades", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
+  senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
+};
+
+function buildSchoolYearOptions() {
+  const current = new Date().getFullYear();
+  const opts = [{ value: "", label: "All Years" }];
+  for (let y = current + 1; y >= current - 3; y--) {
+    opts.push({ value: `${y - 1}-${y}`, label: `${y - 1}–${y}` });
+  }
+  return opts;
+}
 
 function currentSchoolYear() {
   const now = new Date();
@@ -75,7 +86,6 @@ const s = {
   cardHeaderTitle: { fontSize: 13, fontWeight: 700, color: "#1a0a0a" },
   cardHeaderSub:   { fontSize: 11, color: "#b09090", marginTop: 1 },
   cardBody:        { padding: "18px 20px" },
-  filterRow:   { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
   filterGroup: { display: "flex", flexDirection: "column", gap: 4, minWidth: 150 },
   filterLabel: {
     fontSize: 11, fontWeight: 600, color: "#8a8480",
@@ -85,11 +95,6 @@ const s = {
     padding: "8px 12px", borderRadius: 8, border: "1px solid #ede9e1", fontSize: 13,
     color: "#3a3a3a", background: "white", cursor: "pointer",
     fontFamily: "'DM Sans', sans-serif", outline: "none",
-  },
-  input: {
-    padding: "8px 12px", borderRadius: 8, border: "1px solid #ede9e1", fontSize: 13,
-    color: "#3a3a3a", background: "white",
-    fontFamily: "'DM Sans', sans-serif", outline: "none", width: 130,
   },
   runBtn: {
     display: "flex", alignItems: "center", gap: 8,
@@ -234,9 +239,14 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 function ClusterLegend({ clusters }) {
   if (!clusters) return null;
   return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <motion.div
+      variants={listVariants.container}
+      initial="hidden"
+      animate="visible"
+      style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
+    >
       {clusters.map((c) => (
-        <div key={c.cluster_id} style={{
+        <motion.div key={c.cluster_id} variants={listVariants.item} style={{
           flex: "1 1 180px", padding: "12px 16px", borderRadius: 10,
           border: `1.5px solid ${c.color}22`, background: `${c.color}08`,
         }}>
@@ -251,9 +261,9 @@ function ClusterLegend({ clusters }) {
             <span style={{ margin: "0 6px", color: "#d0c8c0" }}>·</span>
             Range {c.min_grade}–{c.max_grade}
           </div>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -294,11 +304,16 @@ function StudentDetailPanel({ student, onClose }) {
 
 // ── Student Table ─────────────────────────────────────────────────────────────
 function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
+  const hasAnimated = useRef(false);
+
   if (!clusters) return null;
 
   const allStudents = clusters.flatMap((c) =>
     c.students.map((st) => ({ ...st, color: c.color, clusterLabel: c.label }))
   ).sort((a, b) => a.grade - b.grade);
+
+  const isFirst = !hasAnimated.current;
+  if (isFirst) hasAnimated.current = true;
 
   return (
     <div style={{ maxHeight: 360, overflowY: "auto" }}>
@@ -311,12 +326,17 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
             <th style={thStyle}>Cluster</th>
           </tr>
         </thead>
-        <tbody>
+        <motion.tbody
+          variants={listVariants.container}
+          initial={isFirst ? "hidden" : false}
+          animate="visible"
+        >
           {allStudents.map((st) => {
             const isSelected = selectedStudent?.student_id === st.student_id;
             return (
-              <tr
+              <motion.tr
                 key={st.student_id}
+                variants={listVariants.item}
                 onClick={() => onSelectStudent(st)}
                 style={{
                   borderBottom: "1px solid #f5eaea",
@@ -340,10 +360,10 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
                     {st.clusterLabel}
                   </span>
                 </td>
-              </tr>
+              </motion.tr>
             );
           })}
-        </tbody>
+        </motion.tbody>
       </table>
     </div>
   );
@@ -399,8 +419,24 @@ export default function AnalyticsPage() {
   const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
   const [gradingPeriod,   setGradingPeriod]   = useState("1st_quarter");
   const [subjectId,       setSubjectId]       = useState("");
+  const [schoolLevel,     setSchoolLevel]     = useState("");
   const [gradeLevel,      setGradeLevel]      = useState("");
   const [nClusters,       setNClusters]       = useState(3);
+
+  const schoolYearOptions = buildSchoolYearOptions();
+  const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
+  const hasFilters        = schoolYear !== currentSchoolYear() || gradingPeriod !== "1st_quarter" || schoolLevel || gradeLevel || subjectId || nClusters !== 3;
+
+  useEffect(() => { setGradeLevel(""); }, [schoolLevel]);
+
+  function clearFilters() {
+    setSchoolYear(currentSchoolYear());
+    setGradingPeriod("1st_quarter");
+    setSchoolLevel("");
+    setGradeLevel("");
+    setSubjectId("");
+    setNClusters(3);
+  }
   const [subjects,        setSubjects]        = useState([]);
   const [result,          setResult]          = useState(null);
   const [loading,         setLoading]         = useState(false);
@@ -434,8 +470,9 @@ export default function AnalyticsPage() {
       grading_period: gradingPeriod,
       n_clusters:     String(nClusters),
     });
-    if (subjectId)  params.set("subject_id",  subjectId);
-    if (gradeLevel) params.set("grade_level", gradeLevel);
+    if (subjectId)   params.set("subject_id",   subjectId);
+    if (schoolLevel) params.set("school_level", schoolLevel);
+    if (gradeLevel)  params.set("grade_level",  gradeLevel);
 
     try {
       const data = await _getAiCluster(Object.fromEntries(params));
@@ -455,64 +492,221 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [schoolYear, gradingPeriod, subjectId, gradeLevel, nClusters, cooldown]);
+  }, [schoolYear, gradingPeriod, subjectId, schoolLevel, gradeLevel, nClusters, cooldown]);
+
+  const hasAnimated = useRef(false);
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
 
   return (
     <AppLayout>
       {/* Topbar */}
       <div style={s.topbar}>
-        <div>
+        <motion.div
+          initial={isFirstRender ? { opacity: 0, y: -8 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        >
           <div style={s.topbarTitle}>Analytics</div>
           <div style={s.topbarSub}>K-Means clustering · Academic performance segmentation · S.Y. {schoolYear}</div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Content */}
-      <div style={s.content}>
+      <motion.div
+        style={s.content}
+        variants={pageVariants.container}
+        initial={isFirstRender ? "hidden" : false}
+        animate="visible"
+      >
 
         {/* ── Filters ── */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <div>
-              <div style={s.cardHeaderTitle}>Analysis Parameters</div>
-              <div style={s.cardHeaderSub}>Configure filters then run the clustering algorithm</div>
+        <motion.div
+          variants={pageVariants.item}
+          style={{
+            background: "white", border: "1px solid #f5eaea",
+            borderRadius: 14, padding: "18px 20px",
+            boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
+            display: "flex", flexDirection: "column", gap: 0,
+          }}
+        >
+          {/* Row 1: action buttons */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>Analysis Parameters</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <AnimatePresence>
+                {hasFilters && (
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.88 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.88 }}
+                    transition={{ duration: 0.14 }}
+                    whileTap={{ scale: 0.93 }}
+                    onClick={clearFilters}
+                    style={{ height: 38, padding: "0 14px", background: "white", border: "1.5px solid #fca5a5", borderRadius: 10, fontSize: 12, fontWeight: 600, color: "#b91c1c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <i className="ti ti-filter-off" style={{ fontSize: 13 }} />Clear
+                  </motion.button>
+                )}
+              </AnimatePresence>
+              <motion.button
+                onClick={runClustering}
+                disabled={loading || cooldown > 0}
+                whileHover={loading || cooldown > 0 ? {} : { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+                whileTap={loading || cooldown > 0 ? {} : { scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{
+                  ...s.runBtn,
+                  opacity: loading || cooldown > 0 ? 0.6 : 1,
+                  cursor:  loading || cooldown > 0 ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? (
+                  <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Running…</>
+                ) : cooldown > 0 ? (
+                  <><i className="ti ti-clock" style={{ fontSize: 14 }} />Wait {cooldown}s</>
+                ) : (
+                  <><i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />Run Analysis</>
+                )}
+              </motion.button>
             </div>
           </div>
-          <div style={{ ...s.cardBody }}>
-            <div style={s.filterRow}>
 
-              <div style={s.filterGroup}>
-                <label style={s.filterLabel}>School Year</label>
-                <input
-                  type="text"
-                  value={schoolYear}
-                  onChange={(e) => setSchoolYear(e.target.value)}
-                  placeholder="2024-2025"
-                  style={s.input}
-                />
+          {/* Divider */}
+          <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
+
+          {/* Chip rows */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* School Year chips */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Year</div>
+              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {schoolYearOptions.map((o) => {
+                  const active = schoolYear === o.value;
+                  return (
+                    <motion.button key={o.value}
+                      layout
+                      initial={false}
+                      animate={{
+                        backgroundColor: active ? "#fff0f0" : "#ffffff",
+                        color:           active ? "#e03131" : "#9a7070",
+                        borderColor:     active ? "#e03131" : "#f0e4e4",
+                      }}
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                      onClick={() => setSchoolYear(o.value)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                    >
+                      <i className="ti ti-calendar" style={{ fontSize: 12 }} />
+                      {o.label}
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+            </div>
+
+            {/* Grading Period chips */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grading Period</div>
+              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {PERIOD_OPTIONS.map((p) => {
+                  const active = gradingPeriod === p.value;
+                  return (
+                    <motion.button key={p.value}
+                      layout
+                      initial={false}
+                      animate={{
+                        backgroundColor: active ? "#fff0f0" : "#ffffff",
+                        color:           active ? "#e03131" : "#9a7070",
+                        borderColor:     active ? "#e03131" : "#f0e4e4",
+                      }}
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                      onClick={() => setGradingPeriod(p.value)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                    >
+                      {p.label}
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+            </div>
+
+            {/* School Level chips */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
+              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {SCHOOL_LEVELS.map((lvl) => {
+                  const active = schoolLevel === lvl.value;
+                  return (
+                    <motion.button key={lvl.value}
+                      layout
+                      initial={false}
+                      animate={{
+                        backgroundColor: active ? lvl.bg    : "#ffffff",
+                        color:           active ? lvl.color : "#9a7070",
+                        borderColor:     active ? lvl.color : "#f0e4e4",
+                      }}
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                      onClick={() => setSchoolLevel(lvl.value)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                    >
+                      <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
+                      {lvl.label}
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+            </div>
+
+            {/* Grade Level chips — cascading, slides open when a school level is selected */}
+            <div style={{
+              maxHeight: schoolLevel !== "" ? 200 : 0,
+              overflow: "hidden",
+              opacity: schoolLevel !== "" ? 1 : 0,
+              marginTop: schoolLevel !== "" ? 0 : -12,
+              transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
+              pointerEvents: schoolLevel !== "" ? "auto" : "none",
+            }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
+                <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  {gradeOptions.map((g, idx) => {
+                    const val    = g === "All Grades" ? "" : g;
+                    const active = gradeLevel === val;
+                    return (
+                      <motion.button key={`${schoolLevel}-${g}`}
+                        layout
+                        initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                        animate={{
+                          opacity: 1, y: 0,
+                          backgroundColor: active ? "#fff0f0" : "#ffffff",
+                          color:           active ? "#e03131" : "#9a7070",
+                          borderColor:     active ? "#e03131" : "#f0e4e4",
+                        }}
+                        transition={{
+                          opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                          y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                          backgroundColor: { duration: 0.18, ease: "easeOut" },
+                          color:           { duration: 0.18, ease: "easeOut" },
+                          borderColor:     { duration: 0.18, ease: "easeOut" },
+                          layout:          { type: "spring", stiffness: 400, damping: 36 },
+                        }}
+                        onClick={() => setGradeLevel(val)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                      >
+                        {g}
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
               </div>
+            </div>
 
-              <div style={s.filterGroup}>
-                <label style={s.filterLabel}>Grading Period</label>
-                <select value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)} style={s.select}>
-                  {PERIOD_OPTIONS.map((p) => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={s.filterGroup}>
-                <label style={s.filterLabel}>Grade Level</label>
-                <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...s.select, minWidth: 150 }}>
-                  {GRADE_LEVEL_OPTIONS.map((g) => (
-                    <option key={g.value} value={g.value}>{g.label}</option>
-                  ))}
-                </select>
-              </div>
-
+            {/* Subject + Clusters row — selects kept since lists are long */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div style={s.filterGroup}>
                 <label style={s.filterLabel}>Subject</label>
-                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={{ ...s.select, minWidth: 200 }}>
+                <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={{ ...s.select, minWidth: 220 }}>
                   <option value="">Overall (All Subjects)</option>
                   {subjects.map((sub) => (
                     <option key={sub.subject_id} value={sub.subject_id}>
@@ -521,7 +715,6 @@ export default function AnalyticsPage() {
                   ))}
                 </select>
               </div>
-
               <div style={s.filterGroup}>
                 <label style={s.filterLabel}>Clusters (k)</label>
                 <select value={nClusters} onChange={(e) => setNClusters(Number(e.target.value))} style={{ ...s.select, width: 72 }}>
@@ -530,191 +723,205 @@ export default function AnalyticsPage() {
                   ))}
                 </select>
               </div>
-
-              <button
-                onClick={runClustering}
-                disabled={loading || cooldown > 0}
-                className="new-btn"
-                style={{
-                  ...s.runBtn,
-                  opacity: loading || cooldown > 0 ? 0.6 : 1,
-                  cursor:  loading || cooldown > 0 ? "not-allowed" : "pointer",
-                  marginBottom: 0,
-                  alignSelf: "flex-end",
-                }}
-              >
-                {loading ? (
-                  <>
-                    <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />
-                    Running…
-                  </>
-                ) : cooldown > 0 ? (
-                  <>
-                    <i className="ti ti-clock" style={{ fontSize: 14 }} />
-                    Wait {cooldown}s
-                  </>
-                ) : (
-                  <>
-                    <i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />
-                    Run Analysis
-                  </>
-                )}
-              </button>
-
             </div>
+
           </div>
-        </div>
+        </motion.div>
 
         {/* ── Error ── */}
-        {error && (
-          <div style={{
-            background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
-            display: "flex", alignItems: "center", gap: 10, padding: "13px 18px",
-          }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131", flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: "#b91c1c" }}>{error}</span>
-          </div>
-        )}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              key="error-banner"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              style={{
+                background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
+                display: "flex", alignItems: "center", gap: 10, padding: "13px 18px",
+              }}
+            >
+              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: "#b91c1c" }}>{error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Loading ── */}
-        {loading && (
-          <div style={s.card}>
-            <div style={s.emptyState}>
-              <div style={{
-                width: 46, height: 46, borderRadius: 12,
-                background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
-                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
-              }}>
-                <i className="ti ti-loader-2" style={{ fontSize: 20, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
+        <AnimatePresence>
+          {loading && (
+            <motion.div
+              key="loading-card"
+              variants={pageVariants.item}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8 }}
+              style={s.card}
+            >
+              <div style={s.emptyState}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 12,
+                  background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                  display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+                }}>
+                  <i className="ti ti-loader-2" style={{ fontSize: 20, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Running K-Means clustering…</div>
+                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and preparing results</div>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Running K-Means clustering…</div>
-              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and preparing results</div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Empty state ── */}
-        {!loading && !result && !error && (
-          <div style={s.card}>
-            <div style={s.emptyState}>
-              <div style={{
-                width: 52, height: 52, borderRadius: 14,
-                background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
-                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
-              }}>
-                <i className="ti ti-chart-dots-3" style={{ fontSize: 24, color: "#e8a0a0" }} />
+        <AnimatePresence>
+          {!loading && !result && !error && (
+            <motion.div
+              key="empty-state"
+              variants={pageVariants.item}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8 }}
+              style={s.card}
+            >
+              <div style={s.emptyState}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: 14,
+                  background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                  display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+                }}>
+                  <i className="ti ti-chart-dots-3" style={{ fontSize: 24, color: "#e8a0a0" }} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>No analysis yet</div>
+                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4, maxWidth: 340, lineHeight: 1.6 }}>
+                  Select your filters above and click{" "}
+                  <strong style={{ color: "#e03131" }}>Run Analysis</strong>{" "}
+                  to cluster students by their academic performance.
+                </div>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>No analysis yet</div>
-              <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4, maxWidth: 340, lineHeight: 1.6 }}>
-                Select your filters above and click{" "}
-                <strong style={{ color: "#e03131" }}>Run Analysis</strong>{" "}
-                to cluster students by their academic performance.
-              </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Results ── */}
-        {result && (
-          <>
-            {/* Meta chips */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {[
-                { label: "Students",    value: result.meta.total_students, icon: "ti-users"        },
-                { label: "Grade Level", value: result.meta.grade_level || "All",    icon: "ti-school"       },
-                { label: "Subject",     value: result.meta.subject,        icon: "ti-book"         },
-                { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period, icon: "ti-calendar" },
-                { label: "Clusters",    value: result.meta.n_clusters,     icon: "ti-chart-dots-3" },
-              ].map((m) => (
-                <div key={m.label} style={{
-                  flex: "1 1 130px", padding: "11px 14px", borderRadius: 10,
-                  background: "white", border: "1px solid #f0ece4",
-                  display: "flex", alignItems: "center", gap: 10,
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
-                }}>
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 8,
-                    background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        <AnimatePresence mode="wait">
+          {result && (
+            <motion.div
+              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8, transition: { duration: 0.15 } }}
+              variants={pageVariants.container}
+              style={{ display: "contents" }}
+            >
+              {/* Meta chips */}
+              <motion.div
+                variants={listVariants.container}
+                initial="hidden"
+                animate="visible"
+                style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
+              >
+                {[
+                  { label: "Students",    value: result.meta.total_students,                                                                                            icon: "ti-users"        },
+                  { label: "Grade Level", value: result.meta.grade_level || "All",                                                                                      icon: "ti-school"       },
+                  { label: "Subject",     value: result.meta.subject,                                                                                                   icon: "ti-book"         },
+                  { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period,               icon: "ti-calendar"     },
+                  { label: "Clusters",    value: result.meta.n_clusters,                                                                                                icon: "ti-chart-dots-3" },
+                ].map((m) => (
+                  <motion.div key={m.label} variants={listVariants.item} style={{
+                    flex: "1 1 130px", padding: "11px 14px", borderRadius: 10,
+                    background: "white", border: "1px solid #f0ece4",
+                    display: "flex", alignItems: "center", gap: 10,
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
                   }}>
-                    <i className={`ti ${m.icon}`} style={{ fontSize: 14, color: "#e03131" }} />
-                  </div>
+                    <div style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      <i className={`ti ${m.icon}`} style={{ fontSize: 14, color: "#e03131" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#a09890", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+
+              {/* Cluster Overview */}
+              <motion.div variants={pageVariants.item} style={s.card}>
+                <div style={s.cardHeader}>
                   <div>
-                    <div style={{ fontSize: 10, color: "#a09890", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
+                    <div style={s.cardHeaderTitle}>Cluster Overview</div>
+                    <div style={s.cardHeaderSub}>Performance bands identified by K-Means</div>
+                  </div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                    borderRadius: 20, background: "#fff0f0", color: "#e03131",
+                  }}>
+                    k = {result.meta.n_clusters}
+                  </span>
+                </div>
+                <div style={s.cardBody}>
+                  <ClusterLegend clusters={result.clusters} />
+                </div>
+              </motion.div>
+
+              {/* Scatter Plot */}
+              <motion.div variants={pageVariants.item} style={s.card}>
+                <div style={s.cardHeader}>
+                  <div>
+                    <div style={s.cardHeaderTitle}>Student Distribution</div>
+                    <div style={s.cardHeaderSub}>PCA projection · click any dot to view student details</div>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Cluster Overview */}
-            <div style={s.card}>
-              <div style={s.cardHeader}>
-                <div>
-                  <div style={s.cardHeaderTitle}>Cluster Overview</div>
-                  <div style={s.cardHeaderSub}>Performance bands identified by K-Means</div>
+                <div style={s.cardBody}>
+                  <ScatterPlot
+                    clusters={result.clusters}
+                    selectedStudent={selectedStudent}
+                    onSelectStudent={setSelectedStudent}
+                  />
+                  <StudentDetailPanel student={selectedStudent} onClose={() => setSelectedStudent(null)} />
                 </div>
-                <span style={{
-                  fontSize: 11, fontWeight: 600, padding: "3px 10px",
-                  borderRadius: 20, background: "#fff0f0", color: "#e03131",
-                }}>
-                  k = {result.meta.n_clusters}
-                </span>
-              </div>
-              <div style={s.cardBody}>
-                <ClusterLegend clusters={result.clusters} />
-              </div>
-            </div>
+              </motion.div>
 
-            {/* Scatter Plot */}
-            <div style={s.card}>
-              <div style={s.cardHeader}>
-                <div>
-                  <div style={s.cardHeaderTitle}>Student Distribution</div>
-                  <div style={s.cardHeaderSub}>PCA projection · click any dot to view student details</div>
+              {/* Student List */}
+              <motion.div variants={pageVariants.item} style={{ ...s.card, overflow: "hidden" }}>
+                <div style={s.cardHeader}>
+                  <div>
+                    <div style={s.cardHeaderTitle}>Student List</div>
+                    <div style={s.cardHeaderSub}>All clustered students · sorted by grade (lowest first)</div>
+                  </div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                    borderRadius: 20, background: "#f5f3ef", color: "#6a6460",
+                  }}>
+                    {result.meta.total_students} student{result.meta.total_students !== 1 ? "s" : ""}
+                  </span>
                 </div>
-              </div>
-              <div style={s.cardBody}>
-                <ScatterPlot
+                <StudentTable
                   clusters={result.clusters}
                   selectedStudent={selectedStudent}
                   onSelectStudent={setSelectedStudent}
                 />
-                <StudentDetailPanel student={selectedStudent} onClose={() => setSelectedStudent(null)} />
-              </div>
-            </div>
+              </motion.div>
 
-            {/* Student List */}
-            <div style={{ ...s.card, overflow: "hidden" }}>
-              <div style={s.cardHeader}>
-                <div>
-                  <div style={s.cardHeaderTitle}>Student List</div>
-                  <div style={s.cardHeaderSub}>All clustered students · sorted by grade (lowest first)</div>
-                </div>
-                <span style={{
-                  fontSize: 11, fontWeight: 600, padding: "3px 10px",
-                  borderRadius: 20, background: "#f5f3ef", color: "#6a6460",
-                }}>
-                  {result.meta.total_students} student{result.meta.total_students !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <StudentTable
-                clusters={result.clusters}
-                selectedStudent={selectedStudent}
-                onSelectStudent={setSelectedStudent}
-              />
-            </div>
+              {/* AI Interpretation & Recommendations
+                  key on ClusterInsightPanel forces a full remount on each new
+                  analysis run so stale output never bleeds into the new one. */}
+              <motion.div variants={pageVariants.item}>
+                <ClusterInsightPanel
+                  key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
+                  result={result}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            {/* AI Interpretation & Recommendations
-                key forces a full remount on each new analysis run so stale
-                output from a previous query never bleeds into the new one. */}
-            <ClusterInsightPanel
-              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
-              result={result}
-            />
-          </>
-        )}
-      </div>
+      </motion.div>
     </AppLayout>
   );
 }
