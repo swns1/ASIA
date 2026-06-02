@@ -1290,59 +1290,98 @@ export default function EnrollmentsPage() {
               {/* Row 2: School level chips */}
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {SCHOOL_LEVELS.map((lvl) => (
-                    <motion.button key={lvl.value}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`filter-chip${schoolLevel === lvl.value ? " active" : ""}`}
-                      onClick={() => setSchoolLevel(lvl.value)}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
-                      {lvl.label}
-                    </motion.button>
-                  ))}
-                </div>
+                <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {[
+                    { value:"",                  label:"All Levels",        icon:"ti-layout-grid",   bg:"#fff0f0", color:"#e03131" },
+                    { value:"nursery",           label:"Nursery",           icon:"ti-baby-carriage", bg:"#fdf5e8", color:"#c27a12" },
+                    { value:"kindergarten",      label:"Kindergarten",      icon:"ti-star",          bg:"#f0e8fd", color:"#7c3aed" },
+                    { value:"elementary",        label:"Elementary",        icon:"ti-book",          bg:"#e8f0fd", color:"#2563eb" },
+                    { value:"junior_highschool", label:"Junior High",       icon:"ti-school",        bg:"#e8fdf0", color:"#16a34a" },
+                    { value:"senior_highschool", label:"Senior High",       icon:"ti-certificate",   bg:"#fde8f8", color:"#be185d" },
+                  ].map((lvl) => {
+                    const active = schoolLevel === lvl.value;
+                    return (
+                      <motion.button key={lvl.value}
+                        layout
+                        initial={false}
+                        animate={{
+                          backgroundColor: active ? lvl.bg    : "#ffffff",
+                          color:           active ? lvl.color : "#9a7070",
+                          borderColor:     active ? lvl.color : "#f0e4e4",
+                        }}
+                        transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                        onClick={() => setSchoolLevel(lvl.value)}
+                        style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                        <i className={`ti ${lvl.icon}`} style={{ fontSize:12 }} />
+                        {lvl.label}
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
               </div>
 
               {/* Row 3: Grade level chips (cascades from school level) */}
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {gradeOptions.map((g) => {
                     const val = g === "All Grades" ? "" : g;
+                    const active = gradeLevel === val;
                     return (
                       <motion.button key={g}
-                        whileHover={{ scale: 1.04 }}
-                        whileTap={{ scale: 0.93 }}
-                        transition={{ duration: 0.12 }}
-                        className={`filter-chip${gradeLevel === val ? " active" : ""}`}
+                        layout
+                        initial={false}
+                        animate={{
+                          backgroundColor: active ? "#fff0f0" : "#ffffff",
+                          color:           active ? "#e03131" : "#9a7070",
+                          borderColor:     active ? "#e03131" : "#f0e4e4",
+                        }}
+                        transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
                         onClick={() => setGradeLevel(val)}
-                        style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
+                        style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                         {g}
                       </motion.button>
                     );
                   })}
-                </div>
+                </motion.div>
               </div>
 
               {/* Row 4: Status chips */}
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {[{ value:"", label:"All" }, ...Object.entries(STATUS_META).map(([v, m]) => ({ value: v, label: m.label }))].map((s) => (
-                    <motion.button key={s.value}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`filter-chip${statusFilter === s.value ? " active" : ""}`}
-                      onClick={() => setStatusFilter(s.value)}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
-                      {s.value && <span style={{ width:7, height:7, borderRadius:"50%", background: statusFilter === s.value ? "#e03131" : STATUS_META[s.value]?.dot, flexShrink:0 }} />}
-                      {s.label}
-                    </motion.button>
-                  ))}
-                </div>
+                <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {[
+                    { value:"",         label:"All",       bg:"#fff0f0", color:"#e03131", dot:null        },
+                    { value:"enrolled", label:"Enrolled",  bg:"#e8f5e0", color:"#2e6b0d", dot:"#4caf50"  },
+                    { value:"pending",  label:"Pending",   bg:"#fef3e2", color:"#7a4a08", dot:"#ff9800"  },
+                    { value:"cancelled",label:"Cancelled", bg:"#fde8e8", color:"#9b2020", dot:"#f44336"  },
+                    { value:"completed",label:"Completed", bg:"#e3f0fd", color:"#1455a0", dot:"#2196f3"  },
+                  ].map((s) => {
+                    const active = statusFilter === s.value;
+                    return (
+                      <motion.button key={s.value}
+                        layout
+                        initial={false}
+                        animate={{
+                          backgroundColor: active ? s.bg    : "#ffffff",
+                          color:           active ? s.color : "#9a7070",
+                          borderColor:     active ? s.color : "#f0e4e4",
+                        }}
+                        transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                        onClick={() => setStatusFilter(s.value)}
+                        style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                        {s.dot && (
+                          <motion.span
+                            animate={{ background: active ? s.dot : "#c0b0b0" }}
+                            transition={{ duration:0.18, ease:"easeOut" }}
+                            style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, display:"inline-block" }}
+                          />
+                        )}
+                        {s.label}
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
               </div>
             </motion.div>
 

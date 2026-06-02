@@ -511,16 +511,21 @@ export default function StudentsPage() {
               </div>
 
               {/* Row 2: quick filters — Recents | Status chips | Sex chips */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
 
                 {/* Recents quick-filter */}
                 <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.93 }}
-                  transition={{ duration: 0.12 }}
-                  className={`chip-btn${isRecents ? " active" : ""}`}
+                  initial={false}
+                  animate={{
+                    backgroundColor: isRecents ? "#fff0f0" : "#ffffff",
+                    color:           isRecents ? "#e03131" : "#9a7070",
+                    borderColor:     isRecents ? "#e03131" : "#f0e4e4",
+                  }}
+                  layout
+                  transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
                   onClick={handleRecents}
                   title="Show most recently registered students"
+                  style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
                 >
                   <i className="ti ti-clock" style={{ fontSize: 12 }} />
                   Recents
@@ -535,37 +540,30 @@ export default function StudentsPage() {
                   return (
                     <motion.button
                       key={val}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`chip-btn${isActive ? " active" : ""}`}
+                      initial={false}
+                      animate={{
+                        backgroundColor: isActive ? "#fff0f0" : "#ffffff",
+                        color:           isActive ? "#e03131" : "#9a7070",
+                        borderColor:     isActive ? "#e03131" : "#f0e4e4",
+                      }}
+                      layout
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
                       onClick={() => handleStatusFilter(val)}
+                      style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
                     >
                       {val !== "all" && (
-                        <span style={{
-                          width: 7, height: 7, borderRadius: "50%",
-                          background: isActive ? "#e03131" : meta?.dot ?? "#9e9e9e",
-                          flexShrink: 0,
-                        }} />
+                        <motion.span
+                          animate={{ background: isActive ? "#e03131" : meta?.dot ?? "#9e9e9e" }}
+                          transition={{ duration: 0.18, ease: "easeOut" }}
+                          style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, display: "inline-block" }}
+                        />
                       )}
                       {val === "all" ? "All" : meta?.label}
-                      <AnimatePresence>
-                        {isActive && !loading && statusCounts[val] !== undefined && (
-                          <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.14 }}
-                            style={{
-                              display: "inline-block",
-                              background: "#e03131", color: "white", borderRadius: 99,
-                              fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2,
-                            }}
-                          >
-                            {statusCounts[val]}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
+                      {isActive && !loading && statusCounts[val] !== undefined && (
+                        <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
+                          {statusCounts[val]}
+                        </span>
+                      )}
                     </motion.button>
                   );
                 })}
@@ -578,18 +576,23 @@ export default function StudentsPage() {
                   return (
                     <motion.button
                       key={sf.value}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`chip-btn${isActive ? " active" : ""}`}
+                      initial={false}
+                      animate={{
+                        backgroundColor: isActive ? "#fff0f0" : "#ffffff",
+                        color:           isActive ? "#e03131" : "#9a7070",
+                        borderColor:     isActive ? "#e03131" : "#f0e4e4",
+                      }}
+                      layout
+                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
                       onClick={() => handleSexFilter(sf.value)}
+                      style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
                     >
-                      {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12, color: isActive ? "#e03131" : sf.color }} />}
+                      {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12 }} />}
                       {sf.label}
                     </motion.button>
                   );
                 })}
-              </div>
+              </motion.div>
             </motion.div>
 
             {/* ── Table ── */}

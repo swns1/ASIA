@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
+import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -49,33 +50,36 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   }} />
 );
 
-// ── Animation variants ────────────────────────────────────────────────────────
-const fadeUp = {
-  hidden:  { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0  },
-};
-
-const rowVariants = {
-  hidden:  { opacity: 0, x: -8 },
-  visible: { opacity: 1, x: 0  },
-  exit:    { opacity: 0, x: 8, transition: { duration: 0.15 } },
-};
-
-const tableContainerVariants = {
-  visible: { transition: { staggerChildren: 0.03 } },
-};
-
-const modalBackdropVariants = {
-  hidden:  { opacity: 0 },
-  visible: { opacity: 1 },
-  exit:    { opacity: 0 },
-};
-
-const modalVariants = {
-  hidden:  { opacity: 0, scale: 0.93, y: 10 },
-  visible: { opacity: 1, scale: 1,    y: 0  },
-  exit:    { opacity: 0, scale: 0.95, y: 6  },
-};
+// ── Stat card — matches StudentsPage exactly ──────────────────────────────────
+function StatCard({ label, value, icon, color, bg, loading }) {
+  return (
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.16 }}
+      style={{
+        background: "white", borderRadius: 14, padding: "16px 20px",
+        border: "1px solid #f5eaea", width: "100%",
+        display: "flex", alignItems: "center", gap: 14,
+        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
+      }}
+    >
+      <div style={{
+        width: 42, height: 42, borderRadius: 12, background: bg,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+      }}>
+        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
+      </div>
+      <div>
+        {loading
+          ? <Sk w={40} h={20} r={4} />
+          : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{value?.toLocaleString?.() ?? value ?? "—"}</div>
+        }
+        <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      </div>
+    </motion.div>
+  );
+}
 
 // ── Form Modal ────────────────────────────────────────────────────────────────
 function SubjectModal({ subject, templates, onSave, onClose }) {
@@ -135,19 +139,22 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
   };
 
   return (
-    <motion.div
-      variants={modalBackdropVariants}
-      initial="hidden" animate="visible" exit="exit"
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-      onClick={onClose}
-    >
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
+      />
+      {/* Dialog */}
       <motion.div
         variants={modalVariants}
         initial="hidden" animate="visible" exit="exit"
-        transition={{ type: "spring", stiffness: 320, damping: 26 }}
-        style={{ background: "white", borderRadius: 20, width: 560, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
-        onClick={(e) => e.stopPropagation()}
+        transition={springTransition}
+        style={{ position: "relative", background: "white", borderRadius: 20, width: 560, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
       >
         {/* Modal header */}
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right, #fdfafa, white)" }}>
@@ -203,9 +210,8 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
                     onClick={() => setF("school_level", lvl.value)}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.95 }}
-                    animate={{ borderColor: active ? lvl.color : "#f0e4e4", background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070", fontWeight: active ? 700 : 500 }}
-                    transition={{ duration: 0.15 }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                    transition={{ duration: 0.12 }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.14s" }}
                   >
                     <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
                   </motion.button>
@@ -286,20 +292,20 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <motion.button
             onClick={onClose}
-            whileHover={{ scale: 1.02, borderColor: "#e03131", color: "#e03131" }}
+            whileHover={{ background: "#fdf8f8" }}
             whileTap={{ scale: 0.97 }}
             transition={{ duration: 0.12 }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}
+            style={{ background: "white", color: "#7a5050", border: "1.5px solid #f0e0e0", borderRadius: 10, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}
           >
             Cancel
           </motion.button>
           <motion.button
             onClick={handleSave}
             disabled={saving}
-            whileHover={saving ? {} : { scale: 1.02, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
+            whileHover={saving ? {} : { opacity: 0.88 }}
             whileTap={saving ? {} : { scale: 0.97 }}
             transition={{ duration: 0.12 }}
-            style={{ background: saving ? "#e87474" : "linear-gradient(135deg, #e03131, #c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+            style={{ background: saving ? "#e87474" : "linear-gradient(135deg, #e03131, #c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
           >
             {saving
               ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Saving…</>
@@ -308,34 +314,33 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
           </motion.button>
         </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
 // ── Delete Modal ──────────────────────────────────────────────────────────────
 function DeleteModal({ subject, onConfirm, onCancel }) {
   return (
-    <motion.div
-      variants={modalBackdropVariants}
-      initial="hidden" animate="visible" exit="exit"
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-      onClick={onCancel}
-    >
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onCancel}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
+      />
+      {/* Dialog */}
       <motion.div
         variants={modalVariants}
         initial="hidden" animate="visible" exit="exit"
-        transition={{ type: "spring", stiffness: 320, damping: 26 }}
-        style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-        onClick={(e) => e.stopPropagation()}
+        transition={springTransition}
+        style={{ position: "relative", background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
       >
-        <motion.div
-          initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.06 }}
-          style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
+        <div style={{ width: 60, height: 60, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
-        </motion.div>
+        </div>
         <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Delete Subject?</div>
         <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
           You're about to delete <strong style={{ color: "#1a0a0a" }}>{subject.subject_name}</strong>. This cannot be undone and may affect existing grades.
@@ -343,7 +348,8 @@ function DeleteModal({ subject, onConfirm, onCancel }) {
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
           <motion.button
             onClick={onCancel}
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+            whileHover={{ background: "#fdf8f8" }}
+            whileTap={{ scale: 0.97 }}
             transition={{ duration: 0.12 }}
             style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}
           >
@@ -351,7 +357,8 @@ function DeleteModal({ subject, onConfirm, onCancel }) {
           </motion.button>
           <motion.button
             onClick={onConfirm}
-            whileHover={{ scale: 1.02, boxShadow: "0 8px 24px rgba(224,49,49,0.36)" }} whileTap={{ scale: 0.97 }}
+            whileHover={{ opacity: 0.88 }}
+            whileTap={{ scale: 0.97 }}
             transition={{ duration: 0.12 }}
             style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg, #e03131, #c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}
           >
@@ -359,43 +366,6 @@ function DeleteModal({ subject, onConfirm, onCancel }) {
           </motion.button>
         </div>
       </motion.div>
-    </motion.div>
-  );
-}
-
-// ── Stats strip ───────────────────────────────────────────────────────────────
-function StatsStrip({ subjects, total, loading }) {
-  const withTemplate    = subjects.filter((s) => s.grading_template_detail).length;
-  const withoutTemplate = subjects.filter((s) => !s.grading_template_detail).length;
-  const activeLevels    = new Set(subjects.map((s) => s.school_level)).size;
-
-  const stats = [
-    { label: "Total Subjects",      value: loading ? "—" : total,           icon: "ti-books",          color: "#e03131", bg: "#fff0f0" },
-    { label: "With Template",       value: loading ? "—" : withTemplate,    icon: "ti-report-analytics",color: "#2e6b0d", bg: "#e8f5e0" },
-    { label: "Without Template",    value: loading ? "—" : withoutTemplate, icon: "ti-alert-triangle", color: "#d97706", bg: "#fdf5e8" },
-    { label: "Levels Active",       value: loading ? "—" : activeLevels,    icon: "ti-layout-grid",    color: "#1455a0", bg: "#e3f0fd" },
-  ];
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
-      {stats.map((s, i) => (
-        <motion.div
-          key={s.label}
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          transition={{ type: "spring", stiffness: 300, damping: 24, delay: i * 0.06 }}
-          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}
-        >
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className={`ti ${s.icon}`} style={{ fontSize: 16, color: s.color }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", lineHeight: 1.1 }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>{s.label}</div>
-          </div>
-        </motion.div>
-      ))}
     </div>
   );
 }
@@ -404,8 +374,10 @@ function StatsStrip({ subjects, total, loading }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function SubjectsPage() {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
   const currentUser = getCurrentUser();
+  const hasAnimated = useRef(false);
+
   const [subjects,    setSubjects]    = useState([]);
   const [templates,   setTemplates]   = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -454,44 +426,62 @@ export default function SubjectsPage() {
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
+  const withTemplate    = subjects.filter((s) => s.grading_template_detail).length;
+  const withoutTemplate = subjects.filter((s) => !s.grading_template_detail).length;
+  const activeLevels    = new Set(subjects.map((s) => s.school_level)).size;
+
+  const isFirstRender = !hasAnimated.current;
+  if (isFirstRender) hasAnimated.current = true;
+
   return (
     <AppLayout>
       {/* Topbar */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 26 }}
-        style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
-      >
+      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Subjects</div>
           <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
             {loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in curriculum`}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <motion.button
-            whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.13 }}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-            onClick={() => setModal({ mode: "create" })}
-          >
-            <i className="ti ti-plus" style={{ fontSize: 15 }} />New Subject
-          </motion.button>
-        </div>
-      </motion.div>
+        <motion.button
+          whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.13 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+          onClick={() => setModal({ mode: "create" })}
+        >
+          <i className="ti ti-plus" style={{ fontSize: 15 }} />New Subject
+        </motion.button>
+      </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
 
-        {/* Stats strip */}
-        <StatsStrip subjects={subjects} total={pageMeta.count} loading={loading} />
+        {/* Stat cards — matches StudentsPage layout */}
+        <div style={{ display: "flex", gap: 12 }}>
+          {[
+            { label: "Total Subjects",   icon: "ti-books",           value: pageMeta.count,  color: "#e03131", bg: "#fff0f0" },
+            { label: "With Template",    icon: "ti-report-analytics", value: withTemplate,    color: "#2e6b0d", bg: "#e8f5e0" },
+            { label: "No Template",      icon: "ti-alert-triangle",  value: withoutTemplate, color: "#d97706", bg: "#fdf5e8" },
+            { label: "Levels Active",    icon: "ti-layout-grid",     value: activeLevels,    color: "#1455a0", bg: "#e3f0fd" },
+          ].map((card, i) => (
+            <motion.div
+              key={card.label}
+              initial={isFirstRender ? { y: 14, opacity: 0 } : false}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              <StatCard {...card} loading={loading} />
+            </motion.div>
+          ))}
+        </div>
 
         {/* Search + filters */}
         <motion.div
-          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 280, damping: 24, delay: 0.1 }}
+          initial={isFirstRender ? { opacity: 0, y: 8 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
           style={{ display: "flex", flexDirection: "column", gap: 10 }}
         >
           <div style={{ display: "flex", gap: 10 }}>
@@ -504,77 +494,67 @@ export default function SubjectsPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter); } }}
                 style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
               />
-              <AnimatePresence>
-                {inputVal && (
-                  <motion.button
-                    key="clear-btn"
-                    initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
-                    transition={{ duration: 0.14 }}
-                    whileHover={{ scale: 1.15, color: "#e03131" }} whileTap={{ scale: 0.85 }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2 }}
-                    onClick={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter); }}
-                  >
-                    <i className="ti ti-x" style={{ fontSize: 13 }} />
-                  </motion.button>
-                )}
-              </AnimatePresence>
+              {inputVal && (
+                <button
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
+                  onClick={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter); }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: 13 }} />
+                </button>
+              )}
             </div>
-            <motion.button
-              whileHover={{ borderColor: "#e03131", color: "#e03131", scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ duration: 0.13 }}
-              style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+            <button
+              style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
               onClick={() => { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter); }}
             >
               Search
-            </motion.button>
+            </button>
           </div>
 
           {/* Level filter chips */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl, i) => {
+          <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
               const active = levelFilter === lvl.value;
               return (
                 <motion.button
                   key={lvl.value}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04, type: "spring", stiffness: 300, damping: 24 }}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.95 }}
+                  layout
+                  initial={false}
+                  animate={{
+                    backgroundColor: active ? lvl.bg    : "#ffffff",
+                    color:           active ? lvl.color : "#9a7070",
+                    borderColor:     active ? lvl.color : "#f0e4e4",
+                  }}
+                  transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
                   onClick={() => { setLevelFilter(lvl.value); fetchSubjects(1, inputVal, lvl.value); }}
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 6,
                     height: 32, padding: "0 14px", borderRadius: 99,
-                    border: `1.5px solid ${active ? (lvl.color ?? "#e03131") : "#f0e4e4"}`,
-                    background: active ? (lvl.bg ?? "#fff0f0") : "white",
-                    color: active ? (lvl.color ?? "#e03131") : "#9a7070",
-                    fontSize: 12, fontWeight: active ? 700 : 500,
+                    border: "1.5px solid", fontSize: 12, fontWeight: 600,
                     cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                    transition: "border-color 0.14s, background 0.14s, color 0.14s",
                   }}
                 >
                   <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
                   {lvl.label}
                   {active && lvl.value === "all" && !loading && (
-                    <motion.span
-                      initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                      style={{ background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2 }}
-                    >
+                    <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
                       {pageMeta.count}
-                    </motion.span>
+                    </span>
                   )}
                 </motion.button>
               );
             })}
-          </div>
+          </motion.div>
         </motion.div>
 
         {/* Table */}
         <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 24, delay: 0.14 }}
-          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)", maxHeight: "calc(100vh - 400px)", overflowY: "auto" }}
+          initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.34 : 0 }}
+          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)", maxHeight: "calc(100vh - 360px)", overflowY: "auto" }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
@@ -588,180 +568,160 @@ export default function SubjectsPage() {
                   { label: "Grading Template", w: "15%" },
                   { label: "",                 w: "4%"  },
                 ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
+                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w, position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }}>
                     {label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <motion.tbody variants={tableContainerVariants} initial="hidden" animate="visible">
-              {loading
-                ? Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Sk w={32} h={32} r={8} />
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <Sk w={130} h={13} />
-                            <Sk w={80} h={11} />
+            <AnimatePresence mode="popLayout">
+              <tbody>
+                {loading
+                  ? Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <Sk w={32} h={32} r={8} />
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <Sk w={130} h={13} />
+                              <Sk w={80} h={11} />
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      {[70, 80, 70, 100, 110, 36].map((w, j) => (
-                        <td key={j} style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}><Sk w={w} h={13} /></td>
-                      ))}
-                    </tr>
-                  ))
-                : subjects.length === 0
-                  ? (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: "64px 16px" }}>
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 22 }}
-                          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}
-                        >
-                          <motion.div
-                            animate={{ y: [0, -5, 0] }}
-                            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                            style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        </td>
+                        {[70, 80, 70, 100, 110, 36].map((w, j) => (
+                          <td key={j} style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}><Sk w={w} h={13} /></td>
+                        ))}
+                      </tr>
+                    ))
+                  : subjects.length === 0
+                    ? (
+                      <motion.tr
+                        key="empty"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                      >
+                        <td colSpan={7} style={{ textAlign: "center", padding: "64px 16px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+                              <i className="ti ti-book-off" style={{ fontSize: 24, color: "#e08080" }} />
+                            </div>
+                            <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No subjects found</div>
+                            <div style={{ fontSize: 12, color: "#b09090" }}>Try a different search or add a new subject</div>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    )
+                    : subjects.map((sub, idx) => {
+                        const lvlMeta = getLevelMeta(sub.school_level);
+                        const hasTpl  = sub.grading_template_detail;
+                        return (
+                          <motion.tr
+                            key={sub.subject_id}
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 6 }}
+                            transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(idx * 0.025, 0.3) }}
+                            className="sub-row"
                           >
-                            <i className="ti ti-book-off" style={{ fontSize: 24, color: "#e08080" }} />
-                          </motion.div>
-                          <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No subjects found</div>
-                          <div style={{ fontSize: 12, color: "#b09090" }}>Try a different search or add a new subject</div>
-                        </motion.div>
-                      </td>
-                    </tr>
-                  )
-                  : subjects.map((sub) => {
-                      const lvlMeta = getLevelMeta(sub.school_level);
-                      const hasTpl  = sub.grading_template_detail;
-                      return (
-                        <motion.tr
-                          key={sub.subject_id}
-                          variants={rowVariants}
-                          transition={{ type: "spring", stiffness: 300, damping: 26 }}
-                          className="sub-row"
-                          layout
-                        >
-                          {/* Subject name */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: 9, background: lvlMeta.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <i className={`ti ${lvlMeta.icon}`} style={{ fontSize: 15, color: lvlMeta.color }} />
-                              </div>
-                              <div>
+                            {/* Subject name */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <div style={{ width: 34, height: 34, borderRadius: 9, background: lvlMeta.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <i className={`ti ${lvlMeta.icon}`} style={{ fontSize: 15, color: lvlMeta.color }} />
+                                </div>
                                 <div className="sub-name" style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", transition: "color 0.12s" }}>{sub.subject_name}</div>
                               </div>
-                            </div>
-                          </td>
-                          {/* Code */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                            <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{sub.subject_code}</span>
-                          </td>
-                          {/* Level */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: lvlMeta.bg, color: lvlMeta.color }}>
-                              <i className={`ti ${lvlMeta.icon}`} style={{ fontSize: 11 }} />{lvlMeta.label}
-                            </span>
-                          </td>
-                          {/* Grade */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle", fontSize: 13, color: "#5a4a4a" }}>
-                            {sub.grade_level}
-                          </td>
-                          {/* Strand / Sem */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                            {sub.strand || sub.semester
-                              ? <div style={{ fontSize: 12, color: "#7a5a5a" }}>
-                                  {sub.strand && <span style={{ display: "block" }}>{sub.strand}</span>}
-                                  {sub.semester && <span style={{ color: "#b09090", fontSize: 11 }}>{sub.semester === "1st" ? "1st Semester" : "2nd Semester"}</span>}
-                                </div>
-                              : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>
-                            }
-                          </td>
-                          {/* Grading template */}
-                          <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                            {hasTpl
-                              ? <div style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>
-                                    <i className="ti ti-check" style={{ fontSize: 10 }} />{hasTpl.template_name}
+                            </td>
+                            {/* Code */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{sub.subject_code}</span>
+                            </td>
+                            {/* Level */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: lvlMeta.bg, color: lvlMeta.color }}>
+                                <i className={`ti ${lvlMeta.icon}`} style={{ fontSize: 11 }} />{lvlMeta.label}
+                              </span>
+                            </td>
+                            {/* Grade */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle", fontSize: 13, color: "#5a4a4a" }}>
+                              {sub.grade_level}
+                            </td>
+                            {/* Strand / Sem */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                              {sub.strand || sub.semester
+                                ? <div style={{ fontSize: 12, color: "#7a5a5a" }}>
+                                    {sub.strand && <span style={{ display: "block" }}>{sub.strand}</span>}
+                                    {sub.semester && <span style={{ color: "#b09090", fontSize: 11 }}>{sub.semester === "1st" ? "1st Semester" : "2nd Semester"}</span>}
+                                  </div>
+                                : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>
+                              }
+                            </td>
+                            {/* Grading template */}
+                            <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                              {hasTpl
+                                ? <div style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>
+                                      <i className="ti ti-check" style={{ fontSize: 10 }} />{hasTpl.template_name}
+                                    </span>
+                                    <span style={{ fontSize: 11, color: "#b09090", paddingLeft: 2 }}>
+                                      {hasTpl.components?.length ?? 0} components · {hasTpl.total_weight ?? 0}%
+                                    </span>
+                                  </div>
+                                : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontStyle: "italic", padding: "3px 9px", borderRadius: 99, border: "1px dashed #f0d8d8", color: "#c0a0a0" }}>
+                                    <i className="ti ti-minus" style={{ fontSize: 10 }} />No template
                                   </span>
-                                  <span style={{ fontSize: 11, color: "#b09090", paddingLeft: 2 }}>
-                                    {hasTpl.components?.length ?? 0} components · {hasTpl.total_weight ?? 0}%
-                                  </span>
-                                </div>
-                              : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontStyle: "italic", padding: "3px 9px", borderRadius: 99, border: "1px dashed #f0d8d8", color: "#c0a0a0" }}>
-                                  <i className="ti ti-minus" style={{ fontSize: 10 }} />No template
-                                </span>
-                            }
-                          </td>
-                          {/* Actions */}
-                          <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <motion.button
-                                className="row-action"
-                                title="Edit"
-                                whileHover={{ scale: 1.12, backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
-                                whileTap={{ scale: 0.88 }}
-                                transition={{ duration: 0.12 }}
-                                onClick={() => setModal({ mode: "edit", subject: sub })}
-                              >
-                                <i className="ti ti-pencil" style={{ fontSize: 13 }} />
-                              </motion.button>
-                              <motion.button
-                                className="row-action"
-                                title="Delete"
-                                whileHover={{ scale: 1.12, backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
-                                whileTap={{ scale: 0.88 }}
-                                transition={{ duration: 0.12 }}
-                                style={{ color: "#c09090" }}
-                                onClick={() => setToDelete(sub)}
-                              >
-                                <i className="ti ti-trash" style={{ fontSize: 13 }} />
-                              </motion.button>
-                            </div>
-                          </td>
-                        </motion.tr>
-                      );
-                    })
-              }
-            </motion.tbody>
+                              }
+                            </td>
+                            {/* Actions */}
+                            <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button className="row-action" title="Edit" onClick={() => setModal({ mode: "edit", subject: sub })}>
+                                  <i className="ti ti-pencil" style={{ fontSize: 13 }} />
+                                </button>
+                                <button className="row-action danger" title="Delete" style={{ color: "#c09090" }} onClick={() => setToDelete(sub)}>
+                                  <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                                </button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })
+                }
+              </tbody>
+            </AnimatePresence>
           </table>
         </motion.div>
 
         {/* Pagination */}
         {!loading && pageMeta.count > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.22 }}
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
-          >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 12, color: "#b09090" }}>
               Page <strong style={{ color: "#7a5050" }}>{page}</strong> of <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong> · {pageMeta.count.toLocaleString()} subjects
             </span>
             <div style={{ display: "flex", gap: 4 }}>
               <motion.button
-                className="page-btn" style={pgBtn}
+                whileTap={{ scale: 0.92 }}
+                transition={{ duration: 0.1 }}
+                className="page-btn"
+                style={pgBtn}
                 disabled={!pageMeta.previous}
-                whileHover={pageMeta.previous ? { scale: 1.08 } : {}}
-                whileTap={pageMeta.previous ? { scale: 0.92 } : {}}
                 onClick={() => fetchSubjects(page - 1, search, levelFilter)}
               >
                 <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
               </motion.button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                const start = Math.max(1, page - 2);
-                const p = start + i;
-                if (p > totalPages) return null;
+              {(() => {
+                const windowSize = Math.min(totalPages, 5);
+                const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
+                return Array.from({ length: windowSize }, (_, i) => start + i);
+              })().map((p) => {
                 const isActive = p === page;
                 return (
                   <motion.button
                     key={p}
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ duration: 0.1 }}
                     className="page-btn"
                     style={{ ...pgBtn, ...(isActive ? pgBtnActive : {}) }}
-                    whileHover={!isActive ? { scale: 1.08 } : {}}
-                    whileTap={{ scale: 0.92 }}
                     onClick={() => fetchSubjects(p, search, levelFilter)}
                   >
                     {p}
@@ -769,16 +729,17 @@ export default function SubjectsPage() {
                 );
               })}
               <motion.button
-                className="page-btn" style={pgBtn}
+                whileTap={{ scale: 0.92 }}
+                transition={{ duration: 0.1 }}
+                className="page-btn"
+                style={pgBtn}
                 disabled={!pageMeta.next}
-                whileHover={pageMeta.next ? { scale: 1.08 } : {}}
-                whileTap={pageMeta.next ? { scale: 0.92 } : {}}
                 onClick={() => fetchSubjects(page + 1, search, levelFilter)}
               >
                 <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
               </motion.button>
             </div>
-          </motion.div>
+          </div>
         )}
       </div>
 
@@ -811,8 +772,10 @@ export default function SubjectsPage() {
 const pgBtn = {
   width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
   background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070", fontFamily: "'DM Sans',sans-serif", transition: "all 0.12s",
+  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
 };
+
 const pgBtnActive = {
   background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
 };
