@@ -159,6 +159,9 @@ export default function Sidebar({ user: userProp }) {
                     key={item.path}
                     variants={navItemVariants}
                     className="nav-item"
+                    whileHover="hovered"
+                    initial="rest"
+                    animate="rest"
                     style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer", fontWeight: active ? 600 : 400 }}
                     onClick={() => navigate(item.path)}
                     role="button"
@@ -169,8 +172,21 @@ export default function Sidebar({ user: userProp }) {
                     {active && (
                       <motion.div
                         layoutId="nav-active-pill"
+                        initial={{ opacity: 0.4 }}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          layout:  { type: "spring", stiffness: 380, damping: 34 },
+                          opacity: { duration: 0.18, delay: 0.22, ease: "easeOut" },
+                        }}
                         style={{ position: "absolute", inset: 0, borderRadius: 9, background: "#fff0f0" }}
-                        transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                      />
+                    )}
+                    {/* Hover pill */}
+                    {!active && (
+                      <motion.div
+                        variants={{ rest: { opacity: 0 }, hovered: { opacity: 1 } }}
+                        transition={{ duration: 0.22, ease: "easeOut" }}
+                        style={{ position: "absolute", inset: 0, borderRadius: 9, background: "#fff4f4", pointerEvents: "none" }}
                       />
                     )}
                     <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center", position: "relative" }} />

@@ -1092,6 +1092,34 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
   );
 }
 
+// ── Stat card — matches StudentsPage / SubjectsPage exactly ──────────────────
+function StatCard({ label, value, icon, color, bg, loading }) {
+  return (
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.16 }}
+      style={{
+        background: "white", borderRadius: 14, padding: "16px 20px",
+        border: "1px solid #f5eaea", width: "100%",
+        display: "flex", alignItems: "center", gap: 14,
+        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
+      }}
+    >
+      <div style={{ width: 42, height: 42, borderRadius: 12, background: bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
+      </div>
+      <div>
+        {loading
+          ? <Sk w={40} h={20} r={4} />
+          : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
+        }
+        <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
@@ -1106,6 +1134,8 @@ export default function EnrollmentsPage() {
   const [pageMeta,       setPageMeta]       = useState({ count: 0, next: null, previous: null });
   const [showMassEnroll,  setShowMassEnroll]  = useState(false);
   const [showPromote,     setShowPromote]     = useState(false);
+  const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
+  const [countsLoading,  setCountsLoading]  = useState(true);
 
   // Filters
   const [schoolYear,   setSchoolYear]   = useState("");
@@ -1120,6 +1150,28 @@ export default function EnrollmentsPage() {
 
   // Reset grade when level changes
   useEffect(() => { setGradeLevel(""); }, [schoolLevel]);
+
+  // Fetch status counts once on mount for stat cards
+  useEffect(() => {
+    if (!token) return;
+    setCountsLoading(true);
+    Promise.all([
+      apiGetEnrollments({ page_size: 1 }),
+      apiGetEnrollments({ page_size: 1, enrollment_status: "enrolled"  }),
+      apiGetEnrollments({ page_size: 1, enrollment_status: "pending"   }),
+      apiGetEnrollments({ page_size: 1, enrollment_status: "completed" }),
+      apiGetEnrollments({ page_size: 1, enrollment_status: "cancelled" }),
+    ]).then(([all, enrolled, pending, completed, cancelled]) => {
+      setStatusCounts({
+        total:     all.count       ?? 0,
+        enrolled:  enrolled.count  ?? 0,
+        pending:   pending.count   ?? 0,
+        completed: completed.count ?? 0,
+        cancelled: cancelled.count ?? 0,
+      });
+    }).catch(() => {}).finally(() => setCountsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchEnrollments = useCallback(async (pg = 1) => {
     if (!token) { navigate("/"); return; }
@@ -1173,11 +1225,7 @@ export default function EnrollmentsPage() {
         .enroll-row:hover td { background:#fff8f6 !important; }
         .enroll-row:hover .row-name { color:#e03131 !important; }
 
-        .filter-chip { transition:all .14s; cursor:pointer; border:1.5px solid #f0e4e4; background:white; font-family:'DM Sans',sans-serif; }
-        .filter-chip:hover { border-color:#fca5a5; color:#e03131; background:#fff8f6; }
-        .filter-chip.active { background:#fff0f0; border-color:#e03131; color:#e03131; font-weight:700; }
-
-        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+@keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
@@ -1233,44 +1281,67 @@ export default function EnrollmentsPage() {
           </motion.div>
 
           {/* Content */}
-          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
+          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:18 }}>
 
-            {/* ── Filter panel ── */}
+            {/* ── Stat cards ── */}
+            <div style={{ display:"flex", gap:12 }}>
+              {[
+                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#e03131", bg:"#fff0f0" },
+                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  color:"#2e6b0d", bg:"#e8f5e0" },
+                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   color:"#7a4a08", bg:"#fef3e2" },
+                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, color:"#1455a0", bg:"#e3f0fd" },
+                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, color:"#9b2020", bg:"#fde8e8" },
+              ].map((card, i) => (
+                <motion.div
+                  key={card.label}
+                  initial={isFirstRender ? { y: 14, opacity: 0 } : false}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
+                  style={{ flex:1, minWidth:0 }}
+                >
+                  <StatCard {...card} loading={countsLoading} />
+                </motion.div>
+              ))}
+            </div>
+
+            {/* ── Search + filters ── */}
             <motion.div
-              initial={isFirstRender ? { opacity: 0, y: 12 } : false}
+              initial={isFirstRender ? { opacity: 0, y: 8 } : false}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
-              style={{ background:"white", border:"1px solid #f5eaea", borderRadius:14, padding:"18px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:14 }}>
+              transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
+              style={{
+                background: "white", border: "1px solid #f5eaea",
+                borderRadius: 14, padding: "18px 20px",
+                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
+                display: "flex", flexDirection: "column", gap: 0,
+              }}
+            >
 
-              {/* Row 1: Search + School Year */}
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                {/* Search */}
+              {/* Row 1: Search + Search btn + Clear */}
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
                 <div className="search-wrap"
-                  style={{ flex:1, minWidth:220, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"0 14px", height:40, transition:"border .15s,box-shadow .15s" }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#c0a0a0", flexShrink:0 }} />
-                  <input placeholder="Search student name or section…" value={searchInput}
+                  style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
+                  <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0", flexShrink:0 }} />
+                  <input
+                    placeholder="Search student name or section…"
+                    value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
+                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }}
+                  />
                   {searchInput && (
-                    <button onClick={() => { setSearchInput(""); setSearch(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex" }}>
+                    <button onClick={() => { setSearchInput(""); setSearch(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}>
                       <i className="ti ti-x" style={{ fontSize:13 }} />
                     </button>
                   )}
                 </div>
-                <button onClick={handleSearch}
-                  style={{ height:40, padding:"0 18px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:10, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                <button
+                  onClick={handleSearch}
+                  style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s", flexShrink:0 }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#e03131"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
                   Search
                 </button>
-
-                {/* School Year */}
-                <select value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)}
-                  style={{ height:40, padding:"0 12px", border:"1.5px solid #f0e4e4", borderRadius:10, fontSize:13, color:"#5a4a4a", fontFamily:"'DM Sans',sans-serif", background:"white", cursor:"pointer", outline:"none" }}>
-                  {schoolYearOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-
                 <AnimatePresence>
                   {hasFilters && (
                     <motion.button
@@ -1280,70 +1351,171 @@ export default function EnrollmentsPage() {
                       transition={{ duration: 0.14 }}
                       whileTap={{ scale: 0.93 }}
                       onClick={clearFilters}
-                      style={{ height:40, padding:"0 14px", border:"1.5px solid #f0e4e4", borderRadius:10, fontSize:12, color:"#a07070", cursor:"pointer", background:"white", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:6 }}>
-                      <i className="ti ti-x" style={{ fontSize:13 }} />Clear
+                      style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+                      <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
                     </motion.button>
                   )}
                 </AnimatePresence>
               </div>
 
-              {/* Row 2: School level chips */}
-              <div>
-                <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {SCHOOL_LEVELS.map((lvl) => (
-                    <motion.button key={lvl.value}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`filter-chip${schoolLevel === lvl.value ? " active" : ""}`}
-                      onClick={() => setSchoolLevel(lvl.value)}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
-                      {lvl.label}
-                    </motion.button>
-                  ))}
+              {/* Divider */}
+              <div style={{ height:1, background:"#f5eaea", margin:"14px 0" }} />
+
+              {/* Chip rows */}
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+
+                {/* Row 2: School Year chips */}
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
+                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                    {schoolYearOptions.map((o) => {
+                      const active = schoolYear === o.value;
+                      return (
+                        <motion.button key={o.value}
+                          layout
+                          initial={false}
+                          animate={{
+                            backgroundColor: active ? "#fff0f0" : "#ffffff",
+                            color:           active ? "#e03131" : "#9a7070",
+                            borderColor:     active ? "#e03131" : "#f0e4e4",
+                          }}
+                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                          onClick={() => setSchoolYear(o.value)}
+                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                          <i className="ti ti-calendar" style={{ fontSize:12 }} />
+                          {o.label}
+                          {active && o.value !== "" && !loading && (
+                            <span style={{ display:"inline-block", background:"#e03131", color:"white", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", marginLeft:2, whiteSpace:"nowrap", flexShrink:0 }}>
+                              {pageMeta.count}
+                            </span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
                 </div>
+
+                {/* Row 3: School Level chips */}
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
+                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                    {[
+                      { value:"",                  label:"All Levels",   icon:"ti-layout-grid",   bg:"#fff0f0", color:"#e03131" },
+                      { value:"nursery",           label:"Nursery",      icon:"ti-baby-carriage", bg:"#fdf5e8", color:"#c27a12" },
+                      { value:"kindergarten",      label:"Kindergarten", icon:"ti-star",          bg:"#f0e8fd", color:"#7c3aed" },
+                      { value:"elementary",        label:"Elementary",   icon:"ti-book",          bg:"#e8f0fd", color:"#2563eb" },
+                      { value:"junior_highschool", label:"Junior High",  icon:"ti-school",        bg:"#e8fdf0", color:"#16a34a" },
+                      { value:"senior_highschool", label:"Senior High",  icon:"ti-certificate",   bg:"#fde8f8", color:"#be185d" },
+                    ].map((lvl) => {
+                      const active = schoolLevel === lvl.value;
+                      return (
+                        <motion.button key={lvl.value}
+                          layout
+                          initial={false}
+                          animate={{
+                            backgroundColor: active ? lvl.bg    : "#ffffff",
+                            color:           active ? lvl.color : "#9a7070",
+                            borderColor:     active ? lvl.color : "#f0e4e4",
+                          }}
+                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                          onClick={() => setSchoolLevel(lvl.value)}
+                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                          <i className={`ti ${lvl.icon}`} style={{ fontSize:12 }} />
+                          {lvl.label}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                </div>
+
+                {/* Row 4: Grade Level chips — slides open/closed with CSS max-height, no reflow on siblings */}
+                <div style={{
+                  maxHeight: schoolLevel !== "" ? 200 : 0,
+                  overflow: "hidden",
+                  opacity: schoolLevel !== "" ? 1 : 0,
+                  marginTop: schoolLevel !== "" ? 0 : -12,
+                  transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
+                  pointerEvents: schoolLevel !== "" ? "auto" : "none",
+                }}>
+                  <div style={{ paddingTop: 0 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
+                    <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                      {gradeOptions.map((g, idx) => {
+                        const val = g === "All Grades" ? "" : g;
+                        const active = gradeLevel === val;
+                        return (
+                          <motion.button key={`${schoolLevel}-${g}`}
+                            layout
+                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                            animate={{
+                              opacity: 1, y: 0,
+                              backgroundColor: active ? "#fff0f0" : "#ffffff",
+                              color:           active ? "#e03131" : "#9a7070",
+                              borderColor:     active ? "#e03131" : "#f0e4e4",
+                            }}
+                            transition={{
+                              opacity: { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                              y:       { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
+                              backgroundColor: { duration: 0.18, ease: "easeOut" },
+                              color:           { duration: 0.18, ease: "easeOut" },
+                              borderColor:     { duration: 0.18, ease: "easeOut" },
+                              layout:          { type: "spring", stiffness: 400, damping: 36 },
+                            }}
+                            onClick={() => setGradeLevel(val)}
+                            style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                            {g}
+                          </motion.button>
+                        );
+                      })}
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* Row 5: Status chips */}
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
+                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                    {[
+                      { value:"",          label:"All",       bg:"#fff0f0", color:"#e03131", dot:null       },
+                      { value:"enrolled",  label:"Enrolled",  bg:"#e8f5e0", color:"#2e6b0d", dot:"#4caf50" },
+                      { value:"pending",   label:"Pending",   bg:"#fef3e2", color:"#7a4a08", dot:"#ff9800" },
+                      { value:"completed", label:"Completed", bg:"#e3f0fd", color:"#1455a0", dot:"#2196f3" },
+                      { value:"cancelled", label:"Cancelled", bg:"#fde8e8", color:"#9b2020", dot:"#f44336" },
+                    ].map((s) => {
+                      const active = statusFilter === s.value;
+                      return (
+                        <motion.button key={s.value}
+                          layout
+                          initial={false}
+                          animate={{
+                            backgroundColor: active ? s.bg    : "#ffffff",
+                            color:           active ? s.color : "#9a7070",
+                            borderColor:     active ? s.color : "#f0e4e4",
+                          }}
+                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                          onClick={() => setStatusFilter(s.value)}
+                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                          {s.dot && (
+                            <motion.span
+                              animate={{ background: active ? s.dot : "#c0b0b0" }}
+                              transition={{ duration:0.18, ease:"easeOut" }}
+                              style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, display:"inline-block" }}
+                            />
+                          )}
+                          {s.label}
+                          {active && s.value !== "" && !loading && (
+                            <span style={{ display:"inline-block", background: s.dot ?? "#e03131", color:"white", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", marginLeft:2, whiteSpace:"nowrap", flexShrink:0 }}>
+                              {pageMeta.count}
+                            </span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                </div>
+
               </div>
 
-              {/* Row 3: Grade level chips (cascades from school level) */}
-              <div>
-                <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {gradeOptions.map((g) => {
-                    const val = g === "All Grades" ? "" : g;
-                    return (
-                      <motion.button key={g}
-                        whileHover={{ scale: 1.04 }}
-                        whileTap={{ scale: 0.93 }}
-                        transition={{ duration: 0.12 }}
-                        className={`filter-chip${gradeLevel === val ? " active" : ""}`}
-                        onClick={() => setGradeLevel(val)}
-                        style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
-                        {g}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Row 4: Status chips */}
-              <div>
-                <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {[{ value:"", label:"All" }, ...Object.entries(STATUS_META).map(([v, m]) => ({ value: v, label: m.label }))].map((s) => (
-                    <motion.button key={s.value}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.93 }}
-                      transition={{ duration: 0.12 }}
-                      className={`filter-chip${statusFilter === s.value ? " active" : ""}`}
-                      onClick={() => setStatusFilter(s.value)}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12 }}>
-                      {s.value && <span style={{ width:7, height:7, borderRadius:"50%", background: statusFilter === s.value ? "#e03131" : STATUS_META[s.value]?.dot, flexShrink:0 }} />}
-                      {s.label}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
             </motion.div>
 
             {/* ── Table ── */}
@@ -1355,7 +1527,7 @@ export default function EnrollmentsPage() {
                 background: "white", border: "1px solid #f5eaea",
                 borderRadius: 16, overflow: "hidden",
                 boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
-                maxHeight: "calc(100vh - 340px)",
+                maxHeight: "calc(100vh - 420px)",
                 overflowY: "auto",
               }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>

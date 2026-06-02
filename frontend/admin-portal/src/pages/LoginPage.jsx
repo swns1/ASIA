@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { login } from "../api/identityApi";
 import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
@@ -52,53 +53,103 @@ export default function LoginPage() {
       `}</style>
 
       {/* Blobs */}
-      <div className="absolute pointer-events-none" style={{
-        top: -60, right: -30, width: 220, height: 220,
-        borderRadius: "60% 40% 70% 30% / 50% 60% 40% 50%",
-        background: "linear-gradient(135deg, #ff6b6b, #e03131)", opacity: 0.85,
-      }} />
-      <div className="absolute pointer-events-none" style={{
-        bottom: -40, left: -20, width: 130, height: 130,
-        borderRadius: "40% 60% 30% 70% / 60% 40% 60% 40%",
-        background: "linear-gradient(135deg, #ff9a9a, #e03131)", opacity: 0.7,
-      }} />
-      <div className="absolute pointer-events-none" style={{
-        top: "55%", right: -50, width: 80, height: 80,
-        borderRadius: "50%",
-        background: "linear-gradient(135deg, #ffcbcb, #ff6b6b)", opacity: 0.5,
-      }} />
+      <motion.div
+        className="absolute pointer-events-none"
+        initial={{ x: 60, y: -60, opacity: 0 }}
+        animate={{ x: 0, y: [0, -8, 0], opacity: 0.85 }}
+        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0 }, y: { duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.4 }, opacity: { duration: 0.5 } }}
+        style={{
+          top: -60, right: -30, width: 220, height: 220,
+          borderRadius: "60% 40% 70% 30% / 50% 60% 40% 50%",
+          background: "linear-gradient(135deg, #ff6b6b, #e03131)",
+        }}
+      />
+      <motion.div
+        className="absolute pointer-events-none"
+        initial={{ x: -50, y: 50, opacity: 0 }}
+        animate={{ x: 0, y: [0, 7, 0], opacity: 0.7 }}
+        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0.08 }, y: { duration: 4.8, repeat: Infinity, ease: "easeInOut", delay: 0.6 }, opacity: { duration: 0.5, delay: 0.08 } }}
+        style={{
+          bottom: -40, left: -20, width: 130, height: 130,
+          borderRadius: "40% 60% 30% 70% / 60% 40% 60% 40%",
+          background: "linear-gradient(135deg, #ff9a9a, #e03131)",
+        }}
+      />
+      <motion.div
+        className="absolute pointer-events-none"
+        initial={{ x: 40, opacity: 0 }}
+        animate={{ x: 0, y: [0, -5, 0], opacity: 0.5 }}
+        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0.15 }, y: { duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }, opacity: { duration: 0.5, delay: 0.15 } }}
+        style={{
+          top: "55%", right: -50, width: 80, height: 80,
+          borderRadius: "50%",
+          background: "linear-gradient(135deg, #ffcbcb, #ff6b6b)",
+        }}
+      />
 
       {/* Header */}
       <div className="relative z-10 text-center mb-8">
-        <div className="mx-auto mb-4 flex items-center justify-center" style={{
-          width: 100, height: 100, borderRadius: "50%",
-          background: "white", border: "2px solid #fdd",
-          boxShadow: "0 2px 8px rgba(224,49,49,0.12)",
-        }}>
+        <motion.div
+          className="mx-auto mb-4 flex items-center justify-center"
+          initial={{ scale: 0.7, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 320, damping: 22, delay: 0.05 }}
+          style={{
+            width: 100, height: 100, borderRadius: "50%",
+            background: "white", border: "2px solid #fdd",
+            boxShadow: "0 2px 8px rgba(224,49,49,0.12)",
+          }}
+        >
           <img src={logo} alt="South Lakes Integrated School" style={{ height: 200, width: 200, objectFit: "contain" }} />
-        </div>
-        <h1 style={{ fontSize: 26, color: "#1a1a1a", margin: "0 0 4px", fontWeight: 400 }}>
+        </motion.div>
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: "easeOut", delay: 0.14 }}
+          style={{ fontSize: 26, color: "#1a1a1a", margin: "0 0 4px", fontWeight: 400 }}
+        >
           Good to see you again
-        </h1>
-        <p style={{ fontSize: 13, color: "#a0756e", margin: 0 }}>
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: "easeOut", delay: 0.2 }}
+          style={{ fontSize: 13, color: "#a0756e", margin: 0 }}
+        >
           South Lakes Integrated School
-        </p>
+        </motion.p>
       </div>
 
       {/* Card */}
-      <div className="relative z-10 w-full" style={{
-        maxWidth: 400, background: "white",
-        borderRadius: 20, padding: "2rem", border: "1px solid #fde2de",
-      }}>
-        {error && (
-          <div style={{
-            background: "#fef2f2", border: "1px solid #fca5a5",
-            borderRadius: 8, padding: "8px 12px", fontSize: 13,
-            color: "#b91c1c", marginBottom: "1rem",
-          }} role="alert">
-            {error}
-          </div>
-        )}
+      <motion.div
+        className="relative z-10 w-full"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 280, damping: 24, delay: 0.12 }}
+        style={{
+          maxWidth: 400, background: "white",
+          borderRadius: 20, padding: "2rem", border: "1px solid #fde2de",
+        }}
+      >
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              style={{
+                background: "#fef2f2", border: "1px solid #fca5a5",
+                borderRadius: 8, padding: "8px 12px", fontSize: 13,
+                color: "#b91c1c", marginBottom: "1rem",
+              }}
+              role="alert"
+            >
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <form onSubmit={handleSubmit}>
           {/* Identifier */}
@@ -170,8 +221,12 @@ export default function LoginPage() {
           </div>
 
           {/* Submit */}
-          <button
-            type="submit" disabled={loading}
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileHover={loading ? {} : { scale: 1.02 }}
+            whileTap={loading ? {} : { scale: 0.97 }}
+            transition={{ duration: 0.13 }}
             style={{
               width: "100%", background: loading ? "#e87474" : "#e03131",
               color: "white", border: "none", borderRadius: 50,
@@ -182,17 +237,23 @@ export default function LoginPage() {
             }}
           >
             {loading ? "Signing in..." : "Sign in"}
-          </button>
+          </motion.button>
         </form>
-      </div>
+      </motion.div>
 
       {/* Footer */}
-      <p className="relative z-10" style={{ textAlign: "center", fontSize: 12, color: "#b49190", marginTop: "1.2rem" }}>
+      <motion.p
+        className="relative z-10"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, delay: 0.28 }}
+        style={{ textAlign: "center", fontSize: 12, color: "#b49190", marginTop: "1.2rem" }}
+      >
         Need help?{" "}
         <a href="mailto:admin@southlakes.edu" style={{ color: "#e03131", textDecoration: "none", fontWeight: 500 }}>
           Contact your administrator
         </a>
-      </p>
+      </motion.p>
     </div>
   );
 }

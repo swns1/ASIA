@@ -227,6 +227,9 @@ export default function DashboardPage() {
   const [enrolledFilters,    setEnrolledFilters]    = useState({ year: null, level: null, grade: null });
   const [pendingFilters,     setPendingFilters]     = useState({ year: null, level: null, grade: null });
   const [scholarshipFilters, setScholarshipFilters] = useState({ year: null, level: null, grade: null });
+  const [financialYear,        setFinancialYear]        = useState(null);
+  const [showFinancialFilters, setShowFinancialFilters] = useState(false);
+  const [showAmounts,          setShowAmounts]          = useState(false);
 
   function updateFilter(setter) {
     return (key, val) => setter((prev) => {
@@ -270,6 +273,11 @@ export default function DashboardPage() {
   useEffect(() => { fetchEnrollmentStats(); }, [enrolledFilters]);
   useEffect(() => { fetchPendingStats(); },    [pendingFilters]);
   useEffect(() => { fetchScholarships(); },    [scholarshipFilters]);
+  const isFirstFinancialFetch = useRef(true);
+  useEffect(() => {
+    if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
+    fetchFinancialSummary();
+  }, [financialYear]);
 
   async function fetchAll() {
     setLoading(true);
@@ -366,7 +374,7 @@ export default function DashboardPage() {
 
   async function fetchFinancialSummary() {
     try {
-      const data = await _getFinancialSummary(schoolYear);
+      const data = await _getFinancialSummary(financialYear ?? schoolYear);
       setFinancialSummary(data);
     } catch { /* non-critical */ }
   }
@@ -424,9 +432,32 @@ export default function DashboardPage() {
               <div style={s.topbarTitle}>Dashboard</div>
               <div style={s.topbarSub}>S.Y. {schoolYear} · {now.toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
-                {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                {(() => {
+                  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                  return timeStr.split("").map((ch, i) => {
+                    if (ch === ":" || ch === " ") return <span key={i} style={{ margin: "0 1px" }}>{ch}</span>;
+                    const isLetter = /[A-Za-z]/.test(ch);
+                    if (isLetter) return <span key={i}>{ch}</span>;
+                    return (
+                      <span key={i} style={{ display: "inline-block", overflow: "hidden", height: "1.2em", lineHeight: "1.2em", width: "0.62em", textAlign: "center", flexShrink: 0 }}>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={ch}
+                            initial={{ y: "100%", opacity: 0 }}
+                            animate={{ y: "0%", opacity: 1 }}
+                            exit={{ y: "-100%", opacity: 0 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                            style={{ display: "block" }}
+                          >
+                            {ch}
+                          </motion.span>
+                        </AnimatePresence>
+                      </span>
+                    );
+                  });
+                })()}
               </div>
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
                 {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
@@ -458,83 +489,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-
-            {/* ── Revenue strip ── */}
-            <div style={s.revenueStrip}>
-              {[
-                {
-                  label: "Net Billed",
-                  key: "net_billed",
-                  icon: "ti-receipt",
-                  color: "#1455a0",
-                  bg: "#e3f0fd",
-                },
-                {
-                  label: "Collected",
-                  key: "total_collected",
-                  icon: "ti-cash",
-                  color: "#2e6b0d",
-                  bg: "#e8f5e0",
-                },
-                {
-                  label: "Outstanding",
-                  key: "outstanding",
-                  icon: "ti-alert-circle",
-                  color: "#a32d2d",
-                  bg: "#fde8e8",
-                },
-              ].map((item) => {
-                const raw = financialSummary ? parseFloat(financialSummary[item.key] ?? 0) : 0;
-                return (
-                  <div
-                    key={item.key}
-                    onClick={() => navigate("/invoices")}
-                    style={{ ...s.revenueCell, cursor: "pointer" }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "white"}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
-                      </div>
-                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</span>
-                    </div>
-                    {loading
-                      ? <Sk h={22} w="70%" />
-                      : <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em" }}>
-                          ₱{raw.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                    }
-                    <div style={{ fontSize: 11, color: "#b09090" }}>S.Y. {schoolYear}</div>
-                  </div>
-                );
-              })}
-              {/* Collection rate bar */}
-              {(() => {
-                const net = parseFloat(financialSummary?.net_billed ?? 0);
-                const col = parseFloat(financialSummary?.total_collected ?? 0);
-                const pct = net > 0 ? Math.min(100, Math.round((col / net) * 100)) : 0;
-                return (
-                  <div style={{ ...s.revenueCell, justifyContent: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f0e8fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <i className="ti ti-chart-pie" style={{ fontSize: 14, color: "#7c3aed" }} />
-                      </div>
-                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Collection Rate</span>
-                    </div>
-                    {loading
-                      ? <Sk h={22} w="50%" />
-                      : <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d" }}>
-                          {pct}%
-                        </div>
-                    }
-                    <div style={{ height: 5, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
-                      {!loading && <div style={{ height: "100%", width: `${pct}%`, background: pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131", borderRadius: 99, transition: "width 0.4s ease" }} />}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
 
             {/* ── Stat cards ── */}
             <motion.div
@@ -603,6 +557,77 @@ export default function DashboardPage() {
                 onFilterChange={updateFilter(setScholarshipFilters)}
               />
             </motion.div>
+
+            {/* ── Revenue strip ── */}
+            <div style={s.revenueStrip}>
+              {[
+                { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd" },
+                { label: "Collected",   key: "total_collected", icon: "ti-cash",         color: "#2e6b0d", bg: "#e8f5e0" },
+                { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", color: "#a32d2d", bg: "#fde8e8" },
+              ].map((item) => {
+                const raw = financialSummary ? parseFloat(financialSummary[item.key] ?? 0) : 0;
+                return (
+                  <div key={item.key} onClick={() => navigate("/invoices")} style={{ ...s.revenueCell, cursor: "pointer" }} onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</span>
+                    </div>
+                    {loading ? <Sk h={22} w="70%" /> : (
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none", transition: "filter 0.3s ease" }}>
+                        ₱{raw.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: "#b09090" }}>S.Y. {financialYear ?? schoolYear}</div>
+                  </div>
+                );
+              })}
+
+              {/* Collection rate + filter */}
+              {(() => {
+                const net = parseFloat(financialSummary?.net_billed ?? 0);
+                const col = parseFloat(financialSummary?.total_collected ?? 0);
+                const pct = net > 0 ? Math.min(100, Math.round((col / net) * 100)) : 0;
+                return (
+                  <div style={{ ...s.revenueCell, justifyContent: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f0e8fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className="ti ti-chart-pie" style={{ fontSize: 14, color: "#7c3aed" }} />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", flex: 1 }}>Collection Rate</span>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {financialYear && (
+                          <button onClick={(e) => { e.stopPropagation(); setFinancialYear(null); }} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: "1px solid #f0e0e0", background: "white", color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }}>
+                            <i className="ti ti-x" style={{ fontSize: 10 }} /> Clear
+                          </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); setShowAmounts((v) => !v); }} style={{ display: "flex", alignItems: "center", fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: `1px solid ${showAmounts ? "#e03131" : "#f0e0e0"}`, background: showAmounts ? "#fff0f0" : "white", color: showAmounts ? "#e03131" : "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                          <i className={`ti ${showAmounts ? "ti-eye" : "ti-eye-off"}`} style={{ fontSize: 10 }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setShowFinancialFilters((v) => !v); }} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: `1px solid ${financialYear ? "#e03131" : "#f0e0e0"}`, background: financialYear ? "#fff0f0" : "white", color: financialYear ? "#e03131" : "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }}>
+                          <i className="ti ti-adjustments-horizontal" style={{ fontSize: 10 }} />
+                        </button>
+                      </div>
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {showFinancialFilters && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
+                          <select value={financialYear ?? ""} onChange={(e) => setFinancialYear(e.target.value || null)} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #f0e0e0", fontSize: 11, color: "#5a3a3a", background: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", outline: "none", marginTop: 4 }}>
+                            <option value="">Current ({schoolYear})</option>
+                            {SCHOOL_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    {loading ? <Sk h={22} w="50%" /> : <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d", filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none", transition: "filter 0.3s ease" }}>{pct}%</div>}
+                    <div style={{ height: 5, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
+                      {!loading && <div style={{ height: "100%", width: showAmounts ? `${pct}%` : "50%", background: showAmounts ? (pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131") : "#d0c0c0", borderRadius: 99, transition: "width 0.4s ease, background 0.3s ease" }} />}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* ── Recent enrollments + Funnel + Level breakdown ── */}
             <motion.div
