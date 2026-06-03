@@ -24,10 +24,12 @@ import UsersPage          from "./pages/UsersPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AcademicCalendarPage from "./pages/AcademicCalendarPage";
 import ReportCardPage from "./pages/ReportCardPage";
+import SchoolFormsPage from "./pages/SchoolFormsPage";
 import CORPrintPage       from "./pages/print/CORPrintPage";
 import GradeSlipPrintPage from "./pages/print/GradeSlipPrintPage";
 import ReceiptPrintPage   from "./pages/print/ReceiptPrintPage";
 import InvoicePrintPage   from "./pages/print/InvoicePrintPage";
+import SF1PrintPage from "./pages/print/SF1PrintPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
@@ -68,6 +70,8 @@ export default function App() {
         <Route path="/print/grade-slip/:enrollmentId" element={<P><GradeSlipPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P><InvoicePrintPage /></P>} />
+        <Route path="/school-forms"          element={<P><SchoolFormsPage /></P>} />
+        <Route path="/print/sf1"             element={<P><SF1PrintPage /></P>} />
       </Routes>
     </BrowserRouter>
   );
