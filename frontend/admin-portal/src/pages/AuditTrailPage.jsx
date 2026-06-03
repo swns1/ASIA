@@ -222,15 +222,16 @@ function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, del
     <motion.button
       onClick={onClick}
       initial={{ opacity: 0, y: 6 }}
-      animate={{
-        opacity: 1, y: 0,
-        backgroundColor: active ? activeBg    : C.white,
-        color:           active ? activeColor : "#9a7070",
-        borderColor:     active ? activeBorder : "#f0e4e4",
-      }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: "easeOut", delay }}
       whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-      style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+      style={{
+        height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
+        backgroundColor: active ? activeBg     : C.white,
+        color:           active ? activeColor  : "#9a7070",
+        borderColor:     active ? activeBorder : "#f0e4e4",
+        transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease",
+      }}
     >
       {label}
     </motion.button>

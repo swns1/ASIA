@@ -126,18 +126,16 @@ function RoleChipPicker({ value, onChange }) {
           <motion.button
             key={r}
             onClick={() => onChange(r)}
-            animate={{
-              backgroundColor: active ? meta.activeBg : C.white,
-              color:           active ? meta.color    : "#9a7070",
-              borderColor:     active ? meta.activeBorder : "#f0e4e4",
-            }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             style={{
               height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid",
               fontSize: 12, fontWeight: 600, cursor: "pointer",
               fontFamily: "'DM Sans', sans-serif",
+              backgroundColor: active ? meta.activeBg     : C.white,
+              color:           active ? meta.color        : "#9a7070",
+              borderColor:     active ? meta.activeBorder : "#f0e4e4",
+              transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease",
             }}
           >
             {meta.label}
@@ -624,11 +622,10 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
             {canEdit && (
               <motion.button
                 onClick={() => setEditOpen(true)}
-                whileHover={{ backgroundColor: C.redLight, color: C.red, borderColor: C.redBorder }}
                 whileTap={{ scale: 0.95 }}
-                animate={{ backgroundColor: C.white, color: C.muted, borderColor: C.border }}
-                transition={{ duration: 0.15 }}
-                style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.white, color: C.muted, transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = C.redLight; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = C.white; e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border; }}
               >
                 <i className="ti ti-pencil" />
               </motion.button>
@@ -636,11 +633,10 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
             {canDelete && (
               <motion.button
                 onClick={() => setDeleteOpen(true)}
-                whileHover={{ backgroundColor: "#fde8e8", color: C.red, borderColor: C.redBorder }}
                 whileTap={{ scale: 0.95 }}
-                animate={{ backgroundColor: C.white, color: C.pale, borderColor: C.border }}
-                transition={{ duration: 0.15 }}
-                style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.white, color: C.pale, transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fde8e8"; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = C.white; e.currentTarget.style.color = C.pale; e.currentTarget.style.borderColor = C.border; }}
               >
                 <i className="ti ti-trash" />
               </motion.button>
@@ -835,14 +831,8 @@ export default function UsersPage() {
               {/* All chip */}
               <motion.button
                 onClick={() => setRoleFilter("all")}
-                animate={{
-                  backgroundColor: roleFilter === "all" ? C.redLight : C.white,
-                  color:           roleFilter === "all" ? C.red      : "#9a7070",
-                  borderColor:     roleFilter === "all" ? C.redBorder : "#f0e4e4",
-                }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", backgroundColor: roleFilter === "all" ? C.redLight : C.white, color: roleFilter === "all" ? C.red : "#9a7070", borderColor: roleFilter === "all" ? C.redBorder : "#f0e4e4", transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
               >
                 All
               </motion.button>
@@ -853,16 +843,11 @@ export default function UsersPage() {
                   <motion.button
                     key={r}
                     initial={{ opacity: 0, y: 6 }}
-                    animate={{
-                      opacity: 1, y: 0,
-                      backgroundColor: active ? meta.activeBg    : C.white,
-                      color:           active ? meta.color       : "#9a7070",
-                      borderColor:     active ? meta.activeBorder : "#f0e4e4",
-                    }}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.18, ease: "easeOut", delay: idx * 0.03 }}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                     onClick={() => setRoleFilter(r)}
-                    style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                    style={{ height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", backgroundColor: active ? meta.activeBg : C.white, color: active ? meta.color : "#9a7070", borderColor: active ? meta.activeBorder : "#f0e4e4", transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
                   >
                     {meta.label}
                   </motion.button>

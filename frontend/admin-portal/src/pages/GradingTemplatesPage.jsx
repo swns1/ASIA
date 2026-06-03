@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
+import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
-// ── API ───────────────────────────────────────────────────────────────────────
 import {
   getGradingTemplates as _getTemplates,
   createGradingTemplate as _createTemplate,
@@ -21,8 +22,6 @@ const createComponent = (p)      => _createComponent(p);
 const updateComponent = (id, p)  => _updateComponent(id, p);
 const deleteComponent = (id)     => _deleteComponent(id);
 
-// ── NAV ───────────────────────────────────────────────────────────────────────
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", color: "#be185d", bg: "#fde8f8" },
@@ -38,6 +37,11 @@ const COMPONENT_COLORS = [
   "#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2",
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function calcTotal(components) {
+  return components?.reduce((s, c) => s + parseFloat(c.weight || 0), 0) ?? 0;
+}
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{
@@ -47,10 +51,23 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   }} />
 );
 
-// ── Weight bar ────────────────────────────────────────────────────────────────
+// ── AnimatedCount ─────────────────────────────────────────────────────────────
+function AnimatedCount({ value, style }) {
+  const mv = useMotionValue(value);
+  const sp = useSpring(mv, { stiffness: 90, damping: 18 });
+  const display = useTransform(sp, Math.round);
+  const [shown, setShown] = useState(value);
+
+  useEffect(() => { mv.set(value); }, [value, mv]);
+  useEffect(() => display.on("change", setShown), [display]);
+
+  return <span style={style}>{shown}</span>;
+}
+
+// ── Weight Bar ────────────────────────────────────────────────────────────────
 function WeightBar({ components }) {
   if (!components || components.length === 0) return null;
-  const total = components.reduce((s, c) => s + parseFloat(c.weight), 0);
+  const total = calcTotal(components);
   return (
     <div style={{ display: "flex", height: 8, borderRadius: 99, overflow: "hidden", gap: 1 }}>
       {components.map((c, i) => (
@@ -68,29 +85,33 @@ function WeightBar({ components }) {
 
 // ── Template Card ─────────────────────────────────────────────────────────────
 function TemplateCard({ template, onEdit, onDelete }) {
-  const lvl = getLevelMeta(template.school_level);
-  const total = template.components?.reduce((s, c) => s + parseFloat(c.weight), 0) ?? 0;
+  const lvl    = getLevelMeta(template.school_level);
+  const total  = calcTotal(template.components);
   const totalOk = Math.abs(total - 100) < 0.01;
 
   return (
-    <div style={{
-      background: "white", borderRadius: 16, border: "1px solid #f5eaea",
-      boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
-      animation: "fadeUp 0.25s ease both", transition: "box-shadow 0.16s, transform 0.16s",
-    }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 8px 32px rgba(224,49,49,0.12)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 2px 16px rgba(224,49,49,0.05)"; e.currentTarget.style.transform = ""; }}
+    <motion.div
+      variants={listVariants.item}
+      whileHover={{ y: -3, boxShadow: "0 10px 36px rgba(224,49,49,0.13)" }}
+      transition={{ duration: 0.18 }}
+      style={{
+        background: "white", borderRadius: 16, border: "1px solid #f5eaea",
+        boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
+      }}
     >
       {/* Card header */}
       <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f9f0f0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: lvl.bg, color: lvl.color }}>
                 <i className={`ti ${lvl.icon}`} style={{ fontSize: 11 }} />{lvl.label}
               </span>
               {!template.is_active && (
                 <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#f0ede8", color: "#7a5050" }}>Inactive</span>
+              )}
+              {!totalOk && (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#faeeda", color: "#854f0b" }}>Incomplete</span>
               )}
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>
@@ -101,18 +122,18 @@ function TemplateCard({ template, onEdit, onDelete }) {
             )}
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <button onClick={() => onEdit(template)} title="Edit"
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", transition: "all 0.12s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
+            <motion.button onClick={() => onEdit(template)} title="Edit"
+              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+              whileTap={{ scale: 0.93 }}
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
               <i className="ti ti-pencil" style={{ fontSize: 13 }} />
-            </button>
-            <button onClick={() => onDelete(template)} title="Delete"
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "all 0.12s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
+            </motion.button>
+            <motion.button onClick={() => onDelete(template)} title="Delete"
+              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+              whileTap={{ scale: 0.93 }}
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
               <i className="ti ti-trash" style={{ fontSize: 13 }} />
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -146,7 +167,7 @@ function TemplateCard({ template, onEdit, onDelete }) {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -217,7 +238,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
         tplId = created.grading_template_id;
       }
 
-      // Sync components
       const existing  = components.filter((c) => c.grading_component_id);
       const brand_new = components.filter((c) => !c.grading_component_id);
 
@@ -257,14 +277,21 @@ function TemplateModal({ template, onClose, onRefresh }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)", animation: "fadeIn 0.15s ease" }}>
-      <div style={{ background: "white", borderRadius: 20, width: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)", animation: "slideUp 0.2s ease" }}>
-
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 20, width: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
+      >
         {/* Header */}
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right, #fdfafa, white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-report-analytics" style={{ fontSize: 18, color: "#e03131" }} />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <i className="ti ti-report-analytics" style={{ fontSize: 20, color: "#e03131" }} />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
@@ -273,18 +300,25 @@ function TemplateModal({ template, onClose, onRefresh }) {
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Define components and their weights</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
-          </button>
+          </motion.button>
         </div>
 
         {/* Body */}
         <div style={{ padding: "22px 28px" }}>
-          {error && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
@@ -304,7 +338,14 @@ function TemplateModal({ template, onClose, onRefresh }) {
                 const active = form.school_level === lvl.value;
                 return (
                   <button key={lvl.value} type="button" onClick={() => setForm((f) => ({ ...f, school_level: lvl.value }))}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s" }}>
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
+                      borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
+                      background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070",
+                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
+                      fontFamily: "'DM Sans', sans-serif",
+                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                    }}>
                     <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
                   </button>
                 );
@@ -332,15 +373,21 @@ function TemplateModal({ template, onClose, onRefresh }) {
                 <span style={{ fontSize: 12, fontWeight: 700, color: weightOk ? "#2e6b0d" : totalWeight > 0 ? "#a32d2d" : "#b09090" }}>
                   {totalWeight.toFixed(1)}% / 100%
                 </span>
-                <button type="button" onClick={addComponent}
+                <motion.button type="button" onClick={addComponent}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: "#fff0f0", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                   <i className="ti ti-plus" style={{ fontSize: 13 }} />Add
-                </button>
+                </motion.button>
               </div>
             </div>
 
+            {/* Progress bar */}
             <div style={{ height: 6, borderRadius: 99, background: "#f0e8e8", overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ height: "100%", width: `${Math.min(totalWeight, 100)}%`, borderRadius: 99, background: weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131", transition: "width 0.3s, background 0.3s" }} />
+              <motion.div
+                animate={{ width: `${Math.min(totalWeight, 100)}%`, background: weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131" }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                style={{ height: "100%", borderRadius: 99 }}
+              />
             </div>
 
             {components.length === 0 && (
@@ -350,56 +397,77 @@ function TemplateModal({ template, onClose, onRefresh }) {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {components.map((comp, i) => (
-                <div key={comp._key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 12 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: COMPONENT_COLORS[i % COMPONENT_COLORS.length], flexShrink: 0 }} />
-                  <input value={comp.component_name}
-                    onChange={(e) => updateComp(comp._key, "component_name", e.target.value)}
-                    placeholder="Component name (e.g. Written Work)"
-                    style={{ ...inp, flex: 1, padding: "8px 12px" }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                    <input type="number" min="0" max="100" step="0.5"
-                      value={comp.weight}
-                      onChange={(e) => updateComp(comp._key, "weight", e.target.value)}
-                      placeholder="0"
-                      style={{ ...inp, width: 70, padding: "8px 10px", textAlign: "right" }} />
-                    <span style={{ fontSize: 12, color: "#b09090", fontWeight: 600 }}>%</span>
-                  </div>
-                  <button onClick={() => removeComponent(comp._key)}
-                    style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", flexShrink: 0, transition: "all 0.12s" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}>
-                    <i className="ti ti-x" style={{ fontSize: 12 }} />
-                  </button>
-                </div>
-              ))}
+              <AnimatePresence initial={false}>
+                {components.map((comp, i) => (
+                  <motion.div
+                    key={comp._key}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10, height: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 12, overflow: "hidden" }}
+                  >
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: COMPONENT_COLORS[i % COMPONENT_COLORS.length], flexShrink: 0 }} />
+                    <input value={comp.component_name}
+                      onChange={(e) => updateComp(comp._key, "component_name", e.target.value)}
+                      placeholder="Component name (e.g. Written Work)"
+                      style={{ ...inp, flex: 1, padding: "8px 12px" }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                      <input type="number" min="0" max="100" step="0.5"
+                        value={comp.weight}
+                        onChange={(e) => updateComp(comp._key, "weight", e.target.value)}
+                        placeholder="0"
+                        style={{ ...inp, width: 70, padding: "8px 10px", textAlign: "right" }} />
+                      <span style={{ fontSize: 12, color: "#b09090", fontWeight: 600 }}>%</span>
+                    </div>
+                    <motion.button onClick={() => removeComponent(comp._key)}
+                      whileHover={{ scale: 1.08, backgroundColor: "#fff0f0" }}
+                      whileTap={{ scale: 0.92 }}
+                      style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", flexShrink: 0 }}>
+                      <i className="ti ti-x" style={{ fontSize: 12 }} />
+                    </motion.button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           </div>
         </div>
 
         {/* Footer */}
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
-          <button onClick={onClose} style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+          <motion.button onClick={onClose}
+            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
             Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving}
+          </motion.button>
+          <motion.button onClick={handleSave} disabled={saving}
+            whileHover={!saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
+            whileTap={!saving ? { scale: 0.96 } : {}}
             style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
             {saving
               ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Saving…</>
               : <><i className="ti ti-check" style={{ fontSize: 13 }} />{isEdit ? "Update Template" : "Create Template"}</>
             }
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 // ── Delete Modal ──────────────────────────────────────────────────────────────
 function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
+      >
         <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
         </div>
@@ -408,39 +476,38 @@ function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
           You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.
         </div>
 
-        {/* ── FIX: show error if delete fails ── */}
-        {deleteError && (
-          <div style={{ width: "100%", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 14, flexShrink: 0 }} />
-            {deleteError}
-          </div>
-        )}
+        <AnimatePresence>
+          {deleteError && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              style={{ width: "100%", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <i className="ti ti-alert-circle" style={{ fontSize: 14, flexShrink: 0 }} />
+              {deleteError}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif", opacity: deleting ? 0.5 : 1 }}
-          >
+          <motion.button onClick={onCancel} disabled={deleting}
+            whileHover={!deleting ? { borderColor: "#e03131", color: "#e03131" } : {}}
+            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif", opacity: deleting ? 0.5 : 1 }}>
             Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: deleting ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
+          </motion.button>
+          <motion.button onClick={onConfirm} disabled={deleting}
+            whileHover={!deleting ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.38)" } : {}}
+            whileTap={!deleting ? { scale: 0.96 } : {}}
+            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: deleting ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {deleting
               ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Deleting…</>
               : "Yes, delete"
             }
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
-
-// ── Logout Modal ──────────────────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -448,32 +515,58 @@ function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
 export default function GradingTemplatesPage() {
   const navigate = useNavigate();
 
-  const [templates,    setTemplates]    = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [levelFilter,  setLevelFilter]  = useState("all");
-  const [modal,        setModal]        = useState(null);
-  const [toDelete,     setToDelete]     = useState(null);
-  const [deleting,     setDeleting]     = useState(false);   // ── FIX
-  const [deleteError,  setDeleteError]  = useState("");      // ── FIX
+  const [templates,   setTemplates]   = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [levelFilter, setLevelFilter] = useState("all");
+  const [statusFilter,setStatusFilter]= useState("all"); // all | active | inactive
+  const [search,      setSearch]      = useState("");
+  const [modal,       setModal]       = useState(null);
+  const [toDelete,    setToDelete]    = useState(null);
+  const [deleting,    setDeleting]    = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
-  const fetchTemplates = useCallback(async (level = levelFilter) => {
+  const [animated] = useState(false);
+  const isFirstRender = !animated;
+
+  const fetchTemplates = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {};
-      if (level !== "all") params.school_level = level;
-      const data = await getTemplates(params);
+      const data = await getTemplates({});
       setTemplates(Array.isArray(data) ? data : data?.results ?? []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [levelFilter]);
+  }, []);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
-    fetchTemplates("all");
-  }, []);
+    fetchTemplates(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── FIX: wrapped in try/catch with loading + error state ──────────────────
+  // ── Derived stats ──────────────────────────────────────────────────────────
+  const totalCount      = templates.length;
+  const activeCount     = templates.filter((t) => t.is_active).length;
+  const completeCount   = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) < 0.01).length;
+  const incompleteCount = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) >= 0.01).length;
+
+  // ── Client-side filtered list ──────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = templates;
+    if (levelFilter !== "all") list = list.filter((t) => t.school_level === levelFilter);
+    if (statusFilter === "active")   list = list.filter((t) => t.is_active);
+    if (statusFilter === "inactive") list = list.filter((t) => !t.is_active);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((t) =>
+        t.template_name.toLowerCase().includes(q) ||
+        (t.description || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [templates, levelFilter, statusFilter, search]);
+
+  const hasFilters = levelFilter !== "all" || statusFilter !== "all" || search.trim() !== "";
+
   const handleDelete = async () => {
     if (!toDelete) return;
     setDeleting(true);
@@ -481,7 +574,7 @@ export default function GradingTemplatesPage() {
     try {
       await deleteTemplate(toDelete.grading_template_id);
       setToDelete(null);
-      fetchTemplates(levelFilter);
+      fetchTemplates();
     } catch (e) {
       const msg = e.message || "Delete failed.";
       try {
@@ -495,122 +588,248 @@ export default function GradingTemplatesPage() {
     }
   };
 
-  const activeCount   = templates.filter((t) => t.is_active).length;
-  const completeCount = templates.filter((t) => {
-    const total = t.components?.reduce((s, c) => s + parseFloat(c.weight), 0) ?? 0;
-    return Math.abs(total - 100) < 0.01;
-  }).length;
+  const STATS = [
+    { label: "Total Templates", value: totalCount,      icon: "ti-report-analytics",       color: "#e03131", bg: "#fff0f0" },
+    { label: "Active",          value: activeCount,     icon: "ti-circle-check",            color: "#2e6b0d", bg: "#e8f5e0" },
+    { label: "Complete",        value: completeCount,   icon: "ti-rosette-discount-check",  color: "#1455a0", bg: "#e3f0fd" },
+    { label: "Incomplete",      value: incompleteCount, icon: "ti-alert-triangle",          color: "#854f0b", bg: "#faeeda" },
+  ];
 
   return (
     <AppLayout>
-          {/* Topbar */}
-          <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>Grading Templates</div>
-              <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
-                {loading ? "Loading…" : `${templates.length} templates · ${activeCount} active · ${completeCount} complete`}
+      {/* ── Topbar ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
+      >
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Grading Templates</div>
+          <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
+            {loading ? "Loading…" : `${totalCount} templates · ${activeCount} active · ${completeCount} complete`}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <motion.button
+            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+            whileTap={{ scale: 0.96 }}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+            onClick={() => setModal({ mode: "create" })}>
+            <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
+          </motion.button>
+        </div>
+      </motion.div>
+
+      {/* ── Content ── */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* Stat cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}>
+          {STATS.map((s, idx) => (
+            <motion.div
+              key={s.label}
+              initial={isFirstRender ? { y: 10, opacity: 0 } : false}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.28, delay: 0.06 + idx * 0.06, ease: "easeOut" }}
+              style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}
+            >
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className={`ti ${s.icon}`} style={{ fontSize: 18, color: s.color }} />
               </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button style={{ width: 36, height: 36, border: "1px solid #f5eaea", borderRadius: 10, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", position: "relative" }}>
-                <i className="ti ti-bell" style={{ fontSize: 16 }} />
-                <span style={{ width: 8, height: 8, background: "#e03131", borderRadius: "50%", position: "absolute", top: 6, right: 6, border: "2px solid white" }} />
-              </button>
-              <button className="new-btn"
-                style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-                onClick={() => setModal({ mode: "create" })}>
-                <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
-              </button>
-            </div>
+              <div>
+                {loading
+                  ? <Sk w={40} h={20} r={4} />
+                  : <AnimatedCount value={s.value} style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }} />
+                }
+                <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Filter panel */}
+        <motion.div
+          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.28, delay: 0.18, ease: "easeOut" }}
+          style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
+        >
+          {/* Search — full width row */}
+          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
+            <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search templates…"
+              style={{ border: "none", outline: "none", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "transparent", width: "100%" }}
+            />
+            <AnimatePresence>
+              {search && (
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
+                  onClick={() => setSearch("")}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 0 }}>
+                  <i className="ti ti-x" style={{ fontSize: 12 }} />
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Chips row */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
 
-            {/* Stat cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12 }}>
-              {[
-                { label: "Total Templates", value: templates.length,  icon: "ti-report-analytics",       color: "#e03131", bg: "#fff0f0" },
-                { label: "Active",          value: activeCount,        icon: "ti-circle-check",           color: "#2e6b0d", bg: "#e8f5e0" },
-                { label: "Complete (100%)", value: completeCount,      icon: "ti-rosette-discount-check", color: "#1455a0", bg: "#e3f0fd" },
-              ].map((s) => (
-                <div key={s.label} style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <i className={`ti ${s.icon}`} style={{ fontSize: 18, color: s.color }} />
-                  </div>
-                  <div>
-                    {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{s.value}</div>}
-                    <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* Level chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
+            {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl, idx) => {
+              const active = levelFilter === lvl.value;
+              return (
+                <motion.button
+                  key={lvl.value}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, delay: idx * 0.03 }}
+                  onClick={() => setLevelFilter(lvl.value)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    height: 32, padding: "0 14px", borderRadius: 99,
+                    border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
+                    background: active ? lvl.bg : "white",
+                    color: active ? lvl.color : "#9a7070",
+                    fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
+                    fontFamily: "'DM Sans',sans-serif",
+                    transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                  }}
+                >
+                  {lvl.icon && <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />}
+                  {lvl.label}
+                </motion.button>
+              );
+            })}
+          </div>
 
-            {/* Level filter chips */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <button className={`chip-btn${levelFilter === "all" ? " active" : ""}`} onClick={() => { setLevelFilter("all"); fetchTemplates("all"); }}>
-                All Levels
-              </button>
-              {SCHOOL_LEVELS.map((lvl) => (
-                <button key={lvl.value} className={`chip-btn${levelFilter === lvl.value ? " active" : ""}`}
-                  onClick={() => { setLevelFilter(lvl.value); fetchTemplates(lvl.value); }}
-                  style={{ borderColor: levelFilter === lvl.value ? lvl.color : "#f0e4e4", color: levelFilter === lvl.value ? lvl.color : "#9a7070", background: levelFilter === lvl.value ? lvl.bg : "white" }}>
-                  <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />{lvl.label}
-                </button>
-              ))}
-            </div>
+          {/* Status chips */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
+            {[
+              { value: "all",      label: "All",      color: "#e03131", bg: "#fff0f0" },
+              { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
+              { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
+            ].map((s) => {
+              const active = statusFilter === s.value;
+              return (
+                <motion.button
+                  key={s.value}
+                  onClick={() => setStatusFilter(s.value)}
+                  style={{
+                    height: 32, padding: "0 14px", borderRadius: 99,
+                    border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
+                    background: active ? s.bg : "white",
+                    color: active ? s.color : "#9a7070",
+                    fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
+                    fontFamily: "'DM Sans',sans-serif",
+                    transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                  }}
+                >
+                  {s.label}
+                </motion.button>
+              );
+            })}
+          </div>
 
-            {/* Cards grid */}
-            {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
-                    <Sk w={100} h={20} /><Sk w="80%" h={14} /><Sk w="60%" h={8} r={99} />
-                    <Sk w="100%" h={1} /><Sk w={120} h={13} /><Sk w={140} h={13} />
-                  </div>
-                ))}
-              </div>
-            ) : templates.length === 0 ? (
-              <div style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "64px 24px", textAlign: "center" }}>
-                <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                  <i className="ti ti-report-analytics" style={{ fontSize: 24, color: "#e08080" }} />
-                </div>
-                <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No templates found</div>
-                <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>Create your first grading template to get started</div>
-                <button onClick={() => setModal({ mode: "create" })}
-                  style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-                  <i className="ti ti-plus" style={{ fontSize: 14 }} />Create Template
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
-                {templates.map((tpl) => (
-                  <TemplateCard key={tpl.grading_template_id} template={tpl}
-                    onEdit={(t) => setModal({ mode: "edit", template: t })}
-                    onDelete={(t) => { setToDelete(t); setDeleteError(""); }} />
-                ))}
-              </div>
+          {/* Clear all */}
+          <AnimatePresence>
+            {hasFilters && (
+              <motion.button
+                initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ duration: 0.16 }}
+                onClick={() => { setLevelFilter("all"); setStatusFilter("all"); setSearch(""); }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
+              </motion.button>
             )}
+          </AnimatePresence>
+          </div>{/* end chips row */}
+        </motion.div>
+
+        {/* Cards grid */}
+        {loading ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                <Sk w={100} h={20} /><Sk w="80%" h={14} /><Sk w="60%" h={8} r={99} />
+                <div style={{ height: 1, background: "#f5eaea" }} />
+                <Sk w={120} h={13} /><Sk w={140} h={13} />
+              </div>
+            ))}
           </div>
+        ) : filtered.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "64px 24px", textAlign: "center" }}
+          >
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+              <i className="ti ti-report-analytics" style={{ fontSize: 22, color: "#e08080" }} />
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
+              {hasFilters ? "No templates match your filters" : "No templates found"}
+            </div>
+            <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>
+              {hasFilters
+                ? "Try adjusting your search or filters"
+                : "Create your first grading template to get started"}
+            </div>
+            {!hasFilters && (
+              <motion.button
+                whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setModal({ mode: "create" })}
+                style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
+                <i className="ti ti-plus" style={{ fontSize: 14 }} />Create Template
+              </motion.button>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            variants={listVariants.container}
+            initial={isFirstRender ? "hidden" : false}
+            animate="visible"
+            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}
+          >
+            {filtered.map((tpl) => (
+              <TemplateCard key={tpl.grading_template_id} template={tpl}
+                onEdit={(t) => setModal({ mode: "edit", template: t })}
+                onDelete={(t) => { setToDelete(t); setDeleteError(""); }} />
+            ))}
+          </motion.div>
+        )}
+      </div>
 
       {/* ── Modals ── */}
-      {modal && (
-        <TemplateModal
-          template={modal.mode === "edit" ? modal.template : null}
-          onClose={() => setModal(null)}
-          onRefresh={() => fetchTemplates(levelFilter)}
-        />
-      )}
+      <AnimatePresence>
+        {modal && (
+          <TemplateModal
+            key="template-modal"
+            template={modal.mode === "edit" ? modal.template : null}
+            onClose={() => setModal(null)}
+            onRefresh={fetchTemplates}
+          />
+        )}
+      </AnimatePresence>
 
-      {toDelete && (
-        <DeleteModal
-          template={toDelete}
-          onConfirm={handleDelete}
-          onCancel={() => { setToDelete(null); setDeleteError(""); }}
-          deleting={deleting}
-          deleteError={deleteError}
-        />
-      )}
+      <AnimatePresence>
+        {toDelete && (
+          <DeleteModal
+            key="delete-modal"
+            template={toDelete}
+            onConfirm={handleDelete}
+            onCancel={() => { setToDelete(null); setDeleteError(""); }}
+            deleting={deleting}
+            deleteError={deleteError}
+          />
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }
