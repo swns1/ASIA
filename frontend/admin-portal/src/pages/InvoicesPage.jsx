@@ -336,6 +336,15 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                 <i className="ti ti-cash" style={{ fontSize:13 }} />Record Payment
               </motion.button>
               <motion.button
+                onClick={() => window.open(`/print/invoice/${invoiceId}`, '_blank')}
+                whileHover={{ borderColor: "#1e3a5f", color: "#1e3a5f" }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#9a7070", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+              >
+                <i className="ti ti-printer" style={{ fontSize: 13 }} />Print
+              </motion.button>
+              <motion.button
                 onClick={() => setShowVoidConfirm(true)}
                 whileHover={{ borderColor:"#e03131", color:"#e03131" }}
                 whileTap={{ scale:0.96 }}
@@ -577,7 +586,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                     <thead>
                       <tr style={{ background:"#fdfafa" }}>
-                        {["Date","Amount","Method","Reference","Notes"].map((h) => (
+                        {["Date","Amount","Method","Reference","Notes",""].map((h) => (
                           <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
                         ))}
                       </tr>
@@ -592,6 +601,14 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                             <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmtDate(p.payment_date)}</td>
                             <td style={{ padding:"11px 18px", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
                             <td style={{ padding:"11px 18px" }}>
+                            <td style={{ padding:"8px 18px" }}>
+                              <button
+                                onClick={() => window.open(`/print/receipt/${p.payment_id}`, '_blank')}
+                                title="Print Receipt"
+                                style={{ background:"none", border:"1px solid #e0d0d0", borderRadius:6, padding:"4px 8px", cursor:"pointer", color:"#7a5050", fontSize:11 }}>
+                                <i className="ti ti-receipt" style={{ fontSize: 12 }} /> Receipt
+                              </button>
+                            </td>
                               <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color, display:"inline-flex", alignItems:"center", gap:4 }}>
                                 <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
                                 {p.payment_method.replace("_", " ")}

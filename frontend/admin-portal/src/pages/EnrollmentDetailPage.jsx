@@ -213,6 +213,16 @@ export default function EnrollmentDetailPage() {
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card
               </button>
+              <button
+                onClick={() => window.open(`/print/cor/${id}`, '_blank')}
+                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <i className="ti ti-file-invoice" style={{ fontSize: 11, marginRight: 4 }} />Print COR
+              </button>
+              <button
+                onClick={() => window.open(`/print/grade-slip/${id}`, '_blank')}
+                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <i className="ti ti-file-chart" style={{ fontSize: 11, marginRight: 4 }} />Grade Slip
+              </button>
               <button onClick={() => navigate(`/enrollments/${id}/edit`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-edit" style={{ fontSize: 11, marginRight: 4 }} />Edit
