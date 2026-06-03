@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -152,9 +154,9 @@ function chineseNewYear(y) {
   };
   if (tbl[y]) { const [yr,mo,dy] = tbl[y].split("-").map(Number); return new Date(yr, mo-1, dy); }
   // Beyond table: 19-year Metonic cycle approximation (accurate to ±1 day)
-  const base = tbl[2020]; const [by,bm,bd] = base.split("-").map(Number);
-  const cycles = Math.floor((y - 2020) / 19);
-  const rem    = (y - 2020) % 19;
+  const base = tbl[2020]; const [by,bm,bd] = base.split("-").map(Number); // eslint-disable-line no-unused-vars
+  const cycles = Math.floor((y - 2020) / 19); // eslint-disable-line no-unused-vars
+  const rem    = (y - 2020) % 19; // eslint-disable-line no-unused-vars
   const offsets = [0,11,11,10,10,11,11,11,11,10,11,10,11,11,10,11,10,11,11];
   let approxDay = new Date(2020, bm-1, bd);
   for (let i = 0; i < (y - 2020); i++) approxDay = new Date(approxDay.getFullYear()+1, approxDay.getMonth(), approxDay.getDate() - offsets[i%19]);
@@ -344,7 +346,6 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                 borderBottom: "1px solid #faf0f0",
                 background: isSelected ? "#fff0f0" : isToday ? "#fffbfb" : isWeekend ? "#fdfafa" : "white",
                 cursor: dayEvents.length ? "pointer" : "default",
-                transition: "background 0.12s",
                 position: "relative",
                 overflow: "hidden",
               }}
@@ -357,6 +358,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                   fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
                   background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
                   color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#c09090" : "#2a1a1a",
+                  transition: "background-color 0.15s ease, color 0.15s ease",
                 }}>
                   {day}
                 </span>
@@ -414,9 +416,13 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
 function EventCard({ event, onEdit, onDelete }) {
   const meta = eventMeta(event.event_type);
   return (
-    <div style={{ borderRadius: 12, border: `1px solid ${meta.color}28`, background: meta.light, overflow: "hidden", transition: "box-shadow 0.12s" }} className="ev-card">
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+      transition={{ duration: 0.15 }}
+      style={{ borderRadius: 12, border: `1px solid ${meta.color}28`, background: meta.light, overflow: "hidden" }}
+    >
       <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
-        <div style={{ width: 4, background: meta.color, borderRadius: "0 0 0 0", flexShrink: 0 }} />
+        <div style={{ width: 4, background: meta.color, flexShrink: 0 }} />
         <div style={{ flex: 1, padding: "10px 12px", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -437,13 +443,23 @@ function EventCard({ event, onEdit, onDelete }) {
               )}
             </div>
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-              <button className="row-action" onClick={() => onEdit(event)} title="Edit" style={{ width: 26, height: 26 }}><i className="ti ti-pencil" style={{ fontSize: 12 }} /></button>
-              <button className="row-action danger" onClick={() => onDelete(event)} title="Delete" style={{ width: 26, height: 26 }}><i className="ti ti-trash" style={{ fontSize: 12 }} /></button>
+              <motion.button onClick={() => onEdit(event)} title="Edit"
+                whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+                whileTap={{ scale: 0.9 }}
+                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+                <i className="ti ti-pencil" style={{ fontSize: 12 }} />
+              </motion.button>
+              <motion.button onClick={() => onDelete(event)} title="Delete"
+                whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+                whileTap={{ scale: 0.9 }}
+                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+                <i className="ti ti-trash" style={{ fontSize: 12 }} />
+              </motion.button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -480,27 +496,43 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}>
-      <div style={{ background: "white", borderRadius: 22, width: 480, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
-
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 22, width: 480, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
         {/* Colored header strip */}
-        <div style={{ background: `linear-gradient(135deg, ${selectedMeta.bg}, white)`, padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 13, background: selectedMeta.bg, border: `1.5px solid ${selectedMeta.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className={`ti ${selectedMeta.icon}`} style={{ fontSize: 22, color: selectedMeta.color }} />
+        <div style={{ background: `linear-gradient(135deg, ${selectedMeta.bg}, white)`, padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, transition: "background 0.2s ease" }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: selectedMeta.bg, border: `1.5px solid ${selectedMeta.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.2s ease, border-color 0.2s ease" }}>
+            <i className={`ti ${selectedMeta.icon}`} style={{ fontSize: 22, color: selectedMeta.color, transition: "color 0.2s ease" }} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>{mode === "edit" ? "Edit Event" : "Add New Event"}</div>
             <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>S.Y. {schoolYear}</div>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}><i className="ti ti-x" style={{ fontSize: 14 }} /></button>
+          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </motion.button>
         </div>
 
         <div style={{ padding: "22px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
-          {error && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div><label style={LBL}>Title *</label><input value={form.title} onChange={(e) => setF("title", e.target.value)} placeholder="e.g. Independence Day" style={INP} /></div>
 
@@ -508,13 +540,24 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
           <div>
             <label style={LBL}>Event Type *</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-              {EVENT_TYPES.map((t) => (
-                <button key={t.value} onClick={() => setF("event_type", t.value)}
-                  style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${form.event_type === t.value ? t.color : "#f0e4e4"}`, background: form.event_type === t.value ? t.bg : "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.1s" }}>
-                  <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: form.event_type === t.value ? t.color : "#b09090" }} />
-                  <span style={{ fontSize: 11.5, fontWeight: form.event_type === t.value ? 700 : 500, color: form.event_type === t.value ? t.color : "#7a5a5a" }}>{t.label}</span>
-                </button>
-              ))}
+              {EVENT_TYPES.map((t) => {
+                const active = form.event_type === t.value;
+                return (
+                  <button key={t.value} type="button" onClick={() => setF("event_type", t.value)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 7, padding: "9px 10px",
+                      borderRadius: 10, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                      outline: "none", appearance: "none", WebkitAppearance: "none",
+                      borderStyle: "solid", borderWidth: "1.5px",
+                      borderColor: active ? t.color : "#f0e4e4",
+                      backgroundColor: active ? t.bg : "white",
+                      transition: "background-color 0.15s ease, border-color 0.15s ease",
+                    }}>
+                    <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? t.color : "#b09090", transition: "color 0.15s ease" }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? t.color : "#7a5a5a", transition: "color 0.15s ease" }}>{t.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -527,14 +570,20 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
         </div>
 
         <div style={{ display: "flex", gap: 10, padding: "0 28px 24px" }}>
-          <button onClick={onClose} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="new-btn"
+          <motion.button onClick={onClose}
+            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+            Cancel
+          </motion.button>
+          <motion.button onClick={handleSave} disabled={saving}
+            whileHover={!saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
+            whileTap={!saving ? { scale: 0.96 } : {}}
             style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: saving ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Saving…</> : <><i className="ti ti-device-floppy" style={{ fontSize: 14 }} />{mode === "edit" ? "Save Changes" : "Add Event"}</>}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -556,9 +605,16 @@ function ColorSettingsModal({ onClose, onSaved }) {
   const preview = buildEventTypes(overrides);
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}>
-      <div style={{ background: "white", borderRadius: 22, width: 420, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
-
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 22, width: 420, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
         {/* Header */}
         <div style={{ background: "linear-gradient(135deg,#fff5f5,white)", padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -568,9 +624,10 @@ function ColorSettingsModal({ onClose, onSaved }) {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Event Colors</div>
             <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Customize strip colors for each event type</div>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
             <i className="ti ti-x" style={{ fontSize: 14 }} />
-          </button>
+          </motion.button>
         </div>
 
         {/* Color rows */}
@@ -615,18 +672,26 @@ function ColorSettingsModal({ onClose, onSaved }) {
 
         {/* Footer */}
         <div style={{ display: "flex", gap: 10, padding: "0 28px 24px", alignItems: "center" }}>
-          <button onClick={resetAll} style={{ height: 38, padding: "0 14px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 12, color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+          <motion.button onClick={resetAll}
+            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            style={{ height: 38, padding: "0 14px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 12, color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
             <i className="ti ti-refresh" style={{ fontSize: 13 }} />Reset all
-          </button>
+          </motion.button>
           <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ height: 38, padding: "0 16px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
-          <button onClick={handleSave} className="new-btn"
+          <motion.button onClick={onClose}
+            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            style={{ height: 38, padding: "0 16px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+            Cancel
+          </motion.button>
+          <motion.button onClick={handleSave}
+            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+            whileTap={{ scale: 0.96 }}
             style={{ height: 38, padding: "0 20px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)", display: "flex", alignItems: "center", gap: 7 }}>
             <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />Apply
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -657,7 +722,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
       })));
       setAdded(toAdd.length);
       setDone(true);
-    } catch (e) {
+    } catch {
       setError("Some holidays failed to import. Check your connection and try again.");
     } finally {
       setImporting(false);
@@ -665,9 +730,16 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}>
-      <div style={{ background: "white", borderRadius: 22, width: 480, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
-
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 22, width: 480, boxShadow: "0 32px 80px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
         {/* Header */}
         <div style={{ background: "linear-gradient(135deg,#fff5f5,white)", padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fde8e8", border: "1.5px solid #fca5a530", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -677,7 +749,12 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Import PH Holidays</div>
             <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Official Philippine public holidays · S.Y. {schoolYear}</div>
           </div>
-          {!importing && <button onClick={onClose} style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}><i className="ti ti-x" style={{ fontSize: 14 }} /></button>}
+          {!importing && (
+            <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+              <i className="ti ti-x" style={{ fontSize: 14 }} />
+            </motion.button>
+          )}
         </div>
 
         <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -744,25 +821,33 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
         {/* Footer */}
         <div style={{ display: "flex", gap: 10, padding: "0 28px 24px" }}>
           {done ? (
-            <button onClick={() => { onImported(); onClose(); }} className="new-btn"
+            <motion.button onClick={() => { onImported(); onClose(); }}
+              whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+              whileTap={{ scale: 0.96 }}
               style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
               Done
-            </button>
+            </motion.button>
           ) : (
             <>
-              <button onClick={onClose} disabled={importing} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: importing ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
-              <button onClick={handleImport} disabled={importing || toAdd.length === 0} className="new-btn"
+              <motion.button onClick={onClose} disabled={importing}
+                whileHover={!importing ? { borderColor: "#e03131", color: "#e03131" } : {}}
+                style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: importing ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                Cancel
+              </motion.button>
+              <motion.button onClick={handleImport} disabled={importing || toAdd.length === 0}
+                whileHover={!importing && toAdd.length > 0 ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
+                whileTap={!importing && toAdd.length > 0 ? { scale: 0.96 } : {}}
                 style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: importing ? "#e87474" : toAdd.length === 0 ? "#d0b8b8" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: importing || toAdd.length === 0 ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: toAdd.length > 0 ? "0 4px 16px rgba(224,49,49,0.26)" : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 {importing
                   ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Importing…</>
                   : <><i className="ti ti-download" style={{ fontSize: 14 }} />Import {toAdd.length} Holiday{toAdd.length !== 1 ? "s" : ""}</>
                 }
-              </button>
+              </motion.button>
             </>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -774,8 +859,16 @@ function DeleteModal({ event, onConfirm, onCancel }) {
   async function handleDelete() { setDeleting(true); try { await onConfirm(); } finally { setDeleting(false); } }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}>
-      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}
+    >
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
+        transition={springTransition}
+        style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
+      >
         <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <i className="ti ti-trash" style={{ fontSize: 26, color: "#e03131" }} />
         </div>
@@ -786,19 +879,26 @@ function DeleteModal({ event, onConfirm, onCancel }) {
         </div>
         <div style={{ fontSize: 12.5, color: "#9a7070", textAlign: "center", lineHeight: 1.7 }}>This event will be permanently removed from the calendar. This action cannot be undone.</div>
         <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
-          <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+          <motion.button onClick={onCancel}
+            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+            Cancel
+          </motion.button>
+          <motion.button onClick={handleDelete} disabled={deleting}
+            whileHover={!deleting ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.38)" } : {}}
+            whileTap={!deleting ? { scale: 0.96 } : {}}
+            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
             {deleting ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Deleting…</> : <><i className="ti ti-trash" style={{ fontSize: 14 }} />Delete</>}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 // ── Events List (grouped, filtered) ──────────────────────────────────────────
 
-function EventsList({ events, loading, schoolYear, onEdit, onDelete, onJumpMonth }) {
+function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete, onJumpMonth }) { // eslint-disable-line no-unused-vars
   const [search,      setSearch]      = useState("");
   const [filterType,  setFilterType]  = useState("all");
   const [collapsed,   setCollapsed]   = useState({});
@@ -842,7 +942,16 @@ function EventsList({ events, loading, schoolYear, onEdit, onDelete, onJumpMonth
             placeholder="Search events…"
             style={{ border: "none", outline: "none", fontSize: 12, color: "#1a0a0a", background: "transparent", width: "100%", fontFamily: "'DM Sans',sans-serif" }}
           />
-          {search && <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", padding: 0, display: "flex" }}><i className="ti ti-x" style={{ fontSize: 11 }} /></button>}
+          <AnimatePresence>
+            {search && (
+              <motion.button
+                initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
+                onClick={() => setSearch("")}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", padding: 0, display: "flex" }}>
+                <i className="ti ti-x" style={{ fontSize: 11 }} />
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Type filter pills */}
@@ -890,36 +999,66 @@ function EventsList({ events, loading, schoolYear, onEdit, onDelete, onJumpMonth
                 {/* Month header row */}
                 <button
                   onClick={() => { toggleMonth(m); onJumpMonth(m); }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: "1px solid #faf0f0" }}>
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fff8f6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: "1px solid #faf0f0", transition: "background-color 0.12s ease" }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
                     {MONTHS[m]}
                   </span>
                   <span style={{ fontSize: 10, color: "#d0b0b0", fontWeight: 600 }}>{monthEvs.length}</span>
-                  <i className={`ti ti-chevron-${isCollapsed ? "down" : "up"}`} style={{ fontSize: 11, color: "#d0b0b0" }} />
+                  <motion.i
+                    animate={{ rotate: isCollapsed ? 0 : 180 }}
+                    transition={{ duration: 0.18 }}
+                    className="ti ti-chevron-down"
+                    style={{ fontSize: 11, color: "#d0b0b0" }}
+                  />
                 </button>
 
                 {/* Event rows */}
-                {!isCollapsed && monthEvs.map((ev) => {
-                  const meta = eventMeta(ev.event_type);
-                  return (
-                    <div key={ev.event_id} className="ev-list-row"
-                      style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: "1px solid #faf5f5", transition: "background 0.1s" }}>
-                      {/* Color bar */}
-                      <div style={{ width: 3, alignSelf: "stretch", background: meta.color, flexShrink: 0 }} />
-                      <div style={{ flex: 1, padding: "7px 10px", minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, background: meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
-                          <span style={{ fontSize: 10, color: "#c0a0a0" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
-                        <button className="row-action" onClick={() => onEdit(ev)} title="Edit" style={{ width: 24, height: 24 }}><i className="ti ti-pencil" style={{ fontSize: 11 }} /></button>
-                        <button className="row-action danger" onClick={() => onDelete(ev)} title="Delete" style={{ width: 24, height: 24 }}><i className="ti ti-trash" style={{ fontSize: 11 }} /></button>
-                      </div>
-                    </div>
-                  );
-                })}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      style={{ overflow: "hidden" }}
+                    >
+                      {monthEvs.map((ev) => {
+                        const meta = eventMeta(ev.event_type);
+                        return (
+                          <div key={ev.event_id}
+                            style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: "1px solid #faf5f5", transition: "background-color 0.12s ease" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fff8f6"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}>
+                            <div style={{ width: 3, alignSelf: "stretch", background: meta.color, flexShrink: 0 }} />
+                            <div style={{ flex: 1, padding: "7px 10px", minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, background: meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
+                                <span style={{ fontSize: 10, color: "#c0a0a0" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
+                              <button onClick={() => onEdit(ev)} title="Edit"
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; }}
+                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                <i className="ti ti-pencil" style={{ fontSize: 11 }} />
+                              </button>
+                              <button onClick={() => onDelete(ev)} title="Delete"
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}
+                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                <i className="ti ti-trash" style={{ fontSize: 11 }} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })
@@ -1138,18 +1277,20 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
       <div style={{ flex: 1 }} />
 
       {/* CSV */}
-      <button onClick={onExportCSV}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#7a5a5a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s" }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#fca5a5"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.background = "#fff8f8"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5a5a"; e.currentTarget.style.background = "white"; }}>
+      <motion.button onClick={onExportCSV}
+        whileHover={{ borderColor: "#fca5a5", color: "#e03131", background: "#fff8f8" }}
+        whileTap={{ scale: 0.96 }}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#7a5a5a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
         <i className="ti ti-table-export" style={{ fontSize: 14 }} />Download CSV
-      </button>
+      </motion.button>
 
       {/* Print */}
-      <button onClick={onPrint} className="new-btn"
+      <motion.button onClick={onPrint}
+        whileHover={{ scale: 1.02, boxShadow: "0 6px 18px rgba(224,49,49,0.36)" }}
+        whileTap={{ scale: 0.96 }}
         style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 16px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 12, fontWeight: 700, color: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(224,49,49,0.28)" }}>
         <i className="ti ti-printer" style={{ fontSize: 14 }} />Print / PDF
-      </button>
+      </motion.button>
     </div>
   );
 }
@@ -1171,6 +1312,9 @@ export default function AcademicCalendarPage() {
   const [activeMonth,   setActiveMonth]   = useState(() => new Date().getMonth());
   const [printView,      setPrintView]     = useState("list");
   const [schoolSettings, setSchoolSettings] = useState(null);
+
+  const [animated] = useState(false);
+  const ifr = !animated; // isFirstRender — entrance animations run only once
 
   const [syYear, syYear2] = schoolYear.split("-").map(Number);
   // PH school year: Jul–Dec belong to Y1, Jan–Jun belong to Y2
@@ -1214,7 +1358,7 @@ export default function AcademicCalendarPage() {
 
   useEffect(() => {
     if (!sessionStorage.getItem("access_token")) { navigate("/"); return; }
-    fetchEvents(schoolYear);
+    fetchEvents(schoolYear); // eslint-disable-line react-hooks/set-state-in-effect
     getSchoolSettings().then(setSchoolSettings).catch(() => {});
   }, [schoolYear, fetchEvents, navigate]);
 
@@ -1243,8 +1387,8 @@ export default function AcademicCalendarPage() {
     <>
     <AppLayout>
       <style>{`
-        .cal-day:hover { background: #fff4f4 !important; }
-        .cal-day:hover > div:first-child > span { background: #fde8e8 !important; }
+        .cal-day:hover { background: #fff4f4; }
+        .cal-day:hover > div:first-child > span { background: #fde8e8; }
         .month-nav-btn:hover { background: #fff0f0 !important; color: #e03131 !important; border-color: #fca5a5 !important; }
         .ev-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; }
         .month-pill:hover { border-color: #fca5a5 !important; color: #e03131 !important; background: #fff8f8 !important; }
@@ -1259,7 +1403,12 @@ export default function AcademicCalendarPage() {
       `}</style>
 
       {/* ── Topbar ── */}
-      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
+      <motion.div
+        initial={ifr ? { opacity: 0, y: -8 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="ti ti-calendar-event" style={{ fontSize: 18, color: "#e03131" }} />
@@ -1270,36 +1419,59 @@ export default function AcademicCalendarPage() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {SCHOOL_YEARS.map((sy) => (
-            <button key={sy} className={`chip-btn${sy === schoolYear ? " active" : ""}`} onClick={() => { setSchoolYear(sy); setSelectedDay(null); }}>{sy}</button>
-          ))}
+          {SCHOOL_YEARS.map((sy) => {
+            const active = sy === schoolYear;
+            return (
+              <motion.button key={sy}
+                onClick={() => { setSchoolYear(sy); setSelectedDay(null); }}
+                whileTap={{ scale: 0.95 }}
+                style={{
+                  height: 30, padding: "0 12px", borderRadius: 99, cursor: "pointer",
+                  border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
+                  background: active ? "#fff0f0" : "white",
+                  color: active ? "#e03131" : "#9a7070",
+                  fontSize: 12, fontWeight: active ? 700 : 500,
+                  fontFamily: "'DM Sans',sans-serif",
+                  transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                }}
+              >{sy}</motion.button>
+            );
+          })}
           <div style={{ width: 1, height: 22, background: "#f0e4e4", margin: "0 4px" }} />
-          <button onClick={() => setShowImport(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "white", color: "#e03131", border: "1.5px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.borderColor = "#e03131"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.borderColor = "#fca5a5"; }}>
+          <motion.button onClick={() => setShowImport(true)}
+            whileHover={{ background: "#fff0f0", borderColor: "#e03131" }}
+            whileTap={{ scale: 0.96 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "white", color: "#e03131", border: "1.5px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             <i className="ti ti-flag" style={{ fontSize: 14 }} />PH Holidays
-          </button>
-          <button onClick={() => setShowColors(true)} title="Customize event colors"
-            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "white", color: "#9a7070", border: "1.5px solid #f0e4e4", borderRadius: 10, cursor: "pointer", transition: "all 0.14s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; e.currentTarget.style.borderColor = "#fca5a5"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; e.currentTarget.style.borderColor = "#f0e4e4"; }}>
+          </motion.button>
+          <motion.button onClick={() => setShowColors(true)} title="Customize event colors"
+            whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
+            whileTap={{ scale: 0.96 }}
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "white", color: "#9a7070", border: "1.5px solid #f0e4e4", borderRadius: 10, cursor: "pointer" }}>
             <i className="ti ti-palette" style={{ fontSize: 16 }} />
-          </button>
-          <button className="new-btn" onClick={() => setModal({ mode: "create" })}
+          </motion.button>
+          <motion.button onClick={() => setModal({ mode: "create" })}
+            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+            whileTap={{ scale: 0.96 }}
             style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
             <i className="ti ti-plus" style={{ fontSize: 15 }} />Add Event
-          </button>
+          </motion.button>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Error ── */}
-      {error && (
-        <div style={{ margin: "14px 24px 0", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "11px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-          <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
-          <button onClick={() => setError("")} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b91c1c" }}><i className="ti ti-x" /></button>
-        </div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18 }}
+            style={{ margin: "14px 24px 0", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "11px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
+          >
+            <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
+            <button onClick={() => setError("")} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b91c1c" }}><i className="ti ti-x" /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Body ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px", display: "flex", gap: 18, minHeight: 0 }}>
@@ -1308,50 +1480,93 @@ export default function AcademicCalendarPage() {
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Month nav bar */}
-          <div style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}>
-            <button className="row-action month-nav-btn" onClick={() => setActiveMonth((m) => (m - 1 + 12) % 12)}>
+          <motion.div
+            initial={ifr ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.26, ease: "easeOut" }}
+            style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+          >
+            <motion.button
+              whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setActiveMonth((m) => (m - 1 + 12) % 12)}
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
               <i className="ti ti-chevron-left" style={{ fontSize: 15 }} />
-            </button>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", minWidth: 148, textAlign: "center" }}>
-              {MONTHS[activeMonth]} <span style={{ color: "#c09090", fontWeight: 500 }}>{activeMonthYear}</span>
-            </div>
-            <button className="row-action month-nav-btn" onClick={() => setActiveMonth((m) => (m + 1) % 12)}>
+            </motion.button>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeMonth}
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", minWidth: 148, textAlign: "center" }}
+              >
+                {MONTHS[activeMonth]} <span style={{ color: "#c09090", fontWeight: 500 }}>{activeMonthYear}</span>
+              </motion.div>
+            </AnimatePresence>
+            <motion.button
+              whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setActiveMonth((m) => (m + 1) % 12)}
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
               <i className="ti ti-chevron-right" style={{ fontSize: 15 }} />
-            </button>
+            </motion.button>
             <div style={{ width: 1, height: 20, background: "#f0e4e4", margin: "0 6px" }} />
             {/* Month pills */}
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {MONTHS.map((m, i) => (
-                <button key={m} className="month-pill"
-                  onClick={() => setActiveMonth(i)}
-                  style={{ height: 26, padding: "0 9px", borderRadius: 99, border: `1.5px solid ${i === activeMonth ? "#e03131" : "#f0e4e4"}`, background: i === activeMonth ? "#fff0f0" : "white", fontSize: 11, color: i === activeMonth ? "#e03131" : "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: i === activeMonth ? 700 : 500, transition: "all 0.1s" }}>
-                  {m.slice(0, 3)}
-                </button>
-              ))}
+              {MONTHS.map((m, i) => {
+                const active = i === activeMonth;
+                return (
+                  <motion.button key={m}
+                    onClick={() => setActiveMonth(i)}
+                    whileTap={{ scale: 0.92 }}
+                    style={{
+                      height: 26, padding: "0 9px", borderRadius: 99, cursor: "pointer",
+                      border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
+                      background: active ? "#fff0f0" : "white",
+                      fontSize: 11, color: active ? "#e03131" : "#9a7070",
+                      fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500,
+                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                    }}>
+                    {m.slice(0, 3)}
+                  </motion.button>
+                );
+              })}
             </div>
-          </div>
+          </motion.div>
 
           {/* Calendar grid */}
           {loading ? <Sk h={480} r={18} /> : (
-            <MonthGrid
-              key={`${schoolYear}-${activeMonth}-${colorVersion}`}
-              year={activeMonthYear}
-              monthIndex={activeMonth}
-              eventMap={eventMap}
-              selectedDay={selectedDay}
-              onSelectDay={setSelectedDay}
-            />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${activeMonth}-${colorVersion}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <MonthGrid
+                  year={activeMonthYear}
+                  monthIndex={activeMonth}
+                  eventMap={eventMap}
+                  selectedDay={selectedDay}
+                  onSelectDay={setSelectedDay}
+                />
+              </motion.div>
+            </AnimatePresence>
           )}
 
           {/* Legend */}
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "2px 0" }}>
+          <motion.div
+            initial={ifr ? { opacity: 0 } : false} animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: ifr ? 0.15 : 0 }}
+            style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "2px 0" }}
+          >
             {EVENT_TYPES.map((t) => (
               <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 3, background: t.bg, border: `1.5px solid ${t.color}60` }} />
                 <span style={{ fontSize: 11, color: "#7a5a5a", fontWeight: 500 }}>{t.label}</span>
               </div>
             ))}
-          </div>
+          </motion.div>
 
           {/* Print toolbar */}
           <PrintToolbar
@@ -1366,59 +1581,89 @@ export default function AcademicCalendarPage() {
         <div style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Stats strip */}
-          {!loading && typeCounts.length > 0 && (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "14px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {typeCounts.map((t) => (
-                  <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <i className={`ti ${t.icon}`} style={{ fontSize: 13, color: t.color }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 600, color: "#3a2020" }}>{t.label}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: t.color }}>{t.count}</span>
+          <AnimatePresence>
+            {!loading && typeCounts.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.26, ease: "easeOut" }}
+                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "14px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+              >
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
+                <motion.div
+                  variants={listVariants.container} initial={ifr ? "hidden" : false} animate="visible"
+                  style={{ display: "flex", flexDirection: "column", gap: 7 }}
+                >
+                  {typeCounts.map((t) => (
+                    <motion.div key={t.value} variants={listVariants.item} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`ti ${t.icon}`} style={{ fontSize: 13, color: t.color }} />
                       </div>
-                      <div style={{ height: 4, borderRadius: 99, background: "#f5eaea", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${Math.min(100, (t.count / events.length) * 100)}%`, background: t.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#3a2020" }}>{t.label}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: t.color }}>{t.count}</span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 99, background: "#f5eaea", overflow: "hidden" }}>
+                          <motion.div
+                            initial={ifr ? { width: 0 } : false}
+                            animate={{ width: `${Math.min(100, (t.count / events.length) * 100)}%` }}
+                            transition={{ duration: 0.6, ease: "easeOut", delay: ifr ? 0.1 : 0 }}
+                            style={{ height: "100%", background: t.color, borderRadius: 99 }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Selected day panel */}
-          {selectedDay ? (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}>
-              <div style={{ padding: "13px 16px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="ti ti-calendar" style={{ fontSize: 15, color: "#e03131" }} />
+          <AnimatePresence mode="wait">
+            {selectedDay ? (
+              <motion.div
+                key="selected"
+                initial={{ opacity: 0, scale: 0.97, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 6 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+              >
+                <div style={{ padding: "13px 16px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <i className="ti ti-calendar" style={{ fontSize: 15, color: "#e03131" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{selectedLabel}</div>
+                    <div style={{ fontSize: 10.5, color: "#b09090", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
+                  </div>
+                  <motion.button onClick={() => setSelectedDay(null)}
+                    whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0" }}>
+                    <i className="ti ti-x" style={{ fontSize: 15 }} />
+                  </motion.button>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{selectedLabel}</div>
-                  <div style={{ fontSize: 10.5, color: "#b09090", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
+                <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
+                  {uniqueForDay.length === 0
+                    ? <div style={{ fontSize: 12, color: "#b09090", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
+                    : uniqueForDay.map((ev) => <EventCard key={ev.event_id} event={ev} onEdit={(e) => setModal({ mode: "edit", event: e })} onDelete={setToDelete} />)
+                  }
                 </div>
-                <button onClick={() => setSelectedDay(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0" }}><i className="ti ti-x" style={{ fontSize: 15 }} /></button>
-              </div>
-              <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
-                {uniqueForDay.length === 0
-                  ? <div style={{ fontSize: 12, color: "#b09090", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
-                  : uniqueForDay.map((ev) => <EventCard key={ev.event_id} event={ev} onEdit={(e) => setModal({ mode: "edit", event: e })} onDelete={setToDelete} />)
-                }
-              </div>
-            </div>
-          ) : (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "22px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#e8a0a0" }} />
-              </div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#b09090" }}>No date selected</div>
-              <div style={{ fontSize: 11, color: "#c8b0b0", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
-            </div>
-          )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="empty"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "22px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
+              >
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#e8a0a0" }} />
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#b09090" }}>No date selected</div>
+                <div style={{ fontSize: 11, color: "#c8b0b0", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* All events list */}
           <EventsList
@@ -1432,10 +1677,18 @@ export default function AcademicCalendarPage() {
         </div>
       </div>
 
-      {modal && <EventModal mode={modal.mode} initial={modal.event ?? null} schoolYear={schoolYear} onClose={() => setModal(null)} onSaved={handleSaved} />}
-      {toDelete && <DeleteModal event={toDelete} onConfirm={handleDeleteConfirm} onCancel={() => setToDelete(null)} />}
-      {showImport && <ImportHolidaysModal schoolYear={schoolYear} existingEvents={events} onClose={() => setShowImport(false)} onImported={() => fetchEvents(schoolYear)} />}
-      {showColors && <ColorSettingsModal onClose={() => setShowColors(false)} onSaved={() => setColorVersion((v) => v + 1)} />}
+      <AnimatePresence>
+        {modal && <EventModal key="event-modal" mode={modal.mode} initial={modal.event ?? null} schoolYear={schoolYear} onClose={() => setModal(null)} onSaved={handleSaved} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {toDelete && <DeleteModal key="delete-modal" event={toDelete} onConfirm={handleDeleteConfirm} onCancel={() => setToDelete(null)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showImport && <ImportHolidaysModal key="import-modal" schoolYear={schoolYear} existingEvents={events} onClose={() => setShowImport(false)} onImported={() => fetchEvents(schoolYear)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showColors && <ColorSettingsModal key="colors-modal" onClose={() => setShowColors(false)} onSaved={() => setColorVersion((v) => v + 1)} />}
+      </AnimatePresence>
 
     </AppLayout>
     {createPortal(
