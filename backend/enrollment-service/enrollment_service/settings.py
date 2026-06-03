@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "grading",
     "requirements",
     "academic_calendar",
+    "attendance",
 ]
 
 MIDDLEWARE = [

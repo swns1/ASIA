@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/", include("ai.urls")),
     path("api/", include("academic_calendar.urls")),
     path("api/send-enrollment-email/", send_enrollment_email, name="send_enrollment_email"),
+    path("api/", include("attendance.urls")),
 ]
 
 if settings.DEBUG:
