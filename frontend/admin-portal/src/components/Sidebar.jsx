@@ -17,6 +17,7 @@ const NAV = [
       { label: "Grades",            icon: "ti-chart-bar",         path: "/grades"              },
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements"        },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
+      { label: "Attendance",    icon: "ti-calendar-check", path: "/attendance"   },
       { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
       { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics"           },
     ],

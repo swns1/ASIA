@@ -30,6 +30,7 @@ import GradeSlipPrintPage from "./pages/print/GradeSlipPrintPage";
 import ReceiptPrintPage   from "./pages/print/ReceiptPrintPage";
 import InvoicePrintPage   from "./pages/print/InvoicePrintPage";
 import SF1PrintPage from "./pages/print/SF1PrintPage";
+import AttendancePage    from "./pages/AttendancePage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/print/invoice/:invoiceId"       element={<P><InvoicePrintPage /></P>} />
         <Route path="/school-forms"          element={<P><SchoolFormsPage /></P>} />
         <Route path="/print/sf1"             element={<P><SF1PrintPage /></P>} />
+        <Route path="/attendance"    element={<P><AttendancePage /></P>} />
       </Routes>
     </BrowserRouter>
   );

@@ -18,7 +18,7 @@ class EnrollmentBriefSerializer(serializers.Serializer):
     grade_level       = serializers.CharField()
     section           = serializers.CharField()
     enrollment_status = serializers.CharField()
-    student           = StudentBriefSerializer(source="student")
+    student           = StudentBriefSerializer()
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
