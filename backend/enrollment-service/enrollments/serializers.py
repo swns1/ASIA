@@ -40,6 +40,7 @@ class StudentSummarySerializer(serializers.ModelSerializer):
             "suffix",
             "full_name",
             "sex",
+            "birth_date",
             "status",
         )
 

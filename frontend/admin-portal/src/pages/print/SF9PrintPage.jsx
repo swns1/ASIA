@@ -197,8 +197,8 @@ export default function SF9PrintPage() {
           <InfoCell label="Section"         value={enrollment.section} />
           {enrollment.strand && <InfoCell label="Track / Strand" value={enrollment.strand} />}
           <InfoCell label="Sex"             value={student.sex} />
-          <InfoCell label="Date of Birth"   value={student.date_of_birth
-            ? new Date(student.date_of_birth).toLocaleDateString("en-PH", { month:"long", day:"numeric", year:"numeric" })
+          <InfoCell label="Date of Birth"   value={student.birth_date
+            ? new Date(student.birth_date).toLocaleDateString("en-PH", { month:"long", day:"numeric", year:"numeric" })
             : "—"} />
           <InfoCell label="School Year"     value={enrollment.school_year} />
         </div>

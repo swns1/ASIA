@@ -117,8 +117,8 @@ export default function CORPrintPage() {
           <InfoRow label="LRN"           value={student.lrn} />
           <InfoRow label="Student No."   value={student.student_number} />
           <InfoRow label="Sex"           value={student.sex} />
-          <InfoRow label="Date of Birth" value={student.date_of_birth
-            ? new Date(student.date_of_birth).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })
+          <InfoRow label="Date of Birth" value={student.birth_date
+            ? new Date(student.birth_date).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })
             : null} />
           <InfoRow label="Grade Level"   value={enrollment.grade_level} />
           <InfoRow label="Section"       value={enrollment.section} />
