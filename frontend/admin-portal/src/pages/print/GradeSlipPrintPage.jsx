@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { getEnrollment, getSubjects, getGrades } from "../../api/enrollmentApi";
 import { getSchoolSettings } from "../../api/billingApi";
-import { downloadAsPDF } from "../../utils/pdfExport";
 import logo from "../../assets/logo.png";
 
 const C = {
@@ -62,7 +61,6 @@ export default function GradeSlipPrintPage() {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [period,      setPeriod]      = useState(searchParams.get("period") || "");
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -127,15 +125,6 @@ export default function GradeSlipPrintPage() {
   const passed = grades.filter((g) => g.remarks?.toLowerCase() === "passed").length;
   const failed = grades.filter((g) => g.remarks?.toLowerCase() === "failed").length;
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    await downloadAsPDF(
-      "grade-slip-doc",
-      `GradeSlip-${enrollment.student_detail?.student_number}-${period}-SY${enrollment.school_year}.pdf`
-    );
-    setDownloading(false);
-  };
-
   return (
     <>
       {/* Toolbar */}
@@ -156,10 +145,10 @@ export default function GradeSlipPrintPage() {
         <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
           Grade Slip — {fullName} · SY {enrollment.school_year}
         </div>
-        <button onClick={handleDownload} disabled={downloading}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", opacity: downloading ? 0.7 : 1 }}>
-          <i className="ti ti-download" style={{ fontSize: 15 }} />
-          {downloading ? "Generating…" : "Download PDF"}
+        <button onClick={() => window.print()}
+          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>
+          <i className="ti ti-printer" style={{ fontSize: 15 }} />
+          Print
         </button>
       </div>
 

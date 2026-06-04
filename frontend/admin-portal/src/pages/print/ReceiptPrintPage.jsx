@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { getPayments, getInvoice, getSchoolSettings } from "../../api/billingApi";
-import { downloadAsPDF } from "../../utils/pdfExport";
 import logo from "../../assets/logo.png";
 
 const C = {
@@ -63,7 +62,6 @@ export default function ReceiptPrintPage() {
   const [schoolName,  setSchoolName]  = useState("South Lakes Integrated School");
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -104,12 +102,6 @@ export default function ReceiptPrintPage() {
   const orNo        = `PAY-${String(paymentId).padStart(6, "0")}`;
   const prevPaid    = parseFloat(invoice.total_paid || 0) - parseFloat(payment.amount_paid || 0);
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    await downloadAsPDF("receipt-doc", `Receipt-${orNo}-${payment.payment_date}.pdf`);
-    setDownloading(false);
-  };
-
   return (
     <>
       {/* Toolbar */}
@@ -121,10 +113,10 @@ export default function ReceiptPrintPage() {
         <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
           Official Receipt — {orNo} · {studentName}
         </div>
-        <button onClick={handleDownload} disabled={downloading}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", opacity: downloading ? 0.7 : 1 }}>
-          <i className="ti ti-download" style={{ fontSize: 15 }} />
-          {downloading ? "Generating…" : "Download PDF"}
+        <button onClick={() => window.print()}
+          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>
+          <i className="ti ti-printer" style={{ fontSize: 15 }} />
+          Print
         </button>
       </div>
 

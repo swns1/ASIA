@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import { getEnrollment, getSubjects } from "../../api/enrollmentApi";
 import { getStudent } from "../../api/studentApi";
 import { getSchoolSettings } from "../../api/billingApi";
-import { downloadAsPDF } from "../../utils/pdfExport";
 import logo from "../../assets/logo.png";
 
 const C = {
@@ -35,7 +34,6 @@ export default function CORPrintPage() {
   const [schoolName,  setSchoolName]  = useState("South Lakes Integrated School");
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -78,12 +76,6 @@ export default function CORPrintPage() {
   const fullName   = [student.last_name, student.first_name, student.middle_name].filter(Boolean).join(", ");
   const statusMeta = STATUS_META[enrollment.enrollment_status] ?? STATUS_META.enrolled;
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    await downloadAsPDF("cor-doc", `COR-${student.student_number}-SY${enrollment.school_year}.pdf`);
-    setDownloading(false);
-  };
-
   return (
     <>
       {/* Toolbar */}
@@ -95,10 +87,10 @@ export default function CORPrintPage() {
         <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
           Certificate of Registration — {fullName} · SY {enrollment.school_year}
         </div>
-        <button onClick={handleDownload} disabled={downloading}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", opacity: downloading ? 0.7 : 1 }}>
-          <i className="ti ti-download" style={{ fontSize: 15 }} />
-          {downloading ? "Generating…" : "Download PDF"}
+        <button onClick={() => window.print()}
+          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>
+          <i className="ti ti-printer" style={{ fontSize: 15 }} />
+          Print
         </button>
       </div>
 
