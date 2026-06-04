@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import { getSchoolSettings } from "../api/billingApi";
+import { getEnrollments } from "../api/enrollmentApi";
+import { getStudents } from "../api/studentApi";
 import { motion } from "framer-motion";
 import { pageVariants } from "../utils/motion";
 
@@ -25,7 +27,7 @@ const OTHER_FORMS = [
   {
     code: "SF10", name: "Learner's Permanent Record",
     desc: "Cumulative academic record maintained for each learner throughout their schooling.",
-    icon: "ti-archive", color: "#7c3aed", bg: "#f0e8fd", status: "coming_soon",
+    icon: "ti-archive", color: "#7c3aed", bg: "#f0e8fd", status: "available",
   },
 ];
 
@@ -45,6 +47,77 @@ function Field({ label, el }) {
     <div>
       <label style={labelStyle}>{label}</label>
       {el}
+    </div>
+  );
+}
+
+function studentLabel(s) {
+  return `${s.last_name}, ${s.first_name}${s.middle_name ? " " + s.middle_name[0] + "." : ""}`;
+}
+
+function enrollmentLabel(enr) {
+  let label = `SY ${enr.school_year} — ${enr.grade_level}`;
+  if (enr.section)  label += ` · ${enr.section}`;
+  if (enr.strand)   label += ` · ${enr.strand}`;
+  if (enr.semester) label += ` · ${enr.semester === "1st" ? "1st Sem" : "2nd Sem"}`;
+  return label;
+}
+
+function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSelect }) {
+  const [search,    setSearch]    = useState("");
+  const [results,   setResults]   = useState([]);
+  const [searching, setSearching] = useState(false);
+  const timerRef = useRef(null);
+
+  function handleChange(value) {
+    setSearch(value);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (value.trim().length < 2) { setResults([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await getStudents({ search: value.trim() });
+        const list = Array.isArray(data) ? data : data.results ?? [];
+        setResults(list.slice(0, 8));
+      } catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 350);
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          value={search}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="Search student by name…"
+          style={{ ...inputStyle, height: 34, border: `1.5px solid ${borderColor}` }}
+        />
+        {searching && (
+          <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#aaa" }}>…</span>
+        )}
+      </div>
+      {results.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, boxShadow: dropdownShadow, overflow: "hidden", marginTop: 2 }}>
+          {results.map(s => (
+            <div
+              key={s.student_id}
+              onClick={() => { onSelect(s); setSearch(""); setResults([]); }}
+              style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #f5eaea", color: "#1a0a0a" }}
+              onMouseEnter={e => e.currentTarget.style.background = "#f9f9f9"}
+              onMouseLeave={e => e.currentTarget.style.background = "white"}
+            >
+              <span style={{ fontWeight: 700 }}>{studentLabel(s)}</span>
+              <span style={{ marginLeft: 8, fontSize: 11, color: "#9a7070" }}>LRN: {s.lrn} · {s.student_number}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {search.trim().length >= 2 && !searching && results.length === 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, padding: "10px 14px", fontSize: 12, color: "#aaa", marginTop: 2, boxShadow: dropdownShadow }}>
+          No students found.
+        </div>
+      )}
     </div>
   );
 }
@@ -72,13 +145,35 @@ export default function SchoolFormsPage() {
   const [sf2Division,   setSf2Division]   = useState("");
   const [sf2Region,     setSf2Region]     = useState("");
   const [sf2Error,      setSf2Error]      = useState("");
+
+  // SF9
+  const [sf9Student,     setSf9Student]     = useState(null);
+  const [sf9Enrollments, setSf9Enrollments] = useState([]);
   const [sf9EnrollmentId, setSf9EnrollmentId] = useState("");
+  const [sf9LoadingEnr,  setSf9LoadingEnr]  = useState(false);
+
+  // SF10
+  const [sf10Student, setSf10Student] = useState(null);
 
   useEffect(() => {
     getSchoolSettings()
       .then((s) => { if (s?.current_school_year) setSchoolYear(s.current_school_year); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!sf9Student) { setSf9Enrollments([]); setSf9EnrollmentId(""); return; }
+    setSf9LoadingEnr(true);
+    getEnrollments({ student: sf9Student.student_id, page_size: 100 })
+      .then(data => {
+        const list = (Array.isArray(data) ? data : data.results ?? [])
+          .sort((a, b) => (b.school_year || "").localeCompare(a.school_year || ""));
+        setSf9Enrollments(list);
+        setSf9EnrollmentId(list[0]?.enrollment_id ? String(list[0].enrollment_id) : "");
+      })
+      .catch(() => setSf9Enrollments([]))
+      .finally(() => setSf9LoadingEnr(false));
+  }, [sf9Student]);
 
   const isFirstRender = !hasAnimated.current;
   if (isFirstRender) hasAnimated.current = true;
@@ -166,7 +261,6 @@ export default function SchoolFormsPage() {
               </div>
             </div>
           </div>
-
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
@@ -188,13 +282,11 @@ export default function SchoolFormsPage() {
                 <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Optional" style={inputStyle} />
               } />
             </div>
-
             {sf1Error && (
               <div style={{ marginBottom: 14, padding: "9px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 7 }}>
                 <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf1Error}
               </div>
             )}
-
             <motion.button
               onClick={handleOpenSF1}
               whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
@@ -223,7 +315,6 @@ export default function SchoolFormsPage() {
               </div>
             </div>
           </div>
-
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
@@ -248,13 +339,11 @@ export default function SchoolFormsPage() {
                 <input value={sf2Region} onChange={(e) => setSf2Region(e.target.value)} placeholder="Optional" style={inputStyle} />
               } />
             </div>
-
             {sf2Error && (
               <div style={{ marginBottom: 14, padding: "9px 14px", background: "#eef3fc", border: "1px solid #93b4f5", borderRadius: 8, fontSize: 12, color: "#1455a0", display: "flex", alignItems: "center", gap: 7 }}>
                 <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf2Error}
               </div>
             )}
-
             <motion.button
               onClick={handleOpenSF2}
               whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(20,85,160,0.30)" }}
@@ -275,36 +364,103 @@ export default function SchoolFormsPage() {
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: form.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <i className={`ti ${form.icon}`} style={{ fontSize: 18, color: form.color }} />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: form.status === "coming_soon" ? "#f0ede8" : form.bg, color: form.status === "coming_soon" ? "#5c5752" : form.color }}>
-                  {form.status === "coming_soon" ? "Coming Soon" : "Available"}
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: form.bg, color: form.color }}>
+                  Available
                 </span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 5 }}>{form.code} — {form.name}</div>
               <div style={{ fontSize: 12, color: "#b09090", lineHeight: 1.6, marginBottom: 16 }}>{form.desc}</div>
-              {form.code === "SF9" ? (
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    value={sf9EnrollmentId}
-                    onChange={(e) => setSf9EnrollmentId(e.target.value)}
-                    placeholder="Enrollment ID"
-                    style={{ ...inputStyle, width: 130, height: 34 }}
-                  />
-                  <motion.button
-                    onClick={() => {
-                      if (!sf9EnrollmentId.trim()) return;
-                      window.open(`/print/sf9/${sf9EnrollmentId.trim()}`, "_blank");
-                    }}
-                    whileHover={sf9EnrollmentId.trim() ? { scale: 1.02 } : {}}
-                    whileTap={sf9EnrollmentId.trim() ? { scale: 0.97 } : {}}
-                    transition={{ duration: 0.12 }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: sf9EnrollmentId.trim() ? form.bg : "#f0ede8", border: `1.5px solid ${sf9EnrollmentId.trim() ? form.color + "40" : "#ddd"}`, color: sf9EnrollmentId.trim() ? form.color : "#aaa", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: sf9EnrollmentId.trim() ? "pointer" : "default", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
-                  >
-                    <i className="ti ti-printer" style={{ fontSize: 12 }} /> Print SF9
-                  </motion.button>
+
+              {/* ── SF9 ── */}
+              {form.code === "SF9" && (
+                <div>
+                  {sf9Student ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {/* Selected student chip + clear */}
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid ${form.color}40`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
+                          {studentLabel(sf9Student)}
+                        </div>
+                        <button
+                          onClick={() => { setSf9Student(null); setSf9Enrollments([]); setSf9EnrollmentId(""); }}
+                          style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#888", fontFamily: "'DM Sans',sans-serif" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {/* Enrollment picker */}
+                      {sf9LoadingEnr ? (
+                        <div style={{ fontSize: 12, color: "#aaa" }}>Loading enrollments…</div>
+                      ) : sf9Enrollments.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#c92a2a" }}>No enrollments found for this student.</div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <select
+                            value={sf9EnrollmentId}
+                            onChange={(e) => setSf9EnrollmentId(e.target.value)}
+                            style={{ ...inputStyle, height: 34, flex: 1, border: `1.5px solid ${form.color}40`, color: "#1a0a0a", cursor: "pointer" }}
+                          >
+                            {sf9Enrollments.map(enr => (
+                              <option key={enr.enrollment_id} value={enr.enrollment_id}>
+                                {enrollmentLabel(enr)}
+                              </option>
+                            ))}
+                          </select>
+                          <motion.button
+                            onClick={() => { if (sf9EnrollmentId) window.open(`/print/sf9/${sf9EnrollmentId}`, "_blank"); }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.97 }}
+                            transition={{ duration: 0.12 }}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid ${form.color}40`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                          >
+                            <i className="ti ti-printer" style={{ fontSize: 12 }} /> Print SF9
+                          </motion.button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <StudentSearch
+                      borderColor={`${form.color}40`}
+                      dropdownBorderColor={`${form.color}40`}
+                      dropdownShadow={`0 4px 16px rgba(46,107,13,0.12)`}
+                      onSelect={setSf9Student}
+                    />
+                  )}
                 </div>
-              ) : (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#f0ede8", color: "#7a6a5a", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600 }}>
-                  <i className="ti ti-clock" style={{ fontSize: 12 }} /> In Development
+              )}
+
+              {/* ── SF10 ── */}
+              {form.code === "SF10" && (
+                <div>
+                  {sf10Student ? (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid ${form.color}40`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
+                        {studentLabel(sf10Student)}
+                      </div>
+                      <button
+                        onClick={() => setSf10Student(null)}
+                        style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#888", fontFamily: "'DM Sans',sans-serif" }}
+                      >
+                        ✕
+                      </button>
+                      <motion.button
+                        onClick={() => window.open(`/print/sf10/${sf10Student.student_id}`, "_blank")}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        transition={{ duration: 0.12 }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid ${form.color}40`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                      >
+                        <i className="ti ti-printer" style={{ fontSize: 12 }} /> Print SF10
+                      </motion.button>
+                    </div>
+                  ) : (
+                    <StudentSearch
+                      borderColor={`${form.color}40`}
+                      dropdownBorderColor={`${form.color}40`}
+                      dropdownShadow={`0 4px 16px rgba(124,58,237,0.12)`}
+                      onSelect={setSf10Student}
+                    />
+                  )}
                 </div>
               )}
             </div>
