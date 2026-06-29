@@ -407,7 +407,12 @@ export default function StudentsPage() {
               initial={isFirstRender ? { opacity: 0, y: 8 } : false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
-              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              style={{
+                background: "white", border: "1px solid #f5eaea",
+                borderRadius: 14, padding: "18px 20px",
+                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
+                display: "flex", flexDirection: "column", gap: 0,
+              }}
             >
 
               {/* Row 1: search + sort + clear */}
@@ -510,89 +515,101 @@ export default function StudentsPage() {
                 </AnimatePresence>
               </div>
 
-              {/* Row 2: quick filters — Recents | Status chips | Sex chips */}
-              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {/* Divider */}
+              <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
 
-                {/* Recents quick-filter */}
-                <motion.button
-                  initial={false}
-                  animate={{
-                    backgroundColor: isRecents ? "#fff0f0" : "#ffffff",
-                    color:           isRecents ? "#e03131" : "#9a7070",
-                    borderColor:     isRecents ? "#e03131" : "#f0e4e4",
-                  }}
-                  layout
-                  transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                  onClick={handleRecents}
-                  title="Show most recently registered students"
-                  style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                >
-                  <i className="ti ti-clock" style={{ fontSize: 12 }} />
-                  Recents
-                </motion.button>
+              {/* Chip rows */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-                <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
+                {/* Status */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
+                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {STATUS_FILTERS.map((val) => {
+                      const meta = STATUS_META[val];
+                      const isActive = statusFilter === val;
+                      return (
+                        <motion.button
+                          key={val}
+                          initial={false}
+                          animate={{
+                            backgroundColor: isActive ? "#fff0f0" : "#ffffff",
+                            color:           isActive ? "#e03131" : "#9a7070",
+                            borderColor:     isActive ? "#e03131" : "#f0e4e4",
+                          }}
+                          layout
+                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                          onClick={() => handleStatusFilter(val)}
+                          style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                        >
+                          {val !== "all" && (
+                            <motion.span
+                              animate={{ background: isActive ? "#e03131" : meta?.dot ?? "#9e9e9e" }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                              style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, display: "inline-block" }}
+                            />
+                          )}
+                          {val === "all" ? "All" : meta?.label}
+                          {isActive && !loading && statusCounts[val] !== undefined && (
+                            <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
+                              {statusCounts[val]}
+                            </span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                </div>
 
-                {/* Status filter chips */}
-                {STATUS_FILTERS.map((val) => {
-                  const meta = STATUS_META[val];
-                  const isActive = statusFilter === val;
-                  return (
+                {/* Sex */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Sex</div>
+                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {SEX_FILTERS.map((sf) => {
+                      const isActive = sexFilter === sf.value;
+                      return (
+                        <motion.button
+                          key={sf.value}
+                          initial={false}
+                          animate={{
+                            backgroundColor: isActive ? "#fff0f0" : "#ffffff",
+                            color:           isActive ? "#e03131" : "#9a7070",
+                            borderColor:     isActive ? "#e03131" : "#f0e4e4",
+                          }}
+                          layout
+                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
+                          onClick={() => handleSexFilter(sf.value)}
+                          style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
+                        >
+                          {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12 }} />}
+                          {sf.label}
+                        </motion.button>
+                      );
+                    })}
+
+                    <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
+
+                    {/* Recents quick-filter — kept inline with Sex since it's a view shortcut */}
                     <motion.button
-                      key={val}
                       initial={false}
                       animate={{
-                        backgroundColor: isActive ? "#fff0f0" : "#ffffff",
-                        color:           isActive ? "#e03131" : "#9a7070",
-                        borderColor:     isActive ? "#e03131" : "#f0e4e4",
+                        backgroundColor: isRecents ? "#fff0f0" : "#ffffff",
+                        color:           isRecents ? "#e03131" : "#9a7070",
+                        borderColor:     isRecents ? "#e03131" : "#f0e4e4",
                       }}
                       layout
                       transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                      onClick={() => handleStatusFilter(val)}
+                      onClick={handleRecents}
+                      title="Show most recently registered students"
                       style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
                     >
-                      {val !== "all" && (
-                        <motion.span
-                          animate={{ background: isActive ? "#e03131" : meta?.dot ?? "#9e9e9e" }}
-                          transition={{ duration: 0.18, ease: "easeOut" }}
-                          style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, display: "inline-block" }}
-                        />
-                      )}
-                      {val === "all" ? "All" : meta?.label}
-                      {isActive && !loading && statusCounts[val] !== undefined && (
-                        <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
-                          {statusCounts[val]}
-                        </span>
-                      )}
+                      <i className="ti ti-clock" style={{ fontSize: 12 }} />
+                      Recents
                     </motion.button>
-                  );
-                })}
+                  </motion.div>
+                </div>
 
-                <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
-
-                {/* Sex filter chips */}
-                {SEX_FILTERS.map((sf) => {
-                  const isActive = sexFilter === sf.value;
-                  return (
-                    <motion.button
-                      key={sf.value}
-                      initial={false}
-                      animate={{
-                        backgroundColor: isActive ? "#fff0f0" : "#ffffff",
-                        color:           isActive ? "#e03131" : "#9a7070",
-                        borderColor:     isActive ? "#e03131" : "#f0e4e4",
-                      }}
-                      layout
-                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                      onClick={() => handleSexFilter(sf.value)}
-                      style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                    >
-                      {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12 }} />}
-                      {sf.label}
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
+              </div>
             </motion.div>
 
             {/* ── Table ── */}

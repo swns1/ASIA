@@ -67,8 +67,6 @@ function OverviewTab({ onNavigate }) {
   const [gradeLevel,    setGradeLevel]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("");
   const [remarks,       setRemarks]       = useState("");
-  const [section,       setSection]       = useState("");
-  const [sectionInput,  setSectionInput]  = useState("");
   const [search,        setSearch]        = useState("");
 
   const [rows,    setRows]    = useState([]);
@@ -85,13 +83,12 @@ function OverviewTab({ onNavigate }) {
   // reset cascaded filters when level changes
   useEffect(() => { setGradeLevel(""); setGradingPeriod(""); }, [schoolLevel]);
 
-  const canFetch = schoolYear || schoolLevel || gradeLevel || section;
-  const hasFilters = schoolYear || schoolLevel || gradeLevel || gradingPeriod || remarks || section || search;
+  const canFetch = schoolYear || schoolLevel || gradeLevel;
+  const hasFilters = schoolYear || schoolLevel || gradeLevel || gradingPeriod || remarks || search;
 
   const clearFilters = () => {
     setSchoolYear(""); setSchoolLevel(""); setGradeLevel("");
-    setGradingPeriod(""); setRemarks(""); setSection("");
-    setSectionInput(""); setSearch("");
+    setGradingPeriod(""); setRemarks(""); setSearch("");
   };
 
   useEffect(() => {
@@ -101,7 +98,7 @@ function OverviewTab({ onNavigate }) {
     if (schoolYear)  params.school_year  = schoolYear;
     if (schoolLevel) params.school_level = schoolLevel;
     if (gradeLevel)  params.grade_level  = gradeLevel;
-    if (section)     params.section      = section;
+
 
     getEnrollments(params)
       .then(async (d) => {
@@ -140,7 +137,7 @@ function OverviewTab({ onNavigate }) {
       })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
-  }, [schoolYear, schoolLevel, gradeLevel, section, gradingPeriod, remarks, canFetch]);
+  }, [schoolYear, schoolLevel, gradeLevel, gradingPeriod, remarks, canFetch]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
@@ -238,29 +235,12 @@ function OverviewTab({ onNavigate }) {
               </button>
             )}
           </div>
-          {/* Section text filter */}
-          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 42, transition: "border .15s,box-shadow .15s" }}>
-            <i className="ti ti-door" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
-            <input
-              placeholder="Section…"
-              value={sectionInput}
-              onChange={(e) => setSectionInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") setSection(sectionInput); }}
-              style={{ width: 90, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
-            />
-            {sectionInput && (
-              <button onClick={() => { setSectionInput(""); setSection(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}>
-                <i className="ti ti-x" style={{ fontSize: 13 }} />
-              </button>
-            )}
-          </div>
           <button
-            onClick={() => setSection(sectionInput)}
-            style={{ height: 42, padding: "0 18px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
+            style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
           >
-            Apply
+            Search
           </button>
           <AnimatePresence>
             {hasFilters && (

@@ -550,9 +550,6 @@ export default function RequirementsPage() {
 
             {/* ── Filter + Search panel ── */}
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.26, ease: "easeOut" }}
               style={{
                 background: "white", border: `1px solid ${C.border}`,
                 borderRadius: 14, padding: "18px 20px",
@@ -623,6 +620,14 @@ export default function RequirementsPage() {
                   )}
                 </div>
 
+                <button
+                  style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
+                  onClick={() => { if (searchInput.trim()) setShowDropdown(true); }}
+                >
+                  Search
+                </button>
                 <AnimatePresence>
                   {hasFilters && (
                     <motion.button
