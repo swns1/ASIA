@@ -275,82 +275,6 @@ function ViewModal({ imageUrl, name, onClose }) {
   );
 }
 
-// ── Requirement card ──────────────────────────────────────────────────────────
-function RequirementCard({ req, onUpload, onView, onRemove }) {
-  const imageUrl = resolveMediaUrl(req.image_url);
-  const hasImage = req.is_submitted && imageUrl && isImageUrl(req.image_url);
-  const icon = reqIcon(req.requirement_code);
-
-  return (
-    <div style={{
-      background: "white",
-      border: `1.5px solid ${req.is_submitted ? C.greenBorder : C.border}`,
-      borderRadius: 16,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      boxShadow: req.is_submitted ? "0 2px 16px rgba(46,125,50,0.08)" : "0 2px 12px rgba(224,49,49,0.05)",
-      transition: "box-shadow 0.15s, transform 0.15s",
-    }} className="req-card">
-      <div style={{ height: 4, background: req.is_submitted ? `linear-gradient(90deg,${C.green},#43a047)` : `linear-gradient(90deg,#e0d0d0,#f0e4e4)` }} />
-
-      <div style={{ height: 120, background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderBottom: `1px solid ${C.softBorder}`, cursor: hasImage ? "pointer" : "default" }}
-        onClick={() => hasImage && onView(imageUrl, req.requirement_name)}>
-        {hasImage ? (
-          <img src={imageUrl} alt={req.requirement_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : req.is_submitted ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className="ti ti-file-check" style={{ fontSize: 34, color: C.green }} />
-            <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>Document on file</span>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#c8b0b0" }} />
-            <span style={{ fontSize: 11, color: C.pale }}>No document yet</span>
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.35 }}>{req.requirement_name}</div>
-          <StatusBadge submitted={req.is_submitted} />
-        </div>
-        {req.description && <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>{req.description}</div>}
-        {req.remarks && <div style={{ fontSize: 11, color: C.pale, fontStyle: "italic", marginTop: 2 }}>"{req.remarks}"</div>}
-        {req.submitted_at && (
-          <div style={{ fontSize: 10.5, color: C.pale, marginTop: 2 }}>
-            <i className="ti ti-calendar" style={{ fontSize: 11 }} />{" "}
-            {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: "0 16px 14px", display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {req.is_submitted ? (
-          <>
-            {hasImage && (
-              <button onClick={() => onView(imageUrl, req.requirement_name)} style={{ ...s.outlineBtn, flex: 1, minWidth: 60 }}>
-                <i className="ti ti-eye" style={{ fontSize: 13 }} />View
-              </button>
-            )}
-            <button onClick={() => onUpload(req)} style={{ ...s.outlineBtn, flex: 1, minWidth: 60 }}>
-              <i className="ti ti-replace" style={{ fontSize: 13 }} />Replace
-            </button>
-            <button onClick={() => onRemove(req)} title="Remove"
-              style={{ width: 34, height: 34, border: "1px solid #fde2de", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.red, flexShrink: 0 }}>
-              <i className="ti ti-trash" style={{ fontSize: 13 }} />
-            </button>
-          </>
-        ) : (
-          <button onClick={() => onUpload(req)} style={{ ...s.primaryBtn, flex: 1, height: 34, fontSize: 12 }}>
-            <i className="ti ti-upload" style={{ fontSize: 13 }} />Upload Document
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon, color, loading }) {
@@ -832,9 +756,9 @@ export default function RequirementsPage() {
                   </div>
                 </div>
 
-                <div style={{ padding: "18px 20px" }}>
+                <div>
                   {reqError && (
-                    <div style={s.errorBanner}>
+                    <div style={{ ...s.errorBanner, margin: "16px 20px 0" }}>
                       <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{reqError}
                       <button onClick={() => setReqError("")} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b91c1c" }}>
                         <i className="ti ti-x" style={{ fontSize: 13 }} />
@@ -842,35 +766,163 @@ export default function RequirementsPage() {
                     </div>
                   )}
 
-                  {reqLoading ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 14 }}>
-                      {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden" }}>
-                          <div style={{ height: 120, background: "#fafafa" }} />
-                          <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-                            <Sk h={14} w="70%" /><Sk h={10} w="50%" /><Sk h={30} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : requirements.length > 0 ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 14 }}>
-                      {requirements.map((req) => (
-                        <RequirementCard
-                          key={req.requirement_type_id}
-                          req={req}
-                          onUpload={setUploadModal}
-                          onView={(url, name) => setViewModal({ imageUrl: url, name })}
-                          onRemove={handleRemove}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ padding: "40px 0", textAlign: "center", color: C.pale }}>
-                      <i className="ti ti-file-search" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
-                      No requirement types configured.
-                    </div>
-                  )}
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "#fdfafa" }}>
+                        {[
+                          { label: "Requirement",    w: "32%" },
+                          { label: "Status",         w: "14%" },
+                          { label: "Date Submitted", w: "18%" },
+                          { label: "Remarks",        w: "26%" },
+                          { label: "",               w: "10%" },
+                        ].map(({ label, w }) => (
+                          <th key={label} style={{
+                            textAlign: "left", fontSize: 10.5, fontWeight: 600,
+                            color: "#c0a0a0", padding: "13px 18px",
+                            borderBottom: `1px solid ${C.border}`,
+                            textTransform: "uppercase", letterSpacing: "0.07em",
+                            width: w,
+                            position: "sticky", top: 0, zIndex: 1,
+                            background: "#fdfafa",
+                          }}>
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reqLoading
+                        ? Array.from({ length: 6 }).map((_, i) => (
+                            <tr key={i}>
+                              <td style={{ padding: "14px 18px", borderBottom: `1px solid #f9f0f0` }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                  <Sk w={32} h={32} r={8} />
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    <Sk w={160} h={13} /><Sk w={100} h={10} />
+                                  </div>
+                                </div>
+                              </td>
+                              {[70, 100, 140, 80].map((w, j) => (
+                                <td key={j} style={{ padding: "14px 18px", borderBottom: `1px solid #f9f0f0` }}>
+                                  <Sk w={w} h={13} />
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        : requirements.length === 0
+                          ? (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: "center", padding: "56px 16px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                                  <div style={{ width: 52, height: 52, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+                                    <i className="ti ti-file-search" style={{ fontSize: 22, color: C.red }} />
+                                  </div>
+                                  <div style={{ fontSize: 14, color: "#7a5050", fontWeight: 600 }}>No requirement types configured</div>
+                                  <div style={{ fontSize: 12, color: C.pale }}>Requirements are set up per school level and grade</div>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                          : requirements.map((req) => {
+                              const imageUrl = resolveMediaUrl(req.image_url);
+                              const hasImage = req.is_submitted && imageUrl && isImageUrl(req.image_url);
+                              const icon = reqIcon(req.requirement_code);
+                              return (
+                                <tr key={req.requirement_type_id} className="student-row">
+                                  {/* Requirement name + icon */}
+                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                      <div style={{
+                                        width: 34, height: 34, borderRadius: 9,
+                                        background: req.is_submitted ? C.greenLight : C.redLight,
+                                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                                      }}>
+                                        <i className={`ti ${req.is_submitted ? "ti-file-check" : icon}`} style={{ fontSize: 15, color: req.is_submitted ? C.green : C.red }} />
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3 }}>
+                                          {req.requirement_name}
+                                        </div>
+                                        {req.description && (
+                                          <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>{req.description}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Status */}
+                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
+                                    <StatusBadge submitted={req.is_submitted} />
+                                  </td>
+
+                                  {/* Date submitted */}
+                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
+                                    {req.submitted_at
+                                      ? (
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <i className="ti ti-calendar" style={{ fontSize: 12, color: "#c0a0a0" }} />
+                                          <span style={{ fontSize: 12, color: "#5a4a4a" }}>
+                                            {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
+                                          </span>
+                                        </div>
+                                      )
+                                      : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                  </td>
+
+                                  {/* Remarks */}
+                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
+                                    {req.remarks
+                                      ? <span style={{ fontSize: 12, color: "#7a5050", fontStyle: "italic" }}>"{req.remarks}"</span>
+                                      : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td
+                                    style={{ padding: "13px 14px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                      {req.is_submitted ? (
+                                        <>
+                                          {hasImage && (
+                                            <button
+                                              className="row-action" title="View"
+                                              onClick={() => setViewModal({ imageUrl, name: req.requirement_name })}
+                                            >
+                                              <i className="ti ti-eye" style={{ fontSize: 14 }} />
+                                            </button>
+                                          )}
+                                          <button
+                                            className="row-action" title="Replace"
+                                            onClick={() => setUploadModal(req)}
+                                          >
+                                            <i className="ti ti-replace" style={{ fontSize: 14 }} />
+                                          </button>
+                                          <button
+                                            className="row-action danger" title="Remove"
+                                            style={{ color: "#c09090" }}
+                                            onClick={() => handleRemove(req)}
+                                          >
+                                            <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          className="row-action" title="Upload"
+                                          onClick={() => setUploadModal(req)}
+                                          style={{ color: C.red }}
+                                        >
+                                          <i className="ti ti-upload" style={{ fontSize: 14 }} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                      }
+                    </tbody>
+                  </table>
                 </div>
               </section>
             )}
@@ -878,56 +930,147 @@ export default function RequirementsPage() {
             {/* ── Recently enrolled students ── */}
             {!selectedStudent && (
               <section style={s.panel}>
-                <div style={s.panelHeader}>
-                  <div>
-                    <div style={s.panelTitle}>
-                      <i className="ti ti-clock" style={{ fontSize: 14, color: C.red, marginRight: 8 }} />
-                      Recently Enrolled Students
-                    </div>
-                    <div style={{ fontSize: 11.5, color: C.pale, marginTop: 2 }}>Click a student to view their requirements</div>
-                  </div>
-                </div>
-                <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
-                  {recentStudentsLoading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.softBorder}` }}>
-                        <Sk w={36} h={36} r={99} />
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                          <Sk h={13} w="45%" />
-                          <Sk h={10} w="30%" />
-                        </div>
-                      </div>
-                    ))
-                  ) : recentStudents.length === 0 ? (
-                    <div style={{ padding: "32px 0", textAlign: "center", color: C.pale }}>
-                      <i className="ti ti-users" style={{ fontSize: 28, display: "block", marginBottom: 8 }} />
-                      No students found.
-                    </div>
-                  ) : (
-                    recentStudents.map((st) => {
-                      const rap = getAvatarPalette(st.last_name ?? "X");
-                      return (
-                      <div
-                        key={st.student_id}
-                        className="dropdown-item"
-                        onClick={() => selectStudent(st)}
-                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.softBorder}`, cursor: "pointer", transition: "background 0.12s" }}
-                      >
-                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: rap.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: rap.color, flexShrink: 0 }}>
-                          {st.first_name?.[0]}{st.last_name?.[0]}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {st.first_name} {st.middle_name ? st.middle_name + " " : ""}{st.last_name}
-                          </div>
-                          <div style={{ fontSize: 11, color: C.pale }}>LRN: {st.lrn} · {st.student_number}</div>
-                        </div>
-                        <i className="ti ti-chevron-right" style={{ fontSize: 13, color: C.pale, flexShrink: 0 }} />
-                      </div>
-                      );
-                    })
-                  )}
-                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#fdfafa" }}>
+                      {[
+                        { label: "Student",  w: "35%" },
+                        { label: "LRN",      w: "20%" },
+                        { label: "Grade",    w: "20%" },
+                        { label: "Status",   w: "15%" },
+                        { label: "",         w: "10%" },
+                      ].map(({ label, w }) => (
+                        <th key={label} style={{
+                          textAlign: "left", fontSize: 10.5, fontWeight: 600,
+                          color: "#c0a0a0", padding: "13px 18px",
+                          borderBottom: `1px solid ${C.border}`,
+                          textTransform: "uppercase", letterSpacing: "0.07em",
+                          width: w,
+                          position: "sticky", top: 0, zIndex: 1,
+                          background: "#fdfafa",
+                        }}>
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentStudentsLoading
+                      ? Array.from({ length: 7 }).map((_, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                <Sk w={36} h={36} r={99} />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                  <Sk w={130} h={13} /><Sk w={90} h={11} />
+                                </div>
+                              </div>
+                            </td>
+                            {[88, 100, 70, 40].map((w, j) => (
+                              <td key={j} style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
+                                <Sk w={w} h={13} />
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      : recentStudents.length === 0
+                        ? (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: "center", padding: "56px 16px" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                                <div style={{ width: 52, height: 52, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+                                  <i className="ti ti-users" style={{ fontSize: 22, color: C.red }} />
+                                </div>
+                                <div style={{ fontSize: 14, color: "#7a5050", fontWeight: 600 }}>No students found</div>
+                                <div style={{ fontSize: 12, color: C.pale }}>Try adjusting the level or grade filter above</div>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                        : recentStudents.map((st) => {
+                            const rap = getAvatarPalette(st.last_name ?? "X");
+                            const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
+                            const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
+                            const statusMeta = {
+                              active:      { bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50", label: "Active" },
+                              inactive:    { bg: "#f0ede8", color: "#5c5752", dot: "#9e9e9e", label: "Inactive" },
+                              transferred: { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Transferred" },
+                              graduated:   { bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3", label: "Graduated" },
+                              dropped:     { bg: "#fde8e8", color: "#9b2020", dot: "#f44336", label: "Dropped" },
+                            };
+                            const pill = statusMeta[st.status] ?? statusMeta.inactive;
+                            const gradeLabel = st.grade_level
+                              ? st.grade_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                              : st.school_level
+                                ? st.school_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                                : null;
+                            return (
+                              <tr
+                                key={st.student_id}
+                                className="student-row"
+                                onClick={() => selectStudent(st)}
+                              >
+                                {/* Student */}
+                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                    <div style={{
+                                      width: 36, height: 36, borderRadius: "50%",
+                                      background: rap.bg, flexShrink: 0,
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      fontSize: 12, fontWeight: 700, color: rap.color,
+                                    }}>
+                                      {initials}
+                                    </div>
+                                    <div>
+                                      <div className="row-name" style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3, transition: "color 0.12s" }}>
+                                        {fullName}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>
+                                        {st.student_number
+                                          ? st.student_number
+                                          : <span style={{ fontStyle: "italic", color: "#d0b8b8" }}>no student number</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* LRN */}
+                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                  {st.lrn
+                                    ? <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{st.lrn}</span>
+                                    : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                </td>
+
+                                {/* Grade */}
+                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                  {gradeLabel
+                                    ? <span style={{ fontSize: 12, color: "#5a4a4a" }}>{gradeLabel}</span>
+                                    : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                </td>
+
+                                {/* Status */}
+                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                  <span style={{
+                                    display: "inline-flex", alignItems: "center", gap: 5,
+                                    fontSize: 11.5, fontWeight: 600,
+                                    padding: "4px 10px", borderRadius: 99,
+                                    background: pill.bg, color: pill.color,
+                                  }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: pill.dot, flexShrink: 0 }} />
+                                    {pill.label}
+                                  </span>
+                                </td>
+
+                                {/* Arrow */}
+                                <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                  <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#c0a0a0" }} />
+                                </td>
+                              </tr>
+                            );
+                          })
+                    }
+                  </tbody>
+                </table>
               </section>
             )}
           </div>
@@ -969,8 +1112,7 @@ const baseCss = `
   .nav-item { transition:background 0.12s,color 0.12s; }
   .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
   .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-  .req-card:hover { box-shadow:0 4px 20px rgba(224,49,49,0.10) !important; transform:translateY(-1px); }
-  .dropdown-item:hover { background:#fff8f6; }
+.dropdown-item:hover { background:#fff8f6; }
   .dropdown-item:last-child { border-bottom:none !important; }
   .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
 `;
@@ -1000,7 +1142,6 @@ const s = {
   statIcon:    { width: 30, height: 30, borderRadius: 8, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" },
   statValue:   { fontSize: 26, fontWeight: 700, lineHeight: 1 },
   primaryBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: `linear-gradient(135deg,#e03131,#c92a2a)`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)" },
-  outlineBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" },
   secondaryBtn:{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" },
   dangerBtn:   { flex: 1, height: 42, border: "none", borderRadius: 10, background: `linear-gradient(135deg,#e03131,#c92a2a)`, fontSize: 13, color: C.white, cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif" },
   errorBanner: { background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 },

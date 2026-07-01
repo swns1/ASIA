@@ -240,8 +240,8 @@ function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, del
 
 // ── Sortable Th ───────────────────────────────────────────────────────────────
 
-function Th({ children, sortable, active, direction, onClick, align = "left" }) {
-  const thStyle = { textAlign: align, fontSize: 10.5, fontWeight: 600, color: C.micro, padding: "12px 18px", borderBottom: `1px solid ${C.border}`, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap", background: C.white };
+function Th({ children, sortable, active, direction, onClick, align = "left", sticky = false }) {
+  const thStyle = { textAlign: align, fontSize: 10.5, fontWeight: 600, color: C.micro, padding: "12px 18px", borderBottom: `1px solid ${C.border}`, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap", background: "#fdfafa", ...(sticky ? { position: "sticky", top: 0, zIndex: 1 } : {}) };
   if (!sortable) return <th style={thStyle}>{children}</th>;
   return (
     <th style={thStyle}>
@@ -347,7 +347,7 @@ export default function AuditTrailPage() {
   const [timeTo, setTimeTo] = useState("");
   const [sort, setSort] = useState({ key: "date", direction: "desc" });
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const roles = useMemo(() => {
     const unique = Array.from(new Set(logs.map(l => l.userRole).filter(Boolean)));
@@ -374,8 +374,8 @@ export default function AuditTrailPage() {
       });
   }, [logs, statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
-  const pageLogs = filteredLogs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const pageLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
   const invalidCount = logs.filter(l => l.invalidDate).length;
 
   const hasActiveFilters = statusFilter !== "all" || roleFilter !== "all" || moduleFilter !== "all" || dateFilter || timeFrom || timeTo;
@@ -387,7 +387,7 @@ export default function AuditTrailPage() {
     loadLogs();
   }, [allowed, navigate]);
 
-  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo]);
+  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, pageSize]);
 
   async function loadLogs() {
     setLoading(true); setError("");
@@ -421,13 +421,6 @@ export default function AuditTrailPage() {
     invalid: invalidCount,
   };
 
-  // Windowed page numbers
-  const pageWindow = useMemo(() => {
-    const delta = 2;
-    const range = [];
-    for (let i = Math.max(1, page - delta); i <= Math.min(totalPages, page + delta); i++) range.push(i);
-    return range;
-  }, [page, totalPages]);
 
   if (!allowed && !loading) return <AccessDenied navigate={navigate} />;
 
@@ -590,31 +583,21 @@ export default function AuditTrailPage() {
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.28, delay: 0.2, ease: "easeOut" }}
-          style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
+          style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: "0 2px 16px rgba(224,49,49,0.06)", display: "flex", flexDirection: "column" }}
         >
-          {/* Panel header */}
-          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>System Log Records</div>
-              <div style={{ fontSize: 11.5, color: C.pale, marginTop: 2 }}>
-                {loading ? "Loading…" : <><AnimatedCount value={filteredLogs.length} /> record{filteredLogs.length !== 1 ? "s" : ""} found</>}
-              </div>
-            </div>
-          </div>
-
           {/* Table */}
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "auto", overflowY: "auto", borderRadius: "0 0 16px 16px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 1040 }}>
               <thead>
                 <tr>
-                  <Th>User</Th>
-                  <Th sortable active={sort.key === "role"} direction={sort.direction} onClick={() => toggleSort("role")}>Role</Th>
-                  <Th>Action</Th>
-                  <Th>Module</Th>
-                  <Th sortable active={sort.key === "date"} direction={sort.direction} onClick={() => toggleSort("date")}>Date</Th>
-                  <Th sortable active={sort.key === "time"} direction={sort.direction} onClick={() => toggleSort("time")}>Time</Th>
-                  <Th>Status</Th>
-                  <Th>Details</Th>
+                  <Th sticky>User</Th>
+                  <Th sticky sortable active={sort.key === "role"} direction={sort.direction} onClick={() => toggleSort("role")}>Role</Th>
+                  <Th sticky>Action</Th>
+                  <Th sticky>Module</Th>
+                  <Th sticky sortable active={sort.key === "date"} direction={sort.direction} onClick={() => toggleSort("date")}>Date</Th>
+                  <Th sticky sortable active={sort.key === "time"} direction={sort.direction} onClick={() => toggleSort("time")}>Time</Th>
+                  <Th sticky>Status</Th>
+                  <Th sticky>Details</Th>
                 </tr>
               </thead>
               <motion.tbody
@@ -623,7 +606,7 @@ export default function AuditTrailPage() {
                 animate="visible"
               >
                 {loading
-                  ? Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                  ? Array.from({ length: pageSize }).map((_, i) => (
                       <tr key={i} style={{ borderBottom: `1px solid ${C.softBorder}` }}>
                         {[140, 80, 200, 90, 80, 60, 70, 180].map((w, c) => (
                           <td key={c} style={{ padding: "11px 18px" }}><Sk w={w} h={13} /></td>
@@ -656,60 +639,68 @@ export default function AuditTrailPage() {
             </table>
           </div>
 
-          {/* Pagination */}
-          {!loading && filteredLogs.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderTop: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 12, color: C.pale }}>
-                Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filteredLogs.length)} of {filteredLogs.length}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <motion.button
-                  disabled={page === 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  whileHover={page !== 1 ? { scale: 1.04 } : {}} whileTap={page !== 1 ? { scale: 0.96 } : {}}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", border: `1px solid ${page === 1 ? "#f0eeee" : C.border}`, borderRadius: 8, background: page === 1 ? "#fbf8f8" : C.white, color: page === 1 ? "#d0bbbb" : C.muted, fontSize: 12, fontWeight: 600, cursor: page === 1 ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                >
-                  <i className="ti ti-chevron-left" style={{ fontSize: 13 }} /> Prev
-                </motion.button>
-
-                {pageWindow[0] > 1 && (
-                  <>
-                    <motion.button onClick={() => setPage(1)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-                      style={{ minWidth: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>1</motion.button>
-                    {pageWindow[0] > 2 && <span style={{ color: C.micro, fontSize: 12 }}>…</span>}
-                  </>
-                )}
-
-                {pageWindow.map(n => (
-                  <motion.button key={n} onClick={() => setPage(n)}
-                    whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-                    style={{ minWidth: 32, height: 32, border: `1px solid ${n === page ? C.redBorder : C.border}`, borderRadius: 8, background: n === page ? C.redLight : C.white, color: n === page ? C.red : C.muted, fontSize: 12, fontWeight: n === page ? 800 : 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                    {n}
-                  </motion.button>
-                ))}
-
-                {pageWindow[pageWindow.length - 1] < totalPages && (
-                  <>
-                    {pageWindow[pageWindow.length - 1] < totalPages - 1 && <span style={{ color: C.micro, fontSize: 12 }}>…</span>}
-                    <motion.button onClick={() => setPage(totalPages)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-                      style={{ minWidth: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>{totalPages}</motion.button>
-                  </>
-                )}
-
-                <motion.button
-                  disabled={page === totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  whileHover={page !== totalPages ? { scale: 1.04 } : {}} whileTap={page !== totalPages ? { scale: 0.96 } : {}}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 32, padding: "0 10px", border: `1px solid ${page === totalPages ? "#f0eeee" : C.border}`, borderRadius: 8, background: page === totalPages ? "#fbf8f8" : C.white, color: page === totalPages ? "#d0bbbb" : C.muted, fontSize: 12, fontWeight: 600, cursor: page === totalPages ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                >
-                  Next <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-                </motion.button>
-              </div>
-            </div>
-          )}
         </motion.div>
+
+        {/* Pagination — outside the card, matching Students page layout */}
+        {!loading && filteredLogs.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12, color: "#b09090" }}>
+              Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
+              <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
+              &nbsp;·&nbsp;{filteredLogs.length.toLocaleString()} total records
+            </span>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                style={{ height: 32, border: "1px solid #f0e4e4", borderRadius: 8, padding: "0 8px", fontSize: 12, color: "#9a7070", background: "white", fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", marginRight: 4 }}
+              >
+                {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
+              </select>
+              <motion.button
+                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+                style={pgBtn} disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
+              </motion.button>
+              {(() => {
+                const windowSize = Math.min(totalPages, 5);
+                const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
+                return Array.from({ length: windowSize }, (_, i) => start + i);
+              })().map(n => (
+                <motion.button
+                  key={n}
+                  whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+                  style={{ ...pgBtn, ...(n === page ? pgBtnActive : {}) }}
+                  onClick={() => setPage(n)}
+                >
+                  {n}
+                </motion.button>
+              ))}
+              <motion.button
+                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+                style={pgBtn} disabled={page === totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              >
+                <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
+              </motion.button>
+            </div>
+          </div>
+        )}
 
       </div>
     </AppLayout>
   );
 }
+
+const pgBtn = {
+  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
+  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
+  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
+};
+
+const pgBtnActive = {
+  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
+};
