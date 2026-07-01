@@ -56,7 +56,6 @@ export default function App() {
         <Route path="/subjects"               element={<P><SubjectsPage /></P>} />
         <Route path="/grading-templates"      element={<P><GradingTemplatesPage /></P>} />
         <Route path="/grades"                 element={<P><GradesPage /></P>} />
-        <Route path="/grades/summary"         element={<P><GradesPage /></P>} />
         <Route path="/grades/entry"           element={<P><GradeEntryPage /></P>} />
         <Route path="/scholarship-types"      element={<P><ScholarshipTypesPage /></P>} />
         <Route path="/scholarships"           element={<P><ScholarshipsPage /></P>} />

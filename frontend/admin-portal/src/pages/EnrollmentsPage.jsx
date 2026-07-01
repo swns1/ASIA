@@ -194,7 +194,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
     searchTimer.current = setTimeout(async () => {
       setCandLoading(true);
       try {
-        const params = new URLSearchParams({ status: "active", page_size: 100 });
+        const params = new URLSearchParams({ status: "active", page_size: 50, school_level: schoolLevel, grade_level: gradeLevel });
         if (searchQuery.trim()) params.set("search", searchQuery.trim());
         const data = await apiGetStudents(Object.fromEntries(params));
         const students = data.results ?? [];

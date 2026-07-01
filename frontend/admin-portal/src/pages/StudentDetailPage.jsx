@@ -820,7 +820,7 @@ export default function StudentDetailPage() {
                                   <motion.div
                                     key={inv.invoice_id}
                                     whileHover={{ boxShadow:"0 3px 12px rgba(224,49,49,0.10)" }}
-                                    onClick={() => navigate("/invoices")}
+                                    onClick={() => navigate(`/invoices?selected=${inv.invoice_id}`)}
                                     style={{ border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px", marginBottom:8, cursor:"pointer" }}
                                   >
                                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>

@@ -317,8 +317,11 @@ export default function RequirementsPage() {
   const suppressSearch = useRef(false);
 
   // Recent students
-  const [recentStudents,      setRecentStudents]      = useState([]);
+  const [recentStudents,        setRecentStudents]        = useState([]);
   const [recentStudentsLoading, setRecentStudentsLoading] = useState(false);
+  const [recentPage,            setRecentPage]            = useState(1);
+  const [recentPageMeta,        setRecentPageMeta]        = useState({ count: 0, next: null, previous: null });
+  const RECENT_PAGE_SIZE = 10;
 
   // Requirements state
   const [requirements, setRequirements] = useState([]);
@@ -335,17 +338,26 @@ export default function RequirementsPage() {
     if (!sessionStorage.getItem("access_token")) navigate("/");
   }, [navigate]);
 
-  // Load recent students — re-fetches when filters change
-  useEffect(() => {
+  // Load recent students — re-fetches when filters or page change
+  const fetchRecentStudents = useCallback((page = 1) => {
     setRecentStudentsLoading(true);
-    const params = { ordering: "-created_at", page: 1 };
-    if (levelFilter) params.school_level = levelFilter;
-    if (gradeFilter) params.grade_level  = gradeFilter;
-    getStudents(params)
-      .then((data) => setRecentStudents(Array.isArray(data) ? data.slice(0, 10) : (data?.results ?? []).slice(0, 10)))
+    getStudents({
+      ordering: "-student_id",
+      page,
+      page_size: RECENT_PAGE_SIZE,
+      school_level: levelFilter,
+      grade_level: gradeFilter,
+    })
+      .then((data) => {
+        setRecentStudents(data?.results ?? []);
+        setRecentPageMeta({ count: data?.count ?? 0, next: data?.next, previous: data?.previous });
+        setRecentPage(page);
+      })
       .catch(() => {})
       .finally(() => setRecentStudentsLoading(false));
   }, [levelFilter, gradeFilter]);
+
+  useEffect(() => { fetchRecentStudents(1); }, [levelFilter, gradeFilter]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -721,7 +733,7 @@ export default function RequirementsPage() {
 
             {/* ── Requirements grid ── */}
             {selectedStudent && (
-              <section style={s.panel}>
+              <section style={{ ...s.panel, overflow: "hidden" }}>
                 <div style={s.panelHeader}>
                   <div>
                     <div style={s.panelTitle}>Requirement Documents</div>
@@ -782,7 +794,6 @@ export default function RequirementsPage() {
                             borderBottom: `1px solid ${C.border}`,
                             textTransform: "uppercase", letterSpacing: "0.07em",
                             width: w,
-                            position: "sticky", top: 0, zIndex: 1,
                             background: "#fdfafa",
                           }}>
                             {label}
@@ -929,25 +940,27 @@ export default function RequirementsPage() {
 
             {/* ── Recently enrolled students ── */}
             {!selectedStudent && (
+              <>
               <section style={s.panel}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: "#fdfafa" }}>
+
                       {[
                         { label: "Student",  w: "35%" },
                         { label: "LRN",      w: "20%" },
                         { label: "Grade",    w: "20%" },
                         { label: "Status",   w: "15%" },
                         { label: "",         w: "10%" },
-                      ].map(({ label, w }) => (
+                      ].map(({ label, w }, i, arr) => (
                         <th key={label} style={{
                           textAlign: "left", fontSize: 10.5, fontWeight: 600,
                           color: "#c0a0a0", padding: "13px 18px",
                           borderBottom: `1px solid ${C.border}`,
                           textTransform: "uppercase", letterSpacing: "0.07em",
                           width: w,
-                          position: "sticky", top: 0, zIndex: 1,
                           background: "#fdfafa",
+                          borderRadius: i === 0 ? "16px 0 0 0" : i === arr.length - 1 ? "0 16px 0 0" : 0,
                         }}>
                           {label}
                         </th>
@@ -956,7 +969,7 @@ export default function RequirementsPage() {
                   </thead>
                   <tbody>
                     {recentStudentsLoading
-                      ? Array.from({ length: 7 }).map((_, i) => (
+                      ? Array.from({ length: RECENT_PAGE_SIZE }).map((_, i) => (
                           <tr key={i}>
                             <td style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -987,7 +1000,9 @@ export default function RequirementsPage() {
                             </td>
                           </tr>
                         )
-                        : recentStudents.map((st) => {
+                        : recentStudents.map((st, idx) => {
+                            const isLast = idx === recentStudents.length - 1;
+                            const tdStyle = (extra = {}) => ({ padding: "13px 18px", borderBottom: isLast ? "none" : "1px solid #f9f0f0", verticalAlign: "middle", ...extra });
                             const rap = getAvatarPalette(st.last_name ?? "X");
                             const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
                             const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
@@ -1011,7 +1026,7 @@ export default function RequirementsPage() {
                                 onClick={() => selectStudent(st)}
                               >
                                 {/* Student */}
-                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                <td style={tdStyle()}>
                                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                                     <div style={{
                                       width: 36, height: 36, borderRadius: "50%",
@@ -1035,21 +1050,21 @@ export default function RequirementsPage() {
                                 </td>
 
                                 {/* LRN */}
-                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                <td style={tdStyle()}>
                                   {st.lrn
                                     ? <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{st.lrn}</span>
                                     : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                 </td>
 
                                 {/* Grade */}
-                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                <td style={tdStyle()}>
                                   {gradeLabel
                                     ? <span style={{ fontSize: 12, color: "#5a4a4a" }}>{gradeLabel}</span>
                                     : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                 </td>
 
                                 {/* Status */}
-                                <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                <td style={tdStyle()}>
                                   <span style={{
                                     display: "inline-flex", alignItems: "center", gap: 5,
                                     fontSize: 11.5, fontWeight: 600,
@@ -1062,7 +1077,7 @@ export default function RequirementsPage() {
                                 </td>
 
                                 {/* Arrow */}
-                                <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
+                                <td style={tdStyle({ padding: "13px 14px" })}>
                                   <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#c0a0a0" }} />
                                 </td>
                               </tr>
@@ -1071,7 +1086,51 @@ export default function RequirementsPage() {
                     }
                   </tbody>
                 </table>
+
               </section>
+
+              {/* Pagination */}
+              {!recentStudentsLoading && recentPageMeta.count > RECENT_PAGE_SIZE && (() => {
+                const totalPages = Math.ceil(recentPageMeta.count / RECENT_PAGE_SIZE);
+                const windowSize = Math.min(totalPages, 5);
+                const start = Math.min(Math.max(1, recentPage - 2), Math.max(1, totalPages - windowSize + 1));
+                const pages = Array.from({ length: windowSize }, (_, i) => start + i);
+                return (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 12, color: "#b09090" }}>
+                      Page <strong style={{ color: "#7a5050" }}>{recentPage}</strong> of{" "}
+                      <strong style={{ color: "#7a5050" }}>{totalPages}</strong>
+                      &nbsp;·&nbsp;{recentPageMeta.count.toLocaleString()} total records
+                    </span>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        style={{ ...pgBtn, opacity: !recentPageMeta.previous ? 0.4 : 1, cursor: !recentPageMeta.previous ? "default" : "pointer" }}
+                        disabled={!recentPageMeta.previous}
+                        onClick={() => fetchRecentStudents(recentPage - 1)}
+                      >
+                        <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
+                      </button>
+                      {pages.map((p) => (
+                        <button
+                          key={p}
+                          style={{ ...pgBtn, ...(p === recentPage ? pgBtnActive : {}) }}
+                          onClick={() => fetchRecentStudents(p)}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                      <button
+                        style={{ ...pgBtn, opacity: !recentPageMeta.next ? 0.4 : 1, cursor: !recentPageMeta.next ? "default" : "pointer" }}
+                        disabled={!recentPageMeta.next}
+                        onClick={() => fetchRecentStudents(recentPage + 1)}
+                      >
+                        <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+              </>
             )}
           </div>
       {/* ── Modals ── */}
@@ -1115,6 +1174,8 @@ const baseCss = `
 .dropdown-item:hover { background:#fff8f6; }
   .dropdown-item:last-child { border-bottom:none !important; }
   .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
+  .student-row:last-child td { border-bottom:none !important; }
+  tbody tr:last-child td { border-bottom:none !important; }
 `;
 
 const s = {
@@ -1145,4 +1206,15 @@ const s = {
   secondaryBtn:{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" },
   dangerBtn:   { flex: 1, height: 42, border: "none", borderRadius: 10, background: `linear-gradient(135deg,#e03131,#c92a2a)`, fontSize: 13, color: C.white, cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif" },
   errorBanner: { background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 },
+};
+
+const pgBtn = {
+  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
+  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
+  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
+};
+
+const pgBtnActive = {
+  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
 };

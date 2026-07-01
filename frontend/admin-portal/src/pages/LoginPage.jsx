@@ -4,18 +4,16 @@ import { login } from "../api/identityApi";
 import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
 import { setCurrentUser } from "../utils/auth";
-import logoutIcon from "../assets/logout.svg";
-
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default function LoginPage() {
-  const navigate = useNavigate(); // ✅ move hook here
+  const navigate = useNavigate();
 
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [identifier,    setIdentifier]    = useState("");
+  const [password,      setPassword]      = useState("");
+  const [showPassword,  setShowPassword]  = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState("");
+  const [forgotVisible, setForgotVisible] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,16 +21,9 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await login({ identifier, password, rememberMe });
+      const res = await login({ identifier, password });
       sessionStorage.setItem("access_token", res.access);
       setCurrentUser(res.user);
-
-      if (rememberMe) {
-        localStorage.setItem("remember_login_until", Date.now() + ONE_WEEK_MS);
-      } else {
-        localStorage.removeItem("remember_login_until");
-      }
-
       navigate("/dashboard");
     } catch (err) {
       setError(
@@ -192,32 +183,50 @@ export default function LoginPage() {
                 </svg>
               </span>
               <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
                 required autoComplete="current-password" placeholder="••••••••"
                 style={{
                   width: "100%", border: "1.5px solid #f0ceca", borderRadius: 10,
-                  padding: "10px 12px 10px 38px", fontSize: 14,
+                  padding: "10px 38px 10px 38px", fontSize: 14,
                   fontFamily: "'DM Sans', sans-serif", color: "#2d1a1a",
                   background: "#fffbfb", outline: "none", boxSizing: "border-box",
                 }}
                 onFocus={(e) => { e.target.style.borderColor = "#e03131"; e.target.style.boxShadow = "0 0 0 3px rgba(224,49,49,0.1)"; e.target.style.background = "white"; }}
                 onBlur={(e) => { e.target.style.borderColor = "#f0ceca"; e.target.style.boxShadow = "none"; e.target.style.background = "#fffbfb"; }}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                style={{
+                  position: "absolute", right: 10, background: "none", border: "none",
+                  cursor: "pointer", color: "#cca9a4", display: "flex", alignItems: "center", padding: 4,
+                }}
+              >
+                <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} style={{ fontSize: 16 }} />
+              </button>
             </div>
           </div>
 
-          {/* Remember + Forgot */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.4rem", fontSize: 13 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 7, color: "#7a5050", cursor: "pointer" }}>
-              <input
-                type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
-                style={{ width: 15, height: 15, accentColor: "#e03131", cursor: "pointer" }}
-              />
-              Remember me (1 week)
-            </label>
-            <a href="/forgot-password" style={{ color: "#e03131", textDecoration: "none", fontWeight: 500 }}>
+          {/* Forgot password */}
+          <div style={{ marginBottom: "1.4rem", fontSize: 13, textAlign: "right" }}>
+            <button
+              type="button"
+              onClick={() => setForgotVisible((v) => !v)}
+              style={{ background: "none", border: "none", color: "#e03131", fontWeight: 500, cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0 }}
+            >
               Forgot password?
-            </a>
+            </button>
+            <AnimatePresence>
+              {forgotVisible && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  style={{ marginTop: 8, padding: "8px 12px", background: "#fff8f6", border: "1px solid #fde2de", borderRadius: 8, fontSize: 12, color: "#7a5050", textAlign: "left", lineHeight: 1.5 }}
+                >
+                  Please contact your system administrator to reset your password.
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Submit */}

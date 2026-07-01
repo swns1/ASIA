@@ -7,7 +7,6 @@ import { listVariants, modalVariants, springTransition } from "../utils/motion";
 import {
   getFeeSchedules as _getFeeSchedules,
   createFeeSchedule as _createFeeSchedule,
-  updateFeeSchedule as _updateFeeSchedule,
   createFeeScheduleItem as _createItem,
   updateFeeScheduleItem as _updateItem,
   deleteFeeScheduleItem as _deleteItem,
@@ -16,7 +15,6 @@ import {
 
 const getFeeSchedules     = (p = {}) => _getFeeSchedules(p);
 const createFeeSchedule   = (p)      => _createFeeSchedule(p);
-const updateFeeSchedule   = (id, p)  => _updateFeeSchedule(id, p); // eslint-disable-line no-unused-vars
 const createItem          = (p)      => _createItem(p);
 const updateItem          = (id, p)  => _updateItem(id, p);
 const deleteItem          = (id)     => _deleteItem(id);

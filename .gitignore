@@ -5,3 +5,6 @@ __pycache__/
 .env
 .Python
 backend/student-service/students/env
+
+# Local review documents — not for commit
+_review/

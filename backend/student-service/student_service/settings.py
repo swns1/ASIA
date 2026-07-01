@@ -79,7 +79,7 @@ REST_FRAMEWORK = {
         "user": "120/minute",
         "ocr":  "10/minute",
     },
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "student_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
 }
 

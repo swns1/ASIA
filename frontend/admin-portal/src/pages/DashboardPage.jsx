@@ -297,7 +297,7 @@ export default function DashboardPage() {
       ]);
     } catch (e) {
       console.error("Dashboard fetch error:", e);
-      setError("");
+      setError(e.message || "Some data failed to load. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -471,7 +471,11 @@ export default function DashboardPage() {
             {/* Error banner */}
             {error && (
               <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"10px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
+                <i className="ti ti-alert-circle" style={{ fontSize:14 }} />
+                <span style={{ flex:1 }}>{error}</span>
+                <button onClick={() => setError("")} style={{ background:"none", border:"none", cursor:"pointer", color:"#b91c1c", display:"flex", alignItems:"center", padding:2 }}>
+                  <i className="ti ti-x" style={{ fontSize:14 }} />
+                </button>
               </div>
             )}
 
@@ -668,7 +672,7 @@ export default function DashboardPage() {
                                 initial="hidden"
                                 animate="visible"
                                 transition={{ delay: idx * 0.04 }}
-                                onClick={() => navigate(`/enrollments`)}
+                                onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
                               >
                                 <td style={{ ...s.td, fontWeight:600 }}>{name}</td>
                                 <td style={s.td}>
