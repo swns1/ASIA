@@ -8,12 +8,11 @@ import { setCurrentUser } from "../utils/auth";
 export default function LoginPage() {
   const navigate = useNavigate();
 
-  const [identifier,    setIdentifier]    = useState("");
-  const [password,      setPassword]      = useState("");
-  const [showPassword,  setShowPassword]  = useState(false);
-  const [loading,       setLoading]       = useState(false);
-  const [error,         setError]         = useState("");
-  const [forgotVisible, setForgotVisible] = useState(false);
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,9 +20,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await login({ identifier, password });
+      const res = await login({ identifier, password, rememberMe });
       sessionStorage.setItem("access_token", res.access);
       setCurrentUser(res.user);
+      if (rememberMe) {
+        localStorage.setItem(
+          "remember_login_until",
+          String(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        );
+      } else {
+        localStorage.removeItem("remember_login_until");
+      }
       navigate("/dashboard");
     } catch (err) {
       setError(
@@ -36,233 +43,512 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden flex flex-col items-center justify-center px-4 py-10"
-      style={{ background: "#fff8f6", fontFamily: "'DM Sans', sans-serif" }}>
-
+    <div
+      className="flex w-full overflow-hidden"
+      style={{ height: "100vh", fontFamily: "'DM Sans', sans-serif" }}
+    >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Serif+Display&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
       `}</style>
 
-      {/* Blobs */}
-      <motion.div
-        className="absolute pointer-events-none"
-        initial={{ x: 60, y: -60, opacity: 0 }}
-        animate={{ x: 0, y: [0, -8, 0], opacity: 0.85 }}
-        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0 }, y: { duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.4 }, opacity: { duration: 0.5 } }}
+      {/* Left: Brand panel */}
+      <div
         style={{
-          top: -60, right: -30, width: 220, height: 220,
-          borderRadius: "60% 40% 70% 30% / 50% 60% 40% 50%",
-          background: "linear-gradient(135deg, #ff6b6b, #e03131)",
-        }}
-      />
-      <motion.div
-        className="absolute pointer-events-none"
-        initial={{ x: -50, y: 50, opacity: 0 }}
-        animate={{ x: 0, y: [0, 7, 0], opacity: 0.7 }}
-        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0.08 }, y: { duration: 4.8, repeat: Infinity, ease: "easeInOut", delay: 0.6 }, opacity: { duration: 0.5, delay: 0.08 } }}
-        style={{
-          bottom: -40, left: -20, width: 130, height: 130,
-          borderRadius: "40% 60% 30% 70% / 60% 40% 60% 40%",
-          background: "linear-gradient(135deg, #ff9a9a, #e03131)",
-        }}
-      />
-      <motion.div
-        className="absolute pointer-events-none"
-        initial={{ x: 40, opacity: 0 }}
-        animate={{ x: 0, y: [0, -5, 0], opacity: 0.5 }}
-        transition={{ x: { type: "spring", stiffness: 80, damping: 18, delay: 0.15 }, y: { duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }, opacity: { duration: 0.5, delay: 0.15 } }}
-        style={{
-          top: "55%", right: -50, width: 80, height: 80,
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #ffcbcb, #ff6b6b)",
-        }}
-      />
-
-      {/* Header */}
-      <div className="relative z-10 text-center mb-8">
-        <motion.div
-          className="mx-auto mb-4 flex items-center justify-center"
-          initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 320, damping: 22, delay: 0.05 }}
-          style={{
-            width: 100, height: 100, borderRadius: "50%",
-            background: "white", border: "2px solid #fdd",
-            boxShadow: "0 2px 8px rgba(224,49,49,0.12)",
-          }}
-        >
-          <img src={logo} alt="South Lakes Integrated School" style={{ height: 200, width: 200, objectFit: "contain" }} />
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, ease: "easeOut", delay: 0.14 }}
-          style={{ fontSize: 26, color: "#1a1a1a", margin: "0 0 4px", fontWeight: 400 }}
-        >
-          Good to see you again
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: "easeOut", delay: 0.2 }}
-          style={{ fontSize: 13, color: "#a0756e", margin: 0 }}
-        >
-          South Lakes Integrated School
-        </motion.p>
-      </div>
-
-      {/* Card */}
-      <motion.div
-        className="relative z-10 w-full"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 280, damping: 24, delay: 0.12 }}
-        style={{
-          maxWidth: 400, background: "white",
-          borderRadius: 20, padding: "2rem", border: "1px solid #fde2de",
+          width: 420,
+          flexShrink: 0,
+          background: "#180c0c",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: 48,
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              style={{
-                background: "#fef2f2", border: "1px solid #fca5a5",
-                borderRadius: 8, padding: "8px 12px", fontSize: 13,
-                color: "#b91c1c", marginBottom: "1rem",
-              }}
-              role="alert"
-            >
-              {error}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage:
+              "radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)",
+            backgroundSize: "20px 20px",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: -90,
+            left: -70,
+            width: 300,
+            height: 300,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(224,49,49,0.26) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: -60,
+            right: -50,
+            width: 200,
+            height: 200,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(224,49,49,0.09) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
 
-        <form onSubmit={handleSubmit}>
-          {/* Identifier */}
-          <div style={{ marginBottom: "1.1rem" }}>
-            <label style={{
-              display: "block", fontSize: 12, fontWeight: 600, color: "#6b4040",
-              letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 6,
-            }}>Email or name</label>
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <span style={{ position: "absolute", left: 12, color: "#cca9a4", display: "flex" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
-                </svg>
-              </span>
-              <input
-                type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                required autoComplete="username" placeholder="e.g. juan@email.com"
-                style={{
-                  width: "100%", border: "1.5px solid #f0ceca", borderRadius: 10,
-                  padding: "10px 12px 10px 38px", fontSize: 14,
-                  fontFamily: "'DM Sans', sans-serif", color: "#2d1a1a",
-                  background: "#fffbfb", outline: "none", boxSizing: "border-box",
-                }}
-                onFocus={(e) => { e.target.style.borderColor = "#e03131"; e.target.style.boxShadow = "0 0 0 3px rgba(224,49,49,0.1)"; e.target.style.background = "white"; }}
-                onBlur={(e) => { e.target.style.borderColor = "#f0ceca"; e.target.style.boxShadow = "none"; e.target.style.background = "#fffbfb"; }}
-              />
-            </div>
-          </div>
-
-          {/* Password */}
-          <div style={{ marginBottom: "1.1rem" }}>
-            <label style={{
-              display: "block", fontSize: 12, fontWeight: 600, color: "#6b4040",
-              letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 6,
-            }}>Password</label>
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <span style={{ position: "absolute", left: 12, color: "#cca9a4", display: "flex" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <input
-                type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
-                required autoComplete="current-password" placeholder="••••••••"
-                style={{
-                  width: "100%", border: "1.5px solid #f0ceca", borderRadius: 10,
-                  padding: "10px 38px 10px 38px", fontSize: 14,
-                  fontFamily: "'DM Sans', sans-serif", color: "#2d1a1a",
-                  background: "#fffbfb", outline: "none", boxSizing: "border-box",
-                }}
-                onFocus={(e) => { e.target.style.borderColor = "#e03131"; e.target.style.boxShadow = "0 0 0 3px rgba(224,49,49,0.1)"; e.target.style.background = "white"; }}
-                onBlur={(e) => { e.target.style.borderColor = "#f0ceca"; e.target.style.boxShadow = "none"; e.target.style.background = "#fffbfb"; }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                style={{
-                  position: "absolute", right: 10, background: "none", border: "none",
-                  cursor: "pointer", color: "#cca9a4", display: "flex", alignItems: "center", padding: 4,
-                }}
-              >
-                <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} style={{ fontSize: 16 }} />
-              </button>
-            </div>
-          </div>
-
-          {/* Forgot password */}
-          <div style={{ marginBottom: "1.4rem", fontSize: 13, textAlign: "right" }}>
-            <button
-              type="button"
-              onClick={() => setForgotVisible((v) => !v)}
-              style={{ background: "none", border: "none", color: "#e03131", fontWeight: 500, cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0 }}
-            >
-              Forgot password?
-            </button>
-            <AnimatePresence>
-              {forgotVisible && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  style={{ marginTop: 8, padding: "8px 12px", background: "#fff8f6", border: "1px solid #fde2de", borderRadius: 8, fontSize: 12, color: "#7a5050", textAlign: "left", lineHeight: 1.5 }}
-                >
-                  Please contact your system administrator to reset your password.
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Submit */}
-          <motion.button
-            type="submit"
-            disabled={loading}
-            whileHover={loading ? {} : { scale: 1.02 }}
-            whileTap={loading ? {} : { scale: 0.97 }}
-            transition={{ duration: 0.13 }}
+        <div style={{ position: "relative" }}>
+          <div
             style={{
-              width: "100%", background: loading ? "#e87474" : "#e03131",
-              color: "white", border: "none", borderRadius: 50,
-              padding: "12px", fontSize: 15, fontWeight: 600,
-              fontFamily: "'DM Sans', sans-serif",
-              cursor: loading ? "not-allowed" : "pointer",
-              letterSpacing: "0.01em", transition: "background 0.15s",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 60,
             }}
           >
-            {loading ? "Signing in..." : "Sign in"}
-          </motion.button>
-        </form>
-      </motion.div>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              <img
+                src={logo}
+                alt="SLIS"
+                style={{ width: 32, height: 32, objectFit: "contain" }}
+              />
+            </div>
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.42)",
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+              }}
+            >
+              South Lakes IS
+            </span>
+          </div>
+          <h1
+            style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 36,
+              fontWeight: 600,
+              color: "white",
+              lineHeight: 1.25,
+              marginBottom: 20,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Academic
+            <br />
+            System for
+            <br />
+            Integrated
+            <br />
+            Administration
+          </h1>
+          <p
+            style={{
+              fontSize: 14,
+              color: "rgba(255,255,255,0.36)",
+              lineHeight: 1.85,
+              maxWidth: 280,
+            }}
+          >
+            Manage students, enrollments, billing, and academic records — all
+            in one place.
+          </p>
+        </div>
 
-      {/* Footer */}
-      <motion.p
-        className="relative z-10"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3, delay: 0.28 }}
-        style={{ textAlign: "center", fontSize: 12, color: "#b49190", marginTop: "1.2rem" }}
+        <div style={{ position: "relative" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              background: "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 99,
+              padding: "10px 18px",
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#4caf50",
+                flexShrink: 0,
+                boxShadow: "0 0 6px rgba(76,175,80,0.5)",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.48)",
+              }}
+            >
+              S.Y. 2025–2026 · Active
+            </span>
+          </div>
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 10.5,
+              color: "rgba(255,255,255,0.18)",
+            }}
+          >
+            v2.0 · South Lakes Integrated School
+          </p>
+        </div>
+      </div>
+
+      {/* Right: Form panel */}
+      <div
+        style={{
+          flex: 1,
+          background: "#fdf8f6",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 40,
+        }}
       >
-        Need help?{" "}
-        <a href="mailto:admin@southlakes.edu" style={{ color: "#e03131", textDecoration: "none", fontWeight: 500 }}>
-          Contact your administrator
-        </a>
-      </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          style={{ width: "100%", maxWidth: 380 }}
+        >
+          <div style={{ marginBottom: 36 }}>
+            <h2
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 28,
+                fontWeight: 500,
+                color: "#1a0a0a",
+                marginBottom: 7,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Welcome back
+            </h2>
+            <p style={{ fontSize: 14, color: "#a07878" }}>
+              Sign in to your account to continue.
+            </p>
+          </div>
+
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: 8,
+                  padding: "8px 12px",
+                  fontSize: 13,
+                  color: "#b91c1c",
+                  marginBottom: 18,
+                }}
+                role="alert"
+              >
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <form onSubmit={handleSubmit}>
+            {/* Identifier */}
+            <div style={{ marginBottom: 18 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#6b4040",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: 8,
+                }}
+              >
+                Email or username
+              </label>
+              <div
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 14,
+                    color: "#cca9a4",
+                    pointerEvents: "none",
+                    display: "flex",
+                    zIndex: 1,
+                  }}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  autoComplete="username"
+                  placeholder="e.g. admin@southlakes.edu"
+                  style={{
+                    width: "100%",
+                    border: "1.5px solid #f0ceca",
+                    borderRadius: 12,
+                    padding: "12px 14px 12px 42px",
+                    fontSize: 14,
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#2d1a1a",
+                    background: "#fffbfb",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "all 0.15s",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#e03131";
+                    e.target.style.boxShadow =
+                      "0 0 0 3px rgba(224,49,49,0.1)";
+                    e.target.style.background = "white";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "#f0ceca";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.background = "#fffbfb";
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div style={{ marginBottom: 22 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <label
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#6b4040",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Password
+                </label>
+                <a
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                  style={{
+                    fontSize: 12,
+                    color: "#e03131",
+                    textDecoration: "none",
+                    fontWeight: 500,
+                  }}
+                >
+                  Forgot password?
+                </a>
+              </div>
+              <div
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 14,
+                    color: "#cca9a4",
+                    pointerEvents: "none",
+                    display: "flex",
+                    zIndex: 1,
+                  }}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  style={{
+                    width: "100%",
+                    border: "1.5px solid #f0ceca",
+                    borderRadius: 12,
+                    padding: "12px 14px 12px 42px",
+                    fontSize: 14,
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#2d1a1a",
+                    background: "#fffbfb",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "all 0.15s",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#e03131";
+                    e.target.style.boxShadow =
+                      "0 0 0 3px rgba(224,49,49,0.1)";
+                    e.target.style.background = "white";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "#f0ceca";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.background = "#fffbfb";
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Remember me */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 28,
+              }}
+            >
+              <input
+                type="checkbox"
+                id="remcheck"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{
+                  width: 15,
+                  height: 15,
+                  accentColor: "#e03131",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              />
+              <label
+                htmlFor="remcheck"
+                style={{ fontSize: 13, color: "#7a5050", cursor: "pointer" }}
+              >
+                Remember me for 1 week
+              </label>
+            </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%",
+                background: loading
+                  ? "#e87474"
+                  : "linear-gradient(135deg, #e03131, #c92a2a)",
+                color: "white",
+                border: "none",
+                borderRadius: 50,
+                padding: 14,
+                fontSize: 15,
+                fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif",
+                cursor: loading ? "not-allowed" : "pointer",
+                letterSpacing: "0.02em",
+                boxShadow: "0 4px 20px rgba(224,49,49,0.28)",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                if (loading) return;
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow =
+                  "0 8px 28px rgba(224,49,49,0.38)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow =
+                  "0 4px 20px rgba(224,49,49,0.28)";
+              }}
+            >
+              {loading ? "Signing in…" : "Sign in to ASIA"}
+            </button>
+          </form>
+
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: 12,
+              color: "#b49190",
+              marginTop: 24,
+            }}
+          >
+            Need help?{" "}
+            <a
+              href="mailto:admin@southlakes.edu"
+              style={{
+                color: "#e03131",
+                textDecoration: "none",
+                fontWeight: 500,
+              }}
+            >
+              Contact administrator
+            </a>
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }
