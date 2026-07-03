@@ -820,29 +820,32 @@ function EligibilityTab({ scholarshipTypes }) {
     try {
       const enrData = await getEnrollments({ school_year:schoolYear, enrollment_status:"enrolled", page_size:200 });
       const enrs = Array.isArray(enrData) ? enrData : enrData?.results ?? [];
-      const eligibleList = [];
-      for (const en of enrs) {
-        const gradeData = await getGrades({ enrollment:en.enrollment_id, grading_period:gradingPeriod, page_size:100 });
-        const grades = Array.isArray(gradeData) ? gradeData : gradeData?.results ?? [];
-        if (grades.length === 0) continue;
-        const avg = grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length;
-        if (avg >= ELIGIBILITY_THRESHOLD) {
-          const studentName = en.student_name ?? `Student #${en.student}`;
-          const lastName = studentName.split(" ").pop() ?? "X";
-          eligibleList.push({
-            enrollment_id:  en.enrollment_id,
-            student_name:   studentName,
-            last_name:      lastName,
-            initials:       studentName.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase(),
-            school_year:    en.school_year,
-            grade_level:    en.grade_level,
-            section:        en.section,
-            grading_period: gradingPeriod,
-            avg:            avg,
-            grades_count:   grades.length,
-          });
-        }
-      }
+      const results = await Promise.all(
+        enrs.map(async (en) => {
+          try {
+            const gradeData = await getGrades({ enrollment:en.enrollment_id, grading_period:gradingPeriod, page_size:100 });
+            const grades = Array.isArray(gradeData) ? gradeData : gradeData?.results ?? [];
+            if (grades.length === 0) return null;
+            const avg = grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length;
+            if (avg < ELIGIBILITY_THRESHOLD) return null;
+            const studentName = en.student_name ?? `Student #${en.student}`;
+            const lastName = studentName.split(" ").pop() ?? "X";
+            return {
+              enrollment_id:  en.enrollment_id,
+              student_name:   studentName,
+              last_name:      lastName,
+              initials:       studentName.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase(),
+              school_year:    en.school_year,
+              grade_level:    en.grade_level,
+              section:        en.section,
+              grading_period: gradingPeriod,
+              avg:            avg,
+              grades_count:   grades.length,
+            };
+          } catch { return null; }
+        })
+      );
+      const eligibleList = results.filter(Boolean);
       eligibleList.sort((a, b) => b.avg - a.avg);
       setEligible(eligibleList);
       setScanned(true);

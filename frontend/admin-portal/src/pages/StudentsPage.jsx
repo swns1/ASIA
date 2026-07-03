@@ -240,12 +240,10 @@ export default function StudentsPage() {
   const fetchCounts = async () => {
     try {
       const counts = {};
-      const all = await getStudents({ page: 1, search: "", status: "" });
-      counts.all = all.count;
       await Promise.all(
-        ["active", "inactive", "transferred", "graduated", "dropped"].map(async (s) => {
+        ["", "active", "inactive", "transferred", "graduated", "dropped"].map(async (s) => {
           const res = await getStudents({ page: 1, search: "", status: s });
-          counts[s] = res.count;
+          counts[s === "" ? "all" : s] = res.count;
         })
       );
       setStatusCounts(counts);
