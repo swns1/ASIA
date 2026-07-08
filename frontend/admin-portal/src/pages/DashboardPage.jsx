@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
-import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
@@ -269,11 +268,27 @@ export default function DashboardPage() {
     fetchAll();
   }, []);
 
-  useEffect(() => { fetchStudentStats(); },    [studentsFilters]);
-  useEffect(() => { fetchEnrollmentStats(); }, [enrolledFilters]);
-  useEffect(() => { fetchPendingStats(); },    [pendingFilters]);
-  useEffect(() => { fetchScholarships(); },    [scholarshipFilters]);
-  const isFirstFinancialFetch = useRef(true);
+  const isFirstStudentsFetch    = useRef(true);
+  const isFirstEnrolledFetch    = useRef(true);
+  const isFirstPendingFetch     = useRef(true);
+  const isFirstScholarshipFetch = useRef(true);
+  const isFirstFinancialFetch   = useRef(true);
+  useEffect(() => {
+    if (isFirstStudentsFetch.current) { isFirstStudentsFetch.current = false; return; }
+    fetchStudentStats();
+  }, [studentsFilters]);
+  useEffect(() => {
+    if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
+    fetchEnrollmentStats();
+  }, [enrolledFilters]);
+  useEffect(() => {
+    if (isFirstPendingFetch.current) { isFirstPendingFetch.current = false; return; }
+    fetchPendingStats();
+  }, [pendingFilters]);
+  useEffect(() => {
+    if (isFirstScholarshipFetch.current) { isFirstScholarshipFetch.current = false; return; }
+    fetchScholarships();
+  }, [scholarshipFilters]);
   useEffect(() => {
     if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
     fetchFinancialSummary();
@@ -297,7 +312,7 @@ export default function DashboardPage() {
       ]);
     } catch (e) {
       console.error("Dashboard fetch error:", e);
-      setError("");
+      setError(e.message || "Some data failed to load. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -361,7 +376,7 @@ export default function DashboardPage() {
 
   async function fetchScholarships() {
     const sy = scholarshipFilters.year ?? schoolYear;
-    const data = await _getEnrollmentScholarships({ page_size: 100, school_year: sy, ...parseGp(scholarshipFilters) });
+    const data = await _getEnrollmentScholarships({ page_size: 4, school_year: sy, ...parseGp(scholarshipFilters) });
     const results = Array.isArray(data) ? data : data.results ?? [];
     setScholarships(results);
     setScholarshipCount(results.length);
@@ -433,31 +448,8 @@ export default function DashboardPage() {
               <div style={s.topbarSub}>S.Y. {schoolYear} · {now.toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
-                {(() => {
-                  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                  return timeStr.split("").map((ch, i) => {
-                    if (ch === ":" || ch === " ") return <span key={i} style={{ margin: "0 1px" }}>{ch}</span>;
-                    const isLetter = /[A-Za-z]/.test(ch);
-                    if (isLetter) return <span key={i}>{ch}</span>;
-                    return (
-                      <span key={i} style={{ display: "inline-block", overflow: "hidden", height: "1.2em", lineHeight: "1.2em", width: "0.62em", textAlign: "center", flexShrink: 0 }}>
-                        <AnimatePresence mode="popLayout" initial={false}>
-                          <motion.span
-                            key={ch}
-                            initial={{ y: "100%", opacity: 0 }}
-                            animate={{ y: "0%", opacity: 1 }}
-                            exit={{ y: "-100%", opacity: 0 }}
-                            transition={{ duration: 0.18, ease: "easeOut" }}
-                            style={{ display: "block" }}
-                          >
-                            {ch}
-                          </motion.span>
-                        </AnimatePresence>
-                      </span>
-                    );
-                  });
-                })()}
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", fontFamily: "'DM Sans', sans-serif", fontVariantNumeric: "tabular-nums", fontFeatureSettings: "'tnum'", letterSpacing: "-0.02em", display: "inline-block", minWidth: "9ch", textAlign: "right" }}>
+                {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </div>
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
                 {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
@@ -471,7 +463,11 @@ export default function DashboardPage() {
             {/* Error banner */}
             {error && (
               <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"10px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
+                <i className="ti ti-alert-circle" style={{ fontSize:14 }} />
+                <span style={{ flex:1 }}>{error}</span>
+                <button onClick={() => setError("")} style={{ background:"none", border:"none", cursor:"pointer", color:"#b91c1c", display:"flex", alignItems:"center", padding:2 }}>
+                  <i className="ti ti-x" style={{ fontSize:14 }} />
+                </button>
               </div>
             )}
 
@@ -668,7 +664,7 @@ export default function DashboardPage() {
                                 initial="hidden"
                                 animate="visible"
                                 transition={{ delay: idx * 0.04 }}
-                                onClick={() => navigate(`/enrollments`)}
+                                onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
                               >
                                 <td style={{ ...s.td, fontWeight:600 }}>{name}</td>
                                 <td style={s.td}>
@@ -820,7 +816,7 @@ export default function DashboardPage() {
                       whileHover={{ y: -2, boxShadow: "0 6px 20px rgba(224,49,49,0.12)" }}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.14 }}
-                      onClick={() => { toast.success(`Opening ${qa.label}…`); navigate(qa.path); }}
+                      onClick={() => navigate(qa.path)}
                     >
                       <i className={`ti ${qa.icon}`} style={{ fontSize:16, color:"#e03131" }} />
                       {qa.label}

@@ -501,11 +501,15 @@ function CreateUserModal({ onClose, onCreated }) {
 
 // ── Delete Confirm Modal ──────────────────────────────────────────────────────
 
-function DeleteModal({ user, onClose, onDeleted }) {
+function DeleteModal({ user, currentUser, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    currentUser?.id === user.user_id ? "You cannot delete your own account." : ""
+  );
+  const isSelf = currentUser?.id === user.user_id;
 
   async function handleDelete() {
+    if (isSelf) return;
     setDeleting(true);
     try {
       await _deleteUser(user.user_id);
@@ -553,8 +557,8 @@ function DeleteModal({ user, onClose, onDeleted }) {
                 style={{ flex: 1, height: 40, border: `1px solid ${C.border}`, borderRadius: 10, background: C.white, fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                 Cancel
               </motion.button>
-              <motion.button onClick={handleDelete} disabled={deleting} whileHover={!deleting ? { scale: 1.02 } : {}} whileTap={!deleting ? { scale: 0.97 } : {}}
-                style={{ flex: 1, height: 40, border: "none", borderRadius: 10, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: "white", fontSize: 13, fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif" }}>
+              <motion.button onClick={handleDelete} disabled={deleting || isSelf} whileHover={!deleting && !isSelf ? { scale: 1.02 } : {}} whileTap={!deleting && !isSelf ? { scale: 0.97 } : {}}
+                style={{ flex: 1, height: 40, border: "none", borderRadius: 10, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: "white", fontSize: 13, fontWeight: 700, cursor: deleting || isSelf ? "not-allowed" : "pointer", opacity: deleting || isSelf ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif" }}>
                 {deleting ? "Deleting…" : "Delete"}
               </motion.button>
             </div>
@@ -655,6 +659,7 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
       {deleteOpen && (
         <DeleteModal
           user={user}
+          currentUser={currentUser}
           onClose={() => setDeleteOpen(false)}
           onDeleted={(id) => { onDeleted(id); setDeleteOpen(false); }}
         />

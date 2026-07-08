@@ -526,105 +526,32 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Search + Award bar */}
-      <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-        <div style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border-color 0.15s, box-shadow 0.15s" }}
-          ref={(el) => {
-            if (el) {
-              el.querySelector("input")?.addEventListener("focus", () => { el.style.borderColor="#e03131"; el.style.boxShadow="0 0 0 3px rgba(224,49,49,0.08)"; });
-              el.querySelector("input")?.addEventListener("blur",  () => { el.style.borderColor="#f0e4e4"; el.style.boxShadow="none"; });
-            }
-          }}>
-          <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0" }} />
-          <input placeholder="Search by student name or scholarship…" value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key==="Enter") setSearch(inputVal); }}
-            style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
-          <AnimatePresence>
+      {/* Filter panel */}
+      <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"18px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:0 }}>
+
+        {/* Search row */}
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <div className="search-wrap" style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
+            <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0" }} />
+            <input placeholder="Search by student name or scholarship…" value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key==="Enter") setSearch(inputVal); }}
+              style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
             {inputVal && (
-              <motion.button initial={{ opacity:0, scale:0.8 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:0.8 }} transition={{ duration:0.12 }}
+              <button
                 style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
                 onClick={() => { setInputVal(""); setSearch(""); }}>
                 <i className="ti ti-x" style={{ fontSize:13 }} />
-              </motion.button>
+              </button>
             )}
-          </AnimatePresence>
-        </div>
-        <motion.button onClick={() => setSearch(inputVal)}
-          whileHover={{ borderColor:"#e03131", color:"#e03131" }}
-          whileTap={{ scale:0.96 }}
-          transition={{ duration:0.12 }}
-          style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-          Search
-        </motion.button>
-        <motion.button onClick={onAward}
-          whileHover={{ scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }}
-          whileTap={{ scale:0.96 }}
-          transition={{ duration:0.12 }}
-          style={{ height:42, padding:"0 18px", background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:12, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
-          <i className="ti ti-plus" style={{ fontSize:14 }} />Award Scholarship
-        </motion.button>
-      </div>
-
-      {/* Filter panel */}
-      <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 8px rgba(224,49,49,0.04)", display:"flex", flexDirection:"column", gap:0 }}>
-
-        {/* Scholarship chips */}
-        {presentSchTypes.length > 0 && (
-          <div style={{ marginBottom:12 }}>
-            <span style={filterLabel}>Scholarship</span>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {[{ scholarship_type_id:"", scholarship_name:"All" }, ...presentSchTypes].map((sc) => {
-                const val    = String(sc.scholarship_type_id);
-                const active = schFilter === val;
-                return (
-                  <motion.button key={val}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => setSchFilter(active ? "" : val)}
-                    style={{
-                      display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px",
-                      borderRadius:99, fontSize:12, fontWeight:600,
-                      border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                      background: active ? "#fff0f0" : "#ffffff",
-                      color: active ? "#e03131" : "#9a7070",
-                      cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                      transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                    }}>
-                    {sc.scholarship_name}
-                  </motion.button>
-                );
-              })}
-            </div>
           </div>
-        )}
-
-        {/* Divider */}
-        <div style={{ height:1, background:"#f5eaea", margin:"4px 0 12px" }} />
-
-        {/* Date row */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <motion.button
-            onClick={() => setDateOpen((v) => !v)}
-            whileTap={{ scale:0.96 }}
-            style={{
-              display:"inline-flex", alignItems:"center", gap:5, height:32, padding:"0 12px",
-              border:`1.5px solid ${dateOpen || dateFrom || dateTo ? "#e03131" : "#f0e4e4"}`,
-              borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-              background: dateOpen || dateFrom || dateTo ? "#fff0f0" : "#ffffff",
-              color: dateOpen || dateFrom || dateTo ? "#e03131" : "#7a5050",
-              transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-              whiteSpace:"nowrap",
-            }}>
-            <i className="ti ti-calendar-search" style={{ fontSize:12 }} />
-            Award Date{(dateFrom || dateTo) ? " •" : ""}
-            <motion.i
-              className="ti ti-chevron-down"
-              animate={{ rotate: dateOpen ? 180 : 0 }}
-              transition={{ duration:0.18 }}
-              style={{ fontSize:11 }}
-            />
-          </motion.button>
-
+          <button
+            onClick={() => setSearch(inputVal)}
+            style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s", flexShrink:0 }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#e03131"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
+            Search
+          </button>
           <AnimatePresence>
             {hasFilters && (
               <motion.button
@@ -634,61 +561,126 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
                 transition={{ duration:0.14 }}
                 whileTap={{ scale:0.93 }}
                 onClick={clearFilters}
-                style={{ height:32, padding:"0 14px", border:"1.5px solid #fca5a5", borderRadius:99, background:"white", color:"#b91c1c", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:5 }}>
-                <i className="ti ti-filter-off" style={{ fontSize:12 }} />Clear
+                style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+                <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
               </motion.button>
             )}
           </AnimatePresence>
-
-          {!loading && (
-            <span style={{ marginLeft:"auto", fontSize:12, color:"#b09090" }}>
-              <strong style={{ color:"#1a0a0a" }}>{filtered.length}</strong> of {awards.length} award{awards.length !== 1 ? "s" : ""}
-            </span>
-          )}
         </div>
 
-        {/* Expandable date inputs */}
-        <AnimatePresence initial={false}>
-          {dateOpen && (
-            <motion.div
-              key="date-panel"
-              initial={{ height:0, opacity:0, marginTop:0 }}
-              animate={{ height:"auto", opacity:1, marginTop:12 }}
-              exit={{ height:0, opacity:0, marginTop:0 }}
-              transition={{ duration:0.22, ease:"easeInOut" }}
-              style={{ overflow:"hidden" }}
-            >
-              <div style={{ paddingTop:12, borderTop:"1px solid #f5eaea", display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
-                <div>
-                  <label style={filterLabel}>Awarded from</label>
-                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
-                </div>
-                <div>
-                  <label style={filterLabel}>Awarded to</label>
-                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
-                </div>
-                <div>
-                  <label style={filterLabel}>Quick</label>
-                  <div style={{ display:"flex", gap:6 }}>
-                    {[
-                      { label:"This Month", fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
-                      { label:"Last Month", fn:() => { const n=new Date(); const y=n.getMonth()===0?n.getFullYear()-1:n.getFullYear(); const m=n.getMonth()===0?12:n.getMonth(); const last=new Date(n.getFullYear(),n.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
-                      { label:"This Year",  fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-01-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
-                    ].map((q) => (
-                      <motion.button key={q.label} type="button" onClick={q.fn}
-                        whileHover={{ borderColor:"#e03131", color:"#e03131" }}
-                        whileTap={{ scale:0.96 }}
-                        transition={{ duration:0.12 }}
-                        style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                        {q.label}
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+        {/* Divider */}
+        <div style={{ height:1, background:"#f5eaea", margin:"14px 0" }} />
+
+        {/* Chip rows */}
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+
+          {/* Scholarship chips */}
+          {presentSchTypes.length > 0 && (
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Scholarship</div>
+              <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[{ scholarship_type_id:"", scholarship_name:"All" }, ...presentSchTypes].map((sc) => {
+                  const val    = String(sc.scholarship_type_id);
+                  const active = schFilter === val;
+                  return (
+                    <motion.button key={val}
+                      layout
+                      initial={false}
+                      animate={{
+                        backgroundColor: active ? "#fff0f0" : "#ffffff",
+                        color:           active ? "#e03131" : "#9a7070",
+                        borderColor:     active ? "#e03131" : "#f0e4e4",
+                      }}
+                      transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
+                      whileTap={{ scale:0.96 }}
+                      onClick={() => setSchFilter(active ? "" : val)}
+                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                      {sc.scholarship_name}
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+
+          {/* Award Date row */}
+          <div>
+            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Award Date</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <motion.button
+                onClick={() => setDateOpen((v) => !v)}
+                whileTap={{ scale:0.96 }}
+                style={{
+                  display:"inline-flex", alignItems:"center", gap:5, height:32, padding:"0 12px",
+                  border:`1.5px solid ${dateOpen || dateFrom || dateTo ? "#e03131" : "#f0e4e4"}`,
+                  borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
+                  background: dateOpen || dateFrom || dateTo ? "#fff0f0" : "#ffffff",
+                  color: dateOpen || dateFrom || dateTo ? "#e03131" : "#7a5050",
+                  transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
+                  whiteSpace:"nowrap",
+                }}>
+                <i className="ti ti-calendar-search" style={{ fontSize:12 }} />
+                {(dateFrom || dateTo) ? `${dateFrom || "…"} → ${dateTo || "…"}` : "All time"}
+                <motion.i
+                  className="ti ti-chevron-down"
+                  animate={{ rotate: dateOpen ? 180 : 0 }}
+                  transition={{ duration:0.18 }}
+                  style={{ fontSize:11 }}
+                />
+              </motion.button>
+
+              {!loading && (
+                <span style={{ marginLeft:"auto", fontSize:12, color:"#b09090" }}>
+                  <strong style={{ color:"#1a0a0a" }}>{filtered.length}</strong> of {awards.length} award{awards.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+
+            {/* Expandable date inputs */}
+            <AnimatePresence initial={false}>
+              {dateOpen && (
+                <motion.div
+                  key="date-panel"
+                  initial={{ height:0, opacity:0, marginTop:0 }}
+                  animate={{ height:"auto", opacity:1, marginTop:12 }}
+                  exit={{ height:0, opacity:0, marginTop:0 }}
+                  transition={{ duration:0.22, ease:"easeInOut" }}
+                  style={{ overflow:"hidden" }}
+                >
+                  <div style={{ paddingTop:12, borderTop:"1px solid #f5eaea", display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
+                    <div>
+                      <label style={filterLabel}>Awarded from</label>
+                      <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
+                    </div>
+                    <div>
+                      <label style={filterLabel}>Awarded to</label>
+                      <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
+                    </div>
+                    <div>
+                      <label style={filterLabel}>Quick</label>
+                      <div style={{ display:"flex", gap:6 }}>
+                        {[
+                          { label:"This Month", fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
+                          { label:"Last Month", fn:() => { const n=new Date(); const y=n.getMonth()===0?n.getFullYear()-1:n.getFullYear(); const m=n.getMonth()===0?12:n.getMonth(); const last=new Date(n.getFullYear(),n.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
+                          { label:"This Year",  fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-01-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
+                        ].map((q) => (
+                          <motion.button key={q.label} type="button" onClick={q.fn}
+                            whileHover={{ borderColor:"#e03131", color:"#e03131" }}
+                            whileTap={{ scale:0.96 }}
+                            transition={{ duration:0.12 }}
+                            style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                            {q.label}
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+        </div>
       </div>
 
       {/* Awards table */}
@@ -828,29 +820,32 @@ function EligibilityTab({ scholarshipTypes }) {
     try {
       const enrData = await getEnrollments({ school_year:schoolYear, enrollment_status:"enrolled", page_size:200 });
       const enrs = Array.isArray(enrData) ? enrData : enrData?.results ?? [];
-      const eligibleList = [];
-      for (const en of enrs) {
-        const gradeData = await getGrades({ enrollment:en.enrollment_id, grading_period:gradingPeriod, page_size:100 });
-        const grades = Array.isArray(gradeData) ? gradeData : gradeData?.results ?? [];
-        if (grades.length === 0) continue;
-        const avg = grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length;
-        if (avg >= ELIGIBILITY_THRESHOLD) {
-          const studentName = en.student_name ?? `Student #${en.student}`;
-          const lastName = studentName.split(" ").pop() ?? "X";
-          eligibleList.push({
-            enrollment_id:  en.enrollment_id,
-            student_name:   studentName,
-            last_name:      lastName,
-            initials:       studentName.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase(),
-            school_year:    en.school_year,
-            grade_level:    en.grade_level,
-            section:        en.section,
-            grading_period: gradingPeriod,
-            avg:            avg,
-            grades_count:   grades.length,
-          });
-        }
-      }
+      const results = await Promise.all(
+        enrs.map(async (en) => {
+          try {
+            const gradeData = await getGrades({ enrollment:en.enrollment_id, grading_period:gradingPeriod, page_size:100 });
+            const grades = Array.isArray(gradeData) ? gradeData : gradeData?.results ?? [];
+            if (grades.length === 0) return null;
+            const avg = grades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / grades.length;
+            if (avg < ELIGIBILITY_THRESHOLD) return null;
+            const studentName = en.student_name ?? `Student #${en.student}`;
+            const lastName = studentName.split(" ").pop() ?? "X";
+            return {
+              enrollment_id:  en.enrollment_id,
+              student_name:   studentName,
+              last_name:      lastName,
+              initials:       studentName.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase(),
+              school_year:    en.school_year,
+              grade_level:    en.grade_level,
+              section:        en.section,
+              grading_period: gradingPeriod,
+              avg:            avg,
+              grades_count:   grades.length,
+            };
+          } catch { return null; }
+        })
+      );
+      const eligibleList = results.filter(Boolean);
       eligibleList.sort((a, b) => b.avg - a.avg);
       setEligible(eligibleList);
       setScanned(true);
@@ -1130,6 +1125,14 @@ export default function ScholarshipsPage() {
             transition={{ duration:0.12 }}
             style={{ display:"flex", alignItems:"center", gap:8, background:"white", color:"#7a5050", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
             <i className="ti ti-settings" style={{ fontSize:14 }} />Manage Types
+          </motion.button>
+          <motion.button
+            onClick={() => setAwardModal(true)}
+            whileHover={{ scale:1.03, boxShadow:"0 8px 28px rgba(224,49,49,0.32)" }}
+            whileTap={{ scale:0.97 }}
+            transition={{ duration:0.12 }}
+            style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
+            <i className="ti ti-award" style={{ fontSize:15 }} />Award Scholarship
           </motion.button>
         </motion.div>
       </div>

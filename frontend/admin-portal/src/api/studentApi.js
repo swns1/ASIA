@@ -47,14 +47,17 @@ studentClient.interceptors.response.use(
   }
 );
 
-export async function getStudents({ page = 1, search = "", status = "", sex = "", ordering = "" } = {}) {
+export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "" } = {}) {
   const res = await studentClient.get("/students/", {
     params: {
       page,
+      ...(page_size    && { page_size }),
       search,
-      ...(status   && { status }),
-      ...(sex      && { sex }),
-      ...(ordering && { ordering }),
+      ...(status       && { status }),
+      ...(sex          && { sex }),
+      ...(ordering     && { ordering }),
+      ...(school_level && { school_level }),
+      ...(grade_level  && { grade_level }),
     },
   });
   return res.data;

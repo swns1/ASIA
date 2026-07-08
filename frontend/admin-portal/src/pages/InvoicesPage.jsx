@@ -33,6 +33,17 @@ const STATUS_META = {
   void:           { label:"Void",           color:"#5c5752", bg:"#f0ede8" },
 };
 
+const SORT_OPTIONS = [
+  { value: "-invoice_id",   label: "Newest first" },
+  { value: "invoice_id",    label: "Oldest first" },
+  { value: "due_date",      label: "Due date ↑" },
+  { value: "-due_date",     label: "Due date ↓" },
+  { value: "net_amount",    label: "Amount ↑" },
+  { value: "-net_amount",   label: "Amount ↓" },
+  { value: "balance",       label: "Balance ↑" },
+  { value: "-balance",      label: "Balance ↓" },
+];
+
 const PLAN_META = {
   monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd" },
   quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0" },
@@ -264,7 +275,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
   const handleVoid = async () => {
     setVoiding(true);
     try { await voidInvoice(invoiceId); onVoided(); }
-    catch (e) { console.error(e); }
+    catch (e) { setError(e.message || "Failed to void invoice. Please try again."); }
     finally { setVoiding(false); setShowVoidConfirm(false); }
   };
 
@@ -601,6 +612,11 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                             <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmtDate(p.payment_date)}</td>
                             <td style={{ padding:"11px 18px", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
                             <td style={{ padding:"11px 18px" }}>
+                              <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color, display:"inline-flex", alignItems:"center", gap:4 }}>
+                                <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
+                                {p.payment_method.replace("_", " ")}
+                              </span>
+                            </td>
                             <td style={{ padding:"8px 18px" }}>
                               <button
                                 onClick={() => window.open(`/print/receipt/${p.payment_id}`, '_blank')}
@@ -608,11 +624,6 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                                 style={{ background:"none", border:"1px solid #e0d0d0", borderRadius:6, padding:"4px 8px", cursor:"pointer", color:"#7a5050", fontSize:11 }}>
                                 <i className="ti ti-receipt" style={{ fontSize: 12 }} /> Receipt
                               </button>
-                            </td>
-                              <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color, display:"inline-flex", alignItems:"center", gap:4 }}>
-                                <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
-                                {p.payment_method.replace("_", " ")}
-                              </span>
                             </td>
                             <td style={{ padding:"11px 18px", color:"#5a4a4a", fontFamily:"monospace", fontSize:12 }}>{p.reference_number || "—"}</td>
                             <td style={{ padding:"11px 18px", color:"#7a5050", fontSize:12 }}>{p.notes || "—"}</td>
@@ -701,6 +712,9 @@ export default function InvoicesPage() {
   });
   const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter,   setPlanFilter]   = useState("all");
+  const [search,       setSearch]       = useState("");
+  const [inputVal,     setInputVal]     = useState("");
+  const [ordering,     setOrdering]     = useState("-invoice_id");
   const [page,         setPage]         = useState(1);
   const [pageMeta,     setPageMeta]     = useState({ count:0, next:null, previous:null });
   const [showGenModal,      setShowGenModal]      = useState(false);
@@ -708,12 +722,19 @@ export default function InvoicesPage() {
   const [refreshKey,        setRefreshKey]        = useState(0);
   const [summary,           setSummary]           = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0 });
 
-  const fetchInvoices = useCallback(async (p = 1, status = statusFilter, plan = planFilter) => {
+  const fetchInvoices = useCallback(async (
+    p = 1,
+    status = statusFilter,
+    plan = planFilter,
+    term = search,
+    ord = ordering,
+  ) => {
     setLoading(true);
     try {
-      const params = { page: p };
+      const params = { page: p, ordering: ord };
       if (status !== "all") params.status = status;
       if (plan   !== "all") params.payment_plan = plan;
+      if (term.trim())      params.search = term.trim();
 
       const summaryParams = {};
       if (plan !== "all") summaryParams.payment_plan = plan;
@@ -728,13 +749,34 @@ export default function InvoicesPage() {
       setSummary(summaryData);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [statusFilter, planFilter]);
+  }, [statusFilter, planFilter, search, ordering]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
-    fetchInvoices();
+    fetchInvoices(1, "all", "all", "", "-invoice_id");
   }, [refreshKey]);
+
+  const handleSearch = () => {
+    setSearch(inputVal);
+    fetchInvoices(1, statusFilter, planFilter, inputVal, ordering);
+  };
+
+  const handleKeyDown = (e) => { if (e.key === "Enter") handleSearch(); };
+
+  const handleOrdering = (val) => {
+    setOrdering(val);
+    fetchInvoices(1, statusFilter, planFilter, search, val);
+  };
+
+  const handleClearAll = () => {
+    setInputVal(""); setSearch("");
+    setStatusFilter("all"); setPlanFilter("all");
+    setOrdering("-invoice_id");
+    fetchInvoices(1, "all", "all", "", "-invoice_id");
+  };
+
+  const hasActiveFilters = search || statusFilter !== "all" || planFilter !== "all" || ordering !== "-invoice_id";
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
@@ -795,7 +837,7 @@ export default function InvoicesPage() {
               <motion.div
                 key={s.label}
                 variants={listVariants.item}
-                onClick={() => { const next = isActive ? "all" : s.statusKey; setStatusFilter(next); fetchInvoices(1, next, planFilter); }}
+                onClick={() => { const next = isActive ? "all" : s.statusKey; setStatusFilter(next); fetchInvoices(1, next, planFilter, search, ordering); }}
                 whileHover={{ y:-2, boxShadow: isActive ? `0 8px 24px ${s.color}28` : "0 6px 20px rgba(224,49,49,0.10)", borderColor: s.color }}
                 whileTap={{ scale:0.97 }}
                 animate={{ borderColor: isActive ? s.color : "#f5eaea", backgroundColor: isActive ? s.bg : "#ffffff" }}
@@ -819,6 +861,84 @@ export default function InvoicesPage() {
           variants={pageVariants.item}
           style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:12 }}
         >
+          {/* Search row */}
+          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+            {/* Search box */}
+            <div
+              className="search-wrap"
+              style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border 0.15s, box-shadow 0.15s" }}
+            >
+              <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0", flexShrink:0 }} />
+              <input
+                className="search-input"
+                placeholder="Search by invoice number…"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={handleKeyDown}
+                style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans', sans-serif", outline:"none" }}
+              />
+              {inputVal && (
+                <button
+                  style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
+                  onClick={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
+                >
+                  <i className="ti ti-x" style={{ fontSize:13 }} />
+                </button>
+              )}
+            </div>
+
+            {/* Sort dropdown */}
+            <div style={{ position:"relative", flexShrink:0 }}>
+              <i className="ti ti-arrows-sort" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:"#c0a0a0", pointerEvents:"none" }} />
+              <select
+                value={ordering}
+                onChange={(e) => handleOrdering(e.target.value)}
+                style={{
+                  height:42, paddingLeft:34, paddingRight:14,
+                  border:`1.5px solid ${ordering !== "-invoice_id" ? "#e03131" : "#f0e4e4"}`,
+                  borderRadius:12, background:ordering !== "-invoice_id" ? "#fff0f0" : "white",
+                  fontSize:13, fontWeight:600,
+                  color:ordering !== "-invoice_id" ? "#e03131" : "#7a5050",
+                  cursor:"pointer", fontFamily:"'DM Sans', sans-serif",
+                  outline:"none", appearance:"none", minWidth:158,
+                }}
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search button */}
+            <button
+              style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans', sans-serif", transition:"all 0.14s", flexShrink:0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
+              onClick={handleSearch}
+            >Search</button>
+
+            {/* Clear all */}
+            <AnimatePresence>
+              {hasActiveFilters && (
+                <motion.button
+                  initial={{ opacity:0, scale:0.88 }}
+                  animate={{ opacity:1, scale:1 }}
+                  exit={{ opacity:0, scale:0.88 }}
+                  transition={{ duration:0.14 }}
+                  whileTap={{ scale:0.93 }}
+                  onClick={handleClearAll}
+                  title="Clear all filters"
+                  style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans', sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}
+                >
+                  <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Divider */}
+          <div style={{ height:1, background:"#f5eaea" }} />
+
           {/* Status chips */}
           <div>
             <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
@@ -842,7 +962,7 @@ export default function InvoicesPage() {
                     }}
                     transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
                     whileTap={{ scale:0.96 }}
-                    onClick={() => { setStatusFilter(s.value); fetchInvoices(1, s.value, planFilter); }}
+                    onClick={() => { setStatusFilter(s.value); fetchInvoices(1, s.value, planFilter, search, ordering); }}
                     style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
                   >
                     {s.label}
@@ -875,7 +995,7 @@ export default function InvoicesPage() {
                     }}
                     transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
                     whileTap={{ scale:0.96 }}
-                    onClick={() => { setPlanFilter(p.value); fetchInvoices(1, statusFilter, p.value); }}
+                    onClick={() => { setPlanFilter(p.value); fetchInvoices(1, statusFilter, p.value, search, ordering); }}
                     style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
                   >
                     {p.label}
@@ -963,7 +1083,7 @@ export default function InvoicesPage() {
                 <div style={{ display:"flex", gap:4 }}>
                   <motion.button
                     disabled={!pageMeta.previous}
-                    onClick={() => fetchInvoices(page - 1)}
+                    onClick={() => fetchInvoices(page - 1, statusFilter, planFilter, search, ordering)}
                     whileHover={pageMeta.previous ? { borderColor:"#e03131", color:"#e03131" } : {}}
                     whileTap={pageMeta.previous ? { scale:0.93 } : {}}
                     transition={{ duration:0.12 }}
@@ -973,7 +1093,7 @@ export default function InvoicesPage() {
                   </motion.button>
                   <motion.button
                     disabled={!pageMeta.next}
-                    onClick={() => fetchInvoices(page + 1)}
+                    onClick={() => fetchInvoices(page + 1, statusFilter, planFilter, search, ordering)}
                     whileHover={pageMeta.next ? { borderColor:"#e03131", color:"#e03131" } : {}}
                     whileTap={pageMeta.next ? { scale:0.93 } : {}}
                     transition={{ duration:0.12 }}

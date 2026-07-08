@@ -102,8 +102,37 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
     )
     serializer_class = StudentInvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("status", "payment_plan", "enrollment_id")
+    ordering_fields = ("invoice_id", "invoice_date", "due_date")
+    ordering = ("-invoice_id",)
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        term = self.request.query_params.get("search", "").strip()
+        if term:
+            from django.db.models import Q
+            from .enrollment_mirror import EnrollmentMirror, StudentMirror
+            matched_student_ids = (
+                StudentMirror.objects
+                .filter(
+                    Q(first_name__icontains=term) |
+                    Q(last_name__icontains=term) |
+                    Q(middle_name__icontains=term) |
+                    Q(lrn__icontains=term)
+                )
+                .values_list("student_id", flat=True)
+            )
+            matched_enrollment_ids = (
+                EnrollmentMirror.objects
+                .filter(student_id__in=matched_student_ids)
+                .values_list("enrollment_id", flat=True)
+            )
+            queryset = queryset.filter(
+                Q(invoice_no__icontains=term) |
+                Q(enrollment_id__in=matched_enrollment_ids)
+            )
+        return queryset
 
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):

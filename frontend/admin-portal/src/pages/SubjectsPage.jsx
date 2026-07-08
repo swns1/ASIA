@@ -486,8 +486,9 @@ export default function SubjectsPage() {
           initial={isFirstRender ? { opacity: 0, y: 8 } : false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
-          style={{ display: "flex", flexDirection: "column", gap: 10 }}
+          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0 }}
         >
+          {/* Row 1: search + clear */}
           <div style={{ display: "flex", gap: 10 }}>
             <div className="search-wrap" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border 0.15s,box-shadow 0.15s" }}>
               <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
@@ -517,9 +518,11 @@ export default function SubjectsPage() {
             </button>
           </div>
 
-          {/* Filter chip panel */}
-          <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Divider */}
+          <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
+
+          {/* Chip rows */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
               {/* School Level chips */}
               <div>
@@ -614,7 +617,6 @@ export default function SubjectsPage() {
               </div>
 
             </div>
-          </div>
         </motion.div>
 
         {/* Table */}

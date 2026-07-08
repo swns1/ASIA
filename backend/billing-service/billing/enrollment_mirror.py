@@ -6,6 +6,18 @@ Used to replace raw SQL cross-service lookups with proper Django ORM queries.
 from django.db import models
 
 
+class StudentMirror(models.Model):
+    student_id  = models.BigAutoField(primary_key=True)
+    first_name  = models.CharField(max_length=100)
+    middle_name = models.CharField(max_length=100, blank=True, null=True)
+    last_name   = models.CharField(max_length=100)
+    lrn         = models.CharField(max_length=30, blank=True, null=True)
+
+    class Meta:
+        managed  = False
+        db_table = "students"
+
+
 class EnrollmentMirror(models.Model):
     enrollment_id     = models.BigAutoField(primary_key=True)
     student_id        = models.BigIntegerField()

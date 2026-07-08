@@ -68,6 +68,8 @@ const OVERVIEW_GRADE_LEVELS = {
   senior_highschool: ["Grade 11","Grade 12"],
 };
 
+const OVERVIEW_PAGE_SIZE = 20;
+
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
   const hasAnimated = useRef(false);
@@ -77,14 +79,22 @@ function OverviewTab({ onNavigate }) {
   const [gradeLevel,    setGradeLevel]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("");
   const [remarks,       setRemarks]       = useState("");
-  const [section,       setSection]       = useState("");
-  const [sectionInput,  setSectionInput]  = useState("");
   const [search,        setSearch]        = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const [rows,    setRows]    = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [sortKey, setSortKey] = useState("avg");
-  const [sortDir, setSortDir] = useState("asc");
+  const [rows,     setRows]     = useState([]);
+  const [pageMeta, setPageMeta] = useState({ count: 0, next: null, previous: null });
+  const [page,     setPage]     = useState(1);
+  const [loading,  setLoading]  = useState(false);
+  const [sortKey,  setSortKey]  = useState("avg");
+  const [sortDir,  setSortDir]  = useState("asc");
+  const searchInputRef = useRef(null);
+
+  // Debounce search so we don't fire an API call on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const schoolYearOptions = buildSchoolYearOptions();
   const gradeLevelOptions = schoolLevel ? (OVERVIEW_GRADE_LEVELS[schoolLevel] ?? []) : [];
@@ -92,80 +102,91 @@ function OverviewTab({ onNavigate }) {
     ? (GRADING_PERIODS_BY_LEVEL[schoolLevel] ?? [])
     : ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter","1st_semester","2nd_semester"];
 
-  // reset cascaded filters when level changes
+  // reset cascaded filters + page when level changes
   useEffect(() => { setGradeLevel(""); setGradingPeriod(""); }, [schoolLevel]);
 
-  const canFetch = schoolYear || schoolLevel || gradeLevel || section;
-  const hasFilters = schoolYear || schoolLevel || gradeLevel || gradingPeriod || remarks || section || search;
+  const hasFilters = schoolYear || schoolLevel || gradeLevel || gradingPeriod || remarks || search;
 
   const clearFilters = () => {
     setSchoolYear(""); setSchoolLevel(""); setGradeLevel("");
-    setGradingPeriod(""); setRemarks(""); setSection("");
-    setSectionInput(""); setSearch("");
+    setGradingPeriod(""); setRemarks(""); setSearch(""); setPage(1);
   };
 
-  useEffect(() => {
-    if (!canFetch) { setRows([]); return; }
+  const fetchPage = useCallback(async (nextPage, opts = {}) => {
+    const sy  = opts.schoolYear    ?? schoolYear;
+    const sl  = opts.schoolLevel   ?? schoolLevel;
+    const gl  = opts.gradeLevel    ?? gradeLevel;
+    const gp  = opts.gradingPeriod ?? gradingPeriod;
+    const rm  = opts.remarks       ?? remarks;
+    const srch = opts.search       ?? debouncedSearch;
+
     setLoading(true);
-    const params = { page_size: 200, enrollment_status: "enrolled" };
-    if (schoolYear)  params.school_year  = schoolYear;
-    if (schoolLevel) params.school_level = schoolLevel;
-    if (gradeLevel)  params.grade_level  = gradeLevel;
-    if (section)     params.section      = section;
+    try {
+      const params = {
+        page: nextPage,
+        page_size: OVERVIEW_PAGE_SIZE,
+        enrollment_status: "enrolled",
+      };
+      if (sy)   params.school_year  = sy;
+      if (sl)   params.school_level = sl;
+      if (gl)   params.grade_level  = gl;
+      if (srch) params.search       = srch;
 
-    getEnrollments(params)
-      .then(async (d) => {
-        const enrollments = Array.isArray(d) ? d : d?.results ?? [];
-        const gradeParams = {};
-        if (gradingPeriod) gradeParams.grading_period = gradingPeriod;
+      const d = await getEnrollments(params);
+      const enrollments = Array.isArray(d) ? d : d?.results ?? [];
+      const meta = { count: d?.count ?? enrollments.length, next: d?.next ?? null, previous: d?.previous ?? null };
 
-        const gradeResults = await Promise.all(
-          enrollments.map((en) =>
-            getGrades({ enrollment: en.enrollment_id, page_size: 200, ...gradeParams })
-              .then((g) => Array.isArray(g) ? g : g?.results ?? [])
-              .catch(() => [])
-          )
-        );
+      const gradeParams = {};
+      if (gp) gradeParams.grading_period = gp;
 
-        const built = enrollments.map((en, i) => {
-          const grades = gradeResults[i];
-          const nums   = grades.map((g) => parseFloat(g.numeric_grade)).filter((n) => !isNaN(n));
-          const avg    = nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-          const passed = grades.filter((g) => parseFloat(g.numeric_grade) >= 75).length;
-          const failed = grades.filter((g) => parseFloat(g.numeric_grade) <  75 && !isNaN(parseFloat(g.numeric_grade))).length;
-          const sd     = en.student_detail ?? {};
-          const name   = sd.full_name ?? [sd.first_name, sd.middle_name, sd.last_name, sd.suffix].filter(Boolean).join(" ");
-          return { enrollment_id: en.enrollment_id, name, lrn: sd.lrn, student_number: sd.student_number, grade_level: en.grade_level, section: en.section, school_year: en.school_year, school_level: en.school_level, avg, passed, failed, total: grades.length, _student: sd, _enrollment: en };
+      const gradeResults = await Promise.all(
+        enrollments.map((en) =>
+          getGrades({ enrollment: en.enrollment_id, page_size: 200, ...gradeParams })
+            .then((g) => Array.isArray(g) ? g : g?.results ?? [])
+            .catch(() => [])
+        )
+      );
+
+      let built = enrollments.map((en, i) => {
+        const grades = gradeResults[i];
+        const nums   = grades.map((g) => parseFloat(g.numeric_grade)).filter((n) => !isNaN(n));
+        const avg    = nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+        const passed = grades.filter((g) => parseFloat(g.numeric_grade) >= 75).length;
+        const failed = grades.filter((g) => parseFloat(g.numeric_grade) < 75 && !isNaN(parseFloat(g.numeric_grade))).length;
+        const sd     = en.student_detail ?? {};
+        const name   = sd.full_name ?? [sd.first_name, sd.middle_name, sd.last_name, sd.suffix].filter(Boolean).join(" ");
+        return { enrollment_id: en.enrollment_id, name, lrn: sd.lrn, student_number: sd.student_number, grade_level: en.grade_level, section: en.section, school_year: en.school_year, school_level: en.school_level, avg, passed, failed, total: grades.length, _student: sd, _enrollment: en };
+      });
+
+      if (rm) {
+        built = built.filter((r) => {
+          if (rm === "passed") return r.avg !== null && r.avg >= 75;
+          if (rm === "failed") return r.avg !== null && r.avg < 75;
+          return true;
         });
+      }
 
-        if (remarks) {
-          setRows(built.filter((r) => {
-            if (remarks === "passed") return r.avg !== null && r.avg >= 75;
-            if (remarks === "failed") return r.avg !== null && r.avg <  75;
-            return true;
-          }));
-        } else {
-          setRows(built);
-        }
-      })
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, [schoolYear, schoolLevel, gradeLevel, section, gradingPeriod, remarks, canFetch]);
+      setRows(built);
+      setPageMeta(meta);
+      setPage(nextPage);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolYear, schoolLevel, gradeLevel, gradingPeriod, remarks, debouncedSearch]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
-    const q = search.toLowerCase();
-    return rows.filter((r) => r.name.toLowerCase().includes(q) || r.lrn?.includes(q) || r.student_number?.toLowerCase().includes(q));
-  }, [rows, search]);
+  // Refetch from page 1 whenever filters change
+  useEffect(() => { fetchPage(1); }, [schoolYear, schoolLevel, gradeLevel, gradingPeriod, remarks, debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       let av = a[sortKey], bv = b[sortKey];
       if (av === null || av === undefined) av = sortDir === "asc" ? Infinity : -Infinity;
       if (bv === null || bv === undefined) bv = sortDir === "asc" ? Infinity : -Infinity;
       return sortDir === "asc" ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [rows, sortKey, sortDir]);
 
   function toggleSort(key) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -177,6 +198,7 @@ function OverviewTab({ onNavigate }) {
     return <i className={`ti ti-sort-${sortDir === "asc" ? "ascending" : "descending"}`} style={{ fontSize: 11, color: "#e03131", marginLeft: 4 }} />;
   };
 
+  const totalPages   = Math.ceil(pageMeta.count / OVERVIEW_PAGE_SIZE);
   const passedCount  = rows.filter((r) => r.avg !== null && r.avg >= 75).length;
   const failedCount  = rows.filter((r) => r.avg !== null && r.avg <  75).length;
   const noGradeCount = rows.filter((r) => r.avg === null).length;
@@ -195,7 +217,7 @@ function OverviewTab({ onNavigate }) {
           { label: "Passing",        icon: "ti-circle-check",   value: loading ? null : passedCount,     color: "#2e6b0d", bg: "#e8f5e0" },
           { label: "Failing",        icon: "ti-circle-x",       value: loading ? null : failedCount,     color: "#9b2020", bg: "#fde8e8" },
           { label: "No Grades Yet",  icon: "ti-alert-triangle", value: loading ? null : noGradeCount,    color: "#854f0b", bg: "#faeeda" },
-          { label: "Class Average",  icon: "ti-chart-bar",      value: loading ? null : (overallMean !== null ? overallMean.toFixed(2) : (canFetch ? "—" : "—")), color: "#1455a0", bg: "#e3f0fd" },
+          { label: "Class Average",  icon: "ti-chart-bar",      value: loading ? null : (overallMean !== null ? overallMean.toFixed(2) : "—"), color: "#1455a0", bg: "#e3f0fd" },
         ].map((card, i) => (
           <motion.div
             key={card.label}
@@ -214,9 +236,9 @@ function OverviewTab({ onNavigate }) {
                 <i className={`ti ${card.icon}`} style={{ fontSize: 18, color: card.color }} />
               </div>
               <div>
-                {loading && canFetch
+                {loading
                   ? <Sk w={40} h={20} r={4} />
-                  : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{canFetch ? (card.value ?? "—") : "—"}</div>
+                  : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{card.value ?? "—"}</div>
                 }
                 <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{card.label}</div>
               </div>
@@ -230,16 +252,18 @@ function OverviewTab({ onNavigate }) {
         initial={isFirstRender ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.28 : 0 }}
-        style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0 }}
+        style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0, position: "relative", zIndex: 2 }}
       >
         {/* Search row */}
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div className="search-wrap" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border .15s,box-shadow .15s" }}>
             <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
             <input
+              ref={searchInputRef}
               placeholder="Search student name or LRN…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchInputRef.current?.blur()}
               style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
             />
             {search && (
@@ -248,29 +272,13 @@ function OverviewTab({ onNavigate }) {
               </button>
             )}
           </div>
-          {/* Section text filter */}
-          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 42, transition: "border .15s,box-shadow .15s" }}>
-            <i className="ti ti-door" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
-            <input
-              placeholder="Section…"
-              value={sectionInput}
-              onChange={(e) => setSectionInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") setSection(sectionInput); }}
-              style={{ width: 90, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
-            />
-            {sectionInput && (
-              <button onClick={() => { setSectionInput(""); setSection(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}>
-                <i className="ti ti-x" style={{ fontSize: 13 }} />
-              </button>
-            )}
-          </div>
           <button
-            onClick={() => setSection(sectionInput)}
-            style={{ height: 42, padding: "0 18px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
+            onClick={() => searchInputRef.current?.focus()}
+            style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
           >
-            Apply
+            Search
           </button>
           <AnimatePresence>
             {hasFilters && (
@@ -465,31 +473,9 @@ function OverviewTab({ onNavigate }) {
         initial={isFirstRender ? { opacity: 0, y: 10 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.38 : 0 }}
-        style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
+        style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)", position: "relative", zIndex: 1 }}
       >
         {/* Table toolbar */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>
-            {loading ? "Loading…" : canFetch ? `${sorted.length} student${sorted.length !== 1 ? "s" : ""}` : "Set a filter to load students"}
-          </div>
-          {overallMean !== null && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 8, background: gradeStyle(overallMean).bg }}>
-              <span style={{ fontSize: 11, color: "#b09090", fontWeight: 600 }}>Class avg</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: gradeStyle(overallMean).color }}>{overallMean.toFixed(2)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Empty / prompt state */}
-        {!loading && !canFetch && (
-          <div style={{ padding: "60px 24px", textAlign: "center" }}>
-            <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-              <i className="ti ti-filter" style={{ fontSize: 24, color: "#e08080" }} />
-            </div>
-            <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>Apply a filter to get started</div>
-            <div style={{ fontSize: 13, color: "#b09090", marginTop: 6 }}>Select a school year, level, or section above to load the student grade overview.</div>
-          </div>
-        )}
 
         {/* Loading skeleton */}
         {loading && (
@@ -508,7 +494,7 @@ function OverviewTab({ onNavigate }) {
         )}
 
         {/* Data table */}
-        {!loading && canFetch && sorted.length > 0 && (
+        {!loading && sorted.length > 0 && (
           <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 520px)", overflowY: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
@@ -591,7 +577,7 @@ function OverviewTab({ onNavigate }) {
         )}
 
         {/* No results */}
-        {!loading && canFetch && sorted.length === 0 && rows.length === 0 && (
+        {!loading && sorted.length === 0 && rows.length === 0 && (
           <div style={{ padding: "60px 24px", textAlign: "center" }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
               <i className="ti ti-users" style={{ fontSize: 24, color: "#e08080" }} />
@@ -602,7 +588,7 @@ function OverviewTab({ onNavigate }) {
         )}
 
         {/* Search filtered to zero */}
-        {!loading && canFetch && sorted.length === 0 && rows.length > 0 && (
+        {!loading && sorted.length === 0 && rows.length > 0 && (
           <div style={{ padding: "40px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 13, color: "#b09090" }}>No students match "<strong>{search}</strong>".</div>
           </div>
@@ -627,6 +613,49 @@ function OverviewTab({ onNavigate }) {
           </div>
         )}
       </motion.div>
+
+      {/* ── Pagination ── */}
+      {!loading && pageMeta.count > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 12, color: "#b09090" }}>
+            Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
+            <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
+            &nbsp;·&nbsp; {pageMeta.count.toLocaleString()} total records
+          </span>
+          <div style={{ display: "flex", gap: 4 }}>
+            <motion.button
+              whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+              style={{ ...ovPgBtn, opacity: !pageMeta.previous ? 0.4 : 1, cursor: !pageMeta.previous ? "default" : "pointer" }}
+              disabled={!pageMeta.previous}
+              onClick={() => fetchPage(page - 1)}
+            >
+              <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
+            </motion.button>
+            {(() => {
+              const windowSize = Math.min(totalPages, 5);
+              const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
+              return Array.from({ length: windowSize }, (_, i) => start + i);
+            })().map((p) => (
+              <motion.button
+                key={p}
+                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+                style={{ ...ovPgBtn, ...(p === page ? ovPgBtnActive : {}) }}
+                onClick={() => fetchPage(p)}
+              >
+                {p}
+              </motion.button>
+            ))}
+            <motion.button
+              whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
+              style={{ ...ovPgBtn, opacity: !pageMeta.next ? 0.4 : 1, cursor: !pageMeta.next ? "default" : "pointer" }}
+              disabled={!pageMeta.next}
+              onClick={() => fetchPage(page + 1)}
+            >
+              <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
+            </motion.button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -675,6 +704,17 @@ const PALETTES = [
   { bg:"#e8fdfd", color:"#0891b2" },
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
+
+// ── Overview pagination button styles ─────────────────────────────────────────
+const ovPgBtn = {
+  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
+  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
+  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
+};
+const ovPgBtnActive = {
+  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
+};
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const thStyle = {
@@ -1415,15 +1455,15 @@ export default function GradesPage() {
       <motion.div
         initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
         transition={{ duration:0.22, ease:"easeOut" }}
-        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
+        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"visible", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", position:"relative", zIndex:10 }}
       >
-        <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10, borderRadius:"16px 16px 0 0" }}>
           <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <i className="ti ti-user-search" style={{ fontSize:14, color:"#e03131" }} />
           </div>
           <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select Student</span>
         </div>
-        <div style={{ padding:"14px 18px" }}>
+        <div style={{ padding:"14px 18px", borderRadius:"0 0 16px 16px", overflow:"visible" }}>
           <StudentPicker value={student} onChange={(s) => { setStudent(s); setEnrollment(null); setSubject(null); setComputation(null); }} />
         </div>
       </motion.div>
@@ -1964,20 +2004,6 @@ export default function GradesPage() {
 
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
-        <div>
-          <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>
-            {tab === "overview" ? "Grade Overview" : tab === "summary" ? "Grade Summary" : "Grade Entry"}
-          </div>
-          <div style={{ fontSize:13, color:"#b09090", marginTop:4 }}>
-            {tab === "overview"
-              ? "Filter and browse students by grade performance across an enrollment cohort."
-              : tab === "summary"
-              ? "View a student's complete grade report across all subjects and periods."
-              : "Select a subject and grading period to enter raw scores."
-            }
-          </div>
-        </div>
-
         {tab === "overview" ? (
           <OverviewTab onNavigate={(targetTab, studentObj, enrollmentObj) => {
             setStudent(studentObj);

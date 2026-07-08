@@ -216,7 +216,7 @@ export default function SchoolFormsPage() {
   return (
     <AppLayout>
       {/* Topbar */}
-      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
+      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
         <motion.div
           initial={isFirstRender ? { opacity: 0, y: -8 } : false}
           animate={{ opacity: 1, y: 0 }}
@@ -224,6 +224,20 @@ export default function SchoolFormsPage() {
         >
           <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>School Forms</div>
           <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>DepEd Official School Forms (SF Documents)</div>
+        </motion.div>
+        <motion.div
+          initial={isFirstRender ? { opacity: 0, y: -8 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, delay: 0.05 }}
+          style={{ display: "flex", alignItems: "center", gap: 10 }}
+        >
+          <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: "nowrap" }}>School Year (all forms)</label>
+          <input
+            value={schoolYear}
+            onChange={(e) => setSchoolYear(e.target.value)}
+            placeholder="e.g. 2025-2026"
+            style={{ ...inputStyle, width: 140, height: 34 }}
+          />
         </motion.div>
       </div>
 
@@ -234,20 +248,9 @@ export default function SchoolFormsPage() {
         initial={isFirstRender ? "hidden" : false}
         animate="visible"
       >
-        {/* Shared school year */}
-        <motion.div variants={pageVariants.item} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: "nowrap" }}>School Year (all forms)</label>
-          <input
-            value={schoolYear}
-            onChange={(e) => setSchoolYear(e.target.value)}
-            placeholder="e.g. 2025-2026"
-            style={{ ...inputStyle, width: 160 }}
-          />
-        </motion.div>
-
         {/* ── SF1 ── */}
-        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#fdfafa,white)" }}>
+        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}>
+          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#fdfafa,white)", borderRadius: "16px 16px 0 0" }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className="ti ti-clipboard-list" style={{ fontSize: 20, color: C.red }} />
             </div>
@@ -282,11 +285,13 @@ export default function SchoolFormsPage() {
                 <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Optional" style={inputStyle} />
               } />
             </div>
-            {sf1Error && (
-              <div style={{ marginBottom: 14, padding: "9px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 7 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf1Error}
-              </div>
-            )}
+            <div style={{ minHeight: 38, marginBottom: sf1Error ? 14 : 0 }}>
+              {sf1Error && (
+                <div style={{ padding: "9px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 7 }}>
+                  <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf1Error}
+                </div>
+              )}
+            </div>
             <motion.button
               onClick={handleOpenSF1}
               whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
@@ -300,8 +305,8 @@ export default function SchoolFormsPage() {
         </motion.div>
 
         {/* ── SF2 ── */}
-        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 16px rgba(20,85,160,0.06)" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#f5f8fd,white)" }}>
+        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(20,85,160,0.06)" }}>
+          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#f5f8fd,white)", borderRadius: "16px 16px 0 0" }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#e3f0fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className="ti ti-calendar-stats" style={{ fontSize: 20, color: "#1455a0" }} />
             </div>
@@ -339,11 +344,13 @@ export default function SchoolFormsPage() {
                 <input value={sf2Region} onChange={(e) => setSf2Region(e.target.value)} placeholder="Optional" style={inputStyle} />
               } />
             </div>
-            {sf2Error && (
-              <div style={{ marginBottom: 14, padding: "9px 14px", background: "#eef3fc", border: "1px solid #93b4f5", borderRadius: 8, fontSize: 12, color: "#1455a0", display: "flex", alignItems: "center", gap: 7 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf2Error}
-              </div>
-            )}
+            <div style={{ minHeight: 38, marginBottom: sf2Error ? 14 : 0 }}>
+              {sf2Error && (
+                <div style={{ padding: "9px 14px", background: "#eef3fc", border: "1px solid #93b4f5", borderRadius: 8, fontSize: 12, color: "#1455a0", display: "flex", alignItems: "center", gap: 7 }}>
+                  <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf2Error}
+                </div>
+              )}
+            </div>
             <motion.button
               onClick={handleOpenSF2}
               whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(20,85,160,0.30)" }}

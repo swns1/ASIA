@@ -103,7 +103,7 @@ function eventMeta(type) {
 
 const SCHOOL_YEARS = (() => {
   const now = new Date();
-  const cur = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  const cur = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   return Array.from({ length: 5 }, (_, i) => { const y = cur - 1 + i; return `${y}-${y + 1}`; });
 })();
 
@@ -283,6 +283,28 @@ function buildEventMap(events) {
   return map;
 }
 
+// For a given grid month (year + monthIndex), return all events that are
+// active on each day, even when the event's calendar year differs from `year`
+// (happens at the school-year Jul/Jun boundary where Jul uses syYear but an
+// event that started in Jun syYear2 bleeds into Jul syYear).
+function getDayEvents(eventMap, year, monthIndex, day) {
+  const primary = `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  // Also check the other calendar year for the same month/day so cross-year
+  // spanning events (e.g. Jun 2026 → Jul 2026 stored under SY 2025-2026 where
+  // the July grid renders as year=2025) are still found.
+  const altYear = year + 1;
+  const alt     = `${altYear}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const seen    = new Set();
+  const result  = [];
+  for (const ev of (eventMap[primary] ?? [])) {
+    if (!seen.has(ev.event_id)) { seen.add(ev.event_id); result.push({ ev, k: primary }); }
+  }
+  for (const ev of (eventMap[alt] ?? [])) {
+    if (!seen.has(ev.event_id)) { seen.add(ev.event_id); result.push({ ev, k: alt }); }
+  }
+  return result;
+}
+
 function formatDateRange(start, end) {
   if (start === end) return start;
   const s = parseLocalDate(start);
@@ -298,17 +320,62 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
 );
 
 // ── Month Calendar Grid ───────────────────────────────────────────────────────
+//
+// Renders week-by-week so multi-day event strips stay in the same slot (row)
+// across all cells in a week — e.g. "Exam" on Wed–Sat stays on row 2 for every
+// cell in that week even if Wed has two events above it.
+
+const MAX_SLOTS = 3; // strips visible before "+N more"
+const STRIP_H   = 18; // px height of each strip row (font 10 + padding 4 + gap 2 + border 2)
+
+function assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap) {
+  // weekDays: array of day numbers or null (for empty cells)
+  // Returns: Map<event_id, slot> for this week
+  const slotMap  = {}; // event_id → slot index
+  const occupied = []; // occupied[slot] = event_id currently filling it
+
+  for (const day of weekDays) {
+    if (!day) continue;
+    const pairs = getDayEvents(eventMap, year, monthIndex, day);
+    for (const { ev } of pairs) {
+      if (slotMap[ev.event_id] !== undefined) continue; // already assigned
+      // Find the lowest free slot
+      let slot = 0;
+      while (occupied[slot] !== undefined) slot++;
+      occupied[slot] = ev.event_id;
+      slotMap[ev.event_id] = slot;
+    }
+    // Free slots whose event ends on this day
+    const isLastOfMonth = day === daysInMonth;
+    for (const { ev, k: evKey } of pairs) {
+      const isEnd = ev.end_date === evKey || isLastOfMonth;
+      if (isEnd) {
+        const slot = slotMap[ev.event_id];
+        if (slot !== undefined && occupied[slot] === ev.event_id) {
+          delete occupied[slot];
+        }
+      }
+    }
+  }
+  return slotMap;
+}
 
 function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
   const firstDay    = new Date(year, monthIndex, 1).getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const todayKey    = dateKey(new Date());
 
-  const cells = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  // pad to complete last row
-  while (cells.length % 7 !== 0) cells.push(null);
+  // Build week rows: each is an array of 7 day-numbers-or-null
+  const weeks = [];
+  let week = Array(firstDay).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    week.push(d);
+    if (week.length === 7) { weeks.push(week); week = []; }
+  }
+  if (week.length > 0) {
+    while (week.length < 7) week.push(null);
+    weeks.push(week);
+  }
 
   return (
     <div style={{ background: "white", borderRadius: 18, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 4px 24px rgba(224,49,49,0.07)" }}>
@@ -319,98 +386,151 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
         ))}
       </div>
 
-      {/* Day cells */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
-        {cells.map((day, idx) => {
-          if (!day) return (
-            <div key={`empty-${idx}`} style={{ minHeight: 88, background: idx % 7 === 0 || idx % 7 === 6 ? "#fdfafa" : "transparent", borderRight: "1px solid #faf0f0", borderBottom: "1px solid #faf0f0" }} />
-          );
+      {/* Week rows */}
+      {weeks.map((weekDays, wi) => {
+        // Assign stable slots for every event visible this week
+        const slotMap = assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap);
 
-          const k = `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-          const dayEvents  = eventMap[k] ?? [];
-          const isSelected = selectedDay === k;
-          const isToday    = k === todayKey;
-          const isWeekend  = idx % 7 === 0 || idx % 7 === 6;
-          const visibleEvs = dayEvents.slice(0, 3);
-          const overflow   = dayEvents.length - 3;
+        // How many slots are actually used this week (caps at MAX_SLOTS)
+        const usedSlots = Math.min(MAX_SLOTS, Object.values(slotMap).length > 0 ? Math.max(...Object.values(slotMap)) + 1 : 0);
 
-          return (
-            <div
-              key={k}
-              className={dayEvents.length ? "cal-day" : ""}
-              onClick={() => onSelectDay(isSelected ? null : k)}
-              style={{
-                minHeight: 88,
-                padding: "6px 0 4px",
-                borderRight: "1px solid #faf0f0",
-                borderBottom: "1px solid #faf0f0",
-                background: isSelected ? "#fff0f0" : isToday ? "#fffbfb" : isWeekend ? "#fdfafa" : "white",
-                cursor: dayEvents.length ? "pointer" : "default",
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              {/* Day number */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "0 6px" }}>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 24, height: 24, borderRadius: "50%",
-                  fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
-                  background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
-                  color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#c09090" : "#2a1a1a",
-                  transition: "background-color 0.15s ease, color 0.15s ease",
-                }}>
-                  {day}
-                </span>
-              </div>
+        return (
+          <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
+            {weekDays.map((day, ci) => {
+              const isWeekend = ci === 0 || ci === 6;
+              if (!day) return (
+                <div key={`empty-${wi}-${ci}`} style={{
+                  minHeight: 88,
+                  background: isWeekend ? "#fdfafa" : "transparent",
+                  borderRight: "1px solid #faf0f0", borderBottom: "1px solid #faf0f0",
+                }} />
+              );
 
-              {/* Event strips */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                {visibleEvs.map((ev) => {
-                  const meta    = eventMeta(ev.event_type);
-                  const isStart = ev.start_date === k;
-                  const isEnd   = ev.end_date   === k;
-                  const isSingle = ev.start_date === ev.end_date;
-                  // Round left edge only on start, right edge only on end
-                  const borderRadius = isSingle
-                    ? 4
-                    : isStart ? "4px 0 0 4px"
-                    : isEnd   ? "0 4px 4px 0"
-                    : 0;
-                  // Bleed into cell padding on continuation/end days so strips connect visually
-                  const marginLeft  = isStart || isSingle ?  0 : -7;
-                  const marginRight = isEnd   || isSingle ?  0 : -7;
-                  return (
-                    <div key={ev.event_id} style={{
-                      fontSize: 10, fontWeight: 600,
-                      color: isStart || isSingle ? meta.color : "transparent",
-                      background: meta.bg,
-                      borderLeft:  isStart || isSingle ? `2.5px solid ${meta.color}` : `1px solid ${meta.color}22`,
-                      borderRight: isEnd   || isSingle ? "none" : "none",
-                      borderTop:    `1px solid ${meta.color}22`,
-                      borderBottom: `1px solid ${meta.color}22`,
-                      borderRadius,
-                      padding: "2px 4px",
-                      marginLeft,
-                      marginRight,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              const k            = `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              const pairs        = getDayEvents(eventMap, year, monthIndex, day);
+              const isSelected   = selectedDay === k;
+              const isToday      = k === todayKey;
+              const isFirstOfMonth = day === 1;
+              const isLastOfMonth  = day === daysInMonth;
+              const hasAny       = pairs.length > 0;
+
+              // Count events beyond MAX_SLOTS for this day
+              const overflowIds  = new Set(
+                pairs.filter(({ ev }) => (slotMap[ev.event_id] ?? MAX_SLOTS) >= MAX_SLOTS).map(({ ev }) => ev.event_id)
+              );
+              const overflow = overflowIds.size;
+
+              // Build slot→pair lookup for this day
+              const slotPairs = {};
+              for (const pair of pairs) {
+                const slot = slotMap[pair.ev.event_id];
+                if (slot !== undefined && slot < MAX_SLOTS) slotPairs[slot] = pair;
+              }
+
+              return (
+                <div
+                  key={k}
+                  className={hasAny ? "cal-day" : ""}
+                  onClick={() => onSelectDay(isSelected ? null : k)}
+                  style={{
+                    minHeight: 88,
+                    padding: "6px 0 4px",
+                    borderRight: "1px solid #faf0f0",
+                    borderBottom: "1px solid #faf0f0",
+                    background: isSelected ? "#fff0f0" : isToday ? "#fffbfb" : isWeekend ? "#fdfafa" : "white",
+                    cursor: hasAny ? "pointer" : "default",
+                    position: "relative",
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Day number */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "0 6px" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 24, height: 24, borderRadius: "50%",
+                      fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
+                      background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
+                      color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#c09090" : "#2a1a1a",
+                      transition: "background-color 0.15s ease, color 0.15s ease",
                     }}>
-                      {isStart || isSingle ? ev.title : " "}
-                    </div>
-                  );
-                })}
-                {overflow > 0 && (
-                  <div style={{ fontSize: 9.5, color: "#b09090", paddingLeft: 2 }}>+{overflow} more</div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                      {day}
+                    </span>
+                  </div>
+
+                  {/* Event strips — rendered slot by slot so alignment is stable.
+                      All strips (and placeholders) share a fixed height so
+                      continuation strips on adjacent days are pixel-aligned. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {Array.from({ length: usedSlots }, (_, slot) => {
+                      const pair = slotPairs[slot];
+                      if (!pair) {
+                        return <div key={slot} style={{ height: 18, flexShrink: 0 }} />;
+                      }
+                      const { ev, k: evKey } = pair;
+                      const meta     = eventMeta(ev.event_type);
+                      const isSingle = ev.start_date === ev.end_date;
+                      const isStart  = ev.start_date === evKey;
+                      const isEnd    = ev.end_date   === evKey;
+                      const isContinuationStart = !isStart && isFirstOfMonth;
+                      const isContinuationEnd   = !isEnd   && isLastOfMonth;
+                      const showTitle = isStart || isSingle || isContinuationStart;
+
+                      const borderRadius = isSingle
+                        ? 4
+                        : (isStart || isContinuationStart) && (isEnd || isContinuationEnd) ? 4
+                        : isStart || isContinuationStart ? "4px 0 0 4px"
+                        : isEnd   || isContinuationEnd   ? "0 4px 4px 0"
+                        : 0;
+
+                      const marginLeft  = (isStart || isContinuationStart || isSingle) ? 0 : -7;
+                      const marginRight = (isEnd   || isContinuationEnd   || isSingle) ? 0 : -7;
+
+                      return (
+                        <div key={ev.event_id} style={{
+                          fontSize: 10, fontWeight: 600,
+                          height: 18, flexShrink: 0, boxSizing: "border-box",
+                          color: showTitle ? meta.color : "transparent",
+                          background: meta.bg,
+                          borderLeft: isStart || isSingle
+                            ? `2.5px solid ${meta.color}`
+                            : isContinuationStart
+                              ? `1.5px dashed ${meta.color}`
+                              : `1px solid ${meta.color}22`,
+                          borderTop:    `1px solid ${meta.color}22`,
+                          borderBottom: `1px solid ${meta.color}22`,
+                          borderRight: "none",
+                          borderRadius,
+                          padding: "2px 4px",
+                          marginLeft,
+                          marginRight,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          display: "flex", alignItems: "center", gap: 3,
+                        }}>
+                          {isContinuationStart && (
+                            <i className="ti ti-arrow-right" style={{ fontSize: 8, opacity: 0.6, flexShrink: 0, transform: "scaleX(-1)" }} />
+                          )}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+                            {showTitle ? ev.title : " "}
+                          </span>
+                          {isContinuationEnd && (
+                            <i className="ti ti-arrow-right" style={{ fontSize: 8, opacity: 0.6, flexShrink: 0 }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {overflow > 0 && (
+                      <div style={{ fontSize: 9.5, color: "#b09090", paddingLeft: 2 }}>+{overflow} more</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
-
 // ── Event Card (right panel) ──────────────────────────────────────────────────
 
 function EventCard({ event, onEdit, onDelete }) {
@@ -478,11 +598,19 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const selectedMeta = eventMeta(form.event_type);
 
+  const [syYear, syYear2] = schoolYear.split("-").map(Number);
+  const syMin = `${syYear}-07-01`;
+  const syMax = `${syYear2}-06-30`;
+
   async function handleSave() {
     if (!form.title.trim())              { setError("Title is required."); return; }
     if (!form.start_date)                { setError("Start date is required."); return; }
     if (!form.end_date)                  { setError("End date is required."); return; }
     if (form.start_date > form.end_date) { setError("Start date must be on or before end date."); return; }
+    if (form.start_date < syMin || form.end_date > syMax) {
+      setError(`Dates must fall within S.Y. ${schoolYear} (${syMin} – ${syMax}).`);
+      return;
+    }
     setSaving(true); setError("");
     try {
       const payload = { school_year: schoolYear, title: form.title.trim(), event_type: form.event_type, start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null };
@@ -562,8 +690,8 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div><label style={LBL}>Start Date *</label><input type="date" value={form.start_date} onChange={(e) => setF("start_date", e.target.value)} style={INP} /></div>
-            <div><label style={LBL}>End Date *</label><input type="date" value={form.end_date} onChange={(e) => setF("end_date", e.target.value)} style={INP} /></div>
+            <div><label style={LBL}>Start Date *</label><input type="date" value={form.start_date} min={syMin} max={syMax} onChange={(e) => setF("start_date", e.target.value)} style={INP} /></div>
+            <div><label style={LBL}>End Date *</label><input type="date" value={form.end_date} min={syMin} max={syMax} onChange={(e) => setF("end_date", e.target.value)} style={INP} /></div>
           </div>
 
           <div><label style={LBL}>Description</label><textarea value={form.description} onChange={(e) => setF("description", e.target.value)} placeholder="Optional notes…" rows={3} style={{ ...INP, resize: "vertical" }} /></div>
@@ -909,13 +1037,24 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
     return matchType && matchSearch;
   });
 
-  // Group by month (using start_date)
+  // Group by every month the event spans (not just start_date month), so a
+  // multi-day event that crosses a month boundary appears in both months.
   const groups = {};
   for (const ev of filtered) {
-    const [, m] = ev.start_date.split("-").map(Number);
-    const key = m - 1; // 0-indexed month
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(ev);
+    const start = parseLocalDate(ev.start_date);
+    const end   = parseLocalDate(ev.end_date);
+    const seen  = new Set();
+    const cur   = new Date(start);
+    while (cur <= end) {
+      const monthKey = cur.getMonth(); // 0-indexed
+      if (!seen.has(monthKey)) {
+        seen.add(monthKey);
+        if (!groups[monthKey]) groups[monthKey] = [];
+        groups[monthKey].push(ev);
+      }
+      // Jump to the 1st of the next month to avoid iterating every day
+      cur.setMonth(cur.getMonth() + 1, 1);
+    }
   }
   const sortedMonths = Object.keys(groups).map(Number).sort((a, b) => a - b);
 
