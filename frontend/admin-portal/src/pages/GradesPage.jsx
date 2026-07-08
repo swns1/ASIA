@@ -16,20 +16,30 @@ import {
   computeGrade as _computeGrade,
   saveGrade as _saveGrade,
   updateGrade as _updateGrade,
+  getNarrativeCategories as _getNarrativeCategories,
+  getNarrativeReports as _getNarrativeReports,
+  createNarrativeReport as _createNarrativeReport,
+  updateNarrativeReport as _updateNarrativeReport,
+  deleteNarrativeReport as _deleteNarrativeReport,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents } from "../api/studentApi";
 
-const getStudents     = (p = {}) => _getStudents(p);
-const getEnrollments  = (p = {}) => _getEnrollments(p);
-const getSubjects     = (p = {}) => _getSubjects(p);
-const getGrades       = (p = {}) => _getGrades(p);
-const getScoreEntries = (p = {}) => _getScoreEntries(p);
-const createScore     = (p)      => _createScore(p);
-const updateScore     = (id, p)  => _updateScore(id, p);
-const deleteScore     = (id)     => _deleteScore(id);
-const computeGrade    = (p = {}) => _computeGrade(p);
-const saveGrade       = (p)      => _saveGrade(p);
-const updateGrade     = (id, p)  => _updateGrade(id, p);
+const getStudents            = (p = {}) => _getStudents(p);
+const getEnrollments         = (p = {}) => _getEnrollments(p);
+const getSubjects            = (p = {}) => _getSubjects(p);
+const getGrades              = (p = {}) => _getGrades(p);
+const getScoreEntries        = (p = {}) => _getScoreEntries(p);
+const createScore            = (p)      => _createScore(p);
+const updateScore            = (id, p)  => _updateScore(id, p);
+const deleteScore            = (id)     => _deleteScore(id);
+const computeGrade           = (p = {}) => _computeGrade(p);
+const saveGrade              = (p)      => _saveGrade(p);
+const updateGrade            = (id, p)  => _updateGrade(id, p);
+const getNarrativeCategories = (p = {}) => _getNarrativeCategories(p);
+const getNarrativeReports    = (p = {}) => _getNarrativeReports(p);
+const createNarrativeReport  = (p)      => _createNarrativeReport(p);
+const updateNarrativeReport  = (id, p)  => _updateNarrativeReport(id, p);
+const deleteNarrativeReport  = (id)     => _deleteNarrativeReport(id);
 
 // ── School year chip options (same helper as EnrollmentsPage) ─────────────────
 function buildSchoolYearOptions() {
@@ -1070,6 +1080,111 @@ function AddScoreForm({ componentId, enrollmentId, subjectId, gradingPeriod, onA
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
+// ── Narrative Rating constants ────────────────────────────────────────────────
+const NARRATIVE_RATINGS = [
+  { value: "outstanding",       label: "Outstanding",       color: "#1455a0", bg: "#e3f0fd" },
+  { value: "satisfactory",      label: "Satisfactory",      color: "#2e6b0d", bg: "#e8f5e0" },
+  { value: "needs_improvement", label: "Needs Improvement", color: "#854f0b", bg: "#faeeda" },
+];
+
+function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, categories, reports, loading, savingStates, onRatingChange }) {
+  const reportMap = {};
+  reports.forEach((r) => { reportMap[r.category] = r; });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: "easeOut" }}
+      style={{ background: "white", borderRadius: 16, border: "1px solid #ede8fd", overflow: "hidden", boxShadow: "0 2px 16px rgba(124,58,237,0.07)" }}
+    >
+      <div style={{ height: 4, background: "linear-gradient(to right,#7c3aed,#a78bfa,#c4b5fd)" }} />
+      <div style={{ padding: "18px 22px", borderBottom: "1px solid #f0ecfd", background: "linear-gradient(to right,#fdfaff,white)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: "#7c3aed" }} />
+              Narrative Report
+            </div>
+            <div style={{ fontSize: 12, color: "#b09090", marginTop: 3 }}>
+              Behavioral &amp; learning assessment for {enrollment.grade_level} · {enrollment.section}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {periods.map((p) => {
+              const active = gradingPeriod === p;
+              return (
+                <motion.button key={p} initial={false}
+                  animate={{ backgroundColor: active ? "#f0e8fd" : "#ffffff", color: active ? "#7c3aed" : "#9a7070", borderColor: active ? "#7c3aed" : "#e8e0f0" }}
+                  transition={{ duration: 0.16 }} whileTap={{ scale: 0.96 }} onClick={() => onPeriodChange(p)}
+                  style={{ height: 28, padding: "0 12px", borderRadius: 99, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                  {PERIOD_LABELS[p]}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {[1,2,3].map((i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#fdfafa", borderRadius: 10 }}>
+              <Sk w="28%" h={14} />
+              <div style={{ flex: 1, display: "flex", gap: 6 }}><Sk w={110} h={28} r={99} /><Sk w={110} h={28} r={99} /><Sk w={140} h={28} r={99} /></div>
+            </div>
+          ))}
+        </div>
+      ) : categories.length === 0 ? (
+        <div style={{ padding: "32px 22px", textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "#b09090" }}>
+            No narrative categories configured.{" "}
+            <a href="/narrative-categories" style={{ color: "#7c3aed", fontWeight: 600 }}>Go to Settings → Narrative Categories</a>{" "}to add some.
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: "12px 22px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {categories.map((cat) => {
+            const existing      = reportMap[cat.category_id] ?? null;
+            const currentRating = existing?.rating ?? null;
+            const saving        = savingStates[cat.category_id] ?? false;
+            return (
+              <div key={cat.category_id}
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px", background: "#fdfafa", borderRadius: 10, border: "1px solid #f0ecfd" }}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = "#c4b5fd"}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = "#f0ecfd"}>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
+                  {NARRATIVE_RATINGS.map((r) => {
+                    const active = currentRating === r.value;
+                    return (
+                      <motion.button key={r.value} onClick={() => !saving && onRatingChange(cat, existing, r.value)} disabled={saving}
+                        initial={false}
+                        animate={{ backgroundColor: active ? r.bg : "#ffffff", color: active ? r.color : "#9a7070", borderColor: active ? r.color : "#e8e0f0" }}
+                        transition={{ duration: 0.15 }} whileTap={{ scale: 0.96 }}
+                        style={{ height: 28, padding: "0 10px", borderRadius: 99, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4, opacity: saving && !active ? 0.5 : 1 }}>
+                        {saving && active && <i className="ti ti-loader-2" style={{ fontSize: 10, animation: "spin 1s linear infinite" }} />}
+                        {r.label}
+                      </motion.button>
+                    );
+                  })}
+                  {currentRating && (
+                    <motion.button onClick={() => !saving && onRatingChange(cat, existing, null)} disabled={saving}
+                      whileHover={{ backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+                      title="Clear rating"
+                      style={{ width: 28, height: 28, borderRadius: "50%", border: "1.5px solid #e8e0f0", background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: saving ? "not-allowed" : "pointer", color: "#c0a0c0" }}>
+                      <i className="ti ti-x" style={{ fontSize: 10 }} />
+                    </motion.button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function GradesPage() {
   const location = useLocation();
   const [tab, setTab] = useState(location.pathname === "/grades/entry" ? "entry" : location.pathname === "/grades/summary" ? "summary" : "overview");
@@ -1097,6 +1212,12 @@ export default function GradesPage() {
   const [savingFinal,    setSavingFinal]    = useState(false);
   const [savedMsg,       setSavedMsg]       = useState("");
   const [entryError,     setEntryError]     = useState("");
+
+    // ── Narrative report state ────────────────────────────────────────────────
+  const [narrativeCategories,   setNarrativeCategories]   = useState([]);
+  const [narrativeReports,      setNarrativeReports]      = useState([]);
+  const [loadingNarrative,      setLoadingNarrative]      = useState(false);
+  const [narrativeSavingStates, setNarrativeSavingStates] = useState({});
 
   // ── Load enrollments when student changes ──────────────────────────────────
   // Summary loads all enrollments (historical); Entry only loads active ones.
@@ -1164,6 +1285,41 @@ export default function GradesPage() {
   }, [enrollment, subject, gradingPeriod]);
 
   useEffect(() => { loadScores(); }, [loadScores]);
+
+    useEffect(() => {
+    getNarrativeCategories({ is_active: true, page_size: 100 })
+      .then((d) => setNarrativeCategories(Array.isArray(d) ? d : d?.results ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "entry" || !enrollment || !gradingPeriod) { setNarrativeReports([]); return; }
+    setLoadingNarrative(true);
+    getNarrativeReports({ enrollment: enrollment.enrollment_id, grading_period: gradingPeriod, page_size: 100 })
+      .then((d) => setNarrativeReports(Array.isArray(d) ? d : d?.results ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingNarrative(false));
+  }, [tab, enrollment, gradingPeriod]);
+
+  const handleNarrativeRating = useCallback(async (category, existingReport, newRating) => {
+    const catId = category.category_id;
+    setNarrativeSavingStates((prev) => ({ ...prev, [catId]: true }));
+    try {
+      if (newRating === null) {
+        if (existingReport) {
+          await deleteNarrativeReport(existingReport.report_id);
+          setNarrativeReports((prev) => prev.filter((r) => r.report_id !== existingReport.report_id));
+        }
+      } else if (existingReport) {
+        const updated = await updateNarrativeReport(existingReport.report_id, { rating: newRating });
+        setNarrativeReports((prev) => prev.map((r) => r.report_id === updated.report_id ? updated : r));
+      } else {
+        const created = await createNarrativeReport({ enrollment: enrollment.enrollment_id, category: catId, grading_period: gradingPeriod, rating: newRating });
+        setNarrativeReports((prev) => [...prev, created]);
+      }
+    } catch (e) { console.error("Failed to save narrative report:", e); }
+    finally { setNarrativeSavingStates((prev) => ({ ...prev, [catId]: false })); }
+  }, [enrollment, gradingPeriod]);
 
   const handleCompute = async () => {
     if (!enrollment || !subject || !gradingPeriod) return;

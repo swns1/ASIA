@@ -205,13 +205,15 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 
       {/* Tooltip */}
       {hovered && (() => {
-        const tx   = scaleX(hovered.x);
-        const ty   = scaleY(hovered.y);
-        const tipW = 185, tipH = 52;
+        const tx    = scaleX(hovered.x);
+        const ty    = scaleY(hovered.y);
+        const tipW  = 210, tipH = 70;
         const flipX = tx + tipW + 10 > W - PAD;
         const flipY = ty - tipH - 10 < PAD;
-        const rx = flipX ? tx - tipW - 10 : tx + 12;
-        const ry = flipY ? ty + 12 : ty - tipH - 8;
+        const rx    = flipX ? tx - tipW - 10 : tx + 12;
+        const ry    = flipY ? ty + 12 : ty - tipH - 8;
+        const attStr  = hovered.attendance_rate != null ? `${(hovered.attendance_rate * 100).toFixed(0)}%` : "—";
+        const narrStr = hovered.avg_narrative   != null ? `${hovered.avg_narrative}/3`                     : "—";
         return (
           <g>
             <rect
@@ -225,8 +227,11 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
             <text x={rx + 10} y={ry + 33} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
               {hovered.student_number}
             </text>
-            <text x={rx + 10} y={ry + 46} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">
+            <text x={rx + 10} y={ry + 47} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">
               Grade: {hovered.grade} · {hovered.clusterLabel}
+            </text>
+            <text x={rx + 10} y={ry + 62} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
+              Att: {attStr} · Narrative: {narrStr}
             </text>
           </g>
         );
@@ -261,6 +266,20 @@ function ClusterLegend({ clusters }) {
             <span style={{ margin: "0 6px", color: "#d0c8c0" }}>·</span>
             Range {c.min_grade}–{c.max_grade}
           </div>
+          <div style={{ fontSize: 11, color: "#9a9490", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {c.avg_attendance != null && (
+              <span>
+                <i className="ti ti-calendar-check" style={{ fontSize: 10, marginRight: 3 }} />
+                Att: <strong>{(c.avg_attendance * 100).toFixed(0)}%</strong>
+              </span>
+            )}
+            {c.avg_narrative != null && (
+              <span>
+                <i className="ti ti-clipboard-text" style={{ fontSize: 10, marginRight: 3 }} />
+                Narrative: <strong>{c.avg_narrative}/3</strong>
+              </span>
+            )}
+          </div>
         </motion.div>
       ))}
     </motion.div>
@@ -287,7 +306,10 @@ function StudentDetailPanel({ student, onClose }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{student.student_name}</div>
           <div style={{ fontSize: 11.5, color: "#8a8480", marginTop: 1 }}>
-            {student.student_number} · Grade: <strong>{student.grade}</strong> · {student.clusterLabel}
+            {student.student_number} · Grade: <strong>{student.grade}</strong>
+            {student.attendance_rate != null && <> · Att: <strong>{(student.attendance_rate * 100).toFixed(0)}%</strong></>}
+            {student.avg_narrative   != null && <> · Narrative: <strong>{student.avg_narrative}/3</strong></>}
+            {" · "}{student.clusterLabel}
           </div>
         </div>
       </div>
@@ -323,6 +345,8 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
             <th style={thStyle}>Student</th>
             <th style={thStyle}>Number</th>
             <th style={thStyle}>Grade</th>
+            <th style={thStyle}>Attendance</th>
+            <th style={thStyle}>Narrative</th>
             <th style={thStyle}>Cluster</th>
           </tr>
         </thead>
@@ -350,6 +374,16 @@ function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
                 <td style={tdStyle}>{st.student_name}</td>
                 <td style={tdStyle}>{st.student_number}</td>
                 <td style={{ ...tdStyle, fontWeight: 600 }}>{st.grade}</td>
+                <td style={tdStyle}>
+                  {st.attendance_rate != null
+                    ? `${(st.attendance_rate * 100).toFixed(0)}%`
+                    : <span style={{ color: "#c0b8b0" }}>—</span>}
+                </td>
+                <td style={tdStyle}>
+                  {st.avg_narrative != null
+                    ? `${st.avg_narrative}/3`
+                    : <span style={{ color: "#c0b8b0" }}>—</span>}
+                </td>
                 <td style={tdStyle}>
                   <span style={{
                     display: "inline-flex", alignItems: "center", gap: 5,
@@ -382,9 +416,11 @@ const tdStyle = { padding: "10px 16px", color: "#3a3a3a" };
 function ClusterInsightPanel({ result }) {
   const onFetch = () => {
     const clusterDetails = result.clusters
-      .map((c) =>
-        `${c.label}: ${c.student_count} student(s), avg grade=${c.avg_grade}, range=[${c.min_grade}–${c.max_grade}]`
-      )
+      .map((c) => {
+        const attStr  = c.avg_attendance != null ? `, att=${(c.avg_attendance * 100).toFixed(0)}%` : "";
+        const narrStr = c.avg_narrative  != null ? `, narrative=${c.avg_narrative}/3`              : "";
+        return `${c.label}: ${c.student_count} student(s), avg grade=${c.avg_grade}, range=[${c.min_grade}–${c.max_grade}]${attStr}${narrStr}`;
+      })
       .join("\n");
 
     return callGemini("clustering_insights", {
@@ -495,7 +531,7 @@ export default function AnalyticsPage() {
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
         >
           <div style={s.topbarTitle}>Analytics</div>
-          <div style={s.topbarSub}>K-Means clustering · Academic performance segmentation · S.Y. {schoolYear}</div>
+          <div style={s.topbarSub}>K-Means clustering · Grades, attendance & behavior segmentation · S.Y. {schoolYear}</div>
         </motion.div>
       </div>
 
@@ -753,7 +789,7 @@ export default function AnalyticsPage() {
                   <i className="ti ti-loader-2" style={{ fontSize: 20, color: "#e03131", animation: "spin 0.8s linear infinite" }} />
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Running K-Means clustering…</div>
-                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades and preparing results</div>
+                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Analyzing grades, attendance, and narrative data</div>
               </div>
             </motion.div>
           )}
@@ -793,7 +829,7 @@ export default function AnalyticsPage() {
         <AnimatePresence mode="wait">
           {result && (
             <motion.div
-              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
+              key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.school_level}-${result.meta.grade_level}-${result.meta.subject}-${result.meta.n_clusters}`}
               initial="hidden"
               animate="visible"
               exit={{ opacity: 0, y: 8, transition: { duration: 0.15 } }}
@@ -898,7 +934,7 @@ export default function AnalyticsPage() {
                   analysis run so stale output never bleeds into the new one. */}
               <motion.div variants={pageVariants.item}>
                 <ClusterInsightPanel
-                  key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}-${result.meta.grade_level}`}
+                  key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.school_level}-${result.meta.grade_level}-${result.meta.subject}-${result.meta.n_clusters}`}
                   result={result}
                 />
               </motion.div>

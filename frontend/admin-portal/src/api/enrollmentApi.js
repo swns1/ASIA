@@ -193,4 +193,30 @@ export const promoteConfirm = (payload) =>
 export const getReportCard = (enrollmentId) =>
   enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`).then((r) => r.data);
 
+// ── Narrative categories ──────────────────────────────────────────────────────
+export const getNarrativeCategories = (params = {}) =>
+  enrollmentClient.get("/narrative-categories/", { params }).then((r) => r.data);
+
+export const createNarrativeCategory = (payload) =>
+  enrollmentClient.post("/narrative-categories/", payload).then((r) => r.data);
+
+export const updateNarrativeCategory = (id, payload) =>
+  enrollmentClient.patch(`/narrative-categories/${id}/`, payload).then((r) => r.data);
+
+export const deleteNarrativeCategory = (id) =>
+  enrollmentClient.delete(`/narrative-categories/${id}/`).then((r) => r.data);
+
+// ── Narrative reports ─────────────────────────────────────────────────────────
+export const getNarrativeReports = (params = {}) =>
+  enrollmentClient.get("/narrative-reports/", { params }).then((r) => r.data);
+
+export const createNarrativeReport = (payload) =>
+  enrollmentClient.post("/narrative-reports/", payload).then((r) => r.data);
+
+export const updateNarrativeReport = (id, payload) =>
+  enrollmentClient.patch(`/narrative-reports/${id}/`, payload).then((r) => r.data);
+
+export const deleteNarrativeReport = (id) =>
+  enrollmentClient.delete(`/narrative-reports/${id}/`).then((r) => r.data);
+
 export { enrollmentClient };

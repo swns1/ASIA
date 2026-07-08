@@ -34,6 +34,7 @@ import AttendancePage    from "./pages/AttendancePage";
 import SF2PrintPage     from "./pages/print/SF2PrintPage";
 import SF9PrintPage from "./pages/print/SF9PrintPage";
 import SF10PrintPage from "./pages/print/SF10PrintPage";
+import NarrativeCategoriesPage from "./pages/NarrativeCategoriesPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="/print/sf2"     element={<P><SF2PrintPage /></P>} />
         <Route path="/print/sf9/:enrollmentId" element={<P><SF9PrintPage /></P>} />
         <Route path="/print/sf10/:studentId" element={<P><SF10PrintPage /></P>} />
+        <Route path="/narrative-categories" element={<P><NarrativeCategoriesPage /></P>} />
       </Routes>
     </BrowserRouter>
   );
