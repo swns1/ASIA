@@ -523,7 +523,7 @@ export default function LoginPage() {
                   "0 4px 20px rgba(224,49,49,0.28)";
               }}
             >
-              {loading ? "Signing in…" : "Sign in to ASIA"}
+              {loading ? "Signing in…" : "Sign in to your account"}
             </button>
           </form>
 
