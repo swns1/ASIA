@@ -1,5 +1,16 @@
 from rest_framework import serializers
-from .models import Enrollment, Student
+from .models import Enrollment, SectionAdvisory, Student
+
+
+class SectionAdvisorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SectionAdvisory
+        fields = (
+            "advisory_id", "teacher_user_id", "school_year",
+            "school_level", "grade_level", "section", "strand",
+            "created_at",
+        )
+        read_only_fields = ("advisory_id", "created_at")
 
 # ── Grade progression helpers ─────────────────────────────────────────────────
 GRADE_ORDER = [

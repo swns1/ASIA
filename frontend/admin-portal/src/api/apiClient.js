@@ -40,6 +40,13 @@ export function createApiClient({ baseURL, timeout = 10000, withCredentials = fa
           return Promise.reject(refreshError);
         }
       }
+      if (error.response?.status === 403) {
+        // Rewrite .message to the backend's real reason (or a friendly
+        // default) so the many call sites across the app that already do
+        // `e.message || "fallback"` show something useful instead of axios's
+        // generic "Request failed with status code 403".
+        error.message = error.response?.data?.detail || "This action is forbidden.";
+      }
       return Promise.reject(error);
     }
   );

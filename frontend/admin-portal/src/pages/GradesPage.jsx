@@ -1382,7 +1382,7 @@ export default function GradesPage() {
       }
     } catch (e) {
       console.error("Failed to save narrative report:", e);
-      toast.error("Failed to save narrative rating.");
+      toast.error(e?.message || "Failed to save narrative rating.");
     }
     finally { setNarrativeSavingStates((prev) => ({ ...prev, [catId]: false })); }
   }, [enrollment, gradingPeriod]);

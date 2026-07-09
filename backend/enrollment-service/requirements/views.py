@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
+
+from accounts.permissions import IsAdminRegistrarOrReadOnly
 from .models import RequirementType, StudentRequirementSubmission
 from .serializers import RequirementTypeSerializer, StudentRequirementSubmissionSerializer
 
@@ -15,6 +17,7 @@ class RequirementTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     serializer_class = StudentRequirementSubmissionSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]

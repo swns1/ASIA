@@ -1,7 +1,8 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 
+from accounts.permissions import IsAdminRegistrarOrReadOnly, IsAdvisoryTeacherOrStaff, teacher_student_ids
 from .models import Grade, NarrativeCategory, NarrativeReport
 from .serializers import GradeSerializer, NarrativeCategorySerializer, NarrativeReportSerializer
 
@@ -9,7 +10,8 @@ from .serializers import GradeSerializer, NarrativeCategorySerializer, Narrative
 class GradeViewSet(viewsets.ModelViewSet):
     queryset = Grade.objects.select_related("enrollment", "subject").all()
     serializer_class = GradeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdvisoryTeacherOrStaff]
+    owner_student_id_field = "enrollment__student_id"
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = {
         "enrollment": ["exact"], "enrollment__student": ["exact"],
@@ -18,11 +20,17 @@ class GradeViewSet(viewsets.ModelViewSet):
     ordering_fields = ("grade_id", "grading_period", "recorded_at", "numeric_grade")
     ordering = ("-recorded_at", "-grade_id")
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if getattr(self.request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+        return qs
+
 
 class NarrativeCategoryViewSet(viewsets.ModelViewSet):
     queryset           = NarrativeCategory.objects.all()
     serializer_class   = NarrativeCategorySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends    = (DjangoFilterBackend, OrderingFilter)
     filterset_fields   = {"is_active": ["exact"]}
     ordering_fields    = ("sort_order", "name", "category_id")
@@ -32,8 +40,15 @@ class NarrativeCategoryViewSet(viewsets.ModelViewSet):
 class NarrativeReportViewSet(viewsets.ModelViewSet):
     queryset           = NarrativeReport.objects.select_related("enrollment", "category").all()
     serializer_class   = NarrativeReportSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdvisoryTeacherOrStaff]
+    owner_student_id_field = "enrollment__student_id"
     filter_backends    = (DjangoFilterBackend, OrderingFilter)
     filterset_fields   = {"enrollment": ["exact"], "category": ["exact"], "grading_period": ["exact"]}
     ordering_fields    = ("report_id", "recorded_at")
     ordering           = ("category__sort_order", "category__name")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if getattr(self.request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+        return qs

@@ -47,7 +47,7 @@ describe("isAdminRole", () => {
   it("does not treat other roles as admin", () => {
     expect(isAdminRole("teacher")).toBe(false);
     expect(isAdminRole("registrar")).toBe(false);
-    expect(isAdminRole("cashier")).toBe(false);
+    expect(isAdminRole("accounting")).toBe(false);
     expect(isAdminRole("")).toBe(false);
     expect(isAdminRole(null)).toBe(false);
     expect(isAdminRole(undefined)).toBe(false);

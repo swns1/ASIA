@@ -37,7 +37,13 @@ import SF10PrintPage from "./pages/print/SF10PrintPage";
 import NarrativeCategoriesPage from "./pages/NarrativeCategoriesPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
-const P = ({ children }) => <PrivateRoute>{children}</PrivateRoute>;
+const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
+
+// Role sets matching the backend permission matrix.
+const STAFF_ADMIN     = ["super_admin", "admin"];
+const ACADEMIC_STAFF  = ["super_admin", "admin", "registrar"];
+const GRADE_ROLES     = ["super_admin", "admin", "registrar", "teacher"];
+const BILLING_ROLES   = ["super_admin", "admin", "accounting"];
 
 export default function App() {
   return (
@@ -55,32 +61,32 @@ export default function App() {
         <Route path="/enrollments/:id"        element={<P><EnrollmentDetailPage /></P>} />
         <Route path="/enrollments/:id/edit"   element={<P><EnrollmentFormPage /></P>} />
         <Route path="/subjects"               element={<P><SubjectsPage /></P>} />
-        <Route path="/grading-templates"      element={<P><GradingTemplatesPage /></P>} />
-        <Route path="/grades"                 element={<P><GradesPage /></P>} />
-        <Route path="/grades/entry"           element={<P><GradeEntryPage /></P>} />
-        <Route path="/scholarship-types"      element={<P><ScholarshipTypesPage /></P>} />
-        <Route path="/scholarships"           element={<P><ScholarshipsPage /></P>} />
-        <Route path="/settings"              element={<P><SchoolSettingsPage /></P>} />
-        <Route path="/fee-schedules"         element={<P><FeeSchedulesPage /></P>} />
-        <Route path="/invoices"              element={<P><InvoicesPage /></P>} />
-        <Route path="/payments"              element={<P><PaymentsPage /></P>} />
-        <Route path="/audit-trail"           element={<P><AuditTrailPage /></P>} />
-        <Route path="/requirements"          element={<P><RequirementsPage /></P>} />
-        <Route path="/users"                 element={<P><UsersPage /></P>} />
-        <Route path="/analytics"             element={<P><AnalyticsPage /></P>} />
+        <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingTemplatesPage /></P>} />
+        <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
+        <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradeEntryPage /></P>} />
+        <Route path="/scholarship-types"      element={<P roles={ACADEMIC_STAFF}><ScholarshipTypesPage /></P>} />
+        <Route path="/scholarships"           element={<P roles={ACADEMIC_STAFF}><ScholarshipsPage /></P>} />
+        <Route path="/settings"              element={<P roles={BILLING_ROLES}><SchoolSettingsPage /></P>} />
+        <Route path="/fee-schedules"         element={<P roles={BILLING_ROLES}><FeeSchedulesPage /></P>} />
+        <Route path="/invoices"              element={<P roles={BILLING_ROLES}><InvoicesPage /></P>} />
+        <Route path="/payments"              element={<P roles={BILLING_ROLES}><PaymentsPage /></P>} />
+        <Route path="/audit-trail"           element={<P roles={STAFF_ADMIN}><AuditTrailPage /></P>} />
+        <Route path="/requirements"          element={<P roles={ACADEMIC_STAFF}><RequirementsPage /></P>} />
+        <Route path="/users"                 element={<P roles={STAFF_ADMIN}><UsersPage /></P>} />
+        <Route path="/analytics"             element={<P roles={ACADEMIC_STAFF}><AnalyticsPage /></P>} />
         <Route path="/academic-calendar"     element={<P><AcademicCalendarPage /></P>} />
         <Route path="/report-card/:enrollmentId" element={<P><ReportCardPage /></P>} />
         <Route path="/print/cor/:enrollmentId"        element={<P><CORPrintPage /></P>} />
         <Route path="/print/grade-slip/:enrollmentId" element={<P><GradeSlipPrintPage /></P>} />
-        <Route path="/print/receipt/:paymentId"       element={<P><ReceiptPrintPage /></P>} />
-        <Route path="/print/invoice/:invoiceId"       element={<P><InvoicePrintPage /></P>} />
+        <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
+        <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
         <Route path="/school-forms"          element={<P><SchoolFormsPage /></P>} />
         <Route path="/print/sf1"             element={<P><SF1PrintPage /></P>} />
-        <Route path="/attendance"    element={<P><AttendancePage /></P>} />
+        <Route path="/attendance"    element={<P roles={GRADE_ROLES}><AttendancePage /></P>} />
         <Route path="/print/sf2"     element={<P><SF2PrintPage /></P>} />
         <Route path="/print/sf9/:enrollmentId" element={<P><SF9PrintPage /></P>} />
         <Route path="/print/sf10/:studentId" element={<P><SF10PrintPage /></P>} />
-        <Route path="/narrative-categories" element={<P><NarrativeCategoriesPage /></P>} />
+        <Route path="/narrative-categories" element={<P roles={GRADE_ROLES}><NarrativeCategoriesPage /></P>} />
       </Routes>
     </BrowserRouter>
   );

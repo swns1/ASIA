@@ -1,13 +1,34 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
-from .models import Enrollment, EnrollmentOverride
-from .serializers import EnrollmentSerializer, GRADE_ORDER, get_next_grade_level
+from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
+from .models import Enrollment, EnrollmentOverride, SectionAdvisory
+from .serializers import EnrollmentSerializer, GRADE_ORDER, get_next_grade_level, SectionAdvisorySerializer
 from .filters import EnrollmentFilter
+
+
+class SectionAdvisoryViewSet(viewsets.ModelViewSet):
+    """
+    /api/section-advisories/
+
+    Assigns a teacher (identity-service user_id) as adviser of a section for
+    a school year — this is what scopes a teacher's grade/attendance/
+    narrative-report access to only their own students. Reads open to any
+    authenticated staff (e.g. a teacher checking their own assignments);
+    writes restricted to admin/registrar.
+
+    Filters: ?teacher_user_id=5, ?school_year=2026-2027
+    """
+
+    queryset = SectionAdvisory.objects.all().order_by("-school_year", "grade_level", "section")
+    serializer_class = SectionAdvisorySerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ("teacher_user_id", "school_year", "school_level", "grade_level", "section")
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
@@ -24,7 +45,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     queryset = Enrollment.objects.select_related("student").all()
     serializer_class = EnrollmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_class = EnrollmentFilter
@@ -348,6 +369,14 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """GET /api/enrollments/{id}/grades/ — convenience for grade panels."""
         from grades.models import Grade
         from grades.serializers import GradeSerializer
+
+        if getattr(request.user, "role", None) == "teacher":
+            student_id = Enrollment.objects.filter(pk=pk).values_list("student_id", flat=True).first()
+            if student_id not in teacher_student_ids(request.user):
+                return Response(
+                    {"detail": "You can only view grades for your own advisory section."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         qs = (
             Grade.objects

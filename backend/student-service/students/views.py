@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Q
+
+from accounts.permissions import IsAdminRegistrarOrReadOnly
 from .models import (
     Student,
     Household,
@@ -32,6 +34,7 @@ from .serializers import (
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["student_number", "lrn", "first_name", "middle_name", "last_name", "email"]
     ordering_fields = ["student_id", "student_number", "last_name", "birth_date", "status"]
@@ -103,6 +106,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 class HouseholdViewSet(viewsets.ModelViewSet):
     queryset = Household.objects.all()
     serializer_class = HouseholdSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -115,6 +119,7 @@ class HouseholdViewSet(viewsets.ModelViewSet):
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.all()
     serializer_class = GuardianSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["full_name", "email_address", "mobile_number"]
     ordering_fields = ["guardian_id", "full_name"]
@@ -135,11 +140,13 @@ class GuardianViewSet(viewsets.ModelViewSet):
 class StudentSiblingViewSet(viewsets.ModelViewSet):
     queryset = StudentSibling.objects.all()
     serializer_class = StudentSiblingSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
 
 class SiblingViewSet(viewsets.ModelViewSet):
     queryset = Sibling.objects.all()
     serializer_class = SiblingSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -152,6 +159,7 @@ class SiblingViewSet(viewsets.ModelViewSet):
 class PreviousSchoolViewSet(viewsets.ModelViewSet):
     queryset = PreviousSchool.objects.all()
     serializer_class = PreviousSchoolSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -164,6 +172,7 @@ class PreviousSchoolViewSet(viewsets.ModelViewSet):
 class RequirementTypeViewSet(viewsets.ModelViewSet):
     queryset = RequirementType.objects.all()
     serializer_class = RequirementTypeSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["requirement_code", "requirement_name"]
     ordering_fields = ["requirement_type_id", "requirement_code", "requirement_name"]
@@ -179,6 +188,7 @@ class RequirementTypeViewSet(viewsets.ModelViewSet):
 class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
     queryset = StudentRequirementSubmission.objects.all()
     serializer_class = StudentRequirementSubmissionSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     ordering_fields = ["student_requirement_submission_id", "submitted_at", "verified_at"]

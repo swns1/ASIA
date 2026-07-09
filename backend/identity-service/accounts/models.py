@@ -1,5 +1,12 @@
 from django.db import models
 
+# Canonical role set for the whole system. `role` has no DB-level constraint
+# (see Meta.managed = False below), so this is the only place enforcing it —
+# identity-service's UserListView/UserDetailView validate against this set
+# whenever a role is assigned. Mirrored (informational only) in the other
+# three services' accounts/models.py ROLE_CHOICES.
+VALID_ROLES = {"super_admin", "admin", "registrar", "teacher", "accounting", "guardian"}
+
 
 class User(models.Model):
     user_id = models.BigAutoField(primary_key=True)

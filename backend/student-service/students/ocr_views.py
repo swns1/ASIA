@@ -13,11 +13,13 @@ import logging
 
 import requests
 from django.conf import settings
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from student_service.throttles import StatelessUserRateThrottle
+
+from accounts.permissions import HasRole
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +163,8 @@ def _sanitize_result(data: dict) -> dict:
 # ── View ──────────────────────────────────────────────────────────────────────
 
 class OCRScanView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles     = {"super_admin", "admin", "registrar"}
     throttle_classes   = [OcrRateThrottle]
     parser_classes     = [MultiPartParser, FormParser]
 

@@ -17,13 +17,13 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const ROLES = ["admin", "super_admin", "registrar", "cashier", "teacher"];
+const ROLES = ["admin", "super_admin", "registrar", "accounting", "teacher"];
 
 const ROLE_META = {
   admin:       { bg: "#fde8e8", color: "#9b2020",  label: "Admin",       activeBg: "#fde8e8", activeBorder: "#fca5a5" },
   super_admin: { bg: "#f0e8fd", color: "#6d28d9",  label: "Super Admin", activeBg: "#f0e8fd", activeBorder: "#c4b5fd" },
   registrar:   { bg: "#e3f0fd", color: "#1455a0",  label: "Registrar",   activeBg: "#e3f0fd", activeBorder: "#93c5fd" },
-  cashier:     { bg: "#e8f5e0", color: "#2e6b0d",  label: "Cashier",     activeBg: "#e8f5e0", activeBorder: "#86efac" },
+  accounting:  { bg: "#e8f5e0", color: "#2e6b0d",  label: "Accounting",  activeBg: "#e8f5e0", activeBorder: "#86efac" },
   teacher:     { bg: "#fef3e2", color: "#7a4a08",  label: "Teacher",     activeBg: "#fef3e2", activeBorder: "#fcd34d" },
 };
 

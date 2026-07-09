@@ -46,11 +46,7 @@ jobs:
         working-directory: backend/${{ matrix.service }}
         run: python manage.py check
 
-      # Only identity-service and billing-service have real test files so
-      # far (see Phase D of the improvement plan) — the other two run the
-      # system check above until tests are added for them too.
       - name: Run tests
-        if: matrix.service == 'identity-service' || matrix.service == 'billing-service'
         working-directory: backend/${{ matrix.service }}
         run: pytest
 

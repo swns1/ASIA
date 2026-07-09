@@ -4,7 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.permissions import IsAuthenticated
+
+from accounts.permissions import HasRole
 
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
@@ -86,7 +87,8 @@ Student Data:
 
 class GeminiInterpretView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = {"super_admin", "admin", "registrar"}
 
     def post(self, request):
         context_type = request.data.get("context_type", "")

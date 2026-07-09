@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
@@ -37,7 +37,7 @@ class EnrollmentScholarshipViewSet(viewsets.ModelViewSet):
         .all()
     )
     serializer_class = EnrollmentScholarshipSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("enrollment", "scholarship_type")

@@ -351,9 +351,10 @@ function ScheduleDetail({ schedule, onUpdated }) {
       setRecalcMsg(msg);
       toast.success(msg);
       setTimeout(() => setRecalcMsg(""), 4000);
-    } catch {
-      setRecalcMsg("Recalculation failed.");
-      toast.error("Recalculation failed.");
+    } catch (e) {
+      const msg = e?.message || "Recalculation failed.";
+      setRecalcMsg(msg);
+      toast.error(msg);
     }
     finally { setRecalcing(false); }
   };

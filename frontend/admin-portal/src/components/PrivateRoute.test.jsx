@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -8,17 +9,19 @@ function makeToken(expSecondsFromNow) {
   return `header.${btoa(JSON.stringify(payload))}.signature`;
 }
 
-function renderProtectedRoute(token) {
+function renderProtectedRoute(token, { allowedRoles, user } = {}) {
   if (token) sessionStorage.setItem("access_token", token);
+  if (user) sessionStorage.setItem("current_user", JSON.stringify(user));
 
   return render(
     <MemoryRouter initialEntries={["/protected"]}>
       <Routes>
         <Route path="/login" element={<div>Login page</div>} />
+        <Route path="/dashboard" element={<div>Dashboard page</div>} />
         <Route
           path="/protected"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRoles={allowedRoles}>
               <div>Secret content</div>
             </PrivateRoute>
           }
@@ -33,8 +36,6 @@ beforeEach(() => {
 });
 
 describe("PrivateRoute", () => {
-  // NOTE: this only proves the *frontend* gate works — it says nothing about
-  // per-role access, since PrivateRoute doesn't check role at all today.
   it("renders the protected content when the token is valid", () => {
     renderProtectedRoute(makeToken(60));
     expect(screen.queryByText("Secret content")).not.toBeNull();
@@ -48,5 +49,21 @@ describe("PrivateRoute", () => {
   it("redirects to /login when the token is expired", () => {
     renderProtectedRoute(makeToken(-60));
     expect(screen.queryByText("Login page")).not.toBeNull();
+  });
+
+  it("renders the protected content when the user's role is allowed", () => {
+    renderProtectedRoute(makeToken(60), {
+      allowedRoles: ["admin", "registrar"],
+      user: { role: "registrar" },
+    });
+    expect(screen.queryByText("Secret content")).not.toBeNull();
+  });
+
+  it("redirects to /dashboard when the user's role is not allowed", () => {
+    renderProtectedRoute(makeToken(60), {
+      allowedRoles: ["admin", "accounting"],
+      user: { role: "teacher" },
+    });
+    expect(screen.queryByText("Dashboard page")).not.toBeNull();
   });
 });

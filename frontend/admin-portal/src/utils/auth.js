@@ -57,3 +57,9 @@ export function isAdminRole(role) {
 export function canViewAuditTrail(user = getCurrentUser()) {
   return isAdminRole(user?.role);
 }
+
+export function hasAnyRole(user, roles) {
+  if (!roles || roles.length === 0) return true;
+  const normalized = String(user?.role || "").trim().toLowerCase();
+  return roles.map((r) => r.toLowerCase()).includes(normalized);
+}

@@ -1,10 +1,10 @@
 from decimal import Decimal, ROUND_HALF_UP
 
-from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
+from accounts.permissions import GRADE_READ_ROLES, HasRole
 from .models import Enrollment
 from grades.models import Grade
 from subjects.models import Subject
@@ -32,12 +32,20 @@ def _round2(value):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([HasRole])
 def report_card(request, enrollment_id):
     try:
         enrollment = Enrollment.objects.select_related("student").get(pk=enrollment_id)
     except Enrollment.DoesNotExist:
         raise NotFound("Enrollment not found.")
+
+    if getattr(request.user, "role", None) == "teacher":
+        from accounts.permissions import teacher_student_ids
+        if enrollment.student_id not in teacher_student_ids(request.user):
+            return Response(
+                {"detail": "You can only view report cards for your own advisory section."},
+                status=403,
+            )
 
     student = enrollment.student
 
@@ -122,3 +130,6 @@ def report_card(request, enrollment_id):
         "overall_gpa":  overall_gpa,
         "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
     })
+
+
+report_card.cls.required_roles = GRADE_READ_ROLES

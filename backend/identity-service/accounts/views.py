@@ -11,7 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
 from .audit import is_audit_admin, record_audit_event, resolve_user_from_request
-from .models import AuditLog, User
+from .models import AuditLog, User, VALID_ROLES
 from .serializers import LoginSerializer, AuditLogSerializer, UserSerializer
 from .throttles import LoginRateThrottle
 
@@ -163,6 +163,9 @@ class UserListView(APIView):
         if not name or not email or not role or not password:
             return Response({"detail": "name, email, role and password are required."}, status=400)
 
+        if role not in VALID_ROLES:
+            return Response({"detail": f"Invalid role '{role}'."}, status=400)
+
         if User.objects.filter(email__iexact=email).exists():
             return Response({"detail": "A user with this email already exists."}, status=400)
 
@@ -257,6 +260,8 @@ class UserDetailView(APIView):
             if not is_admin:
                 return Response({"detail": "Only admins can change roles."}, status=403)
             new_role = (data["role"] or "").strip()
+            if new_role and new_role not in VALID_ROLES:
+                return Response({"detail": f"Invalid role '{new_role}'."}, status=400)
             if new_role and new_role != target.role:
                 changes.append(f"role changed from '{target.role}' to '{new_role}'")
                 target.role = new_role

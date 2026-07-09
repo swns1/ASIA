@@ -3,7 +3,10 @@
     "allow": [
       "Bash(node_modules/.bin/vite build *)",
       "Bash(node_modules/.bin/eslint src/)",
-      "Bash(node_modules/.bin/eslint src/components/ConfirmModal.jsx src/components/EmptyState.jsx src/hooks/usePageTitle.js src/components/Sidebar.jsx)"
+      "Bash(node_modules/.bin/eslint src/components/ConfirmModal.jsx src/components/EmptyState.jsx src/hooks/usePageTitle.js src/components/Sidebar.jsx)",
+      "Bash(../../.venv/Scripts/python.exe manage.py sqlmigrate enrollments 0002)",
+      "Bash(npx vitest *)",
+      "Bash(../../.venv/Scripts/python.exe -m pytest accounts/test_roles.py -v)"
     ]
   }
 }

@@ -2,9 +2,10 @@ from django.db.models import Count, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from accounts.permissions import IsAdvisoryTeacherOrStaff, teacher_student_ids
+from enrollments.models import Enrollment
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer, BulkAttendanceSerializer
 
@@ -14,7 +15,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         "enrollment__student"
     ).all()
     serializer_class = AttendanceRecordSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdvisoryTeacherOrStaff]
+    owner_student_id_field = "enrollment__student_id"
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = {
         "date":                         ["exact", "gte", "lte"],
@@ -27,6 +29,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     }
     ordering_fields = ["date", "enrollment__student__last_name"]
     ordering = ["-date"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if getattr(self.request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(recorded_by=getattr(self.request, "user_id", None))
@@ -44,6 +52,23 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         records     = ser.validated_data["records"]
         user_id     = getattr(request, "user_id", None)
         created_ids = []
+
+        allowed_students = None
+        if getattr(request.user, "role", None) == "teacher":
+            allowed_students = teacher_student_ids(request.user)
+
+        if allowed_students is not None:
+            enrollment_ids = [item["enrollment_id"] for item in records]
+            student_by_enrollment = dict(
+                Enrollment.objects.filter(enrollment_id__in=enrollment_ids)
+                .values_list("enrollment_id", "student_id")
+            )
+            for item in records:
+                if student_by_enrollment.get(item["enrollment_id"]) not in allowed_students:
+                    return Response(
+                        {"detail": "You can only record attendance for your own advisory section."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         for item in records:
             obj, _ = AttendanceRecord.objects.update_or_create(
@@ -63,6 +88,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         qs = AttendanceRecord.objects.all()
+        if getattr(request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(request.user))
 
         school_year = request.query_params.get("school_year")
         grade_level = request.query_params.get("grade_level")

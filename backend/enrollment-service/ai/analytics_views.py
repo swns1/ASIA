@@ -88,11 +88,12 @@ from collections import defaultdict
 import numpy as np
 import requests
 from django.db.models import Count, Q
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from accounts.permissions import HasRole
 from attendance.models import AttendanceRecord
 from enrollments.models import Enrollment, Student
 from grades.models import Grade, NarrativeReport
@@ -232,7 +233,8 @@ class ClusterAnalyticsView(APIView):
     plot a chart with meaningful, directly-labelled axes.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles     = {"super_admin", "admin", "registrar"}
     throttle_classes   = [ClusterRateThrottle]
 
     def get(self, request):

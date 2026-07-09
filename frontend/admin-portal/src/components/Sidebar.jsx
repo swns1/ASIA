@@ -3,10 +3,16 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 const MotionLink = motion.create(Link);
-import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
+import { hasAnyRole, clearAuthSession, getCurrentUser } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
+
+// Role sets matching the backend permission matrix (see App.jsx).
+const STAFF_ADMIN    = ["super_admin", "admin"];
+const ACADEMIC_STAFF = ["super_admin", "admin", "registrar"];
+const GRADE_ROLES    = ["super_admin", "admin", "registrar", "teacher"];
+const BILLING_ROLES  = ["super_admin", "admin", "accounting"];
 
 const NAV = [
   {
@@ -16,32 +22,32 @@ const NAV = [
       { label: "Students",          icon: "ti-users",             path: "/students"            },
       { label: "Enrollments",       icon: "ti-clipboard-list",    path: "/enrollments"         },
       { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },
-      { label: "Grades",            icon: "ti-chart-bar",         path: "/grades"              },
-      { label: "Requirements",      icon: "ti-file-check",        path: "/requirements"        },
+      { label: "Grades",            icon: "ti-chart-bar",         path: "/grades",             allowedRoles: GRADE_ROLES },
+      { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
-      { label: "Attendance",    icon: "ti-calendar-check", path: "/attendance"   },
+      { label: "Attendance",    icon: "ti-calendar-check", path: "/attendance",   allowedRoles: GRADE_ROLES },
       { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
-      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics"           },
+      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: ACADEMIC_STAFF },
     ],
   },
   {
     section: "Finance",
     items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices"     },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments"     },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships" },
+      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices",     allowedRoles: BILLING_ROLES },
+      { label: "Payments",     icon: "ti-cash",     path: "/payments",     allowedRoles: BILLING_ROLES },
+      { label: "Scholarships", icon: "ti-discount", path: "/scholarships", allowedRoles: ACADEMIC_STAFF },
     ],
   },
   {
     section: "Settings",
     items: [
-      { label: "Users",             icon: "ti-user-cog",         path: "/users"             },
-      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail",       adminOnly: true },
-      { label: "School Settings",   icon: "ti-settings",         path: "/settings"          },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates" },
-      { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories" },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types" },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules"     },
+      { label: "Users",             icon: "ti-user-cog",         path: "/users",              allowedRoles: STAFF_ADMIN },
+      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail",         allowedRoles: STAFF_ADMIN },
+      { label: "School Settings",   icon: "ti-settings",         path: "/settings",            allowedRoles: BILLING_ROLES },
+      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates",   allowedRoles: GRADE_ROLES },
+      { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories", allowedRoles: GRADE_ROLES },
+      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types",   allowedRoles: ACADEMIC_STAFF },
+      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules",       allowedRoles: BILLING_ROLES },
     ],
   },
 ];
@@ -120,7 +126,7 @@ export default function Sidebar({ user: userProp }) {
 
   const navGroups = NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.adminOnly || canViewAuditTrail(currentUser)),
+    items: group.items.filter((item) => hasAnyRole(currentUser, item.allowedRoles)),
   }));
 
   function handleLogout() {

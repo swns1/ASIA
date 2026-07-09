@@ -1,7 +1,8 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from accounts.permissions import HasRole
 from .models import SchoolSetting
 from .serializers import SchoolSettingSerializer
 
@@ -16,7 +17,8 @@ class SchoolSettingViewSet(viewsets.ModelViewSet):
     """
     queryset = SchoolSetting.objects.all()
     serializer_class = SchoolSettingSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = {"super_admin", "admin", "accounting"}
 
     @action(detail=False, methods=["get"], url_path="current")
     def current(self, request):

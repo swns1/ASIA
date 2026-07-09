@@ -2,11 +2,15 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+
+from accounts.permissions import HasRole
+
+BILLING_ROLES = {"super_admin", "admin", "accounting"}
 
 from .models import (
     FeeSchedule, FeeScheduleItem,
@@ -36,7 +40,8 @@ class FeeScheduleViewSet(viewsets.ModelViewSet):
     """
     queryset = FeeSchedule.objects.prefetch_related("items").all()
     serializer_class = FeeScheduleSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("school_level", "grade_level", "is_active")
 
@@ -56,7 +61,8 @@ class FeeScheduleItemViewSet(viewsets.ModelViewSet):
     """
     queryset = FeeScheduleItem.objects.all()
     serializer_class = FeeScheduleItemSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("fee_schedule", "item_category")
 
@@ -79,7 +85,8 @@ class FeeScheduleItemViewSet(viewsets.ModelViewSet):
 class DiscountTypeViewSet(viewsets.ModelViewSet):
     queryset = DiscountType.objects.all().order_by("discount_name")
     serializer_class = DiscountTypeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("discount_mode",)
 
@@ -101,7 +108,8 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         .order_by("-invoice_id")
     )
     serializer_class = StudentInvoiceSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("status", "payment_plan", "enrollment_id")
     ordering_fields = ("invoice_id", "invoice_date", "due_date")
@@ -401,7 +409,8 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
       ordering              — payment_date | amount_paid | -payment_date | -amount_paid
     """
     serializer_class = StudentPaymentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_fields = ("invoice", "payment_method")
     search_fields = ("invoice__enrollment_id",)
@@ -477,7 +486,8 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = InvoiceInstallment.objects.all().order_by("invoice_id", "sequence")
     serializer_class = InvoiceInstallmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasRole]
+    required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("invoice", "status")
 

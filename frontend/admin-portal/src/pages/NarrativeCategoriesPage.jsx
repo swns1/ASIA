@@ -40,7 +40,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
       });
       toast.success("Category updated.");
       onUpdated(updated); setEditing(false);
-    } catch { toast.error("Failed to save category."); }
+    } catch (e) { toast.error(e?.message || "Failed to save category."); }
     finally { setSaving(false); }
   };
 
@@ -49,7 +49,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
     try {
       const updated = await updateCategory(cat.category_id, { is_active: !active });
       setActive(updated.is_active); onUpdated(updated);
-    } catch { toast.error("Failed to update category."); }
+    } catch (e) { toast.error(e?.message || "Failed to update category."); }
     finally { setSaving(false); }
   };
 
@@ -60,7 +60,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
       toast.success("Category deleted.");
       onDeleted(cat.category_id);
     }
-    catch { toast.error("Failed to delete category."); }
+    catch (e) { toast.error(e?.message || "Failed to delete category."); }
     finally { setDeleting(false); setConfirm(false); }
   };
 
@@ -162,9 +162,10 @@ export default function NarrativeCategoriesPage() {
       toast.success("Category created.");
       setCategories((prev) => [...prev, created]);
       setNewName(""); setNewDesc(""); setNewOrder(""); setAdding(false);
-    } catch {
-      setError("Failed to create category.");
-      toast.error("Failed to create category.");
+    } catch (e) {
+      const msg = e?.message || "Failed to create category.";
+      setError(msg);
+      toast.error(msg);
     }
     finally { setSaving(false); }
   };

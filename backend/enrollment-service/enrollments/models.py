@@ -115,3 +115,36 @@ class EnrollmentOverride(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"Override for enrollment #{self.enrollment_id} by user #{self.overridden_by}"
+
+
+# ─── Teacher advisory assignment ─────────────────────────────────────────────
+class SectionAdvisory(models.Model):
+    """
+    Assigns a teacher (identity-service user_id) as adviser of a section for a
+    school year — the basis for scoping a teacher's grade/attendance/narrative
+    report access to only the students in their own section(s). New data
+    genuinely owned by enrollment-service, so unlike most models in this file
+    this one IS Django-managed (real migrations).
+    """
+
+    advisory_id = models.BigAutoField(primary_key=True)
+
+    teacher_user_id = models.BigIntegerField(db_index=True)  # user_id from identity-service JWT
+
+    school_year  = models.CharField(max_length=20)
+    school_level = models.CharField(max_length=20, choices=Enrollment.SCHOOL_LEVEL_CHOICES)
+    grade_level  = models.CharField(max_length=20)
+    section      = models.CharField(max_length=50)
+    strand       = models.CharField(max_length=50, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "section_advisories"
+        unique_together = (
+            ("teacher_user_id", "school_year", "school_level", "grade_level", "section", "strand"),
+        )
+
+    def __str__(self):  # pragma: no cover
+        return f"Teacher #{self.teacher_user_id} → {self.school_year} {self.grade_level}-{self.section}"

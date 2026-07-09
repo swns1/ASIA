@@ -1,10 +1,12 @@
 from decimal import Decimal
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 
+from accounts.permissions import IsAdminRegistrarOrReadOnly, IsAdvisoryTeacherOrStaff, teacher_student_ids
+from enrollments.models import Enrollment
 from subjects.models import Subject
 from .models import GradingTemplate, GradingComponent, ScoreEntry
 from .serializers import (
@@ -17,7 +19,7 @@ from .serializers import (
 class GradingTemplateViewSet(viewsets.ModelViewSet):
     queryset = GradingTemplate.objects.prefetch_related("components").all()
     serializer_class = GradingTemplateSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = (DjangoFilterBackend, SearchFilter)
     search_fields = ("template_name",)
 
@@ -34,7 +36,7 @@ class GradingTemplateViewSet(viewsets.ModelViewSet):
 class GradingComponentViewSet(viewsets.ModelViewSet):
     queryset = GradingComponent.objects.all()
     serializer_class = GradingComponentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminRegistrarOrReadOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -48,7 +50,8 @@ class GradingComponentViewSet(viewsets.ModelViewSet):
 class ScoreEntryViewSet(viewsets.ModelViewSet):
     queryset = ScoreEntry.objects.select_related("grading_component").all()
     serializer_class = ScoreEntrySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdvisoryTeacherOrStaff]
+    owner_student_id_field = "enrollment__student_id"
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     ordering_fields = ("recorded_at", "score_entry_id")
     ordering = ("-recorded_at",)
@@ -64,6 +67,8 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
             qs = qs.filter(grading_period=params["grading_period"])
         if params.get("grading_component_id"):
             qs = qs.filter(grading_component_id=params["grading_component_id"])
+        if getattr(self.request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
         return qs
 
     @action(detail=False, methods=["get"], url_path="compute")
@@ -82,6 +87,14 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
                 {"error": "enrollment_id, subject_id, and grading_period are required."},
                 status=400,
             )
+
+        if getattr(request.user, "role", None) == "teacher":
+            student_id = Enrollment.objects.filter(pk=enrollment_id).values_list("student_id", flat=True).first()
+            if student_id not in teacher_student_ids(request.user):
+                return Response(
+                    {"detail": "You can only view grade computations for your own advisory section."},
+                    status=403,
+                )
 
         try:
             subject = Subject.objects.select_related("grading_template").get(

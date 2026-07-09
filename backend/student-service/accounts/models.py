@@ -1,0 +1,65 @@
+"""
+Stub User model that points at the existing `users` table managed by
+identity-service. It is `managed = False` so Django will never alter it.
+Mirrors the identical file in enrollment-service and billing-service.
+"""
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
+from django.db import models
+
+
+ROLE_CHOICES = [
+    ("super_admin", "Super Admin"),
+    ("admin",       "Admin"),
+    ("registrar",   "Registrar"),
+    ("teacher",     "Teacher"),
+    ("accounting",  "Accounting"),
+]
+
+
+class UserManager(BaseUserManager):
+    def get_by_natural_key(self, email):
+        return self.get(email=email)
+
+
+class User(models.Model):
+    user_id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=100)
+    email = models.EmailField(unique=True)
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES)
+    password = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = "users"
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
+
+    def __str__(self):
+        return self.email
+
+    @property
+    def is_active(self):
+        return True
+
+    @property
+    def is_staff(self):
+        return self.role in ["super_admin", "admin"]
+
+    @property
+    def is_superuser(self):
+        return self.role == "super_admin"
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    def has_perm(self, perm, obj=None):
+        return self.role == "super_admin"
+
+    def has_module_perms(self, app_label):
+        return self.role == "super_admin"
