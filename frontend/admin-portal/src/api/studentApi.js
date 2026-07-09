@@ -1,51 +1,10 @@
 // studentApi.js
-import axios from "axios";
+import { createApiClient } from "./apiClient";
 
-const studentClient = axios.create({
+const studentClient = createApiClient({
   baseURL: import.meta.env.VITE_STUDENT_API_URL || "http://localhost:8000/api",
   timeout: 10000,
 });
-
-// Request interceptor — attach token
-studentClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Response interceptor — auto refresh on 401
-studentClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const res = await axios.post(
-          (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth") + "/refresh/",
-          {},
-          { withCredentials: true }
-        );
-
-        const newToken = res.data.access;
-        sessionStorage.setItem("access_token", newToken);
-
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return studentClient(originalRequest);
-      } catch (refreshError) {
-        sessionStorage.removeItem("access_token");
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
 
 export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "" } = {}) {
   const res = await studentClient.get("/students/", {

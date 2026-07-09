@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
@@ -217,6 +218,7 @@ function Panel({ title, action, onAction, children }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
+  usePageTitle("Dashboard");
   const navigate    = useNavigate();
   const currentUser = getCurrentUser();
   const now         = useClock();
@@ -444,7 +446,7 @@ export default function DashboardPage() {
           {/* Topbar */}
           <div style={s.topbar}>
             <div>
-              <div style={s.topbarTitle}>Dashboard</div>
+              <h1 style={{ ...s.topbarTitle, margin: 0 }}>Dashboard</h1>
               <div style={s.topbarSub}>S.Y. {schoolYear} · {now.toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>

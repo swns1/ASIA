@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from "react";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
@@ -50,6 +51,15 @@ function currentSchoolYear() {
   const now = new Date();
   const yr  = now.getFullYear();
   return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+}
+
+// Silhouette score ranges from -1 to 1; these thresholds follow the
+// conventional rule of thumb (< 0.25 weak / < 0.5 fair / >= 0.5 good
+// separation) rather than anything specific to this dataset.
+function silhouetteLabel(score) {
+  if (score == null) return "N/A";
+  const tier = score < 0.25 ? "Weak" : score < 0.5 ? "Fair" : "Good";
+  return `${score.toFixed(2)} · ${tier}`;
 }
 
 // ── Shared style tokens (aligned with system design) ──────────────────────────
@@ -112,131 +122,207 @@ const s = {
 };
 
 // ── Scatter Plot ──────────────────────────────────────────────────────────────
+// Plots each student by grade (x), attendance rate (y), and narrative rating
+// (bubble size) — the same three signals the clustering itself uses, all
+// visible directly instead of behind a PCA projection. Fixed axis ranges
+// (grade 60-100, attendance 0-100%) keep the chart the same shape run to run
+// instead of auto-zooming to whatever the current filter happens to return.
+const PASSING_GRADE = 75; // DepEd "Did Not Meet Expectations" cutoff
+
+// avg_narrative is 1 (Needs Improvement) to 3 (Outstanding); missing data
+// falls back to the middle size rather than being hidden.
+function narrativeRadius(avgNarrative) {
+  if (avgNarrative == null)   return 5.5;
+  if (avgNarrative < 1.5)     return 4;
+  if (avgNarrative < 2.5)     return 6;
+  return 8;
+}
+
 function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
+  // Hooks must run unconditionally on every render, before either early
+  // return below — this was already true of the pre-existing
+  // `if (!clusters...) return null` guard, and matters more now that
+  // there's a second early return for the no-attendance-data case.
+  const [hovered, setHovered] = useState(null);
+
   if (!clusters || clusters.length === 0) return null;
 
-  const allPoints = clusters.flatMap((c) =>
+  const allPointsRaw = clusters.flatMap((c) =>
     c.students.map((st) => ({ ...st, color: c.color, clusterLabel: c.label }))
   );
 
+  // Students missing an attendance record can't be positioned on this chart
+  // (they still appear in the legend and student list below).
+  const allPoints = allPointsRaw
+    .filter((p) => p.attendance_rate != null)
+    .map((p) => ({ ...p, plotX: p.grade, plotY: p.attendance_rate * 100 }));
+  const omittedCount = allPointsRaw.length - allPoints.length;
+
+  if (allPoints.length === 0) {
+    return (
+      <div style={{ padding: "40px 20px", textAlign: "center", color: "#c0b8b0", fontSize: 13 }}>
+        No attendance data available to chart these students.
+      </div>
+    );
+  }
+
   const W = 700, H = 420, PAD = 50;
-  const xs = allPoints.map((p) => p.x);
-  const ys = allPoints.map((p) => p.y);
+  const xs = allPoints.map((p) => p.plotX);
+  const ys = allPoints.map((p) => p.plotY);
 
   // use reduce instead of spread — Math.min(...largeArray) can silently
-  // fail in Firefox/Edge/older Chrome due to call-stack size limits
-  const xMin = xs.reduce((a, b) => Math.min(a, b), Infinity);
-  const xMax = xs.reduce((a, b) => Math.max(a, b), -Infinity);
-  const yMin = ys.reduce((a, b) => Math.min(a, b), Infinity);
-  const yMax = ys.reduce((a, b) => Math.max(a, b), -Infinity);
+  // fail in Firefox/Edge/older Chrome due to call-stack size limits.
+  // Bounded to the familiar 60-100 grade / 0-100% attendance range, only
+  // expanding further if a student actually falls outside it.
+  const xMin = Math.min(xs.reduce((a, b) => Math.min(a, b), Infinity), 60);
+  const xMax = Math.max(xs.reduce((a, b) => Math.max(a, b), -Infinity), 100);
+  const yMin = Math.min(ys.reduce((a, b) => Math.min(a, b), Infinity), 0);
+  const yMax = Math.max(ys.reduce((a, b) => Math.max(a, b), -Infinity), 100);
 
-  // 10% padding so edge points don't sit directly on the axis lines
-  const xPad   = (xMax - xMin || 1) * 0.1;
-  const yPad   = (yMax - yMin || 1) * 0.1;
+  // 8% padding so edge points don't sit directly on the axis lines
+  const xPad   = (xMax - xMin || 1) * 0.08;
+  const yPad   = (yMax - yMin || 1) * 0.08;
   const xRange = (xMax - xMin || 1) + xPad * 2;
   const yRange = (yMax - yMin || 1) + yPad * 2;
 
   const scaleX = (v) => PAD + ((v - (xMin - xPad)) / xRange) * (W - 2 * PAD);
   const scaleY = (v) => H - PAD - ((v - (yMin - yPad)) / yRange) * (H - 2 * PAD);
 
-  const [hovered, setHovered] = useState(null);
+  const showPassingLine = PASSING_GRADE > xMin - xPad && PASSING_GRADE < xMax + xPad;
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 8, border: "1px solid #f0ece4" }}
-    >
-      {/* Grid lines */}
-      {[0.25, 0.5, 0.75].map((frac) => (
-        <g key={frac}>
-          <line
-            x1={PAD} x2={W - PAD}
-            y1={scaleY(yMin - yPad + frac * yRange)}
-            y2={scaleY(yMin - yPad + frac * yRange)}
-            stroke="#f0ece4" strokeDasharray="4,4"
-          />
-          <line
-            y1={PAD} y2={H - PAD}
-            x1={scaleX(xMin - xPad + frac * xRange)}
-            x2={scaleX(xMin - xPad + frac * xRange)}
-            stroke="#f0ece4" strokeDasharray="4,4"
-          />
-        </g>
-      ))}
-
-      {/* Axes */}
-      <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#d8d4cc" />
-      <line x1={PAD} x2={PAD}     y1={PAD}     y2={H - PAD} stroke="#d8d4cc" />
-
-      {/* Axis labels */}
-      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans">
-        PCA Component 1
-      </text>
-      <text
-        x={14} y={H / 2} textAnchor="middle" fontSize="11" fill="#a09890"
-        fontFamily="DM Sans" transform={`rotate(-90, 14, ${H / 2})`}
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: "100%", maxHeight: 420, background: "#fefcf9", borderRadius: 8, border: "1px solid #f0ece4" }}
       >
-        PCA Component 2
-      </text>
-
-      {/* Data points */}
-      {allPoints.map((pt) => {
-        const cx = scaleX(pt.x);
-        const cy = scaleY(pt.y);
-        const isSelected = selectedStudent?.student_id === pt.student_id;
-        const isHov      = hovered?.student_id === pt.student_id;
-        const r          = isSelected ? 8 : isHov ? 7 : 5;
-        return (
-          <g key={pt.student_id}>
-            <circle
-              cx={cx} cy={cy} r={r}
-              fill={pt.color}
-              fillOpacity={isSelected ? 1 : 0.75}
-              stroke={isSelected ? "#1a0a0a" : isHov ? "#fff" : "none"}
-              strokeWidth={isSelected ? 2.5 : 1.5}
-              style={{ cursor: "pointer", transition: "r 0.15s, stroke 0.15s" }}
-              onMouseEnter={() => setHovered(pt)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => onSelectStudent(pt)}
+        {/* Grid lines */}
+        {[0.25, 0.5, 0.75].map((frac) => (
+          <g key={frac}>
+            <line
+              x1={PAD} x2={W - PAD}
+              y1={scaleY(yMin - yPad + frac * yRange)}
+              y2={scaleY(yMin - yPad + frac * yRange)}
+              stroke="#f0ece4" strokeDasharray="4,4"
+            />
+            <line
+              y1={PAD} y2={H - PAD}
+              x1={scaleX(xMin - xPad + frac * xRange)}
+              x2={scaleX(xMin - xPad + frac * xRange)}
+              stroke="#f0ece4" strokeDasharray="4,4"
             />
           </g>
-        );
-      })}
+        ))}
 
-      {/* Tooltip */}
-      {hovered && (() => {
-        const tx    = scaleX(hovered.x);
-        const ty    = scaleY(hovered.y);
-        const tipW  = 210, tipH = 70;
-        const flipX = tx + tipW + 10 > W - PAD;
-        const flipY = ty - tipH - 10 < PAD;
-        const rx    = flipX ? tx - tipW - 10 : tx + 12;
-        const ry    = flipY ? ty + 12 : ty - tipH - 8;
-        const attStr  = hovered.attendance_rate != null ? `${(hovered.attendance_rate * 100).toFixed(0)}%` : "—";
-        const narrStr = hovered.avg_narrative   != null ? `${hovered.avg_narrative}/3`                     : "—";
-        return (
+        {/* Passing-grade reference line */}
+        {showPassingLine && (
           <g>
-            <rect
-              x={rx} y={ry} width={tipW} height={tipH} rx={8}
-              fill="white" stroke="#e0dcd4" strokeWidth={1}
-              filter="drop-shadow(0 2px 6px rgba(0,0,0,0.08))"
+            <line
+              x1={scaleX(PASSING_GRADE)} x2={scaleX(PASSING_GRADE)}
+              y1={PAD} y2={H - PAD}
+              stroke="#e03131" strokeWidth={1.25} strokeDasharray="3,3" opacity={0.45}
             />
-            <text x={rx + 10} y={ry + 18} fontSize="12" fontWeight="700" fill="#1a0a0a" fontFamily="DM Sans">
-              {hovered.student_name}
-            </text>
-            <text x={rx + 10} y={ry + 33} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
-              {hovered.student_number}
-            </text>
-            <text x={rx + 10} y={ry + 47} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">
-              Grade: {hovered.grade} · {hovered.clusterLabel}
-            </text>
-            <text x={rx + 10} y={ry + 62} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
-              Att: {attStr} · Narrative: {narrStr}
+            <text
+              x={scaleX(PASSING_GRADE) + 5} y={PAD + 12}
+              fontSize="10" fill="#e03131" fontFamily="DM Sans" opacity={0.75}
+            >
+              Passing ({PASSING_GRADE})
             </text>
           </g>
-        );
-      })()}
-    </svg>
+        )}
+
+        {/* Axes */}
+        <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#d8d4cc" />
+        <line x1={PAD} x2={PAD}     y1={PAD}     y2={H - PAD} stroke="#d8d4cc" />
+
+        {/* Axis labels */}
+        <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans">
+          Average Grade
+        </text>
+        <text
+          x={14} y={H / 2} textAnchor="middle" fontSize="11" fill="#a09890"
+          fontFamily="DM Sans" transform={`rotate(-90, 14, ${H / 2})`}
+        >
+          Attendance Rate (%)
+        </text>
+
+        {/* Data points */}
+        {allPoints.map((pt) => {
+          const cx = scaleX(pt.plotX);
+          const cy = scaleY(pt.plotY);
+          const isSelected = selectedStudent?.student_id === pt.student_id;
+          const isHov      = hovered?.student_id === pt.student_id;
+          const baseR      = narrativeRadius(pt.avg_narrative);
+          const r          = isSelected ? baseR + 3 : isHov ? baseR + 2 : baseR;
+          return (
+            <g key={pt.student_id}>
+              <circle
+                cx={cx} cy={cy} r={r}
+                fill={pt.color}
+                fillOpacity={isSelected ? 1 : 0.75}
+                stroke={isSelected ? "#1a0a0a" : isHov ? "#fff" : "none"}
+                strokeWidth={isSelected ? 2.5 : 1.5}
+                style={{ cursor: "pointer", transition: "r 0.15s, stroke 0.15s" }}
+                onMouseEnter={() => setHovered(pt)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => onSelectStudent(pt)}
+              />
+            </g>
+          );
+        })}
+
+        {/* Tooltip */}
+        {hovered && (() => {
+          const tx    = scaleX(hovered.plotX);
+          const ty    = scaleY(hovered.plotY);
+          const tipW  = 210, tipH = 70;
+          const flipX = tx + tipW + 10 > W - PAD;
+          const flipY = ty - tipH - 10 < PAD;
+          const rx    = flipX ? tx - tipW - 10 : tx + 12;
+          const ry    = flipY ? ty + 12 : ty - tipH - 8;
+          const attStr  = hovered.attendance_rate != null ? `${(hovered.attendance_rate * 100).toFixed(0)}%` : "—";
+          const narrStr = hovered.avg_narrative   != null ? `${hovered.avg_narrative}/3`                     : "—";
+          return (
+            <g>
+              <rect
+                x={rx} y={ry} width={tipW} height={tipH} rx={8}
+                fill="white" stroke="#e0dcd4" strokeWidth={1}
+                filter="drop-shadow(0 2px 6px rgba(0,0,0,0.08))"
+              />
+              <text x={rx + 10} y={ry + 18} fontSize="12" fontWeight="700" fill="#1a0a0a" fontFamily="DM Sans">
+                {hovered.student_name}
+              </text>
+              <text x={rx + 10} y={ry + 33} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
+                {hovered.student_number}
+              </text>
+              <text x={rx + 10} y={ry + 47} fontSize="11" fontWeight="600" fill={hovered.color} fontFamily="DM Sans">
+                Grade: {hovered.grade} · {hovered.clusterLabel}
+              </text>
+              <text x={rx + 10} y={ry + 62} fontSize="11" fill="#8a8480" fontFamily="DM Sans">
+                Att: {attStr} · Narrative: {narrStr}
+              </text>
+            </g>
+          );
+        })()}
+      </svg>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 8, fontSize: 11, color: "#a09890" }}>
+        <span style={{ fontWeight: 600, color: "#8a8480" }}>Bubble size = narrative rating:</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#b0a898" /></svg> Needs Improvement
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#b0a898" /></svg> Satisfactory
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <svg width="18" height="18"><circle cx="9" cy="9" r="8" fill="#b0a898" /></svg> Outstanding
+        </span>
+      </div>
+      {omittedCount > 0 && (
+        <div style={{ fontSize: 11, color: "#b0a898", marginTop: 6 }}>
+          {omittedCount} student{omittedCount !== 1 ? "s" : ""} not shown above — no attendance record for this school year.
+        </div>
+      )}
+    </>
   );
 }
 
@@ -280,6 +366,13 @@ function ClusterLegend({ clusters }) {
               </span>
             )}
           </div>
+          {c.narrative_distribution && (
+            <div style={{ fontSize: 10.5, color: "#a09890", marginTop: 4, display: "flex", gap: 7 }}>
+              <span title="Outstanding"><span style={{ color: "#22c55e" }}>●</span> {c.narrative_distribution.outstanding}</span>
+              <span title="Satisfactory"><span style={{ color: "#f59e0b" }}>●</span> {c.narrative_distribution.satisfactory}</span>
+              <span title="Needs Improvement"><span style={{ color: "#ef4444" }}>●</span> {c.narrative_distribution.needs_improvement}</span>
+            </div>
+          )}
         </motion.div>
       ))}
     </motion.div>
@@ -450,6 +543,7 @@ function ClusterInsightPanel({ result }) {
 // ── PAGE COMPONENT ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AnalyticsPage() {
+  usePageTitle("Analytics");
   const navigate = useNavigate();
 
   const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
@@ -849,6 +943,7 @@ export default function AnalyticsPage() {
                   { label: "Subject",     value: result.meta.subject,                                                                                                   icon: "ti-book"         },
                   { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === result.meta.grading_period)?.label || result.meta.grading_period,               icon: "ti-calendar"     },
                   { label: "Clusters",    value: result.meta.n_clusters,                                                                                                icon: "ti-chart-dots-3" },
+                  { label: "Cluster Quality", value: silhouetteLabel(result.meta.silhouette_score),                                                                     icon: "ti-gauge"        },
                 ].map((m) => (
                   <motion.div key={m.label} variants={listVariants.item} style={{
                     flex: "1 1 130px", padding: "11px 14px", borderRadius: 10,
@@ -883,6 +978,12 @@ export default function AnalyticsPage() {
                     borderRadius: 20, background: "#fff0f0", color: "#e03131",
                   }}>
                     k = {result.meta.n_clusters}
+                    {result.meta.suggested_n_clusters != null &&
+                      result.meta.suggested_n_clusters !== result.meta.n_clusters && (
+                        <span style={{ fontWeight: 500, opacity: 0.75 }}>
+                          {" "}(suggested: {result.meta.suggested_n_clusters})
+                        </span>
+                      )}
                   </span>
                 </div>
                 <div style={s.cardBody}>
@@ -894,8 +995,8 @@ export default function AnalyticsPage() {
               <motion.div variants={pageVariants.item} style={s.card}>
                 <div style={s.cardHeader}>
                   <div>
-                    <div style={s.cardHeaderTitle}>Student Distribution</div>
-                    <div style={s.cardHeaderSub}>PCA projection · click any dot to view student details</div>
+                    <div style={s.cardHeaderTitle}>Grade vs. Attendance Map</div>
+                    <div style={s.cardHeaderSub}>Each bubble is a student · position = grade &amp; attendance · size = narrative rating · click for details</div>
                   </div>
                 </div>
                 <div style={s.cardBody}>

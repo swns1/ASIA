@@ -1,6 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
@@ -267,10 +270,13 @@ function TemplateModal({ template, onClose, onRefresh }) {
         });
       }
 
+      toast.success(isEdit ? "Grading template updated." : "Grading template created.");
       onRefresh();
       onClose();
     } catch (e) {
-      setError(e.message || "Failed to save template.");
+      const msg = e.message || "Failed to save template.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -458,54 +464,15 @@ function TemplateModal({ template, onClose, onRefresh }) {
 // ── Delete Modal ──────────────────────────────────────────────────────────────
 function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-    >
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-      >
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Delete Template?</div>
-        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
-          You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.
-        </div>
-
-        <AnimatePresence>
-          {deleteError && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-              style={{ width: "100%", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
-            >
-              <i className="ti ti-alert-circle" style={{ fontSize: 14, flexShrink: 0 }} />
-              {deleteError}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <motion.button onClick={onCancel} disabled={deleting}
-            whileHover={!deleting ? { borderColor: "#e03131", color: "#e03131" } : {}}
-            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif", opacity: deleting ? 0.5 : 1 }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={onConfirm} disabled={deleting}
-            whileHover={!deleting ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.38)" } : {}}
-            whileTap={!deleting ? { scale: 0.96 } : {}}
-            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: deleting ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {deleting
-              ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Deleting…</>
-              : "Yes, delete"
-            }
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
+    <ConfirmModal
+      icon="ti-trash"
+      title="Delete template?"
+      message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.</>}
+      error={deleteError}
+      loading={deleting}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -513,6 +480,7 @@ function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function GradingTemplatesPage() {
+  usePageTitle("Grading Templates");
   const navigate = useNavigate();
 
   const [templates,   setTemplates]   = useState([]);
@@ -573,6 +541,7 @@ export default function GradingTemplatesPage() {
     setDeleteError("");
     try {
       await deleteTemplate(toDelete.grading_template_id);
+      toast.success("Grading template deleted.");
       setToDelete(null);
       fetchTemplates();
     } catch (e) {

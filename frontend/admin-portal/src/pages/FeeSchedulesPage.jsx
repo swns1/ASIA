@@ -1,6 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
@@ -75,10 +78,13 @@ function NewScheduleModal({ onClose, onSaved }) {
     setSaving(true); setError("");
     try {
       const created = await createFeeSchedule({ school_level: schoolLevel, grade_level: gradeLevel, is_active: true });
+      toast.success("Fee schedule created.");
       onSaved(created);
       onClose();
     } catch (e) {
-      setError(e.message || "Failed to create. This level/grade may already exist.");
+      const msg = e.message || "Failed to create. This level/grade may already exist.";
+      setError(msg);
+      toast.error(msg);
     } finally { setSaving(false); }
   };
 
@@ -182,6 +188,8 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
   const [name,    setName]    = useState(item.item_name);
   const [amount,  setAmount]  = useState(String(item.amount));
   const [saving,  setSaving]  = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const catMeta = CATEGORY_META[item.item_category] ?? CATEGORY_META.other;
   const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
@@ -194,9 +202,15 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
     onUpdated();
   };
 
-  const handleDelete = async () => {
-    await deleteItem(item.fee_schedule_item_id);
-    onDeleted();
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteItem(item.fee_schedule_item_id);
+      onDeleted();
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
   };
 
   return (
@@ -240,7 +254,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
             style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
             <i className="ti ti-pencil" style={{ fontSize: 11 }} />
           </motion.button>
-          <motion.button onClick={handleDelete}
+          <motion.button onClick={() => setConfirmDelete(true)} aria-label={`Delete fee item ${item.item_name}`}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
             style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
@@ -248,6 +262,18 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           </motion.button>
         </>
       )}
+      <AnimatePresence>
+        {confirmDelete && (
+          <ConfirmModal
+            icon="ti-trash"
+            title="Delete fee item?"
+            message={<>Remove <strong>{item.item_name}</strong> ({fmt(item.amount)}) from this fee schedule? This cannot be undone.</>}
+            loading={deleting}
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -321,9 +347,14 @@ function ScheduleDetail({ schedule, onUpdated }) {
     setRecalcing(true); setRecalcMsg("");
     try {
       const result = await recalculateSchedule(schedule.fee_schedule_id);
-      setRecalcMsg(`${result.updated} invoice${result.updated !== 1 ? "s" : ""} updated`);
+      const msg = `${result.updated} invoice${result.updated !== 1 ? "s" : ""} updated`;
+      setRecalcMsg(msg);
+      toast.success(msg);
       setTimeout(() => setRecalcMsg(""), 4000);
-    } catch { setRecalcMsg("Recalculation failed."); }
+    } catch {
+      setRecalcMsg("Recalculation failed.");
+      toast.error("Recalculation failed.");
+    }
     finally { setRecalcing(false); }
   };
 
@@ -446,6 +477,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
 
 // ════════════════════════════════════════════════════════════════════════════
 export default function FeeSchedulesPage() {
+  usePageTitle("Fee Schedules");
   const navigate = useNavigate();
   const [schedules,    setSchedules]    = useState([]);
   const [selected,     setSelected]     = useState(null);

@@ -1,5 +1,8 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
@@ -103,23 +106,17 @@ function StatusBadge({ submitted }) {
 // ── Logout modal ──────────────────────────────────────────────────────────────
 
 // ── Remove confirm modal ──────────────────────────────────────────────────────
-function RemoveModal({ req, onConfirm, onCancel }) {
+function RemoveModal({ req, onConfirm, onCancel, removing }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, animation: "slideUp 0.2s ease" }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-trash" style={{ fontSize: 24, color: C.red }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>Remove Document?</div>
-        <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.7 }}>
-          You're about to remove <strong style={{ color: C.text }}>{req?.requirement_name}</strong>. This cannot be undone.
-        </div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={s.secondaryBtn}>Cancel</button>
-          <button onClick={onConfirm} style={s.dangerBtn}>Yes, remove</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      icon="ti-trash"
+      title="Remove document?"
+      message={<>You're about to remove <strong style={{ color: C.text }}>{req?.requirement_name}</strong>. This cannot be undone.</>}
+      confirmLabel="Yes, remove"
+      loading={removing}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -165,9 +162,12 @@ function UploadModal({ requirement, studentId, onClose, onSuccess }) {
       } else {
         await uploadRequirement({ studentId, requirementTypeId: requirement.requirement_type_id, file, remarks });
       }
+      toast.success(isReplace ? "Document replaced." : "Document uploaded.");
       onSuccess();
     } catch (e) {
-      setError(e.message || "Upload failed.");
+      const msg = e.message || "Upload failed.";
+      setError(msg);
+      toast.error(msg);
     } finally { setUploading(false); }
   }
 
@@ -293,6 +293,7 @@ function StatCard({ label, value, icon, color, loading }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function RequirementsPage() {
+  usePageTitle("Requirements");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const isAdmin = canViewAuditTrail(currentUser);
@@ -332,6 +333,7 @@ export default function RequirementsPage() {
   const [uploadModal, setUploadModal] = useState(null);
   const [viewModal,   setViewModal]   = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
+  const [removing,    setRemoving]    = useState(false);
 
   // Auth guard
   useEffect(() => {
@@ -427,13 +429,18 @@ export default function RequirementsPage() {
 
   async function confirmRemove() {
     if (!removeModal) return;
+    setRemoving(true);
     try {
       await removeRequirement(removeModal.submission_id);
-      setRemoveModal(null);
+      toast.success("Document removed.");
       reloadRequirements();
     } catch (e) {
+      const msg = e.message || "Failed to remove document.";
+      setReqError(msg);
+      toast.error(msg);
+    } finally {
+      setRemoving(false);
       setRemoveModal(null);
-      setReqError(e.message || "Failed to remove document.");
     }
   }
 
@@ -1152,6 +1159,7 @@ export default function RequirementsPage() {
           req={removeModal}
           onConfirm={confirmRemove}
           onCancel={() => setRemoveModal(null)}
+          removing={removing}
         />
       )}
     </AppLayout>

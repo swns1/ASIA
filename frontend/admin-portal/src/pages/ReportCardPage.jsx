@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getReportCard } from "../api/enrollmentApi";
@@ -28,6 +29,7 @@ function gradeColor(avg) {
 }
 
 export default function ReportCardPage() {
+  usePageTitle("Report Card");
   const { enrollmentId } = useParams();
   const navigate = useNavigate();
   const printRef = useRef();

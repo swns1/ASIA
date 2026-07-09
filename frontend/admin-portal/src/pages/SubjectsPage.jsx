@@ -1,6 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
@@ -126,7 +129,9 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
       };
       await onSave(isEdit ? subject.subject_id : null, payload);
     } catch (e) {
-      setError(e.message || "Failed to save subject.");
+      const msg = e.message || "Failed to save subject.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -318,62 +323,11 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
   );
 }
 
-// ── Delete Modal ──────────────────────────────────────────────────────────────
-function DeleteModal({ subject, onConfirm, onCancel }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        onClick={onCancel}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
-      />
-      {/* Dialog */}
-      <motion.div
-        variants={modalVariants}
-        initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ position: "relative", background: "white", borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-      >
-        <div style={{ width: 60, height: 60, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Delete Subject?</div>
-        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
-          You're about to delete <strong style={{ color: "#1a0a0a" }}>{subject.subject_name}</strong>. This cannot be undone and may affect existing grades.
-        </div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <motion.button
-            onClick={onCancel}
-            whileHover={{ background: "#fdf8f8" }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}
-          >
-            Cancel
-          </motion.button>
-          <motion.button
-            onClick={onConfirm}
-            whileHover={{ opacity: 0.88 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg, #e03131, #c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}
-          >
-            Yes, delete
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function SubjectsPage() {
+  usePageTitle("Subjects");
   const navigate    = useNavigate();
   const currentUser = getCurrentUser();
   const hasAnimated = useRef(false);
@@ -417,15 +371,24 @@ export default function SubjectsPage() {
   const handleSave = async (id, payload) => {
     if (id) await updateSubject(id, payload);
     else    await createSubject(payload);
+    toast.success(id ? "Subject updated." : "Subject created.");
     setModal(null);
     fetchSubjects(page, search, levelFilter, gradeFilter);
   };
 
+  const [deletingSubject, setDeletingSubject] = useState(false);
+
   const handleDelete = async () => {
     if (!toDelete) return;
-    await deleteSubject(toDelete.subject_id);
-    setToDelete(null);
-    fetchSubjects(page, search, levelFilter, gradeFilter);
+    setDeletingSubject(true);
+    try {
+      await deleteSubject(toDelete.subject_id);
+      toast.success("Subject deleted.");
+      setToDelete(null);
+      fetchSubjects(page, search, levelFilter, gradeFilter);
+    } finally {
+      setDeletingSubject(false);
+    }
   };
 
   const totalPages = Math.ceil(pageMeta.count / 20);
@@ -828,9 +791,12 @@ export default function SubjectsPage() {
       </AnimatePresence>
       <AnimatePresence>
         {toDelete && (
-          <DeleteModal
+          <ConfirmModal
             key="delete-modal"
-            subject={toDelete}
+            icon="ti-trash"
+            title="Delete subject?"
+            message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{toDelete.subject_name}</strong>. This cannot be undone and may affect existing grades.</>}
+            loading={deletingSubject}
             onConfirm={handleDelete}
             onCancel={() => setToDelete(null)}
           />

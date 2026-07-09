@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+
+const MotionLink = motion.create(Link);
 import { canViewAuditTrail, clearAuthSession, getCurrentUser } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 import logo from "../assets/logo.png";
@@ -158,18 +160,16 @@ export default function Sidebar({ user: userProp }) {
               {group.items.map((item) => {
                 const active = location.pathname === item.path || location.pathname.startsWith(item.path + "/");
                 return (
-                  <motion.div
+                  <MotionLink
                     key={item.path}
+                    to={item.path}
                     variants={navItemVariants}
                     className="nav-item"
                     whileHover="hovered"
                     initial="rest"
                     animate="rest"
-                    style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer", fontWeight: active ? 600 : 400 }}
-                    onClick={() => navigate(item.path)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && navigate(item.path)}
+                    aria-current={active ? "page" : undefined}
+                    style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer", fontWeight: active ? 600 : 400, textDecoration: "none" }}
                   >
                     {/* Sliding active pill */}
                     {active && (
@@ -194,7 +194,7 @@ export default function Sidebar({ user: userProp }) {
                     )}
                     <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center", position: "relative" }} />
                     <span style={{ position: "relative" }}>{item.label}</span>
-                  </motion.div>
+                  </MotionLink>
                 );
               })}
             </div>

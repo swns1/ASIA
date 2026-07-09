@@ -8,7 +8,9 @@ GET /api/ai/cluster/
     &n_clusters=3                  (optional, default 3)
 
 Features used for clustering:
-  - Per-subject grades (or single subject if subject_id given)
+  - Grade: each student's own average across whatever subjects they have
+    data for (or the single subject's grade if subject_id is given) — one
+    feature, not one column per subject; see "Design notes" below for why.
   - Attendance rate for the full school year  (non-absent / total days)
   - Average narrative report score            (1=Needs Improvement, 2=Satisfactory, 3=Outstanding)
     averaged across all rated categories for the selected grading period
@@ -16,6 +18,30 @@ Features used for clustering:
 
 Missing attendance / narrative values are imputed with the column mean so
 clustering still works when records are partially absent.
+
+Design notes (methodological limitations, deliberate not accidental):
+  - Grades always collapse to ONE averaged feature per student, even in
+    "overall" mode across many subjects — never one column per subject.
+    A student taking 8 subjects would otherwise contribute 8 grade
+    dimensions vs. 1 attendance + 1 narrative dimension, letting grades
+    dominate the Euclidean distance the clustering is based on even after
+    StandardScaler. This keeps grades / attendance / behavior weighted as
+    three roughly equal signals, trading away per-subject granularity
+    (use `subject_id` for that) to do it.
+  - Narrative ratings are ordinal categories (Needs Improvement /
+    Satisfactory / Outstanding) mapped to 1/2/3 and averaged as if
+    continuous — the same simplification GPA makes. `avg_narrative` is
+    the averaged score; `narrative_distribution` on each cluster exposes
+    the raw category counts so the average doesn't hide the underlying
+    spread.
+  - `n_clusters` is not auto-selected — it's a user-chosen (or default)
+    parameter, clamped to [2, 7]. `silhouette_score` / `k_search` /
+    `suggested_n_clusters` in `meta` give the chosen k a quality metric
+    and a data-driven alternative to compare against, without forcing it.
+  - No PCA-projected coordinates are returned. Each student's own `grade`
+    and `attendance_rate` (both already below) are directly plottable on a
+    2D chart, so the frontend plots those instead of an abstract PCA
+    projection that isn't meaningful to a non-technical viewer.
 
 Returns:
 {
@@ -30,6 +56,7 @@ Returns:
       "max_grade": 79.5,
       "avg_attendance": 0.82,
       "avg_narrative": 1.9,
+      "narrative_distribution": {"outstanding": 2, "satisfactory": 7, "needs_improvement": 3},
       "students": [
         {
           "student_id": 1,
@@ -38,15 +65,18 @@ Returns:
           "grade": 72.5,
           "attendance_rate": 0.87,
           "avg_narrative": 2.0,
-          "subject_name": "Mathematics 7",
-          "x": 1.23,
-          "y": -0.45
+          "subject_name": "Mathematics 7"
         }, ...
       ]
     }, ...
   ],
   "interpretation": "AI-generated narrative ...",
-  "meta": { ... }
+  "meta": {
+    ...,
+    "silhouette_score": 0.42,
+    "k_search": [{"n_clusters": 2, "silhouette_score": 0.38}, ...],
+    "suggested_n_clusters": 4
+  }
 }
 """
 
@@ -116,6 +146,7 @@ Context:
   75-79 Fairly Satisfactory, Below 75 Did Not Meet Expectations
 - Attendance rate: proportion of school days attended (1.00 = perfect, 0.00 = never attended)
 - Narrative score: 1=Needs Improvement, 2=Satisfactory, 3=Outstanding (averaged across all rated categories)
+- Cluster separation quality (silhouette score, -1 to 1, higher = better separated): {silhouette_score}
 """
 
 
@@ -146,6 +177,7 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         grading_period=meta["grading_period"],
         subject=meta["subject"],
         total_students=meta["total_students"],
+        silhouette_score=meta.get("silhouette_score", "N/A"),
     )
 
     try:
@@ -195,8 +227,9 @@ class ClusterAnalyticsView(APIView):
     GET /api/ai/cluster/
 
     Performs K-Means clustering on student grades, attendance, and
-    narrative report ratings; returns PCA-reduced 2D coordinates for
-    scatter plot visualisation.
+    narrative report ratings. Each student's own grade and attendance
+    rate are returned directly (no PCA projection) so the frontend can
+    plot a chart with meaningful, directly-labelled axes.
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -305,10 +338,12 @@ class ClusterAnalyticsView(APIView):
             narrative_qs = narrative_qs.filter(grading_period=grading_period)
 
         narrative_map = defaultdict(list)
+        narrative_ratings_map = defaultdict(list)
         for nr in narrative_qs:
             score = NARRATIVE_SCORE.get(nr.rating)
             if score is not None:
                 narrative_map[nr.enrollment_id].append(score)
+                narrative_ratings_map[nr.enrollment_id].append(nr.rating)
 
         # ── Attach attendance_rate and avg_narrative ───────────────────────
         for sd in student_data.values():
@@ -322,30 +357,21 @@ class ClusterAnalyticsView(APIView):
 
             scores = narrative_map.get(eid, [])
             sd["avg_narrative"] = float(np.mean(scores)) if scores else np.nan
+            sd["narrative_ratings"] = narrative_ratings_map.get(eid, [])
 
         # ── Build grade feature matrix ────────────────────────────────────
+        # Always a single averaged-grade column (same as the subject_id
+        # case), never one column per subject. A student taking 8 subjects
+        # would otherwise contribute 8 grade dimensions vs. 1 attendance +
+        # 1 narrative dimension, letting grades dominate the distance metric
+        # even after scaling. This trades away per-subject granularity to
+        # keep the three signal types (grades, attendance, behavior) balanced.
         student_ids = list(student_data.keys())
 
-        if subject_id:
-            grade_features = np.array([
-                [np.mean(list(student_data[sid]["grades"].values()))]
-                for sid in student_ids
-            ])
-        else:
-            all_subjects = sorted({
-                subj for sd in student_data.values() for subj in sd["grades"]
-            })
-            if len(all_subjects) == 1:
-                grade_features = np.array([
-                    [list(student_data[sid]["grades"].values())[0]]
-                    for sid in student_ids
-                ])
-            else:
-                grade_features = np.array([
-                    [student_data[sid]["grades"].get(subj, np.nan) for subj in all_subjects]
-                    for sid in student_ids
-                ])
-                _impute_col_mean(grade_features)
+        grade_features = np.array([
+            [np.mean(list(student_data[sid]["grades"].values()))]
+            for sid in student_ids
+        ])
 
         # ── Append attendance + narrative features ────────────────────────
         extra_features = np.array([
@@ -358,7 +384,7 @@ class ClusterAnalyticsView(APIView):
 
         # ── K-Means ───────────────────────────────────────────────────────
         from sklearn.cluster import KMeans
-        from sklearn.decomposition import PCA
+        from sklearn.metrics import silhouette_score
         from sklearn.preprocessing import StandardScaler
 
         scaler = StandardScaler()
@@ -367,24 +393,42 @@ class ClusterAnalyticsView(APIView):
         kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
         labels = kmeans.fit_predict(features_scaled)
 
-        # ── PCA → 2D coords ───────────────────────────────────────────────
-        if features_scaled.shape[1] < 2:
-            coords = np.column_stack([
-                features_scaled[:, 0],
-                np.random.RandomState(42).normal(0, 0.3, size=len(features_scaled)),
-            ])
-        else:
-            pca = PCA(n_components=2, random_state=42)
-            coords = pca.fit_transform(features_scaled)
+        # ── Cluster quality (silhouette) ────────────────────────────────
+        # Reported for the chosen k, plus a cheap search across nearby k
+        # values, so the choice of k has a defensible quality metric
+        # attached instead of being an arbitrary default. Does not change
+        # n_clusters itself — purely informational for the UI/response.
+        chosen_silhouette = float(silhouette_score(features_scaled, labels))
+
+        k_search = []
+        max_k = min(7, len(features_scaled) - 1)
+        for k in range(2, max_k + 1):
+            if k == n_clusters:
+                k_search.append({"n_clusters": k, "silhouette_score": round(chosen_silhouette, 4)})
+                continue
+            km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(features_scaled)
+            k_search.append({
+                "n_clusters": k,
+                "silhouette_score": round(float(silhouette_score(features_scaled, km.labels_)), 4),
+            })
+        suggested_k = (
+            max(k_search, key=lambda r: r["silhouette_score"])["n_clusters"] if k_search else None
+        )
 
         # ── Build cluster response ────────────────────────────────────────
+        # No PCA projection — the chart plots grade vs. attendance directly
+        # (both already below), which is meaningful to a non-technical
+        # viewer in a way "PCA Component 1/2" never was. Nothing else in
+        # this codebase consumed the old x/y PCA coordinates.
         clusters_map = defaultdict(list)
+        narrative_dist_map = defaultdict(lambda: defaultdict(int))
         for idx, sid in enumerate(student_ids):
             sd = student_data[sid]
             avg_grade = float(np.mean(list(sd["grades"].values())))
             att_rate  = sd["attendance_rate"]
             avg_narr  = sd["avg_narrative"]
-            clusters_map[int(labels[idx])].append({
+            cluster_id = int(labels[idx])
+            clusters_map[cluster_id].append({
                 "student_id":      sd["student_id"],
                 "student_name":    sd["student_name"],
                 "student_number":  sd["student_number"],
@@ -392,9 +436,9 @@ class ClusterAnalyticsView(APIView):
                 "attendance_rate": None if np.isnan(att_rate) else round(float(att_rate), 4),
                 "avg_narrative":   None if np.isnan(avg_narr) else round(float(avg_narr), 2),
                 "subject_name":    subject_name if subject_id else "Overall",
-                "x":               round(float(coords[idx, 0]), 4),
-                "y":               round(float(coords[idx, 1]), 4),
             })
+            for rating in sd["narrative_ratings"]:
+                narrative_dist_map[cluster_id][rating] += 1
 
         # Sort by average grade ascending (cluster 0 = at-risk)
         sorted_clusters = sorted(
@@ -406,7 +450,7 @@ class ClusterAnalyticsView(APIView):
         cluster_summary_lines = []
         clusters_response     = []
 
-        for new_id, (_, students) in enumerate(sorted_clusters):
+        for new_id, (old_cluster_id, students) in enumerate(sorted_clusters):
             grades_list = [s["grade"] for s in students]
             att_list    = [s["attendance_rate"] for s in students if s["attendance_rate"] is not None]
             narr_list   = [s["avg_narrative"]   for s in students if s["avg_narrative"]   is not None]
@@ -417,6 +461,19 @@ class ClusterAnalyticsView(APIView):
             att_str  = f"{avg_att:.0%}"  if avg_att  is not None else "N/A"
             narr_str = f"{avg_narr:.2f}" if avg_narr is not None else "N/A"
 
+            # Raw rating counts behind avg_narrative. Narrative ratings are
+            # ordinal categories (Needs Improvement/Satisfactory/Outstanding)
+            # averaged into a 1-3 score as a deliberate, bounded
+            # simplification (the same convention GPA uses) — this exposes
+            # the underlying distribution so the averaged number doesn't
+            # hide it.
+            raw_dist = narrative_dist_map.get(old_cluster_id, {})
+            narrative_distribution = {
+                "outstanding":       raw_dist.get("outstanding", 0),
+                "satisfactory":      raw_dist.get("satisfactory", 0),
+                "needs_improvement": raw_dist.get("needs_improvement", 0),
+            }
+
             summary = {
                 "cluster_id":     new_id,
                 "student_count":  len(students),
@@ -425,6 +482,7 @@ class ClusterAnalyticsView(APIView):
                 "max_grade":      round(float(np.max(grades_list)),  2),
                 "avg_attendance": avg_att,
                 "avg_narrative":  avg_narr,
+                "narrative_distribution": narrative_distribution,
             }
             cluster_summary_lines.append(
                 f"Cluster {new_id}: {summary['student_count']} students, "
@@ -446,6 +504,9 @@ class ClusterAnalyticsView(APIView):
             "grade_level":    grade_level or "All Levels",
             "subject":        subject_name,
             "n_clusters":     n_clusters,
+            "silhouette_score":     round(chosen_silhouette, 4),
+            "k_search":             k_search,
+            "suggested_n_clusters": suggested_k,
         }
 
         ai_result = _call_groq_for_interpretation("\n".join(cluster_summary_lines), meta)

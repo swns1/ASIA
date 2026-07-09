@@ -1,6 +1,8 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
@@ -442,6 +444,7 @@ function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function EnrollmentFormPage() {
+  usePageTitle("Enrollment Form");
   const { id }   = useParams();
   const navigate = useNavigate();
   const isEdit   = Boolean(id);
@@ -648,10 +651,13 @@ export default function EnrollmentFormPage() {
           }
         }
 
+        toast.success(isEdit ? "Enrollment updated." : "Enrollment created.");
         navigate("/enrollments");
       } catch (err) {
         console.error(err);
-        setError(err?.message || "Something went wrong. Please review the form.");
+        const msg = err?.message || "Something went wrong. Please review the form.";
+        setError(msg);
+        toast.error(msg);
       } finally {
         setSaving(false);
       }

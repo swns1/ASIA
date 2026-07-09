@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
@@ -157,6 +158,7 @@ function EmptySection({ message }) {
 const TAB_ORDER = ["personal", "household", "guardians", "family", "schools", "enrollments", "ledger"];
 
 export default function StudentDetailPage() {
+  usePageTitle("Student Details");
   const { id } = useParams();
   const navigate = useNavigate();
 

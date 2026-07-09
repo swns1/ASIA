@@ -1,4 +1,6 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getSchoolSettings } from "../api/billingApi";
@@ -311,6 +313,7 @@ function SummaryTable({ classInfo, data }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AttendancePage() {
+  usePageTitle("Attendance");
   const [tab, setTab] = useState("daily");
 
   // ── Shared filters ──
@@ -340,7 +343,6 @@ export default function AttendancePage() {
 
   // ── Notifications ──
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
 
   // Pre-fill school year
   useEffect(() => {
@@ -375,7 +377,7 @@ export default function AttendancePage() {
   async function handleDailyLoad() {
     if (!schoolYear.trim()||!gradeLevel||!section.trim()) { setError("Fill in School Year, Grade Level, and Section."); return; }
     if (isWeekend(date)) { setError("Selected date is a weekend. Attendance is Mon–Fri only."); return; }
-    setDLoading(true); setError(""); setSaved(false);
+    setDLoading(true); setError("");
     try {
       const data = await getEnrollments({ school_year:schoolYear.trim(), grade_level:gradeLevel, section:section.trim(), enrollment_status:"enrolled", page_size:300 });
       const list = sortByLastName(Array.isArray(data)?data:(data?.results??[]));
@@ -393,11 +395,15 @@ export default function AttendancePage() {
 
   async function handleDailySave() {
     if (!dClassInfo||!dEnrollments.length) return;
-    setDSaving(true); setError(""); setSaved(false);
+    setDSaving(true); setError("");
     try {
       await bulkAttendance({ date, records: dEnrollments.map((e)=>({ enrollment_id:e.enrollment_id, status:dStatuses[e.enrollment_id]||"P" })) });
-      setSaved(true); setTimeout(()=>setSaved(false), 3500);
-    } catch(e) { setError(e.response?.data?.detail||e.message||"Failed to save."); }
+      toast.success("Attendance saved.");
+    } catch(e) {
+      const msg = e.response?.data?.detail||e.message||"Failed to save.";
+      setError(msg);
+      toast.error(msg);
+    }
     finally { setDSaving(false); }
   }
 
@@ -477,12 +483,6 @@ export default function AttendancePage() {
             <button onClick={()=>setError("")} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#b91c1c"}}><i className="ti ti-x" style={{fontSize:13}}/></button>
           </div>
         )}
-        {saved&&(
-          <div style={{background:"#e8f5e0",border:"1px solid #a3d977",borderRadius:10,padding:"12px 16px",fontSize:13,color:"#2e6b0d",display:"flex",alignItems:"center",gap:8}}>
-            <i className="ti ti-circle-check" style={{fontSize:15}}/>Attendance saved successfully!
-          </div>
-        )}
-
         {/* Shared filter row */}
         <div style={{background:"white",borderRadius:14,border:`1px solid ${C.border}`,padding:"18px 22px",boxShadow:"0 2px 12px rgba(224,49,49,0.04)",display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end"}}>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 
 import {
   getInvoice as _getInvoice,
@@ -101,9 +102,14 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
         reference_number: form.reference_number.trim() || null,
         notes:            form.notes.trim() || null,
       });
+      toast.success("Payment recorded.");
       onSaved();
       onClose();
-    } catch (e) { setError(e.message || "Failed to record payment."); }
+    } catch (e) {
+      const msg = e.message || "Failed to record payment.";
+      setError(msg);
+      toast.error(msg);
+    }
     finally     { setSaving(false); }
   };
 

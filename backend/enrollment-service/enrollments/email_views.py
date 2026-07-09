@@ -1,15 +1,19 @@
-import json
 import resend
 from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
-@csrf_exempt
-@require_POST
+
+@api_view(["POST"])
 def send_enrollment_email(request):
+    # @api_view applies this service's DEFAULT_AUTHENTICATION_CLASSES /
+    # DEFAULT_PERMISSION_CLASSES (JWTAuthentication + IsAuthenticated), so this
+    # endpoint is no longer reachable without a valid access token. It also
+    # replaces the old @csrf_exempt + json.loads(request.body) combo — DRF
+    # parses the JSON body into request.data and doesn't enforce Django's
+    # session-based CSRF check for token-authenticated requests.
     try:
-        data = json.loads(request.body)
+        data = request.data
         student_name  = data.get("student_name", "Student")
         student_email = data.get("student_email")
         grade_level   = data.get("grade_level", "")
@@ -18,7 +22,7 @@ def send_enrollment_email(request):
         school_level  = data.get("school_level", "").replace("_", " ").title()
 
         if not student_email:
-            return JsonResponse({"error": "No email address on file for this student."}, status=400)
+            return Response({"error": "No email address on file for this student."}, status=400)
 
         resend.api_key = settings.RESEND_API_KEY
 
@@ -77,8 +81,8 @@ def send_enrollment_email(request):
         }
 
         resend.Emails.send(params)
-        return JsonResponse({"success": True})
+        return Response({"success": True})
 
     except Exception as e:
         print(f"[Resend] Email send failed: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)

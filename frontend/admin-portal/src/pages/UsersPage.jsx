@@ -1,6 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, isAdminRole } from "../utils/auth";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
@@ -201,10 +204,13 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
     setSaving(true);
     try {
       const data = await _updateUser(user.user_id, body);
+      toast.success("Profile updated.");
       onSaved(data);
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.detail || "Failed to save changes.");
+      const msg = err?.response?.data?.detail || "Failed to save changes.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -240,7 +246,7 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
               </div>
             </div>
             <motion.button
-              onClick={onClose} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              onClick={onClose} aria-label="Close" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               style={{ width: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: C.white, cursor: "pointer", color: C.pale, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
             >
               <i className="ti ti-x" style={{ fontSize: 14 }} />
@@ -402,10 +408,13 @@ function CreateUserModal({ onClose, onCreated }) {
     setSaving(true);
     try {
       const data = await _createUser({ name: name.trim(), email: email.trim(), role, password });
+      toast.success("User account created.");
       onCreated(data);
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.detail || "Network error. Please try again.");
+      const msg = err?.response?.data?.detail || "Network error. Please try again.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -502,17 +511,18 @@ function CreateUserModal({ onClose, onCreated }) {
 // ── Delete Confirm Modal ──────────────────────────────────────────────────────
 
 function DeleteModal({ user, currentUser, onClose, onDeleted }) {
+  const isSelf = currentUser?.id === user.user_id;
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(() =>
-    currentUser?.id === user.user_id ? "You cannot delete your own account." : ""
+    isSelf ? "You cannot delete your own account." : ""
   );
-  const isSelf = currentUser?.id === user.user_id;
 
   async function handleDelete() {
     if (isSelf) return;
     setDeleting(true);
     try {
       await _deleteUser(user.user_id);
+      toast.success("User account deleted.");
       onDeleted(user.user_id);
       onClose();
     } catch (err) {
@@ -523,49 +533,17 @@ function DeleteModal({ user, currentUser, onClose, onDeleted }) {
   }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.42)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
-        <motion.div
-          variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-          transition={springTransition}
-          style={{ background: C.white, borderRadius: 20, width: "100%", maxWidth: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", padding: "32px 36px" }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-trash" style={{ fontSize: 24, color: C.red }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Delete User Account</div>
-              <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-                Are you sure you want to delete <strong>{user.name}</strong>?<br />This action cannot be undone.
-              </div>
-            </div>
-            <AnimatePresence>
-              {error && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  style={{ width: "100%", background: "#fde8e8", border: "1px solid #fca5a5", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#9b2020" }}>
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-              <motion.button onClick={onClose} whileHover={{ borderColor: C.red, color: C.red }} whileTap={{ scale: 0.97 }}
-                style={{ flex: 1, height: 40, border: `1px solid ${C.border}`, borderRadius: 10, background: C.white, fontSize: 13, fontWeight: 600, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Cancel
-              </motion.button>
-              <motion.button onClick={handleDelete} disabled={deleting || isSelf} whileHover={!deleting && !isSelf ? { scale: 1.02 } : {}} whileTap={!deleting && !isSelf ? { scale: 0.97 } : {}}
-                style={{ flex: 1, height: 40, border: "none", borderRadius: 10, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: "white", fontSize: 13, fontWeight: 700, cursor: deleting || isSelf ? "not-allowed" : "pointer", opacity: deleting || isSelf ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif" }}>
-                {deleting ? "Deleting…" : "Delete"}
-              </motion.button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    <ConfirmModal
+      icon="ti-trash"
+      title="Delete user account?"
+      message={<>Are you sure you want to delete <strong>{user.name}</strong>? This action cannot be undone.</>}
+      error={error}
+      loading={deleting}
+      confirmDisabled={isSelf}
+      confirmLabel="Delete"
+      onConfirm={handleDelete}
+      onCancel={onClose}
+    />
   );
 }
 
@@ -626,6 +604,7 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
             {canEdit && (
               <motion.button
                 onClick={() => setEditOpen(true)}
+                aria-label={`Edit ${user.name}`}
                 whileTap={{ scale: 0.95 }}
                 style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.white, color: C.muted, transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = C.redLight; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
@@ -637,6 +616,7 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
             {canDelete && (
               <motion.button
                 onClick={() => setDeleteOpen(true)}
+                aria-label={`Delete ${user.name}`}
                 whileTap={{ scale: 0.95 }}
                 style={{ height: 32, width: 32, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.white, color: C.pale, transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease" }}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fde8e8"; e.currentTarget.style.color = C.red; e.currentTarget.style.borderColor = C.redBorder; }}
@@ -656,14 +636,16 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
           onSaved={(u) => { onSaved(u); setEditOpen(false); }}
         />
       )}
-      {deleteOpen && (
-        <DeleteModal
-          user={user}
-          currentUser={currentUser}
-          onClose={() => setDeleteOpen(false)}
-          onDeleted={(id) => { onDeleted(id); setDeleteOpen(false); }}
-        />
-      )}
+      <AnimatePresence>
+        {deleteOpen && (
+          <DeleteModal
+            user={user}
+            currentUser={currentUser}
+            onClose={() => setDeleteOpen(false)}
+            onDeleted={(id) => { onDeleted(id); setDeleteOpen(false); }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -678,6 +660,7 @@ const STAT_DEFS = [
 ];
 
 export default function UsersPage() {
+  usePageTitle("Users");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const isAdmin = isAdminRole(currentUser?.role);
@@ -744,7 +727,7 @@ export default function UsersPage() {
         style={{ background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
       >
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.01em" }}>Users</div>
+          <h1 style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.01em", margin: 0 }}>Users</h1>
           <div style={{ fontSize: 11.5, color: C.pale, marginTop: 1 }}>
             {loading ? "Loading…" : <><AnimatedCount value={users.length} /> user{users.length !== 1 ? "s" : ""} registered</>}
           </div>

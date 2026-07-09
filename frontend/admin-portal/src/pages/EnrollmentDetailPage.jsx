@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
@@ -70,6 +71,7 @@ function Sk({ w = "100%", h = 14, r = 6 }) {
 }
 
 export default function EnrollmentDetailPage() {
+  usePageTitle("Enrollment Details");
   const { id } = useParams();
   const navigate = useNavigate();
 

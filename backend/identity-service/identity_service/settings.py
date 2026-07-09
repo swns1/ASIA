@@ -7,10 +7,18 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t",
-)
+
+def _required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(
+            f"Required environment variable '{name}' is not set. "
+            "Copy .env.example to .env in this service's directory and fill in real values."
+        )
+    return value
+
+
+SECRET_KEY = _required_env("SECRET_KEY")
 
 DEBUG = True
 
@@ -83,7 +91,13 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
 CORS_ALLOW_CREDENTIALS = True
 
 AXES_FAILURE_LIMIT = 5
@@ -96,7 +110,7 @@ DATABASES = {
         "ENGINE":   "django.db.backends.postgresql",
         "NAME":     os.environ.get("DB_NAME",     "SLIS THESIS FINAL"),
         "USER":     os.environ.get("DB_USER",     "postgres"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "admin123"),
+        "PASSWORD": _required_env("DB_PASSWORD"),
         "HOST":     os.environ.get("DB_HOST",     "localhost"),
         "PORT":     os.environ.get("DB_PORT",     "5432"),
     }

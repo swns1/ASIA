@@ -1,4 +1,6 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
@@ -127,8 +129,13 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
     setSaving(true); setError("");
     try {
       await createEnrollmentScholarship({ enrollment:enrollment.enrollment_id, scholarship_type:parseInt(schTypeId), notes:notes.trim()||null });
+      toast.success("Scholarship awarded.");
       onSaved(); onClose();
-    } catch (e) { setError(e.message || "Failed to award scholarship."); }
+    } catch (e) {
+      const msg = e.message || "Failed to award scholarship.";
+      setError(msg);
+      toast.error(msg);
+    }
     finally { setSaving(false); }
   };
 
@@ -1049,6 +1056,7 @@ function EligibilityTab({ scholarshipTypes }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function ScholarshipsPage() {
+  usePageTitle("Scholarships");
   const navigate = useNavigate();
   const hasAnimated = useRef(false);
 

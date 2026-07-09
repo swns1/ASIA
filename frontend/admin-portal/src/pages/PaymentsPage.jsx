@@ -1,6 +1,8 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from "react";
 import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
+import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -57,6 +59,7 @@ function avatarPalette(name) {
 
 // ════════════════════════════════════════════════════════════════════════════════
 export default function PaymentsPage() {
+  usePageTitle("Payments");
   const navigate    = useNavigate();
   const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
@@ -437,21 +440,14 @@ export default function PaymentsPage() {
                 ))
               ) : payments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding:"64px 24px", textAlign:"center" }}>
-                    <motion.div
-                      initial={{ opacity:0, y:8 }}
-                      animate={{ opacity:1, y:0 }}
-                      transition={{ duration:0.22 }}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}
-                    >
-                      <div style={{ width:52, height:52, borderRadius:14, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <i className="ti ti-cash" style={{ fontSize:24, color:"#2e6b0d" }} />
-                      </div>
-                      <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>No payments found</div>
-                      <div style={{ fontSize:13, color:"#b09090" }}>
-                        {hasActiveFilters ? "Try adjusting your filters." : "Record the first payment to get started."}
-                      </div>
-                      {!hasActiveFilters && (
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon="ti-cash"
+                      iconBg="#e8f5e0"
+                      iconColor="#2e6b0d"
+                      title="No payments found"
+                      subtitle={hasActiveFilters ? "Try adjusting your filters." : "Record the first payment to get started."}
+                      action={!hasActiveFilters && (
                         <motion.button
                           onClick={() => setShowModal(true)}
                           whileHover={{ scale:1.02, boxShadow:"0 6px 16px rgba(46,107,13,0.30)" }}
@@ -462,7 +458,7 @@ export default function PaymentsPage() {
                           <i className="ti ti-cash" style={{ fontSize:14 }} />Record Payment
                         </motion.button>
                       )}
-                    </motion.div>
+                    />
                   </td>
                 </tr>
               ) : (

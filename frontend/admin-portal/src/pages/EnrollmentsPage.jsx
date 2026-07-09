@@ -1,7 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
+import EmptyState from "../components/EmptyState";
 import { modalVariants, springTransition } from "../utils/motion";
 
 
@@ -1124,6 +1126,7 @@ function StatCard({ label, value, icon, color, bg, loading }) {
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
 export default function EnrollmentsPage() {
+  usePageTitle("Enrollments");
   const navigate = useNavigate();
   const token = sessionStorage.getItem("access_token");
   const hasAnimated  = useRef(false);
@@ -1564,18 +1567,18 @@ export default function EnrollmentsPage() {
                     : enrollments.length === 0
                       ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign:"center", padding:"64px 16px" }}>
-                            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                              <div style={{ width:56, height:56, borderRadius:16, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                <i className="ti ti-clipboard-off" style={{ fontSize:24, color:"#e08080" }} />
-                              </div>
-                              <div style={{ fontSize:15, color:"#7a5050", fontWeight:600}}>No enrollments found</div>
-                              <div style={{ fontSize:12, color:"#b09090" }}>Try adjusting your filters or enroll a new student</div>
-                              <button onClick={() => navigate("/enrollments/new")}
-                                style={{ marginTop:8, padding:"9px 20px", background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                                + New Enrollment
-                              </button>
-                            </div>
+                          <td colSpan={7}>
+                            <EmptyState
+                              icon="ti-clipboard-off"
+                              title="No enrollments found"
+                              subtitle="Try adjusting your filters or enroll a new student"
+                              action={
+                                <button onClick={() => navigate("/enrollments/new")}
+                                  style={{ marginTop:8, padding:"9px 20px", background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:99, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                                  + New Enrollment
+                                </button>
+                              }
+                            />
                           </td>
                         </tr>
                       )

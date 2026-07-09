@@ -1,5 +1,7 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 
 import {
@@ -36,8 +38,9 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
         name: name.trim(), description: desc.trim() || null,
         sort_order: parseInt(order) || 0, is_active: active,
       });
+      toast.success("Category updated.");
       onUpdated(updated); setEditing(false);
-    } catch { /* ignore */ }
+    } catch { toast.error("Failed to save category."); }
     finally { setSaving(false); }
   };
 
@@ -46,14 +49,18 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
     try {
       const updated = await updateCategory(cat.category_id, { is_active: !active });
       setActive(updated.is_active); onUpdated(updated);
-    } catch { /* ignore */ }
+    } catch { toast.error("Failed to update category."); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
     setDeleting(true);
-    try { await deleteCategory(cat.category_id); onDeleted(cat.category_id); }
-    catch { /* ignore */ }
+    try {
+      await deleteCategory(cat.category_id);
+      toast.success("Category deleted.");
+      onDeleted(cat.category_id);
+    }
+    catch { toast.error("Failed to delete category."); }
     finally { setDeleting(false); setConfirm(false); }
   };
 
@@ -129,6 +136,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
 }
 
 export default function NarrativeCategoriesPage() {
+  usePageTitle("Narrative Categories");
   const [categories, setCategories] = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [adding,     setAdding]     = useState(false);
@@ -151,9 +159,13 @@ export default function NarrativeCategoriesPage() {
     setSaving(true); setError("");
     try {
       const created = await createCategory({ name: newName.trim(), description: newDesc.trim() || null, sort_order: parseInt(newOrder) || 0, is_active: true });
+      toast.success("Category created.");
       setCategories((prev) => [...prev, created]);
       setNewName(""); setNewDesc(""); setNewOrder(""); setAdding(false);
-    } catch { setError("Failed to create category."); }
+    } catch {
+      setError("Failed to create category.");
+      toast.error("Failed to create category.");
+    }
     finally { setSaving(false); }
   };
 

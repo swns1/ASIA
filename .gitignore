@@ -8,3 +8,18 @@ backend/student-service/students/env
 
 # Local review documents — not for commit
 _review/
+
+# Dependencies (previously untracked-but-not-ignored — see git rm --cached step)
+node_modules/
+.venv/
+
+# OS / editor
+.DS_Store
+
+# Build output
+dist/
+dist-ssr/
+
+# Django uploaded media (was landing in source tree before the MEDIA_ROOT fix)
+media/
+node_modules

@@ -1,15 +1,9 @@
 // siblingApi.js
-import axios from "axios";
+import { createApiClient } from "./apiClient";
 
-const studentClient = axios.create({
+const studentClient = createApiClient({
   baseURL: import.meta.env.VITE_STUDENT_API_URL || "http://localhost:8000/api",
   timeout: 10000,
-});
-
-studentClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
 });
 
 export async function getSiblingsByStudent(studentId) {

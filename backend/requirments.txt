@@ -28,3 +28,6 @@ resend
 numpy
 scikit-learn
 
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest
+pytest-django

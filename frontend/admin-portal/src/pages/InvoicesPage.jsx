@@ -1,6 +1,10 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from "react";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
+import ConfirmModal from "../components/ConfirmModal";
+import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -274,8 +278,8 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 
   const handleVoid = async () => {
     setVoiding(true);
-    try { await voidInvoice(invoiceId); onVoided(); }
-    catch (e) { setError(e.message || "Failed to void invoice. Please try again."); }
+    try { await voidInvoice(invoiceId); toast.success("Invoice voided."); onVoided(); }
+    catch (e) { toast.error(e?.response?.data?.error || e.message || "Failed to void invoice. Please try again."); }
     finally { setVoiding(false); setShowVoidConfirm(false); }
   };
 
@@ -646,51 +650,15 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
       {/* Void confirm modal */}
       <AnimatePresence>
         {showVoidConfirm && (
-          <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-            <motion.div
-              initial={{ opacity:0 }}
-              animate={{ opacity:1 }}
-              exit={{ opacity:0 }}
-              transition={{ duration:0.18 }}
-              onClick={() => setShowVoidConfirm(false)}
-              style={{ position:"absolute", inset:0, background:"rgba(26,10,10,0.4)", backdropFilter:"blur(4px)" }}
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={springTransition}
-              style={{ position:"relative", background:"white", borderRadius:20, padding:"32px 36px", width:380, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}
-            >
-              <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <i className="ti ti-ban" style={{ fontSize:24, color:"#e03131" }} />
-              </div>
-              <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a" }}>Void Invoice?</div>
-              <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-                This will mark invoice <strong>{invoice.invoice_no}</strong> as void. This cannot be undone.
-              </div>
-              <div style={{ display:"flex", gap:10, width:"100%" }}>
-                <motion.button
-                  onClick={() => setShowVoidConfirm(false)}
-                  whileHover={{ borderColor:"#e03131", color:"#e03131" }}
-                  whileTap={{ scale:0.97 }}
-                  transition={{ duration:0.12 }}
-                  style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}
-                >Cancel</motion.button>
-                <motion.button
-                  onClick={handleVoid}
-                  disabled={voiding}
-                  whileHover={voiding ? {} : { scale:1.02, boxShadow:"0 6px 18px rgba(224,49,49,0.32)" }}
-                  whileTap={voiding ? {} : { scale:0.97 }}
-                  transition={{ duration:0.12 }}
-                  style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif" }}
-                >
-                  {voiding ? "Voiding…" : "Yes, void"}
-                </motion.button>
-              </div>
-            </motion.div>
-          </div>
+          <ConfirmModal
+            icon="ti-ban"
+            title="Void invoice?"
+            message={<>This will mark invoice <strong>{invoice.invoice_no}</strong> as void. This cannot be undone.</>}
+            confirmLabel="Yes, void"
+            loading={voiding}
+            onConfirm={handleVoid}
+            onCancel={() => setShowVoidConfirm(false)}
+          />
         )}
       </AnimatePresence>
     </motion.div>
@@ -699,6 +667,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 
 // ════════════════════════════════════════════════════════════════════════════
 export default function InvoicesPage() {
+  usePageTitle("Invoices");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
@@ -1021,19 +990,7 @@ export default function InvoicesPage() {
                   </div>
                 ))
               ) : invoices.length === 0 ? (
-                <motion.div
-                  initial={{ opacity:0 }}
-                  animate={{ opacity:1 }}
-                  style={{ padding:"48px 16px", textAlign:"center" }}
-                >
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                    <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <i className="ti ti-receipt-off" style={{ fontSize:22, color:"#e08080" }} />
-                    </div>
-                    <div style={{ fontSize:14, color:"#7a5050", fontWeight:600 }}>No invoices found</div>
-                    <div style={{ fontSize:12, color:"#b09090" }}>Try adjusting your filters</div>
-                  </div>
-                </motion.div>
+                <EmptyState icon="ti-receipt-off" title="No invoices found" subtitle="Try adjusting your filters" />
               ) : (
                 <AnimatePresence mode="popLayout" initial={false}>
                   {invoices.map((inv) => {

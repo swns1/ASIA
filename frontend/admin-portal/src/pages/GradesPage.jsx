@@ -1,8 +1,12 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import ConfirmModal from "../components/ConfirmModal";
+import EmptyState from "../components/EmptyState";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -578,13 +582,7 @@ function OverviewTab({ onNavigate }) {
 
         {/* No results */}
         {!loading && sorted.length === 0 && rows.length === 0 && (
-          <div style={{ padding: "60px 24px", textAlign: "center" }}>
-            <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-              <i className="ti ti-users" style={{ fontSize: 24, color: "#e08080" }} />
-            </div>
-            <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No students found</div>
-            <div style={{ fontSize: 13, color: "#b09090", marginTop: 6 }}>Try adjusting the filters above.</div>
-          </div>
+          <EmptyState icon="ti-users" title="No students found" subtitle="Try adjusting the filters above." />
         )}
 
         {/* Search filtered to zero */}
@@ -1002,6 +1000,8 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
   const [score,   setScore]   = useState(String(entry.score));
   const [max,     setMax]     = useState(String(entry.max_score));
   const [saving,  setSaving]  = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const pct = entry.max_score > 0 ? Math.round((entry.score / entry.max_score) * 100) : 0;
   const gc  = gradeColor(pct);
@@ -1013,6 +1013,16 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
     await onUpdate(entry.score_entry_id, { label: label.trim(), score: parseFloat(score), max_score: parseFloat(max) });
     setEditing(false);
     setSaving(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete(entry.score_entry_id);
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
   };
 
   const inp = { border:"1.5px solid #fde2de", borderRadius:8, padding:"6px 10px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none" };
@@ -1048,7 +1058,7 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
             onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#9a7070"; }}>
             <i className="ti ti-pencil" style={{ fontSize:11 }} />
           </button>
-          <button onClick={() => onDelete(entry.score_entry_id)}
+          <button onClick={() => setConfirmDelete(true)} aria-label={`Delete score entry ${entry.label}`}
             style={{ width:26, height:26, border:"1px solid #f0e4e4", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#c09090", transition:"all 0.12s" }}
             onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#c09090"; }}>
@@ -1056,6 +1066,18 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
           </button>
         </>
       )}
+      <AnimatePresence>
+        {confirmDelete && (
+          <ConfirmModal
+            icon="ti-trash"
+            title="Delete score entry?"
+            message={<>Remove <strong>{entry.label}</strong> ({entry.score}/{entry.max_score})? This cannot be undone.</>}
+            loading={deleting}
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1226,6 +1248,7 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
 }
 
 export default function GradesPage() {
+  usePageTitle("Grades");
   const location = useLocation();
   const [tab, setTab] = useState(location.pathname === "/grades/entry" ? "entry" : location.pathname === "/grades/summary" ? "summary" : "overview");
 
@@ -1357,7 +1380,10 @@ export default function GradesPage() {
         const created = await createNarrativeReport({ enrollment: enrollment.enrollment_id, category: catId, grading_period: gradingPeriod, rating: newRating });
         setNarrativeReports((prev) => [...prev, created]);
       }
-    } catch (e) { console.error("Failed to save narrative report:", e); }
+    } catch (e) {
+      console.error("Failed to save narrative report:", e);
+      toast.error("Failed to save narrative rating.");
+    }
     finally { setNarrativeSavingStates((prev) => ({ ...prev, [catId]: false })); }
   }, [enrollment, gradingPeriod]);
 
@@ -1383,6 +1409,7 @@ export default function GradesPage() {
       }
       setSavedMsg("Final grade saved successfully!");
       setTimeout(() => setSavedMsg(""), 3000);
+      toast.success("Final grade saved.");
       await loadScores();
       // Refresh summary grades too
       if (enrollment) {
@@ -1390,7 +1417,11 @@ export default function GradesPage() {
           .then((d) => setSumGrades(Array.isArray(d) ? d : d?.results ?? []))
           .catch(() => {});
       }
-    } catch (e) { setEntryError(e.message || "Failed to save grade."); }
+    } catch (e) {
+      const msg = e.message || "Failed to save grade.";
+      setEntryError(msg);
+      toast.error(msg);
+    }
     finally { setSavingFinal(false); }
   };
 

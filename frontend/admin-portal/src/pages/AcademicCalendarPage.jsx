@@ -1,7 +1,10 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
@@ -615,9 +618,12 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
     try {
       const payload = { school_year: schoolYear, title: form.title.trim(), event_type: form.event_type, start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null };
       mode === "edit" ? await updateEvent(initial.event_id, payload) : await createEvent(payload);
+      toast.success(mode === "edit" ? "Event updated." : "Event created.");
       onSaved();
     } catch (e) {
-      setError(e.message || "Failed to save event.");
+      const msg = e.message || "Failed to save event.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -987,40 +993,22 @@ function DeleteModal({ event, onConfirm, onCancel }) {
   async function handleDelete() { setDeleting(true); try { await onConfirm(); } finally { setDeleting(false); } }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(5px)" }}
-    >
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-      >
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-trash" style={{ fontSize: 26, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Delete Event?</div>
-        <div style={{ background: meta.bg, border: `1px solid ${meta.color}28`, borderRadius: 10, padding: "10px 14px", width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
-          <i className={`ti ${meta.icon}`} style={{ fontSize: 14, color: meta.color, flexShrink: 0 }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: meta.color }}>{event.title}</span>
-        </div>
-        <div style={{ fontSize: 12.5, color: "#9a7070", textAlign: "center", lineHeight: 1.7 }}>This event will be permanently removed from the calendar. This action cannot be undone.</div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <motion.button onClick={onCancel}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={handleDelete} disabled={deleting}
-            whileHover={!deleting ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.38)" } : {}}
-            whileTap={!deleting ? { scale: 0.96 } : {}}
-            style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: deleting ? "not-allowed" : "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-            {deleting ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Deleting…</> : <><i className="ti ti-trash" style={{ fontSize: 14 }} />Delete</>}
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
+    <ConfirmModal
+      icon="ti-trash"
+      title="Delete event?"
+      message={
+        <>
+          <div style={{ background: meta.bg, border: `1px solid ${meta.color}28`, borderRadius: 10, padding: "10px 14px", width: "100%", display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <i className={`ti ${meta.icon}`} style={{ fontSize: 14, color: meta.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: meta.color }}>{event.title}</span>
+          </div>
+          This event will be permanently removed from the calendar. This action cannot be undone.
+        </>
+      }
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -1437,6 +1425,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AcademicCalendarPage() {
+  usePageTitle("Academic Calendar");
   const navigate = useNavigate();
   const [schoolYear,  setSchoolYear]  = useState(DEFAULT_SY);
   const [events,      setEvents]      = useState([]);
@@ -1507,7 +1496,7 @@ export default function AcademicCalendarPage() {
     : [];
 
   function handleSaved() { setModal(null); fetchEvents(schoolYear); }
-  async function handleDeleteConfirm() { await deleteEvent(toDelete.event_id); setToDelete(null); setSelectedDay(null); fetchEvents(schoolYear); }
+  async function handleDeleteConfirm() { await deleteEvent(toDelete.event_id); toast.success("Event deleted."); setToDelete(null); setSelectedDay(null); fetchEvents(schoolYear); }
 
   function handlePrint() {
     window.print();

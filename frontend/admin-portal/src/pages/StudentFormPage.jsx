@@ -1,6 +1,9 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
+import ConfirmModal from "../components/ConfirmModal";
 import { modalVariants, springTransition } from "../utils/motion";
 import { createStudent, getStudent, updateStudent } from "../api/studentApi";
 import {
@@ -755,31 +758,14 @@ function DocStatusBadge({ submitted }) {
 
 function DocRemoveModal({ name, onConfirm, onCancel }) {
   return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        onClick={onCancel}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ position: "relative", background: C.white, borderRadius: 20, padding: "32px 36px", width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-      >
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-trash" style={{ fontSize: 24, color: C.red }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.dark }}>Remove Document?</div>
-        <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.7 }}>
-          You're about to remove <strong style={{ color: C.dark }}>{name}</strong>. This cannot be undone.
-        </div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onCancel} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</motion.button>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: C.red, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Yes, remove</motion.button>
-        </div>
-      </motion.div>
-    </div>
+    <ConfirmModal
+      icon="ti-trash"
+      title="Remove document?"
+      message={<>You're about to remove <strong style={{ color: C.dark }}>{name}</strong>. This cannot be undone.</>}
+      confirmLabel="Yes, remove"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -1442,6 +1428,7 @@ function genDevData() {
 // ════════════════════════════════════════════════════════════════════════════
 
 export default function StudentFormPage() {
+  usePageTitle("Student Form");
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -1886,6 +1873,7 @@ export default function StudentFormPage() {
       }
 
       clearDraft();
+      toast.success(id ? "Student updated." : "Student created.");
       navigate("/students");
     } catch (err) {
       const data = err?.response?.data;
@@ -1899,6 +1887,7 @@ export default function StudentFormPage() {
         msg = entries.map(([field, errs]) => `${field}: ${[].concat(errs).join(", ")}`).join(" | ");
       }
       setError(msg || "Something went wrong. Please check your inputs.");
+      toast.error(msg || "Something went wrong. Please check your inputs.");
     } finally {
       setLoading(false);
       submittingRef.current = false;

@@ -36,11 +36,18 @@ def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def _required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(
+            f"Required environment variable '{name}' is not set. "
+            "Copy .env.example to .env in this service's directory and fill in real values."
+        )
+    return value
+
+
 # ─── Core ───────────────────────────────────────────────────────────────────
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t",
-)
+SECRET_KEY = _required_env("SECRET_KEY")
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
@@ -110,7 +117,7 @@ DATABASES = {
         "ENGINE":   "django.db.backends.postgresql",
         "NAME":     os.environ.get("DB_NAME",     "SLIS THESIS FINAL"),
         "USER":     os.environ.get("DB_USER",     "postgres"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "admin123"),
+        "PASSWORD": _required_env("DB_PASSWORD"),
         "HOST":     os.environ.get("DB_HOST",     "localhost"),
         "PORT":     os.environ.get("DB_PORT",     "5432"),
     }
@@ -163,7 +170,13 @@ SIMPLE_JWT = {
 
 
 # ─── CORS ───────────────────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -175,6 +188,14 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Uploaded requirement documents land here. This was previously UNSET, which
+# left Django's global MEDIA_ROOT default ('') in effect — FileSystemStorage
+# resolved that relative to whatever directory `manage.py` was launched from
+# (this app's own source folder), which is why dozens of uploaded files ended
+# up committed inside requirements/. See requirements/serializers.py::_save_file.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # ─── External APIs ───────────────────────────────────────────────────────────

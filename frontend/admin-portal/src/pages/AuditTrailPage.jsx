@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
@@ -329,6 +330,7 @@ function AccessDenied({ navigate }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AuditTrailPage() {
+  usePageTitle("Audit Trail");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const allowed = canViewAuditTrail(currentUser);

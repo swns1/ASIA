@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
@@ -123,6 +124,7 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
 }
 
 export default function SchoolFormsPage() {
+  usePageTitle("School Forms");
   const navigate    = useNavigate();
   const hasAnimated = useRef(false);
 

@@ -1,43 +1,10 @@
-import axios from "axios";
+import { createApiClient } from "./apiClient";
 
-const identityClient = axios.create({
+const identityClient = createApiClient({
   baseURL: import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth",
   withCredentials: true, // required for httpOnly refresh cookies
   timeout: 10000,
 });
-
-// ── Auth token attachment ─────────────────────────────────────────────────────
-identityClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// ── 401 auto-refresh ──────────────────────────────────────────────────────────
-identityClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
-      original._retry = true;
-      try {
-        const res = await axios.post(
-          (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth") + "/refresh/",
-          {},
-          { withCredentials: true }
-        );
-        const newToken = res.data.access;
-        sessionStorage.setItem("access_token", newToken);
-        original.headers.Authorization = `Bearer ${newToken}`;
-        return identityClient(original);
-      } catch {
-        sessionStorage.removeItem("access_token");
-        window.location.href = "/login";
-      }
-    }
-    return Promise.reject(error);
-  }
-);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login({ identifier, password, rememberMe }) {

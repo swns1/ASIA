@@ -1,17 +1,11 @@
 // householdApi.js
-import axios from "axios";
- 
-const householdClient = axios.create({
+import { createApiClient } from "./apiClient";
+
+const householdClient = createApiClient({
   baseURL: import.meta.env.VITE_STUDENT_API_URL || "http://localhost:8000/api",
   timeout: 10000,
 });
- 
-householdClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
- 
+
 // Try to fetch a household for a given student.
 // Adjust the endpoint to whatever your DRF view actually exposes.
 // Common patterns:
@@ -27,17 +21,17 @@ export async function getHouseholdByStudent(studentId) {
   if (data?.results) return data.results[0] || null;
   return data || null;
 }
- 
+
 export async function createHousehold(payload) {
   const res = await householdClient.post("/households/", payload);
   return res.data;
 }
- 
+
 export async function updateHousehold(id, payload) {
   const res = await householdClient.put(`/households/${id}/`, payload);
   return res.data;
 }
- 
+
 export async function deleteHousehold(id) {
   const res = await householdClient.delete(`/households/${id}/`);
   return res.data;

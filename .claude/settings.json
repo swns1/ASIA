@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(node_modules/.bin/eslint src/)",
+      "Bash(node_modules/.bin/eslint src/components/ConfirmModal.jsx src/components/EmptyState.jsx src/hooks/usePageTitle.js src/components/Sidebar.jsx)"
+    ]
+  }
+}

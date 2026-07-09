@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { login } from "../api/identityApi";
@@ -6,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { setCurrentUser } from "../utils/auth";
 
 export default function LoginPage() {
+  usePageTitle("Login");
   const navigate = useNavigate();
 
   const [identifier,    setIdentifier]    = useState("");

@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
@@ -339,6 +340,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 export default function GradeSummaryPage() {
+  usePageTitle("Grade Summary");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const [student,     setStudent]     = useState(null);

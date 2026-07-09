@@ -1,8 +1,10 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { listVariants, modalVariants, springTransition } from "../utils/motion";
+import { listVariants } from "../utils/motion";
 
 import {
   getSchoolSettings as _getSettings,
@@ -126,43 +128,17 @@ function SYProgress({ startDate, endDate }) {
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
-function SavedToast({ onDone }) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 3200);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <motion.div
-      variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-      transition={springTransition}
-      style={{ position: "fixed", bottom: 28, right: 28, zIndex: 2000, background: C.white, border: `1px solid #86efac`, borderRadius: 14, padding: "14px 18px", boxShadow: "0 8px 32px rgba(46,107,13,0.18)", display: "flex", alignItems: "center", gap: 12, minWidth: 260, overflow: "hidden" }}
-    >
-      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <i className="ti ti-circle-check" style={{ fontSize: 20, color: "#2e6b0d" }} />
-      </div>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Settings saved</div>
-        <div style={{ fontSize: 11, color: C.pale, marginTop: 1 }}>All changes applied successfully.</div>
-      </div>
-      {/* drain bar */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, height: 3, width: "100%", background: "#f0f9f0" }}>
-        <div style={{ height: "100%", background: "#86efac", animation: "drainBar 3.2s linear forwards" }} />
-      </div>
-    </motion.div>
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SchoolSettingsPage() {
+  usePageTitle("School Settings");
   const navigate = useNavigate();
   const [animated] = useState(false);
 
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showToast, setShowToast] = useState(false);
   const [error, setError] = useState("");
 
   const [form, setForm] = useState({
@@ -231,9 +207,11 @@ export default function SchoolSettingsPage() {
         contact_phone:       form.contact_phone.trim()  || null,
       });
       setSettings(updated);
-      setShowToast(true);
+      toast.success("Settings saved.");
     } catch (e) {
-      setError(e.message || "Failed to save settings.");
+      const msg = e.message || "Failed to save settings.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -418,11 +396,6 @@ export default function SchoolSettingsPage() {
           </div>
         </div>
       </div>
-
-      {/* Toast */}
-      <AnimatePresence>
-        {showToast && <SavedToast onDone={() => setShowToast(false)} />}
-      </AnimatePresence>
 
     </AppLayout>
   );

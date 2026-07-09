@@ -1,10 +1,12 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
+import ConfirmModal from "../components/ConfirmModal";
+import EmptyState from "../components/EmptyState";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/auth";
 import { deleteStudent, getStudents } from "../api/studentApi";
-import { modalVariants, springTransition } from "../utils/motion";
 
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -109,81 +111,12 @@ function StatCard({ label, value, icon, color, bg, loading }) {
   );
 }
 
-// ── Delete confirm modal ───────────────────────────────────────────────────────
-function ConfirmModal({ student, onConfirm, onCancel }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        onClick={onCancel}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.35)", backdropFilter: "blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={springTransition}
-        style={{
-          position: "relative", background: "white", borderRadius: 20, padding: "32px 36px",
-          width: 400, boxShadow: "0 24px 64px rgba(224,49,49,0.18)",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
-        }}
-      >
-        <div style={{
-          width: 60, height: 60, borderRadius: 16, background: "#fff0f0",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <i className="ti ti-trash" style={{ fontSize: 24, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a" }}>
-          Delete Student?
-        </div>
-        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
-          You're about to permanently remove{" "}
-          <strong style={{ color: "#1a0a0a" }}>{student.first_name} {student.last_name}</strong>{" "}
-          and all their associated records. This cannot be undone.
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 6, width: "100%" }}>
-          <motion.button
-            whileHover={{ background: "#fdf8f8" }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            style={{
-              flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10,
-              background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer",
-              fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
-            }}
-            onClick={onCancel}
-          >Cancel</motion.button>
-          <motion.button
-            whileHover={{ opacity: 0.88 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            style={{
-              flex: 1, height: 42, border: "none", borderRadius: 10,
-              background: "linear-gradient(135deg, #e03131, #c92a2a)",
-              fontSize: 13, color: "white", cursor: "pointer",
-              fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
-              boxShadow: "0 4px 16px rgba(224,49,49,0.3)",
-            }}
-            onClick={onConfirm}
-          >Yes, delete</motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
 
 export default function StudentsPage() {
+  usePageTitle("Students");
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const [students, setStudents]   = useState([]);
@@ -309,12 +242,19 @@ export default function StudentsPage() {
 
   const hasActiveFilters = search || statusFilter !== "all" || sexFilter || ordering !== "-student_id";
 
+  const [deletingStudent, setDeletingStudent] = useState(false);
+
   const handleDelete = async () => {
     if (!toDelete) return;
-    await deleteStudent(toDelete.student_id);
-    setToDelete(null);
-    fetchStudents(page, search, statusFilter, sexFilter, ordering);
-    fetchCounts();
+    setDeletingStudent(true);
+    try {
+      await deleteStudent(toDelete.student_id);
+      setToDelete(null);
+      fetchStudents(page, search, statusFilter, sexFilter, ordering);
+      fetchCounts();
+    } finally {
+      setDeletingStudent(false);
+    }
   };
 
   const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
@@ -334,9 +274,9 @@ export default function StudentsPage() {
             flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)",
           }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>
+              <h1 style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em", margin: 0 }}>
                 Student
-              </div>
+              </h1>
               <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
                 {loading ? "Loading records…" : `${pageMeta.count.toLocaleString()} students registered`}
               </div>
@@ -668,21 +608,12 @@ export default function StudentsPage() {
                           exit={{ opacity: 0 }}
                           transition={{ duration: 0.18 }}
                         >
-                          <td colSpan={7} style={{ textAlign: "center", padding: "64px 16px" }}>
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                              <div style={{
-                                width: 56, height: 56, borderRadius: 16, background: "#fff0f0",
-                                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4,
-                              }}>
-                                <i className="ti ti-users-off" style={{ fontSize: 24, color: "#e08080" }} />
-                              </div>
-                              <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>
-                                No students found
-                              </div>
-                              <div style={{ fontSize: 12, color: "#b09090" }}>
-                                Try adjusting your search or changing the status filter
-                              </div>
-                            </div>
+                          <td colSpan={7}>
+                            <EmptyState
+                              icon="ti-users-off"
+                              title="No students found"
+                              subtitle="Try adjusting your search or changing the status filter"
+                            />
                           </td>
                         </motion.tr>
                       )
@@ -791,13 +722,13 @@ export default function StudentsPage() {
                               >
                                 <div style={{ display: "flex", gap: 4 }}>
                                   <button
-                                    className="row-action" title="Edit"
+                                    className="row-action" title="Edit" aria-label={`Edit ${st.first_name} ${st.last_name}`}
                                     onClick={(e) => { e.stopPropagation(); navigate(`/students/${st.student_id}/edit`); }}
                                   >
                                     <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                   </button>
                                   <button
-                                    className="row-action danger" title="Delete"
+                                    className="row-action danger" title="Delete" aria-label={`Delete ${st.first_name} ${st.last_name}`}
                                     style={{ color: "#c09090" }}
                                     onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
                                   >
@@ -875,7 +806,10 @@ export default function StudentsPage() {
       <AnimatePresence>
         {toDelete && (
           <ConfirmModal
-            student={toDelete}
+            icon="ti-trash"
+            title="Delete student?"
+            message={<>You're about to permanently remove <strong style={{ color: "#1a0a0a" }}>{toDelete.first_name} {toDelete.last_name}</strong> and all their associated records. This cannot be undone.</>}
+            loading={deletingStudent}
             onConfirm={handleDelete}
             onCancel={() => setToDelete(null)}
           />
