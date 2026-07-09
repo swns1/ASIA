@@ -24,7 +24,7 @@ SECRET_KEY = _required_env("SECRET_KEY")
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["*"]  # dev only — allows mobile clients on LAN IPs
 
 INSTALLED_APPS = [
     'django.contrib.admin',
