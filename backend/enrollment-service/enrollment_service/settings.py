@@ -42,7 +42,7 @@ SECRET_KEY = os.environ.get(
     "django-insecure-n77il4oulrzslvvx+rg$lh&_e&(%c10gx(uiprm&qs@dm$++3t",
 )
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["*"]  # dev only — allows mobile clients on LAN IPs
 
 
 # ─── Apps ───────────────────────────────────────────────────────────────────
