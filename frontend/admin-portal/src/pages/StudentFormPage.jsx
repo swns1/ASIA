@@ -1,11 +1,12 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { modalVariants, springTransition } from "../utils/motion";
-import { createStudent, getStudent, updateStudent } from "../api/studentApi";
+import { getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
   updateGuardian,
@@ -105,18 +106,6 @@ const cardStyle = {
   padding: "24px 28px", boxShadow: C.shadow, marginBottom: 18,
 };
 
-const btnPrimary = {
-  background: C.red, color: "#fff", border: "none", borderRadius: 50,
-  padding: "11px 28px", fontSize: 14, fontWeight: 700,
-  fontFamily: "'DM Sans', sans-serif", cursor: "pointer", letterSpacing: ".02em",
-};
-
-const btnSecondary = {
-  background: "transparent", color: C.red, border: `1.5px solid ${C.red}`,
-  borderRadius: 50, padding: "10px 24px", fontSize: 14, fontWeight: 600,
-  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
-};
-
 const btnGhost = {
   background: C.redLight, color: C.red, border: "none", borderRadius: 8,
   padding: "7px 16px", fontSize: 13, fontWeight: 600,
@@ -149,8 +138,8 @@ function Input({ style, onFocus, onBlur, ...props }) {
         ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}),
         ...style,
       }}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+      onBlur={(e) => { setFocused(false); onBlur?.(e); }}
     />
   );
 }
@@ -769,7 +758,7 @@ function DocRemoveModal({ name, onConfirm, onCancel }) {
   );
 }
 
-function DocUploadModal({ req, isEdit, studentId, pendingEntry, onClose, onFileSelected }) {
+function DocUploadModal({ req, isEdit, pendingEntry, onClose, onFileSelected }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [remarks, setRemarks] = useState("");
@@ -1244,15 +1233,17 @@ function DocumentsStep({
   );
 }
 
-function ReviewStep({ student, household, guardians, siblings, schools, pendingUploads = [], existingDocs = [], isEdit = false }) {
-  const Row = ({ label, value }) => value ? (
+function ReviewStepRow({ label, value }) {
+  return value ? (
     <div style={{ display: "flex", gap: 12, padding: "7px 0", borderBottom: `1px solid ${C.redMid}` }}>
       <span style={{ width: 150, fontSize: 11, color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", flexShrink: 0, paddingTop: 1 }}>{label}</span>
       <span style={{ fontSize: 13, color: C.dark, lineHeight: 1.5 }}>{value}</span>
     </div>
   ) : null;
+}
 
-  const Section = ({ icon, title, children }) => (
+function ReviewStepSection({ icon, title, children }) {
+  return (
     <div style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.redMid}`, marginBottom: 14, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 18px", borderBottom: `1px solid ${C.redMid}`, background: C.redLight }}>
         <i className={`ti ${icon}`} style={{ fontSize: 15, color: C.red }} />
@@ -1261,6 +1252,11 @@ function ReviewStep({ student, household, guardians, siblings, schools, pendingU
       <div style={{ padding: "4px 18px 10px" }}>{children}</div>
     </div>
   );
+}
+
+function ReviewStep({ student, household, guardians, siblings, schools, pendingUploads = [], existingDocs = [], isEdit = false }) {
+  const Row = ReviewStepRow;
+  const Section = ReviewStepSection;
 
   const statusColors = { active: "#2e7d32", inactive: "#757575", transferred: "#1565c0", graduated: "#f57f17", dropped: "#c62828" };
 
@@ -1572,7 +1568,7 @@ export default function StudentFormPage() {
             });
             setHouseholdId(hh.household_id || hh.id || null);
           }
-        } catch (e) {
+        } catch {
           // Household may not exist yet — that's fine
         }
 
@@ -1580,26 +1576,26 @@ export default function StudentFormPage() {
         try {
           const gs = await getGuardiansByStudent(id);
           setGuardians(Array.isArray(gs) ? gs : (gs?.results || []));
-        } catch (e) { /* none */ }
+        } catch { /* none */ }
 
         // Siblings
         try {
           const ss = await getSiblingsByStudent(id);
           setSiblings(Array.isArray(ss) ? ss : (ss?.results || []));
-        } catch (e) { /* none */ }
+        } catch { /* none */ }
 
         // Previous Schools
         try {
           const ps = await getPreviousSchoolsByStudent(id);
           setSchools(Array.isArray(ps) ? ps : (ps?.results || []));
-        } catch (e) { /* none */ }
+        } catch { /* none */ }
 
         // Existing requirement submissions
         try {
           const docs = await fetchRequirementSummary(id);
           setExistingDocs(Array.isArray(docs) ? docs : []);
-        } catch (e) { /* none */ }
-      } catch (err) {
+        } catch { /* none */ }
+      } catch {
         setError("Failed to load student data.");
       }
     })();
@@ -1662,17 +1658,16 @@ export default function StudentFormPage() {
     setSchools(d.schools);
   }
 
-  const hasAnimated  = useRef(false);
-  const stepDir      = useRef(1); // 1 = forward, -1 = backward
+  const [stepDir, setStepDir] = useState(1); // 1 = forward, -1 = backward
   const prevStepRef  = useRef(step);
 
   const next = () => {
-    stepDir.current = 1;
+    setStepDir(1);
     prevStepRef.current = step;
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
   const prev = () => {
-    stepDir.current = -1;
+    setStepDir(-1);
     prevStepRef.current = step;
     setStep((s) => Math.max(s - 1, 0));
   };
@@ -1782,7 +1777,7 @@ export default function StudentFormPage() {
           }
         }
         for (const gid of removedGuardianIds) {
-          try { await deleteGuardian(gid); } catch (e) { /* ignore */ }
+          try { await deleteGuardian(gid); } catch { /* ignore */ }
         }
 
         // 4) Siblings — update existing, create new, delete removed
@@ -1800,7 +1795,7 @@ export default function StudentFormPage() {
           }
         }
         for (const sid of removedSiblingIds) {
-          try { await deleteSibling(sid); } catch (e) { /* ignore */ }
+          try { await deleteSibling(sid); } catch { /* ignore */ }
         }
 
         // 5) Previous schools — update existing, create new, delete removed
@@ -1818,7 +1813,7 @@ export default function StudentFormPage() {
           }
         }
         for (const psid of removedSchoolIds) {
-          try { await deletePreviousSchool(psid); } catch (e) { /* ignore */ }
+          try { await deletePreviousSchool(psid); } catch { /* ignore */ }
         }
       } else {
         // ════════════════════════════════════════════════════════
@@ -1896,10 +1891,9 @@ export default function StudentFormPage() {
 
   const isLastStep = step === STEPS.length - 1;
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
-  const dir = stepDir.current;
+  const dir = stepDir;
   const stepVariants = {
     enter:  { x: dir * 32, opacity: 0 },
     center: { x: 0, opacity: 1 },
@@ -1971,7 +1965,7 @@ export default function StudentFormPage() {
           transition={{ duration: 0.22, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
         >
         <StepBar current={step} onStepClick={(i) => {
-          stepDir.current = i > step ? 1 : -1;
+          setStepDir(i > step ? 1 : -1);
           prevStepRef.current = step;
           setStep(i);
         }} />

@@ -1,9 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate, useParams } from "react-router-dom";
-import { modalVariants, springTransition } from "../utils/motion";
 import { getStudent } from "../api/studentApi";
 import { getGuardiansByStudent } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
@@ -172,15 +172,14 @@ export default function StudentDetailPage() {
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
 
-  const hasAnimated   = useRef(false);
   const prevTabRef    = useRef("personal");
   const visitedTabs   = useRef(new Set(["personal"]));
-  const tabDirection  = useRef(1); // 1 = right, -1 = left
+  const [tabDirection, setTabDirection] = useState(1); // 1 = right, -1 = left
 
   function handleTabChange(tabId) {
     const prevIdx = TAB_ORDER.indexOf(prevTabRef.current);
     const nextIdx = TAB_ORDER.indexOf(tabId);
-    tabDirection.current = nextIdx > prevIdx ? 1 : -1;
+    setTabDirection(nextIdx > prevIdx ? 1 : -1);
     prevTabRef.current = tabId;
     visitedTabs.current.add(tabId);
     setActiveTab(tabId);
@@ -232,10 +231,9 @@ export default function StudentDetailPage() {
         .filter(Boolean).join(" ")
     : "";
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
-  const dir = tabDirection.current;
+  const dir = tabDirection;
   const tabVariants = {
     enter:  { x: dir * 18, opacity: 0 },
     center: { x: 0, opacity: 1 },

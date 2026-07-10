@@ -370,7 +370,7 @@ export default function AttendancePage() {
       });
       const records = Array.isArray(data) ? data : (data?.results??[]);
       records.forEach((r) => { map[r.enrollment] = r.status; });
-    } catch {}
+    } catch { /* none */ }
     setDStatuses(map);
   }
 

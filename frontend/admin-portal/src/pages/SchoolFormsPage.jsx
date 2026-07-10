@@ -1,6 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import { getSchoolSettings } from "../api/billingApi";
 import { getEnrollments } from "../api/enrollmentApi";
@@ -125,8 +125,6 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
 
 export default function SchoolFormsPage() {
   usePageTitle("School Forms");
-  const navigate    = useNavigate();
-  const hasAnimated = useRef(false);
 
   // Shared
   const [schoolYear, setSchoolYear] = useState("");
@@ -177,8 +175,7 @@ export default function SchoolFormsPage() {
       .finally(() => setSf9LoadingEnr(false));
   }, [sf9Student]);
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   function handleOpenSF1() {
     if (!schoolYear.trim() || !gradeLevel || !section.trim()) {

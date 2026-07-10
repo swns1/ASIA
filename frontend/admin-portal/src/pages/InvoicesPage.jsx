@@ -1,12 +1,12 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { pageVariants, listVariants, modalVariants, springTransition } from "../utils/motion";
 
@@ -14,7 +14,6 @@ import { pageVariants, listVariants, modalVariants, springTransition } from "../
 import {
   getInvoices as _getInvoices,
   getInvoice as _getInvoice,
-  getInvoiceBreakdown as _getBreakdown,
   getInvoiceSummary as _getInvoiceSummary,
   generateInvoice as _generateInvoice,
   voidInvoice as _voidInvoice,
@@ -23,7 +22,6 @@ import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
 
 const getInvoices       = (p = {}) => _getInvoices(p);
 const getInvoice        = (id)     => _getInvoice(id);
-const getBreakdown      = (id)     => _getBreakdown(id);
 const getInvoiceSummary = (p = {}) => _getInvoiceSummary(p);
 const generateInvoice   = (p)      => _generateInvoice(p);
 const voidInvoice       = (id)     => _voidInvoice(id);
@@ -259,19 +257,18 @@ function GenerateModal({ onClose, onGenerated }) {
 
 // ── Invoice Detail ────────────────────────────────────────────────────────────
 function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
-  const hasAnimated = useRef(false);
+  const [hasAnimated, setHasAnimated] = useState(false);
   const [invoice,    setInvoice]    = useState(null);
-  const [breakdown,  setBreakdown]  = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [voiding,    setVoiding]    = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [tab,        setTab]        = useState("breakdown");
 
   useEffect(() => {
-    setLoading(true); setInvoice(null); setBreakdown(null);
-    hasAnimated.current = false;
-    Promise.all([getInvoice(invoiceId), getBreakdown(invoiceId)])
-      .then(([inv, bd]) => { setInvoice(inv); setBreakdown(bd); })
+    setLoading(true); setInvoice(null);
+    setHasAnimated(false);
+    getInvoice(invoiceId)
+      .then(setInvoice)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [invoiceId]);
@@ -283,8 +280,8 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
     finally { setVoiding(false); setShowVoidConfirm(false); }
   };
 
-  const isFirst = !hasAnimated.current;
-  if (!loading && invoice && isFirst) hasAnimated.current = true;
+  const isFirst = !hasAnimated;
+  if (!loading && invoice && isFirst) setHasAnimated(true);
 
   if (loading) return (
     <div style={{ padding:"24px", display:"flex", flexDirection:"column", gap:14 }}>
@@ -669,9 +666,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 export default function InvoicesPage() {
   usePageTitle("Invoices");
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
-  const hasAnimated = useRef(false);
 
   const [invoices,     setInvoices]     = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -749,8 +744,7 @@ export default function InvoicesPage() {
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   const STAT_CARDS = [
     { label:"Unpaid",  statusKey:"unpaid",         value:summary.unpaid,         icon:"ti-clock",        ...STATUS_META.unpaid         },

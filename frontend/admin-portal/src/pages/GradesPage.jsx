@@ -1,10 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
-import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 
@@ -25,6 +26,7 @@ import {
   createNarrativeReport as _createNarrativeReport,
   updateNarrativeReport as _updateNarrativeReport,
   deleteNarrativeReport as _deleteNarrativeReport,
+  callGemini,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents } from "../api/studentApi";
 
@@ -74,9 +76,13 @@ const OVERVIEW_GRADE_LEVELS = {
 
 const OVERVIEW_PAGE_SIZE = 20;
 
+function SortIcon({ k, sortKey, sortDir }) {
+  if (sortKey !== k) return <i className="ti ti-selector" style={{ fontSize: 11, color: "#d0b8b8", marginLeft: 4 }} />;
+  return <i className={`ti ti-sort-${sortDir === "asc" ? "ascending" : "descending"}`} style={{ fontSize: 11, color: "#e03131", marginLeft: 4 }} />;
+}
+
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
-  const hasAnimated = useRef(false);
 
   const [schoolYear,    setSchoolYear]    = useState("");
   const [schoolLevel,   setSchoolLevel]   = useState("");
@@ -197,19 +203,13 @@ function OverviewTab({ onNavigate }) {
     else { setSortKey(key); setSortDir("asc"); }
   }
 
-  const SortIcon = ({ k }) => {
-    if (sortKey !== k) return <i className="ti ti-selector" style={{ fontSize: 11, color: "#d0b8b8", marginLeft: 4 }} />;
-    return <i className={`ti ti-sort-${sortDir === "asc" ? "ascending" : "descending"}`} style={{ fontSize: 11, color: "#e03131", marginLeft: 4 }} />;
-  };
-
   const totalPages   = Math.ceil(pageMeta.count / OVERVIEW_PAGE_SIZE);
   const passedCount  = rows.filter((r) => r.avg !== null && r.avg >= 75).length;
   const failedCount  = rows.filter((r) => r.avg !== null && r.avg <  75).length;
   const noGradeCount = rows.filter((r) => r.avg === null).length;
   const overallMean  = (() => { const n = rows.filter((r) => r.avg !== null); return n.length > 0 ? n.reduce((s, r) => s + r.avg, 0) / n.length : null; })();
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -504,11 +504,11 @@ function OverviewTab({ onNavigate }) {
               <thead>
                 <tr style={{ background: "#fdfafa" }}>
                   <th style={{ ...thStyle, textAlign: "left", paddingLeft: 20, position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }}>Student</th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("grade_level")}>Grade / Section <SortIcon k="grade_level" /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("total")}>Grades <SortIcon k="total" /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("passed")}>Passed <SortIcon k="passed" /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("failed")}>Failed <SortIcon k="failed" /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", background: "#f9f4f4", position: "sticky", top: 0, zIndex: 1 }} onClick={() => toggleSort("avg")}>Average <SortIcon k="avg" /></th>
+                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("grade_level")}>Grade / Section <SortIcon k="grade_level" sortKey={sortKey} sortDir={sortDir} /></th>
+                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("total")}>Grades <SortIcon k="total" sortKey={sortKey} sortDir={sortDir} /></th>
+                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("passed")}>Passed <SortIcon k="passed" sortKey={sortKey} sortDir={sortDir} /></th>
+                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("failed")}>Failed <SortIcon k="failed" sortKey={sortKey} sortDir={sortDir} /></th>
+                  <th style={{ ...thStyle, cursor: "pointer", background: "#f9f4f4", position: "sticky", top: 0, zIndex: 1 }} onClick={() => toggleSort("avg")}>Average <SortIcon k="avg" sortKey={sortKey} sortDir={sortDir} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -1769,7 +1769,9 @@ export default function GradesPage() {
   );
 
   // ── Entry right panel ─────────────────────────────────────────────────────
-  const entryPanel = !student || !enrollment ? (
+  const entryPanel = (
+    <>
+    {!student || !enrollment ? (
     <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
       <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
         <i className="ti ti-pencil" style={{ fontSize:28, color:"#e08080" }} />
@@ -1997,6 +1999,23 @@ export default function GradesPage() {
         </motion.div>
       )}
     </div>
+  )}
+    {enrollment && (
+      <div style={{ marginTop: 14 }}>
+        <NarrativeSection
+          enrollment={enrollment}
+          gradingPeriod={gradingPeriod}
+          periods={periods}
+          onPeriodChange={(p) => { setGradingPeriod(p); setComputation(null); }}
+          categories={narrativeCategories}
+          reports={narrativeReports}
+          loading={loadingNarrative}
+          savingStates={narrativeSavingStates}
+          onRatingChange={handleNarrativeRating}
+        />
+      </div>
+    )}
+    </>
   );
 
   return (

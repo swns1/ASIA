@@ -1,13 +1,13 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
-import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import AIInsightPanel from "../components/AIInsightPanel";
 import { pageVariants, listVariants } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-import { getSubjects as _getSubjects, getAiCluster as _getAiCluster } from "../api/enrollmentApi";
+import { getSubjects as _getSubjects, getAiCluster as _getAiCluster, callGemini } from "../api/enrollmentApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -419,16 +419,13 @@ function StudentDetailPanel({ student, onClose }) {
 
 // ── Student Table ─────────────────────────────────────────────────────────────
 function StudentTable({ clusters, selectedStudent, onSelectStudent }) {
-  const hasAnimated = useRef(false);
+  const isFirst = useIsFirstRender();
 
   if (!clusters) return null;
 
   const allStudents = clusters.flatMap((c) =>
     c.students.map((st) => ({ ...st, color: c.color, clusterLabel: c.label }))
   ).sort((a, b) => a.grade - b.grade);
-
-  const isFirst = !hasAnimated.current;
-  if (isFirst) hasAnimated.current = true;
 
   return (
     <div style={{ maxHeight: 360, overflowY: "auto" }}>
@@ -544,7 +541,6 @@ function ClusterInsightPanel({ result }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AnalyticsPage() {
   usePageTitle("Analytics");
-  const navigate = useNavigate();
 
   const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
   const [gradingPeriod,   setGradingPeriod]   = useState("1st_quarter");
@@ -609,11 +605,9 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [schoolYear, gradingPeriod, subjectId, schoolLevel, gradeLevel, nClusters]);
+  }, [schoolYear, gradingPeriod, subjectId, schoolLevel, gradeLevel, nClusters, setLoading, setError, setResult, setSelectedStudent]);
 
-  const hasAnimated = useRef(false);
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <AppLayout>

@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -449,7 +450,6 @@ export default function EnrollmentFormPage() {
   const navigate = useNavigate();
   const isEdit   = Boolean(id);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
-  const hasAnimated = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
@@ -663,8 +663,7 @@ export default function EnrollmentFormPage() {
       }
     };
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
 

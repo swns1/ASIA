@@ -1,11 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
 import { deleteStudent, getStudents } from "../api/studentApi";
 
 
@@ -118,7 +118,6 @@ function StatCard({ label, value, icon, color, bg, loading }) {
 export default function StudentsPage() {
   usePageTitle("Students");
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
   const [students, setStudents]   = useState([]);
   const [search, setSearch]       = useState("");
   const [inputVal, setInputVal]   = useState("");
@@ -136,8 +135,7 @@ export default function StudentsPage() {
   const [statusCounts, setStatusCounts] = useState({});
 
   const searchRef   = useRef();
-  const hasAnimated = useRef(false);
-  const rowsAnimated = useRef(false); // rows only animate on the very first load
+  const [rowsAnimated, setRowsAnimated] = useState(false); // rows only animate on the very first load
   const token = sessionStorage.getItem("access_token");
 
   // Fetch students — all filter/sort params threaded through
@@ -161,7 +159,7 @@ export default function StudentsPage() {
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(nextPage);
-      rowsAnimated.current = true;
+      setRowsAnimated(true);
     } catch (err) {
       console.error(err);
     } finally {
@@ -259,9 +257,8 @@ export default function StudentsPage() {
 
   const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
 
-  const isFirstRender    = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
-  const isFirstRowRender = !rowsAnimated.current;
+  const isFirstRender    = useIsFirstRender();
+  const isFirstRowRender = !rowsAnimated;
 
   return (
     <AppLayout>

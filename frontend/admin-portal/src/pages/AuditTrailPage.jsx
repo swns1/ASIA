@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
@@ -334,7 +335,6 @@ export default function AuditTrailPage() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const allowed = canViewAuditTrail(currentUser);
-  const hasAnimated = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -413,8 +413,7 @@ export default function AuditTrailPage() {
     setDateFilter(""); setTimeFrom(""); setTimeTo("");
   }
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   const stats = {
     total: logs.length,

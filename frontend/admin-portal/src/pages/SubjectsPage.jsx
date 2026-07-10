@@ -1,11 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -329,8 +329,6 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
 export default function SubjectsPage() {
   usePageTitle("Subjects");
   const navigate    = useNavigate();
-  const currentUser = getCurrentUser();
-  const hasAnimated = useRef(false);
 
   const [subjects,     setSubjects]    = useState([]);
   const [templates,    setTemplates]   = useState([]);
@@ -397,8 +395,7 @@ export default function SubjectsPage() {
   const withoutTemplate = subjects.filter((s) => !s.grading_template_detail).length;
   const activeLevels    = new Set(subjects.map((s) => s.school_level)).size;
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <AppLayout>

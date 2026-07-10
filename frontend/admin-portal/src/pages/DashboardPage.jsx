@@ -3,8 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
-import { pageVariants, listVariants } from "../utils/motion";
+import { listVariants } from "../utils/motion";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -220,7 +219,6 @@ function Panel({ title, action, onAction, children }) {
 export default function DashboardPage() {
   usePageTitle("Dashboard");
   const navigate    = useNavigate();
-  const currentUser = getCurrentUser();
   const now         = useClock();
 
   // ── per-card filter state ──
@@ -249,7 +247,7 @@ export default function DashboardPage() {
   const [enrolledCount,    setEnrolledCount]    = useState(0);
   const [pendingCount,     setPendingCount]     = useState(0);
   const [scholarshipCount, setScholarshipCount] = useState(0);
-  const [subjectCount,     setSubjectCount]     = useState(0);
+  const [, setSubjectCount] = useState(0);
 
   const [recentEnrollments, setRecentEnrollments] = useState([]);
   const [levelBreakdown,    setLevelBreakdown]    = useState([]);
@@ -264,37 +262,11 @@ export default function DashboardPage() {
 
   const schoolYear = currentSchoolYear();
 
-  useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
-    fetchAll();
-  }, []);
-
   const isFirstStudentsFetch    = useRef(true);
   const isFirstEnrolledFetch    = useRef(true);
   const isFirstPendingFetch     = useRef(true);
   const isFirstScholarshipFetch = useRef(true);
   const isFirstFinancialFetch   = useRef(true);
-  useEffect(() => {
-    if (isFirstStudentsFetch.current) { isFirstStudentsFetch.current = false; return; }
-    fetchStudentStats();
-  }, [studentsFilters]);
-  useEffect(() => {
-    if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
-    fetchEnrollmentStats();
-  }, [enrolledFilters]);
-  useEffect(() => {
-    if (isFirstPendingFetch.current) { isFirstPendingFetch.current = false; return; }
-    fetchPendingStats();
-  }, [pendingFilters]);
-  useEffect(() => {
-    if (isFirstScholarshipFetch.current) { isFirstScholarshipFetch.current = false; return; }
-    fetchScholarships();
-  }, [scholarshipFilters]);
-  useEffect(() => {
-    if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
-    fetchFinancialSummary();
-  }, [financialYear]);
 
   async function fetchAll() {
     setLoading(true);
@@ -318,12 +290,6 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function buildGp(f) {
-    if (f.grade) return `&grade_level=${encodeURIComponent(f.grade)}`;
-    if (f.level) return `&school_level=${f.level}`;
-    return "";
   }
 
   function parseGp(f) {
@@ -419,6 +385,33 @@ export default function DashboardPage() {
     } catch { /* alerts are non-critical */ }
     setAlerts(newAlerts);
   }
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("access_token");
+    if (!token) { navigate("/"); return; }
+    fetchAll();
+  }, []);
+
+  useEffect(() => {
+    if (isFirstStudentsFetch.current) { isFirstStudentsFetch.current = false; return; }
+    fetchStudentStats();
+  }, [studentsFilters]);
+  useEffect(() => {
+    if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
+    fetchEnrollmentStats();
+  }, [enrolledFilters]);
+  useEffect(() => {
+    if (isFirstPendingFetch.current) { isFirstPendingFetch.current = false; return; }
+    fetchPendingStats();
+  }, [pendingFilters]);
+  useEffect(() => {
+    if (isFirstScholarshipFetch.current) { isFirstScholarshipFetch.current = false; return; }
+    fetchScholarships();
+  }, [scholarshipFilters]);
+  useEffect(() => {
+    if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
+    fetchFinancialSummary();
+  }, [financialYear]);
 
   // ── derived ──
   const maxLevel = Math.max(...levelBreakdown.map((l) => l.count), 1);
@@ -902,7 +895,7 @@ export default function DashboardPage() {
                       )
                       : (
                         <>
-                          {topScholarships.map(([name, count], i) => (
+                          {topScholarships.map(([name, count]) => (
                             <div key={name} style={s.levelRow}>
                               <div style={{ ...s.levelIcon, background:"#e3f0fd" }}>
                                 <i className="ti ti-award" style={{ fontSize:13, color:"#1455a0" }} />

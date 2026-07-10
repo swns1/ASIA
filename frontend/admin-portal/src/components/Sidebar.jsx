@@ -1,6 +1,7 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 
 const MotionLink = motion.create(Link);
 import { hasAnyRole, clearAuthSession, getCurrentUser } from "../utils/auth";
@@ -121,7 +122,6 @@ export default function Sidebar({ user: userProp }) {
   const navigate     = useNavigate();
   const location     = useLocation();
   const [showLogout, setShowLogout] = useState(false);
-  const hasAnimated  = useRef(false);
 
   const currentUser = userProp ?? getCurrentUser();
 
@@ -135,8 +135,7 @@ export default function Sidebar({ user: userProp }) {
     navigate("/");
   }
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <>

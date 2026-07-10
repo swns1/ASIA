@@ -5,7 +5,6 @@ import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { getStudents } from "../api/studentApi";
 import {
   fetchRequirementSummary,
@@ -295,8 +294,6 @@ function StatCard({ label, value, icon, color, loading }) {
 export default function RequirementsPage() {
   usePageTitle("Requirements");
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
-  const isAdmin = canViewAuditTrail(currentUser);
 
   // Filter state
   const [levelFilter, setLevelFilter] = useState("");

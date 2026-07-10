@@ -8,13 +8,6 @@
 
 import { useState, useEffect } from "react";
 
-import { enrollmentClient } from "../api/enrollmentApi";
-
-export async function callGemini(context_type, payload) {
-  const res = await enrollmentClient.post("/ai/interpret/", { context_type, payload });
-  return res.data; // { interpretation: string }
-}
-
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
 // Converts **bold**, bullet lines, and numbered sections into styled JSX.
 function renderInterpretation(text) {
@@ -43,8 +36,8 @@ function renderInterpretation(text) {
     }
 
     // Bullet lines starting with * or -
-    if (/^[\*\-]\s+/.test(line)) {
-      const content = line.replace(/^[\*\-]\s+/, "");
+    if (/^[*-]\s+/.test(line)) {
+      const content = line.replace(/^[*-]\s+/, "");
       elements.push(
         <div key={key++} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
           <span style={{

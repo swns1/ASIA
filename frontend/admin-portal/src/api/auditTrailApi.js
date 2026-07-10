@@ -18,8 +18,8 @@ export async function fetchAuditLogs() {
     };
   } catch (err) {
     if (err.response?.status === 403) {
-      throw new Error("You are not authorized to view audit records.");
+      throw new Error("You are not authorized to view audit records.", { cause: err });
     }
-    throw new Error("Failed to load log records.");
+    throw new Error("Failed to load log records.", { cause: err });
   }
 }

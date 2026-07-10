@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,19 +31,6 @@ function getNextGrade(g) {
   const i = ALL_GRADES_ORDERED.indexOf(g);
   return i === -1 || i === ALL_GRADES_ORDERED.length - 1 ? null : ALL_GRADES_ORDERED[i + 1];
 }
-
-function getSchoolLevelForGrade(grade) {
-  const map = {
-    Nursery: "nursery", Kindergarten: "kindergarten",
-    "Grade 1":"elementary","Grade 2":"elementary","Grade 3":"elementary",
-    "Grade 4":"elementary","Grade 5":"elementary","Grade 6":"elementary",
-    "Grade 7":"junior_highschool","Grade 8":"junior_highschool",
-    "Grade 9":"junior_highschool","Grade 10":"junior_highschool",
-    "Grade 11":"senior_highschool","Grade 12":"senior_highschool",
-  };
-  return map[grade] ?? null;
-}
-
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCHOOL_LEVELS = [
@@ -658,11 +646,11 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 // ════════════════════════════════════════════════════════════════════════════
 // PROMOTE SECTION MODAL
 // ════════════════════════════════════════════════════════════════════════════
-function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel, initSection }) {
+function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLevel, initSection }) {
   // Step: "input" → "preview" → "result"
   const STEP_ORDER = ["input", "preview", "result"];
   const [step, setStep] = useState("input");
-  const stepDir    = useRef(1);
+  const [stepDir, setStepDir] = useState(1);
   const prevStepRef = useRef("input");
 
   const [fromSchoolYear,  setFromSchoolYear]  = useState(initSchoolYear  || "");
@@ -680,7 +668,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
   function goStep(next) {
     const prevIdx = STEP_ORDER.indexOf(prevStepRef.current);
     const nextIdx = STEP_ORDER.indexOf(next);
-    stepDir.current   = nextIdx > prevIdx ? 1 : -1;
+    setStepDir(nextIdx > prevIdx ? 1 : -1);
     prevStepRef.current = next;
     setStep(next);
   }
@@ -744,7 +732,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initSchoolLev
     }
   }
 
-  const dir = stepDir.current;
+  const dir = stepDir;
   const stepVariants = {
     enter:  { x: dir * 28, opacity: 0 },
     center: { x: 0,        opacity: 1 },
@@ -1129,8 +1117,7 @@ export default function EnrollmentsPage() {
   usePageTitle("Enrollments");
   const navigate = useNavigate();
   const token = sessionStorage.getItem("access_token");
-  const hasAnimated  = useRef(false);
-  const rowsAnimated = useRef(false);
+  const [rowsAnimated, setRowsAnimated] = useState(false);
   const [enrollments,    setEnrollments]    = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [page,           setPage]           = useState(1);
@@ -1191,7 +1178,7 @@ export default function EnrollmentsPage() {
       setEnrollments(data.results ?? []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(pg);
-      rowsAnimated.current = true;
+      setRowsAnimated(true);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1210,9 +1197,8 @@ export default function EnrollmentsPage() {
   const hasFilters = schoolYear || schoolLevel || gradeLevel || statusFilter || search;
   const totalPages = Math.ceil(pageMeta.count / 20);
 
-  const isFirstRender    = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
-  const isFirstRowRender = !rowsAnimated.current;
+  const isFirstRender    = useIsFirstRender();
+  const isFirstRowRender = !rowsAnimated;
 
   return (
     <>

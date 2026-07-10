@@ -1,9 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { modalVariants, springTransition } from "../utils/motion";
 
@@ -274,7 +274,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
 }
 
 // ── Revoke Modal ──────────────────────────────────────────────────────────────
-function RevokeModal({ award, onConfirm, onCancel }) {
+function RevokeModal({ onConfirm, onCancel }) {
   return (
     <ModalShell onClose={onCancel}>
       <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:400, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}>
@@ -445,7 +445,7 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
 // ════════════════════════════════════════════════════════════════════════════
 // TAB 1: MANUAL AWARDS
 // ════════════════════════════════════════════════════════════════════════════
-function ManualAwardsTab({ scholarshipTypes, onAward }) {
+function ManualAwardsTab() {
   const [awards,      setAwards]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [toRevoke,    setToRevoke]    = useState(null);
@@ -455,7 +455,7 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
   const [dateFrom,    setDateFrom]    = useState("");
   const [dateTo,      setDateTo]      = useState("");
   const [dateOpen,    setDateOpen]    = useState(false);
-  const rowsAnimated = useRef(false);
+  const [rowsAnimated, setRowsAnimated] = useState(false);
 
   const hasFilters = search || schFilter || dateFrom || dateTo;
 
@@ -470,7 +470,7 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
       const data = await getEnrollmentScholarships({ page_size:100 });
       setAwards(Array.isArray(data) ? data : data?.results ?? []);
     } catch (e) { console.error(e); }
-    finally { setLoading(false); rowsAnimated.current = true; }
+    finally { setLoading(false); setRowsAnimated(true); }
   }, []);
 
   useEffect(() => { fetchAwards(); }, []);
@@ -732,7 +732,7 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
                   const awardedOn = award.approved_at
                     ? new Date(award.approved_at).toLocaleDateString("en-PH", { year:"numeric", month:"short", day:"numeric" })
                     : "—";
-                  const isFirst = !rowsAnimated.current;
+                  const isFirst = !rowsAnimated;
                   return (
                     <motion.tr
                       key={award.enrollment_scholarship_id}
@@ -806,12 +806,12 @@ function ManualAwardsTab({ scholarshipTypes, onAward }) {
 function EligibilityTab({ scholarshipTypes }) {
   const [eligible,      setEligible]      = useState([]);
   const [loading,       setLoading]       = useState(false);
-  const rowsAnimated = useRef(false);
+  const [rowsAnimated, setRowsAnimated] = useState(false);
   const [schoolYear,    setSchoolYear]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [scanned,       setScanned]       = useState(false);
   const [applyModal,    setApplyModal]    = useState(false);
-  const [savedCount,    setSavedCount]    = useState(0);
+  const [, setSavedCount] = useState(0);
 
   const syOptions = useMemo(() => {
     const d = new Date();
@@ -857,7 +857,7 @@ function EligibilityTab({ scholarshipTypes }) {
       setEligible(eligibleList);
       setScanned(true);
     } catch (e) { console.error(e); }
-    finally { setLoading(false); rowsAnimated.current = true; }
+    finally { setLoading(false); setRowsAnimated(true); }
   };
 
   return (
@@ -995,7 +995,7 @@ function EligibilityTab({ scholarshipTypes }) {
                 <tbody>
                   <>
                     {eligible.map((elig, idx) => {
-                      const isFirst = !rowsAnimated.current;
+                      const isFirst = !rowsAnimated;
                       return (
                       <motion.tr
                         key={elig.enrollment_id}
@@ -1058,7 +1058,6 @@ function EligibilityTab({ scholarshipTypes }) {
 export default function ScholarshipsPage() {
   usePageTitle("Scholarships");
   const navigate = useNavigate();
-  const hasAnimated = useRef(false);
 
   const [activeTab,        setActiveTab]        = useState("manual");
   const [scholarshipTypes, setScholarshipTypes] = useState([]);
@@ -1078,8 +1077,7 @@ export default function ScholarshipsPage() {
     { id:"eligibility", label:"Grade-Based Eligibility", icon:"ti-chart-bar" },
   ];
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <AppLayout>

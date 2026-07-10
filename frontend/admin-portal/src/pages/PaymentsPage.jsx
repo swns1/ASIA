@@ -1,12 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
-import { pageVariants, listVariants, modalVariants, springTransition } from "../utils/motion";
 
 import { getPayments as _getPayments } from "../api/billingApi";
 const getPayments = (p = {}) => _getPayments(p);
@@ -61,9 +60,7 @@ function avatarPalette(name) {
 export default function PaymentsPage() {
   usePageTitle("Payments");
   const navigate    = useNavigate();
-  const currentUser = getCurrentUser();
   const [searchParams] = useSearchParams();
-  const hasAnimated = useRef(false);
   const preloadedInvoiceId = searchParams.get("invoice") ? parseInt(searchParams.get("invoice")) : null;
 
   const [payments,   setPayments]   = useState([]);
@@ -142,8 +139,7 @@ export default function PaymentsPage() {
     background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box",
   };
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   return (
     <AppLayout>

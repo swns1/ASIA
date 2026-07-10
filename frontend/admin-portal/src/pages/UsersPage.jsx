@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import toast from "react-hot-toast";
@@ -664,7 +665,6 @@ export default function UsersPage() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const isAdmin = isAdminRole(currentUser?.role);
-  const hasAnimated = useRef(false);
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -704,8 +704,7 @@ export default function UsersPage() {
     return matchSearch && matchRole;
   });
 
-  const isFirstRender = !hasAnimated.current;
-  if (isFirstRender) hasAnimated.current = true;
+  const isFirstRender = useIsFirstRender();
 
   const stats = {
     total:  users.length,

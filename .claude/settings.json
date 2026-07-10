@@ -8,7 +8,21 @@
       "Bash(npx vitest *)",
       "Bash(../../.venv/Scripts/python.exe -m pytest accounts/test_roles.py -v)",
       "Bash(docker --version)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm run *)",
+      "Bash(grep -B6 \"react-hooks/static-components$\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"Exit code: $?\")",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(chromium-cli --help)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(timeout 90 npm install --no-save playwright)",
+      "Bash(timeout 100 npx playwright install chromium)",
+      "Bash(curl -sf http://localhost:5173)",
+      "Bash(node \"C:/Users/WINDOW~1/AppData/Local/Temp/claude/c--SLIS-Prototype/5b5a37dd-047f-42b2-95fb-9d55ad4ae866/scratchpad/smoke_test.js\")",
+      "Bash(node _smoke_test.cjs)",
+      "Bash(node _smoke_test2.cjs)"
     ]
   }
 }

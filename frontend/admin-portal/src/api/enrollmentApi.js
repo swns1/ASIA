@@ -140,6 +140,11 @@ export const deleteCalendarEvent = (id) =>
 export const getAiCluster = (params = {}) =>
   enrollmentClient.get("/ai/cluster/", { params }).then((r) => r.data);
 
+export async function callGemini(context_type, payload) {
+  const res = await enrollmentClient.post("/ai/interpret/", { context_type, payload });
+  return res.data; // { interpretation: string }
+}
+
 // ── Requirement types (enrollment-service mirror) ─────────────────────────────
 export const getRequirementTypes = (params = {}) =>
   enrollmentClient.get("/requirement-types/", { params }).then((r) => r.data);

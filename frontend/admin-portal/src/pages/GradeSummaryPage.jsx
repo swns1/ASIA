@@ -1,9 +1,8 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
-import AIInsightPanel, { callGemini } from "../components/AIInsightPanel";
+import AIInsightPanel from "../components/AIInsightPanel";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -11,6 +10,7 @@ import {
   getEnrollments as _getEnrollments,
   getGrades as _getGrades,
   getSubjects as _getSubjects,
+  callGemini,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents } from "../api/studentApi";
 
@@ -28,15 +28,6 @@ const GRADING_PERIODS_BY_LEVEL = {
   elementary:        ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
   junior_highschool: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
   senior_highschool: ["1st_semester","2nd_semester"],
-};
-
-const PERIOD_LABELS = {
-  "1st_quarter":  "Q1",
-  "2nd_quarter":  "Q2",
-  "3rd_quarter":  "Q3",
-  "4th_quarter":  "Q4",
-  "1st_semester": "Sem 1",
-  "2nd_semester": "Sem 2",
 };
 
 const PERIOD_FULL = {
@@ -342,7 +333,6 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
 export default function GradeSummaryPage() {
   usePageTitle("Grade Summary");
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
   const [student,     setStudent]     = useState(null);
   const [enrollments, setEnrollments] = useState([]);
   const [enrollment,  setEnrollment]  = useState(null);

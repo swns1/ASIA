@@ -16,7 +16,6 @@ const fmtDate = (d) =>
 function ageAsOfJune1(birthDate, schoolYear) {
   if (!birthDate) return "—";
   const startYear = schoolYear ? parseInt(schoolYear.split("-")[0]) : new Date().getFullYear();
-  const ref   = new Date(startYear, 5, 1);
   const birth = new Date(birthDate);
   let age = startYear - birth.getFullYear();
   const m = 5 - birth.getMonth();

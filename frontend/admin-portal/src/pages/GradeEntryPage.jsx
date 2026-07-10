@@ -1,8 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import AppLayout from "../components/AppLayout";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { getCurrentUser } from "../utils/auth";
+import { useNavigate } from "react-router-dom";
 
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -277,8 +276,6 @@ function AddScoreForm({ componentId, enrollmentId, subjectId, gradingPeriod, onA
 export default function GradeEntryPage() {
   usePageTitle("Grade Entry");
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const currentUser = getCurrentUser();
   // ── Selection state ──
   const [student,       setStudent]       = useState(null);
   const [enrollment,    setEnrollment]    = useState(null);

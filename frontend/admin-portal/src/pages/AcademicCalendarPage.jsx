@@ -329,7 +329,6 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
 // cell in that week even if Wed has two events above it.
 
 const MAX_SLOTS = 3; // strips visible before "+N more"
-const STRIP_H   = 18; // px height of each strip row (font 10 + padding 4 + gap 2 + border 2)
 
 function assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap) {
   // weekDays: array of day numbers or null (for empty cells)

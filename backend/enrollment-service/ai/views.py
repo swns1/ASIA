@@ -7,7 +7,14 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from accounts.permissions import HasRole
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+    return _client
 
 PROMPTS = {
     "grade_report": """
@@ -108,7 +115,7 @@ class GeminiInterpretView(APIView):
 
         try:
             prompt   = PROMPTS[context_type].format(payload=payload)
-            response = client.models.generate_content(
+            response = _get_client().models.generate_content(
                 model="gemini-2.5-flash-lite",
                 contents=prompt,
             )

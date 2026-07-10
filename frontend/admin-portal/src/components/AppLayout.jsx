@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import Sidebar from "./Sidebar";
-import { isTokenValid, clearAuthSession } from "../utils/auth";
+import { clearAuthSession } from "../utils/auth";
 import { refreshToken } from "../api/identityApi";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry

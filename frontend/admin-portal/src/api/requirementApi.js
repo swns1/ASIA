@@ -47,7 +47,7 @@ export async function uploadRequirement({ studentId, requirementTypeId, file, re
     const res = await client.post("/api/student-requirement-submissions/", form);
     return res.data;
   } catch (err) {
-    throw new Error(err.response?.data?.detail || "Upload failed.");
+    throw new Error(err.response?.data?.detail || "Upload failed.", { cause: err });
   }
 }
 
@@ -60,7 +60,7 @@ export async function replaceRequirement({ submissionId, file, remarks }) {
     const res = await client.patch(`/api/student-requirement-submissions/${submissionId}/`, form);
     return res.data;
   } catch (err) {
-    throw new Error(err.response?.data?.detail || "Update failed.");
+    throw new Error(err.response?.data?.detail || "Update failed.", { cause: err });
   }
 }
 

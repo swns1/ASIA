@@ -35,9 +35,6 @@ const GRADE_LABELS = {
   "1st_semester": "Sem 1", "2nd_semester": "Sem 2",
 };
 
-const fmt = (n) =>
-  n != null ? `₱${parseFloat(n).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : "—";
-
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
 

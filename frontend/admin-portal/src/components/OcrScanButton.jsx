@@ -13,7 +13,6 @@
 
 import { useRef, useState } from "react";
 import { scanDocument } from "../api/ocrApi";
-import { getCurrentUser } from "../utils/auth";
 
 const CONFIDENCE_STYLES = {
   high:   { bar: "bg-green-500",  label: "text-green-700",  text: "High confidence"   },
