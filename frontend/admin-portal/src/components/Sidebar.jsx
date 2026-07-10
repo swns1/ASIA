@@ -46,6 +46,7 @@ const NAV = [
       { label: "School Settings",   icon: "ti-settings",         path: "/settings",            allowedRoles: BILLING_ROLES },
       { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates",   allowedRoles: GRADE_ROLES },
       { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories", allowedRoles: GRADE_ROLES },
+      { label: "Teacher Advisories", icon: "ti-user-check",     path: "/teacher-advisories",  allowedRoles: ACADEMIC_STAFF },
       { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types",   allowedRoles: ACADEMIC_STAFF },
       { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules",       allowedRoles: BILLING_ROLES },
     ],

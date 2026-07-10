@@ -173,6 +173,19 @@ export const updateNarrativeCategory = (id, payload) =>
 export const deleteNarrativeCategory = (id) =>
   enrollmentClient.delete(`/narrative-categories/${id}/`).then((r) => r.data);
 
+// ── Section advisories (teacher → section assignment) ─────────────────────────
+export const getSectionAdvisories = (params = {}) =>
+  enrollmentClient.get("/section-advisories/", { params }).then((r) => r.data);
+
+export const createSectionAdvisory = (payload) =>
+  enrollmentClient.post("/section-advisories/", payload).then((r) => r.data);
+
+export const updateSectionAdvisory = (id, payload) =>
+  enrollmentClient.patch(`/section-advisories/${id}/`, payload).then((r) => r.data);
+
+export const deleteSectionAdvisory = (id) =>
+  enrollmentClient.delete(`/section-advisories/${id}/`).then((r) => r.data);
+
 // ── Narrative reports ─────────────────────────────────────────────────────────
 export const getNarrativeReports = (params = {}) =>
   enrollmentClient.get("/narrative-reports/", { params }).then((r) => r.data);

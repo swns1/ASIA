@@ -6,7 +6,9 @@
       "Bash(node_modules/.bin/eslint src/components/ConfirmModal.jsx src/components/EmptyState.jsx src/hooks/usePageTitle.js src/components/Sidebar.jsx)",
       "Bash(../../.venv/Scripts/python.exe manage.py sqlmigrate enrollments 0002)",
       "Bash(npx vitest *)",
-      "Bash(../../.venv/Scripts/python.exe -m pytest accounts/test_roles.py -v)"
+      "Bash(../../.venv/Scripts/python.exe -m pytest accounts/test_roles.py -v)",
+      "Bash(docker --version)",
+      "Bash(npx vite *)"
     ]
   }
 }
