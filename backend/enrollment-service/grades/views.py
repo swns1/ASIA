@@ -2,9 +2,26 @@ from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly, IsAdvisoryTeacherOrStaff, teacher_student_ids
+from accounts.permissions import (
+    IsAdminRegistrarOrReadOnly,
+    IsAdvisoryTeacherOrStaff,
+    guardian_student_ids,
+    teacher_student_ids,
+)
 from .models import Grade, NarrativeCategory, NarrativeReport
 from .serializers import GradeSerializer, NarrativeCategorySerializer, NarrativeReportSerializer
+
+
+def _scope_to_student_records(qs, user, path="enrollment__student_id"):
+    """Narrow a queryset to the student_ids a teacher/guardian may see.
+    Staff roles are unaffected. Guardians/teachers with no linked students
+    get an empty queryset (fail closed)."""
+    role = getattr(user, "role", None)
+    if role == "teacher":
+        return qs.filter(**{f"{path}__in": teacher_student_ids(user)})
+    if role == "guardian":
+        return qs.filter(**{f"{path}__in": guardian_student_ids(user)})
+    return qs
 
 
 class GradeViewSet(viewsets.ModelViewSet):
@@ -21,10 +38,7 @@ class GradeViewSet(viewsets.ModelViewSet):
     ordering = ("-recorded_at", "-grade_id")
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        if getattr(self.request.user, "role", None) == "teacher":
-            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
-        return qs
+        return _scope_to_student_records(super().get_queryset(), self.request.user)
 
 
 class NarrativeCategoryViewSet(viewsets.ModelViewSet):
@@ -48,7 +62,4 @@ class NarrativeReportViewSet(viewsets.ModelViewSet):
     ordering           = ("category__sort_order", "category__name")
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        if getattr(self.request.user, "role", None) == "teacher":
-            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
-        return qs
+        return _scope_to_student_records(super().get_queryset(), self.request.user)

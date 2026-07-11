@@ -13,6 +13,7 @@ ROLE_CHOICES = [
     ("registrar",   "Registrar"),
     ("teacher",     "Teacher"),
     ("accounting",  "Accounting"),
+    ("guardian",    "Guardian"),
 ]
 
 

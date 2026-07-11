@@ -31,6 +31,13 @@ psql -U postgres -c 'CREATE DATABASE "SLIS THESIS FINAL"'
 psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
 ```
 
+`seed_data.sql` only inserts rows into tables that already exist — the schema itself isn't tracked here (built up via pgAdmin over time). One schema addition made outside a migration, needed for the guardian self-service portal: `guardians.user_id`, linking a guardian contact record to a `role=guardian` login account. If you're setting up a fresh database, run this once against it:
+
+```sql
+ALTER TABLE guardians ADD COLUMN IF NOT EXISTS user_id BIGINT NULL;
+CREATE INDEX IF NOT EXISTS guardians_user_id_idx ON guardians (user_id);
+```
+
 ### 2. Backend
 
 All four services share **one** virtualenv at the repo root and **one** requirements file — set it up once:

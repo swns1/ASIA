@@ -19,7 +19,9 @@ from accounts.permissions import (
     HasRole,
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
+    IsStaffOrOwnerGuardianReadOnly,
     STAFF_FULL_WRITE_ROLES,
+    guardian_student_ids,
     teacher_student_ids,
 )
 
@@ -60,6 +62,12 @@ class TestIsAdminRegistrarOrReadOnly:
     def test_accounting_cannot_write(self):
         request = factory.post("/")
         request.user = _user("accounting")
+        assert self.perm.has_permission(request, None) is False
+
+    def test_guardian_denied_even_read(self):
+        # guardians are not staff — generic staff endpoints are fail-closed.
+        request = factory.get("/")
+        request.user = _user("guardian")
         assert self.perm.has_permission(request, None) is False
 
 
@@ -216,3 +224,118 @@ class TestIsAdvisoryTeacherOrStaff:
         request.user = _user("teacher", user_id=5)
 
         assert self.perm.has_object_permission(request, view, obj) is True
+
+    def test_guardian_read_allowed_at_permission_level(self):
+        # guardians pass has_permission for reads (scoped later by object/queryset)
+        get_request = factory.get("/")
+        get_request.user = _user("guardian")
+        assert self.perm.has_permission(get_request, None) is True
+
+    def test_guardian_cannot_write(self):
+        post_request = factory.post("/")
+        post_request.user = _user("guardian")
+        assert self.perm.has_permission(post_request, None) is False
+
+
+def _guardian_mirror_returning(student_ids):
+    """Build a mock GuardianMirror whose .objects.filter(...).values_list(...)
+    yields the given student_ids."""
+    mock_mirror = MagicMock()
+    mock_mirror.objects.filter.return_value.values_list.return_value = student_ids
+    return mock_mirror
+
+
+class TestGuardianStudentIds:
+    def test_returns_empty_set_for_user_without_user_id(self):
+        assert guardian_student_ids(SimpleNamespace()) == set()
+
+    def test_resolves_linked_student_ids(self):
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10, 11])):
+            result = guardian_student_ids(_user("guardian", user_id=7))
+        assert result == {10, 11}
+
+    def test_unlinked_guardian_gets_empty_set(self):
+        # a guardian account with no matching Guardian row → sees nothing.
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([])):
+            result = guardian_student_ids(_user("guardian", user_id=999))
+        assert result == set()
+
+
+class TestGuardianConfidentiality:
+    """The single most important guarantee of Phase B: a guardian linked to
+    student A must never see student B's records."""
+
+    perm = IsAdvisoryTeacherOrStaff()
+
+    def test_guardian_denied_for_other_students_record(self):
+        view = SimpleNamespace(owner_student_id_field="enrollment__student_id")
+        # guardian is linked to student 10, but the object belongs to student 20
+        obj = SimpleNamespace(enrollment=SimpleNamespace(student_id=20))
+        request = factory.get("/")
+        request.user = _user("guardian", user_id=7)
+
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10])):
+            assert self.perm.has_object_permission(request, view, obj) is False
+
+    def test_guardian_allowed_for_own_childs_record(self):
+        view = SimpleNamespace(owner_student_id_field="enrollment__student_id")
+        obj = SimpleNamespace(enrollment=SimpleNamespace(student_id=10))
+        request = factory.get("/")
+        request.user = _user("guardian", user_id=7)
+
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10, 11])):
+            assert self.perm.has_object_permission(request, view, obj) is True
+
+    def test_guardian_write_denied_even_on_own_child(self):
+        # guardians are strictly read-only, even for their own child.
+        view = SimpleNamespace(owner_student_id_field="enrollment__student_id")
+        obj = SimpleNamespace(enrollment=SimpleNamespace(student_id=10))
+        request = factory.patch("/")
+        request.user = _user("guardian", user_id=7)
+
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10])):
+            assert self.perm.has_object_permission(request, view, obj) is False
+
+
+class TestIsStaffOrOwnerGuardianReadOnly:
+    perm = IsStaffOrOwnerGuardianReadOnly()
+
+    def test_guardian_read_passes_permission(self):
+        request = factory.get("/")
+        request.user = _user("guardian")
+        assert self.perm.has_permission(request, None) is True
+
+    def test_guardian_write_denied(self):
+        request = factory.post("/")
+        request.user = _user("guardian")
+        assert self.perm.has_permission(request, None) is False
+
+    def test_registrar_can_write(self):
+        request = factory.post("/")
+        request.user = _user("registrar")
+        assert self.perm.has_permission(request, None) is True
+
+    def test_guardian_object_scoped_to_own_child(self):
+        view = SimpleNamespace(owner_student_id_field="student_id")
+        own = SimpleNamespace(student_id=10)
+        other = SimpleNamespace(student_id=20)
+        request = factory.get("/")
+        request.user = _user("guardian", user_id=7)
+
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10])):
+            assert self.perm.has_object_permission(request, view, own) is True
+        with patch("accounts.guardian_mirror.GuardianMirror",
+                   _guardian_mirror_returning([10])):
+            assert self.perm.has_object_permission(request, view, other) is False
+
+    def test_staff_object_permission_unaffected(self):
+        request = factory.get("/")
+        request.user = _user("registrar")
+        obj = SimpleNamespace(student_id=20)
+        assert self.perm.has_object_permission(request, SimpleNamespace(), obj) is True

@@ -6,14 +6,22 @@ WRITE_ROLES_DEFAULT = {"super_admin", "admin", "registrar"}
 
 class IsAdminRegistrarOrReadOnly(BasePermission):
     """
-    Anyone authenticated can read. Only super_admin, admin, or registrar
-    can write (create/update/delete).
+    Anyone authenticated (staff) can read. Only super_admin, admin, or
+    registrar can write (create/update/delete).
+
+    Guardians are denied entirely — they are not staff and must never reach a
+    student-service endpoint (student/household/guardian records are all
+    sensitive PII). The guardian portal gets everything it needs from
+    enrollment-service (which embeds the child's name) and billing-service, so
+    denying here keeps student-service fail-closed for guardians.
     """
 
     message = "Only admins or registrars can perform this action."
 
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
+            return False
+        if getattr(request.user, "role", None) == "guardian":
             return False
         if request.method in SAFE_METHODS:
             return True

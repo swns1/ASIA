@@ -5,7 +5,12 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
+from accounts.permissions import (
+    IsAdminRegistrarOrReadOnly,
+    IsStaffOrOwnerGuardianReadOnly,
+    guardian_student_ids,
+    teacher_student_ids,
+)
 from .models import Enrollment, EnrollmentOverride, SectionAdvisory
 from .serializers import EnrollmentSerializer, GRADE_ORDER, get_next_grade_level, SectionAdvisorySerializer
 from .filters import EnrollmentFilter
@@ -45,10 +50,19 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     queryset = Enrollment.objects.select_related("student").all()
     serializer_class = EnrollmentSerializer
-    permission_classes = [IsAdminRegistrarOrReadOnly]
+    permission_classes = [IsStaffOrOwnerGuardianReadOnly]
+    owner_student_id_field = "student_id"  # obj is the Enrollment itself
 
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_class = EnrollmentFilter
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Guardians only ever see their own child(ren)'s enrollments; an
+        # unlinked guardian gets an empty list (fail closed).
+        if getattr(self.request.user, "role", None) == "guardian":
+            qs = qs.filter(student_id__in=guardian_student_ids(self.request.user))
+        return qs
     search_fields = (
         "student__first_name",
         "student__middle_name",
@@ -370,11 +384,13 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         from grades.models import Grade
         from grades.serializers import GradeSerializer
 
-        if getattr(request.user, "role", None) == "teacher":
+        role = getattr(request.user, "role", None)
+        if role in ("teacher", "guardian"):
             student_id = Enrollment.objects.filter(pk=pk).values_list("student_id", flat=True).first()
-            if student_id not in teacher_student_ids(request.user):
+            allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
+            if student_id not in allowed:
                 return Response(
-                    {"detail": "You can only view grades for your own advisory section."},
+                    {"detail": "You do not have access to this record."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
@@ -397,6 +413,11 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         from grades.models import Grade
         from requirements.models import RequirementType, StudentRequirementSubmission
+
+        # Enrollment eligibility is a staff planning tool, not part of the
+        # guardian portal — guardians have no business probing it.
+        if getattr(request.user, "role", None) == "guardian":
+            return Response({"detail": "You do not have access to this record."}, status=403)
 
         student_id = request.query_params.get("student_id")
         if not student_id:

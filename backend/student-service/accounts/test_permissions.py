@@ -45,6 +45,13 @@ class TestIsAdminRegistrarOrReadOnly:
         request.user = _user("teacher")
         assert self.perm.has_permission(request, None) is False
 
+    def test_guardian_denied_all_student_service_access(self):
+        # student records are sensitive PII — guardians never reach
+        # student-service; they get their child's info via enrollment-service.
+        get_request = factory.get("/")
+        get_request.user = _user("guardian")
+        assert self.perm.has_permission(get_request, None) is False
+
 
 class TestHasRole:
     def test_ocr_scan_denied_for_teacher(self):

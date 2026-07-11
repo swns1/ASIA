@@ -22,6 +22,7 @@ ROLE_CHOICES = [
     ("registrar",   "Registrar"),
     ("teacher",     "Teacher"),
     ("accounting",  "Accounting"),
+    ("guardian",    "Guardian"),
 ]
 
 
@@ -34,16 +35,7 @@ class User(models.Model):
     user_id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
-    role = models.CharField(
-        max_length=30,
-        choices=[
-            ('super_admin', 'Super Admin'),
-            ('admin', 'Admin'),
-            ('registrar', 'Registrar'),
-            ('teacher', 'Teacher'),
-            ('accounting', 'Accounting'),
-        ]
-    )
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES)
     password = models.CharField(max_length=255)
 
     class Meta:

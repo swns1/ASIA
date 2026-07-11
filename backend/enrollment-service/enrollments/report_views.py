@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
-from accounts.permissions import GRADE_READ_ROLES, HasRole
+from accounts.permissions import GRADE_READ_ROLES, HasRole, guardian_student_ids, teacher_student_ids
 from .models import Enrollment
 from grades.models import Grade
 from subjects.models import Subject
@@ -39,11 +39,12 @@ def report_card(request, enrollment_id):
     except Enrollment.DoesNotExist:
         raise NotFound("Enrollment not found.")
 
-    if getattr(request.user, "role", None) == "teacher":
-        from accounts.permissions import teacher_student_ids
-        if enrollment.student_id not in teacher_student_ids(request.user):
+    role = getattr(request.user, "role", None)
+    if role in ("teacher", "guardian"):
+        allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
+        if enrollment.student_id not in allowed:
             return Response(
-                {"detail": "You can only view report cards for your own advisory section."},
+                {"detail": "You do not have access to this record."},
                 status=403,
             )
 
@@ -132,4 +133,6 @@ def report_card(request, enrollment_id):
     })
 
 
-report_card.cls.required_roles = GRADE_READ_ROLES
+# Staff who may read report cards, plus guardians (scoped to their own child
+# by the ownership check inside the view above).
+report_card.cls.required_roles = GRADE_READ_ROLES | {"guardian"}

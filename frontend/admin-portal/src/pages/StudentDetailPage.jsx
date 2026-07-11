@@ -1,15 +1,108 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useEffect, useState, useRef } from "react";
+import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate, useParams } from "react-router-dom";
 import { getStudent } from "../api/studentApi";
-import { getGuardiansByStudent } from "../api/guardianApi";
+import { getGuardiansByStudent, patchGuardian } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudentLedger } from "../api/billingApi";
+import { getUsers } from "../api/identityApi";
+import { getCurrentUser, hasAnyRole } from "../utils/auth";
+import { modalVariants, springTransition } from "../utils/motion";
+
+const CAN_LINK_ROLES = ["super_admin", "admin", "registrar"];
+
+// ── Guardian account-linking modal ────────────────────────────────────────────
+function LinkAccountModal({ guardian, onClose, onLinked }) {
+  const [users, setUsers]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(guardian.user_id ?? "");
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState("");
+
+  useEffect(() => {
+    getUsers()
+      .then((data) => setUsers((Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian")))
+      .catch((e) => setError(e.message || "Failed to load guardian accounts."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave(unlink = false) {
+    setSaving(true); setError("");
+    try {
+      const value = unlink ? null : (selected ? parseInt(selected, 10) : null);
+      const updated = await patchGuardian(guardian.guardian_id, { user_id: value });
+      toast.success(unlink ? "Account unlinked." : "Guardian account linked.");
+      onLinked(updated);
+      onClose();
+    } catch (e) {
+      const msg = e.message || "Failed to update link.";
+      setError(msg); toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inp = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box" };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}>
+      <motion.div variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
+        style={{ background: "white", borderRadius: 20, width: 480, boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}>
+        <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>Link Login Account</div>
+          <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 2 }}>
+            Give <strong>{guardian.full_name}</strong> access to the parent portal for this student.
+          </div>
+        </div>
+        <div style={{ padding: "22px 28px" }}>
+          {error && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16 }}>{error}</div>
+          )}
+          <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Guardian account</label>
+          {loading ? (
+            <div style={{ fontSize: 13, color: "#b09090" }}>Loading accounts…</div>
+          ) : users.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "#a07878", lineHeight: 1.6, background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10, padding: "12px 14px" }}>
+              No guardian login accounts exist yet. Create one first in <strong>Users</strong> (role “Guardian”), then return here to link it.
+            </div>
+          ) : (
+            <select value={selected} onChange={(e) => setSelected(e.target.value)} style={inp}>
+              <option value="">— Not linked —</option>
+              {users.map((u) => <option key={u.user_id} value={u.user_id}>{u.name} ({u.email})</option>)}
+            </select>
+          )}
+          <div style={{ fontSize: 11, color: "#b09090", marginTop: 8, lineHeight: 1.5 }}>
+            Tip: link the same account across each of a parent's children so they see all of them in one portal.
+          </div>
+        </div>
+        <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid #f5eaea" }}>
+          <div>
+            {guardian.user_id && (
+              <button onClick={() => handleSave(true)} disabled={saving}
+                style={{ background: "transparent", color: "#c92a2a", border: "1.5px solid #fca5a5", borderRadius: 50, padding: "9px 18px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer" }}>
+                Unlink
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>Cancel</button>
+            <button onClick={() => handleSave(false)} disabled={saving || loading || users.length === 0}
+              style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving || loading ? "not-allowed" : "pointer" }}>
+              {saving ? "Saving…" : "Save link"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 
 
@@ -171,6 +264,9 @@ export default function StudentDetailPage() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState("personal");
+  const [linkGuardian,  setLinkGuardian]  = useState(null); // guardian being linked to an account
+
+  const canLink = hasAnyRole(getCurrentUser(), CAN_LINK_ROLES);
 
   const prevTabRef    = useRef("personal");
   const visitedTabs   = useRef(new Set(["personal"]));
@@ -613,12 +709,33 @@ export default function StudentDetailPage() {
                                 <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
                               </div>
                             </div>
-                            {g.is_primary_contact && (
-                              <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#e03131", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
-                                <i className="ti ti-star-filled" style={{ fontSize:10 }} />
-                                Primary Contact
-                              </span>
-                            )}
+                            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                              {g.is_primary_contact && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#e03131", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
+                                  <i className="ti ti-star-filled" style={{ fontSize:10 }} />
+                                  Primary Contact
+                                </span>
+                              )}
+                              {g.user_id ? (
+                                <span title="This guardian can log into the parent portal"
+                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d", fontSize:11, fontWeight:700, border:"1px solid #86efac" }}>
+                                  <i className="ti ti-user-check" style={{ fontSize:11 }} />
+                                  Portal access
+                                </span>
+                              ) : canLink ? (
+                                <button onClick={() => setLinkGuardian(g)}
+                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"white", color:"#7a5050", fontSize:11, fontWeight:600, border:"1px solid #f0e4e4", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                                  <i className="ti ti-link" style={{ fontSize:11 }} />
+                                  Link account
+                                </button>
+                              ) : null}
+                              {g.user_id && canLink && (
+                                <button title="Manage portal access" onClick={() => setLinkGuardian(g)}
+                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                                  <i className="ti ti-settings" style={{ fontSize:12 }} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div style={{ padding:"4px 22px 14px" }}>
                             <InfoRow icon="ti-briefcase" label="Occupation"    value={g.occupation} />
@@ -874,6 +991,19 @@ export default function StudentDetailPage() {
               </>
             )}
           </div>
+
+          <AnimatePresence>
+            {linkGuardian && (
+              <LinkAccountModal
+                key="link-guardian-modal"
+                guardian={linkGuardian}
+                onClose={() => setLinkGuardian(null)}
+                onLinked={(updated) =>
+                  setGuardians((prev) => prev.map((x) => x.guardian_id === updated.guardian_id ? { ...x, ...updated } : x))
+                }
+              />
+            )}
+          </AnimatePresence>
     </AppLayout>
   );
 }

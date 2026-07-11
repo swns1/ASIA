@@ -36,15 +36,21 @@ import SF9PrintPage from "./pages/print/SF9PrintPage";
 import SF10PrintPage from "./pages/print/SF10PrintPage";
 import NarrativeCategoriesPage from "./pages/NarrativeCategoriesPage";
 import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
+import GuardianHomePage from "./pages/GuardianHomePage";
+import GuardianChildPage from "./pages/GuardianChildPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
 
-// Role sets matching the backend permission matrix.
+// Role sets matching the backend permission matrix. STAFF_ALL is every staff
+// role — used to keep guardians out of routes that any staff member may see
+// but a parent must not (e.g. dashboard, students, the printable pages).
 const STAFF_ADMIN     = ["super_admin", "admin"];
 const ACADEMIC_STAFF  = ["super_admin", "admin", "registrar"];
 const GRADE_ROLES     = ["super_admin", "admin", "registrar", "teacher"];
 const BILLING_ROLES   = ["super_admin", "admin", "accounting"];
+const STAFF_ALL       = ["super_admin", "admin", "registrar", "teacher", "accounting"];
+const GUARDIAN        = ["guardian"];
 
 export default function App() {
   return (
@@ -52,16 +58,16 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/dashboard"              element={<P><DashboardPage /></P>} />
-        <Route path="/students"               element={<P><StudentsPage /></P>} />
-        <Route path="/students/new"           element={<P><StudentFormPage /></P>} />
-        <Route path="/students/:id"           element={<P><StudentDetailPage /></P>} />
-        <Route path="/students/:id/edit"      element={<P><StudentFormPage /></P>} />
-        <Route path="/enrollments"            element={<P><EnrollmentsPage /></P>} />
-        <Route path="/enrollments/new"        element={<P><EnrollmentFormPage /></P>} />
-        <Route path="/enrollments/:id"        element={<P><EnrollmentDetailPage /></P>} />
-        <Route path="/enrollments/:id/edit"   element={<P><EnrollmentFormPage /></P>} />
-        <Route path="/subjects"               element={<P><SubjectsPage /></P>} />
+        <Route path="/dashboard"              element={<P roles={STAFF_ALL}><DashboardPage /></P>} />
+        <Route path="/students"               element={<P roles={STAFF_ALL}><StudentsPage /></P>} />
+        <Route path="/students/new"           element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
+        <Route path="/students/:id"           element={<P roles={STAFF_ALL}><StudentDetailPage /></P>} />
+        <Route path="/students/:id/edit"      element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
+        <Route path="/enrollments"            element={<P roles={STAFF_ALL}><EnrollmentsPage /></P>} />
+        <Route path="/enrollments/new"        element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
+        <Route path="/enrollments/:id"        element={<P roles={STAFF_ALL}><EnrollmentDetailPage /></P>} />
+        <Route path="/enrollments/:id/edit"   element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
+        <Route path="/subjects"               element={<P roles={STAFF_ALL}><SubjectsPage /></P>} />
         <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingTemplatesPage /></P>} />
         <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
         <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradeEntryPage /></P>} />
@@ -75,19 +81,25 @@ export default function App() {
         <Route path="/requirements"          element={<P roles={ACADEMIC_STAFF}><RequirementsPage /></P>} />
         <Route path="/users"                 element={<P roles={STAFF_ADMIN}><UsersPage /></P>} />
         <Route path="/analytics"             element={<P roles={ACADEMIC_STAFF}><AnalyticsPage /></P>} />
-        <Route path="/academic-calendar"     element={<P><AcademicCalendarPage /></P>} />
+        <Route path="/academic-calendar"     element={<P roles={STAFF_ALL}><AcademicCalendarPage /></P>} />
+        {/* Report card is backend-scoped: guardians may open only their own
+            child's (403 otherwise), so it stays reachable to any authenticated user. */}
         <Route path="/report-card/:enrollmentId" element={<P><ReportCardPage /></P>} />
-        <Route path="/print/cor/:enrollmentId"        element={<P><CORPrintPage /></P>} />
-        <Route path="/print/grade-slip/:enrollmentId" element={<P><GradeSlipPrintPage /></P>} />
+        <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
+        <Route path="/print/grade-slip/:enrollmentId" element={<P roles={STAFF_ALL}><GradeSlipPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
-        <Route path="/school-forms"          element={<P><SchoolFormsPage /></P>} />
-        <Route path="/print/sf1"             element={<P><SF1PrintPage /></P>} />
+        <Route path="/school-forms"          element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
+        <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />
         <Route path="/attendance"    element={<P roles={GRADE_ROLES}><AttendancePage /></P>} />
-        <Route path="/print/sf2"     element={<P><SF2PrintPage /></P>} />
-        <Route path="/print/sf9/:enrollmentId" element={<P><SF9PrintPage /></P>} />
-        <Route path="/print/sf10/:studentId" element={<P><SF10PrintPage /></P>} />
+        <Route path="/print/sf2"     element={<P roles={STAFF_ALL}><SF2PrintPage /></P>} />
+        <Route path="/print/sf9/:enrollmentId" element={<P roles={STAFF_ALL}><SF9PrintPage /></P>} />
+        <Route path="/print/sf10/:studentId" element={<P roles={STAFF_ALL}><SF10PrintPage /></P>} />
         <Route path="/narrative-categories" element={<P roles={GRADE_ROLES}><NarrativeCategoriesPage /></P>} />
+
+        {/* ── Guardian (parent) portal ── */}
+        <Route path="/guardian"                    element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
+        <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
         <Route path="/teacher-advisories"   element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
       </Routes>
     </BrowserRouter>
