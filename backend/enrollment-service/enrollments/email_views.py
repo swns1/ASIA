@@ -1,34 +1,50 @@
 import resend
 from django.conf import settings
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+
+from accounts.permissions import IsAdminRegistrarOrReadOnly
+from .models import Enrollment
 
 
 @api_view(["POST"])
+@permission_classes([IsAdminRegistrarOrReadOnly])
 def send_enrollment_email(request):
-    # @api_view applies this service's DEFAULT_AUTHENTICATION_CLASSES /
-    # DEFAULT_PERMISSION_CLASSES (JWTAuthentication + IsAuthenticated), so this
-    # endpoint is no longer reachable without a valid access token. It also
-    # replaces the old @csrf_exempt + json.loads(request.body) combo — DRF
-    # parses the JSON body into request.data and doesn't enforce Django's
-    # session-based CSRF check for token-authenticated requests.
+    # Only enrollment_id is trusted from the client -- every other field is
+    # derived server-side from the DB record. Previously this endpoint sent
+    # whatever student_name/student_email/etc the client posted, verbatim,
+    # to an address the client also chose -- any authenticated role could
+    # trigger an official-looking email to an arbitrary address.
+    enrollment_id = request.data.get("enrollment_id")
+    if not enrollment_id:
+        return Response({"error": "enrollment_id is required."}, status=400)
+
+    enrollment = (
+        Enrollment.objects.select_related("student")
+        .filter(pk=enrollment_id)
+        .first()
+    )
+    if not enrollment:
+        return Response({"error": "Enrollment not found."}, status=404)
+
+    student = enrollment.student
+    if not student.email:
+        return Response({"error": "No email address on file for this student."}, status=400)
+
+    student_name = " ".join(
+        filter(None, [student.first_name, student.middle_name, student.last_name])
+    ).strip() or "Student"
+    grade_level  = enrollment.grade_level
+    section      = enrollment.section
+    school_year  = enrollment.school_year
+    school_level = enrollment.get_school_level_display()
+
     try:
-        data = request.data
-        student_name  = data.get("student_name", "Student")
-        student_email = data.get("student_email")
-        grade_level   = data.get("grade_level", "")
-        section       = data.get("section", "")
-        school_year   = data.get("school_year", "")
-        school_level  = data.get("school_level", "").replace("_", " ").title()
-
-        if not student_email:
-            return Response({"error": "No email address on file for this student."}, status=400)
-
         resend.api_key = settings.RESEND_API_KEY
 
         params: resend.Emails.SendParams = {
             "from": "South Lakes Integrated School <onboarding@resend.dev>",
-            "to": [student_email],
+            "to": [student.email],
             "subject": f"Enrollment Confirmation – {school_year}",
             "html": f"""
             <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;background:#fff8f6;border:1px solid #fde2de;border-radius:16px;padding:36px;">

@@ -628,18 +628,12 @@ export default function EnrollmentFormPage() {
             }).catch((e) => console.error("scholarship attach failed", e));
           }
 
-          // Send enrollment confirmation email (non-blocking)
+          // Send enrollment confirmation email (non-blocking). The backend
+          // derives all content server-side from the enrollment record now
+          // (registrar/admin only) -- we only pass the id.
           if (student?.email) {
-            const fullName = [student.first_name, student.middle_name, student.last_name]
-              .filter(Boolean).join(" ");
-            sendEnrollmentEmail({
-              student_name: fullName,
-              student_email: student.email,
-              grade_level: form.grade_level,
-              section: form.section,
-              school_year: form.school_year,
-              school_level: form.school_level,
-            }).catch((e) => console.warn("Enrollment email failed (non-critical):", e));
+            sendEnrollmentEmail({ enrollment_id: created.enrollment_id })
+              .catch((e) => console.warn("Enrollment email failed (non-critical):", e));
           }
 
           // Prompt to generate invoice when enrollment status is enrolled

@@ -1,12 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { isTokenValid, getCurrentUser, hasAnyRole } from "../utils/auth";
-
-// Where to send a logged-in user who lacks access to the route they hit.
-// Guardians go to their own portal; everyone else to the staff dashboard.
-// (Sending a guardian to /dashboard would loop, since that route is staff-only.)
-function homeFor(user) {
-  return user?.role === "guardian" ? "/guardian" : "/dashboard";
-}
+import { isTokenValid, getCurrentUser, hasAnyRole, homeFor } from "../utils/auth";
 
 export default function PrivateRoute({ children, allowedRoles }) {
   if (!isTokenValid()) {

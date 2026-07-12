@@ -10,6 +10,7 @@ from .serializers import RequirementTypeSerializer, StudentRequirementSubmission
 
 
 class RequirementTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAdminRegistrarOrReadOnly]
     queryset = RequirementType.objects.all()
     serializer_class = RequirementTypeSerializer
     filter_backends = [DjangoFilterBackend]

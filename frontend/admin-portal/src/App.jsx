@@ -38,6 +38,7 @@ import NarrativeCategoriesPage from "./pages/NarrativeCategoriesPage";
 import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
 import GuardianHomePage from "./pages/GuardianHomePage";
 import GuardianChildPage from "./pages/GuardianChildPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
@@ -101,6 +102,10 @@ export default function App() {
         <Route path="/guardian"                    element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
         <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
         <Route path="/teacher-advisories"   element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
+
+        {/* Catch-all: must stay outside PrivateRoute so a bad URL always
+            shows 404 regardless of auth state. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

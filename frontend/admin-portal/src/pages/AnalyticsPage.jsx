@@ -7,7 +7,14 @@ import AIInsightPanel from "../components/AIInsightPanel";
 import { pageVariants, listVariants } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-import { getSubjects as _getSubjects, getAiCluster as _getAiCluster, callGemini } from "../api/enrollmentApi";
+import {
+  getSubjects as _getSubjects,
+  getAiCluster as _getAiCluster,
+  callGemini,
+  runRiskAssessment as _runRiskAssessment,
+  getRiskAssessmentLatest as _getRiskAssessmentLatest,
+  getRiskAssessmentTrend as _getRiskAssessmentTrend,
+} from "../api/enrollmentApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -51,6 +58,23 @@ function currentSchoolYear() {
   const now = new Date();
   const yr  = now.getFullYear();
   return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
+}
+
+// Fixed status palette (good/warning/serious/critical) — reserved for state,
+// never reused as a categorical series color. Exact validated hexes (see the
+// dataviz skill's palette reference); warning/serious read sub-3:1 on white
+// by design, so they're only ever used for a small dot/icon swatch next to a
+// dark-ink text label — never as the label's own text color.
+const RISK_LEVEL_META = {
+  low:      { label: "Low",      order: 0, color: "#0ca30c", icon: "ti-shield-check"    },
+  moderate: { label: "Moderate", order: 1, color: "#fab219", icon: "ti-alert-triangle"  },
+  high:     { label: "High",     order: 2, color: "#ec835a", icon: "ti-alert-octagon"   },
+  critical: { label: "Critical", order: 3, color: "#d03b3b", icon: "ti-alert-hexagon"   },
+};
+const RISK_LEVEL_ORDER = ["low", "moderate", "high", "critical"];
+
+function riskLevelMeta(level) {
+  return RISK_LEVEL_META[level] || { label: level || "Unknown", order: -1, color: "#a09890", icon: "ti-help-circle" };
 }
 
 // Silhouette score ranges from -1 to 1; these thresholds follow the
@@ -536,6 +560,215 @@ function ClusterInsightPanel({ result }) {
   );
 }
 
+// ── At-Risk Students ─────────────────────────────────────────────────────────
+// Persisted rule-based risk scoring (ai/risk_views.py) — a weighted composite
+// of grade/attendance/narrative signals, not a trained model; see that
+// endpoint's docstring for why. Distinct from the clustering above: results
+// are saved server-side so they can be tracked run over run.
+
+function RiskLevelBadge({ level }) {
+  const meta = riskLevelMeta(level);
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600,
+      background: `${meta.color}18`, color: "#1a0a0a",
+    }}>
+      <i className={`ti ${meta.icon}`} style={{ fontSize: 11, color: meta.color }} />
+      {meta.label}
+    </span>
+  );
+}
+
+function RiskLevelLegend() {
+  return (
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "#8a8480" }}>
+      {RISK_LEVEL_ORDER.map((lvl) => {
+        const meta = RISK_LEVEL_META[lvl];
+        return (
+          <span key={lvl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <i className={`ti ${meta.icon}`} style={{ fontSize: 12, color: meta.color }} />
+            {meta.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// Line chart, single series (one student's risk_score over time). The
+// connecting line stays a neutral, structural gray — per-point color is the
+// status palette (each run's risk_level), so the trajectory itself reads as
+// a sequence of state changes rather than one flat series color.
+function RiskTrendChart({ points }) {
+  const [hovered, setHovered] = useState(null);
+  if (!points || points.length === 0) return null;
+
+  const W = 700, H = 260, PAD_L = 40, PAD_R = 20, PAD_T = 16, PAD_B = 34;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const scaleX = (i) => (points.length === 1 ? PAD_L + innerW / 2 : PAD_L + (i / (points.length - 1)) * innerW);
+  const scaleY = (score) => PAD_T + innerH - (score / 100) * innerH;
+
+  const linePath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${scaleX(i)} ${scaleY(p.risk_score)}`)
+    .join(" ");
+
+  const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: "100%", maxHeight: H, background: "#fefcf9", borderRadius: 8, border: "1px solid #f0ece4" }}
+    >
+      {/* Threshold gridlines at the exact risk_level cut points (25/50/75) */}
+      {[25, 50, 75].map((mark) => (
+        <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke="#f0ece4" strokeDasharray="4,4" />
+      ))}
+      {[0, 25, 50, 75, 100].map((mark) => (
+        <text key={mark} x={PAD_L - 8} y={scaleY(mark) + 3} textAnchor="end" fontSize="10" fill="#a09890" fontFamily="DM Sans">
+          {mark}
+        </text>
+      ))}
+
+      {/* Axes */}
+      <line x1={PAD_L} x2={W - PAD_R} y1={H - PAD_B} y2={H - PAD_B} stroke="#d8d4cc" />
+      <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={H - PAD_B} stroke="#d8d4cc" />
+
+      {/* X axis dates */}
+      {points.map((p, i) => (
+        <text key={p.run_id} x={scaleX(i)} y={H - PAD_B + 16} textAnchor="middle" fontSize="9.5" fill="#a09890" fontFamily="DM Sans">
+          {fmtDate(p.created_at)}
+        </text>
+      ))}
+
+      {/* Connecting line — neutral/structural, 2px per mark spec */}
+      <path d={linePath} fill="none" stroke="#c0b8b0" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+
+      {/* Points — status-colored, 2px surface ring (mark spec) */}
+      {points.map((p, i) => {
+        const meta = riskLevelMeta(p.risk_level);
+        const isHov = hovered?.run_id === p.run_id;
+        return (
+          <circle
+            key={p.run_id}
+            cx={scaleX(i)} cy={scaleY(p.risk_score)} r={isHov ? 7 : 5.5}
+            fill={meta.color} stroke="#fefcf9" strokeWidth={2.5}
+            style={{ cursor: "pointer", transition: "r 0.12s" }}
+            onMouseEnter={() => setHovered(p)}
+            onMouseLeave={() => setHovered(null)}
+          />
+        );
+      })}
+
+      {/* Tooltip */}
+      {hovered && (() => {
+        const i = points.findIndex((p) => p.run_id === hovered.run_id);
+        const tx = scaleX(i), ty = scaleY(hovered.risk_score);
+        const tipW = 180, tipH = 62;
+        const flipX = tx + tipW + 10 > W - PAD_R;
+        const rx = flipX ? tx - tipW - 10 : tx + 12;
+        const ry = Math.max(PAD_T, ty - tipH - 8);
+        const meta = riskLevelMeta(hovered.risk_level);
+        return (
+          <g>
+            <rect x={rx} y={ry} width={tipW} height={tipH} rx={8} fill="white" stroke="#e0dcd4" strokeWidth={1} filter="drop-shadow(0 2px 6px rgba(0,0,0,0.08))" />
+            <text x={rx + 10} y={ry + 18} fontSize="12" fontWeight="700" fill="#1a0a0a" fontFamily="DM Sans">
+              {fmtDate(hovered.created_at)}
+            </text>
+            <text x={rx + 10} y={ry + 33} fontSize="11" fontWeight="600" fill={meta.color} fontFamily="DM Sans">
+              Risk {hovered.risk_score} · {meta.label}
+            </text>
+            <text x={rx + 10} y={ry + 48} fontSize="10.5" fill="#8a8480" fontFamily="DM Sans">
+              {hovered.school_year} · {hovered.grading_period}
+            </text>
+          </g>
+        );
+      })()}
+    </svg>
+  );
+}
+
+function riskSortValue(row, key) {
+  if (key === "risk_level") return riskLevelMeta(row.risk_level).order;
+  return row[key];
+}
+
+function RiskTable({ scores, selectedStudentId, onSelectStudent, sortKey, sortDir, onSort }) {
+  const isFirst = useIsFirstRender();
+  if (!scores) return null;
+
+  const sorted = [...scores].sort((a, b) => {
+    const av = riskSortValue(a, sortKey);
+    const bv = riskSortValue(b, sortKey);
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  function headerFor(key, label) {
+    const active = sortKey === key;
+    const icon = active ? (sortDir === "asc" ? "ti-chevron-up" : "ti-chevron-down") : "ti-selector";
+    return (
+      <th style={{ ...thStyle, cursor: "pointer", userSelect: "none" }} onClick={() => onSort(key)}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+          {label}
+          <i className={`ti ${icon}`} style={{ fontSize: 11, opacity: active ? 1 : 0.4 }} />
+        </span>
+      </th>
+    );
+  }
+
+  return (
+    <div style={{ maxHeight: 360, overflowY: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: "#faf9f6", position: "sticky", top: 0 }}>
+            {headerFor("student_name", "Student")}
+            <th style={thStyle}>Number</th>
+            {headerFor("risk_score", "Risk Score")}
+            {headerFor("risk_level", "Level")}
+            <th style={thStyle}>Grade</th>
+            <th style={thStyle}>Attendance</th>
+            <th style={thStyle}>Narrative</th>
+          </tr>
+        </thead>
+        <motion.tbody variants={listVariants.container} initial={isFirst ? "hidden" : false} animate="visible">
+          {sorted.map((row) => {
+            const meta = riskLevelMeta(row.risk_level);
+            const isSelected = selectedStudentId === row.student_id;
+            return (
+              <motion.tr
+                key={row.student_id}
+                variants={listVariants.item}
+                onClick={() => onSelectStudent(row)}
+                style={{
+                  borderBottom: "1px solid #f5eaea",
+                  cursor: "pointer",
+                  background: isSelected ? `${meta.color}10` : "white",
+                  transition: "background 0.1s",
+                }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#fff8f6"; }}
+                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "white"; }}
+              >
+                <td style={tdStyle}>{row.student_name || `Student #${row.student_id}`}</td>
+                <td style={tdStyle}>{row.student_number || "—"}</td>
+                <td style={{ ...tdStyle, fontWeight: 700 }}>{row.risk_score}</td>
+                <td style={tdStyle}><RiskLevelBadge level={row.risk_level} /></td>
+                <td style={tdStyle}>{row.grade_component ?? <span style={{ color: "#c0b8b0" }}>—</span>}</td>
+                <td style={tdStyle}>{row.attendance_component ?? <span style={{ color: "#c0b8b0" }}>—</span>}</td>
+                <td style={tdStyle}>{row.narrative_component ?? <span style={{ color: "#c0b8b0" }}>—</span>}</td>
+              </motion.tr>
+            );
+          })}
+        </motion.tbody>
+      </table>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── PAGE COMPONENT ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -607,6 +840,68 @@ export default function AnalyticsPage() {
     }
   }, [schoolYear, gradingPeriod, subjectId, schoolLevel, gradeLevel, nClusters, setLoading, setError, setResult, setSelectedStudent]);
 
+  // ── At-risk students (persisted rule-based scoring) ──────────────────────
+  // Reuses the same school_year/grading_period/school_level/grade_level chips
+  // above — n_clusters and subject_id don't apply to a whole-student score.
+  const [riskResult,          setRiskResult]          = useState(null);
+  const [riskLoading,         setRiskLoading]         = useState(false);
+  const [riskError,           setRiskError]           = useState("");
+  const [riskIsLatest,        setRiskIsLatest]        = useState(false);
+  const [riskSort,            setRiskSort]            = useState({ key: "risk_score", dir: "desc" });
+  const [selectedRiskStudent, setSelectedRiskStudent] = useState(null);
+  const [riskTrend,           setRiskTrend]           = useState(null);
+  const [riskTrendLoading,    setRiskTrendLoading]    = useState(false);
+
+  useEffect(() => {
+    _getRiskAssessmentLatest().then((data) => {
+      setRiskResult(data);
+      setRiskIsLatest(true);
+    }).catch(() => {}); // no saved runs yet — leave the empty state showing
+  }, []);
+
+  const runRiskAssessment = useCallback(async () => {
+    setRiskLoading(true);
+    setRiskError("");
+    setSelectedRiskStudent(null);
+    setRiskTrend(null);
+
+    const payload = { school_year: schoolYear, grading_period: gradingPeriod };
+    if (schoolLevel) payload.school_level = schoolLevel;
+    if (gradeLevel)  payload.grade_level  = gradeLevel;
+
+    try {
+      const data = await _runRiskAssessment(payload);
+      setRiskResult(data);
+      setRiskIsLatest(false);
+    } catch (e) {
+      setRiskError(e.response?.data?.detail || e.message || "Risk assessment failed.");
+    } finally {
+      setRiskLoading(false);
+    }
+  }, [schoolYear, gradingPeriod, schoolLevel, gradeLevel, setRiskLoading, setRiskError, setSelectedRiskStudent, setRiskTrend, setRiskResult, setRiskIsLatest]);
+
+  const handleRiskSort = useCallback((key) => {
+    setRiskSort((prev) => (
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "student_name" ? "asc" : "desc" }
+    ));
+  }, [setRiskSort]);
+
+  const selectRiskStudent = useCallback(async (row) => {
+    setSelectedRiskStudent(row);
+    setRiskTrend(null);
+    setRiskTrendLoading(true);
+    try {
+      const data = await _getRiskAssessmentTrend(row.student_id);
+      setRiskTrend(data);
+    } catch {
+      setRiskTrend(null);
+    } finally {
+      setRiskTrendLoading(false);
+    }
+  }, [setSelectedRiskStudent, setRiskTrend, setRiskTrendLoading]);
+
   const isFirstRender = useIsFirstRender();
 
   return (
@@ -676,6 +971,28 @@ export default function AnalyticsPage() {
                   <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Running…</>
                 ) : (
                   <><i className="ti ti-chart-dots-3" style={{ fontSize: 14 }} />Run Analysis</>
+                )}
+              </motion.button>
+              <motion.button
+                onClick={runRiskAssessment}
+                disabled={riskLoading}
+                whileHover={riskLoading ? {} : { scale: 1.02, boxShadow: "0 6px 20px rgba(217,119,6,0.35)" }}
+                whileTap={riskLoading ? {} : { scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  height: 38, padding: "0 20px", borderRadius: 9,
+                  background: "linear-gradient(135deg, #d97706, #b45309)", color: "white",
+                  border: "none", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
+                  boxShadow: "0 4px 14px rgba(217,119,6,0.25)", transition: "all 0.12s",
+                  opacity: riskLoading ? 0.6 : 1,
+                  cursor: riskLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                {riskLoading ? (
+                  <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Assessing…</>
+                ) : (
+                  <><i className="ti ti-shield-exclamation" style={{ fontSize: 14 }} />Assess Risk</>
                 )}
               </motion.button>
             </div>
@@ -1033,6 +1350,218 @@ export default function AnalyticsPage() {
                   result={result}
                 />
               </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── At-Risk Students ── */}
+        <motion.div variants={pageVariants.item} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 8 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>At-Risk Students</div>
+            <div style={s.topbarSub}>Persisted, rule-based risk scoring · weighted grade / attendance / narrative signals</div>
+          </div>
+        </motion.div>
+
+        <AnimatePresence>
+          {riskError && (
+            <motion.div
+              key="risk-error-banner"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              style={{
+                background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
+                display: "flex", alignItems: "center", gap: 10, padding: "13px 18px",
+              }}
+            >
+              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: "#b91c1c" }}>{riskError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {riskLoading && (
+            <motion.div
+              key="risk-loading-card"
+              variants={pageVariants.item}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8 }}
+              style={s.card}
+            >
+              <div style={s.emptyState}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 12,
+                  background: "linear-gradient(135deg, #fef3e2, #fde8c8)",
+                  display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+                }}>
+                  <i className="ti ti-loader-2" style={{ fontSize: 20, color: "#d97706", animation: "spin 0.8s linear infinite" }} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>Computing risk scores…</div>
+                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4 }}>Scoring every enrolled student for the selected filters</div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {!riskLoading && !riskResult && !riskError && (
+            <motion.div
+              key="risk-empty-state"
+              variants={pageVariants.item}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8 }}
+              style={s.card}
+            >
+              <div style={s.emptyState}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: 14,
+                  background: "linear-gradient(135deg, #fef3e2, #fde8c8)",
+                  display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+                }}>
+                  <i className="ti ti-shield-exclamation" style={{ fontSize: 24, color: "#e8b870" }} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#8a8480" }}>No risk assessment yet</div>
+                <div style={{ fontSize: 12, color: "#b0a898", marginTop: 4, maxWidth: 340, lineHeight: 1.6 }}>
+                  Click <strong style={{ color: "#d97706" }}>Assess Risk</strong> above to score every
+                  enrolled student for the selected school year and period.
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {riskResult && !riskLoading && (
+            <motion.div
+              key={`risk-${riskResult.run_id}`}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 8, transition: { duration: 0.15 } }}
+              variants={pageVariants.container}
+              style={{ display: "contents" }}
+            >
+              {/* Meta chips */}
+              <motion.div
+                variants={listVariants.container}
+                initial="hidden"
+                animate="visible"
+                style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
+              >
+                {[
+                  { label: "Students",    value: riskResult.student_count, icon: "ti-users" },
+                  { label: "School Year", value: riskResult.school_year,   icon: "ti-calendar" },
+                  { label: "Period",      value: PERIOD_OPTIONS.find((p) => p.value === riskResult.grading_period)?.label || riskResult.grading_period, icon: "ti-calendar-time" },
+                  { label: "Computed",    value: new Date(riskResult.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }), icon: "ti-clock" },
+                ].map((m) => (
+                  <motion.div key={m.label} variants={listVariants.item} style={{
+                    flex: "1 1 150px", padding: "11px 14px", borderRadius: 10,
+                    background: "white", border: "1px solid #f0ece4",
+                    display: "flex", alignItems: "center", gap: 10,
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                  }}>
+                    <div style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: "linear-gradient(135deg, #fef3e2, #fde8c8)",
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      <i className={`ti ${m.icon}`} style={{ fontSize: 14, color: "#d97706" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#a09890", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", marginTop: 1 }}>{m.value}</div>
+                    </div>
+                  </motion.div>
+                ))}
+                {riskIsLatest && (
+                  <motion.div variants={listVariants.item} style={{
+                    flex: "1 1 150px", padding: "11px 14px", borderRadius: 10,
+                    background: "#fffbeb", border: "1px solid #fde68a",
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <i className="ti ti-history" style={{ fontSize: 14, color: "#b45309" }} />
+                    <span style={{ fontSize: 11.5, color: "#92400e", fontWeight: 600 }}>Showing last saved run</span>
+                  </motion.div>
+                )}
+              </motion.div>
+
+              {/* Risk table */}
+              <motion.div variants={pageVariants.item} style={{ ...s.card, overflow: "hidden" }}>
+                <div style={s.cardHeader}>
+                  <div>
+                    <div style={s.cardHeaderTitle}>Risk Breakdown</div>
+                    <div style={s.cardHeaderSub}>Component risk contribution shown 0–100 (higher = more at-risk) · click a row for its trend</div>
+                  </div>
+                  <RiskLevelLegend />
+                </div>
+                <RiskTable
+                  scores={riskResult.scores}
+                  selectedStudentId={selectedRiskStudent?.student_id}
+                  onSelectStudent={selectRiskStudent}
+                  sortKey={riskSort.key}
+                  sortDir={riskSort.dir}
+                  onSort={handleRiskSort}
+                />
+              </motion.div>
+
+              {/* Trend for the selected student */}
+              <AnimatePresence>
+                {selectedRiskStudent && (
+                  <motion.div
+                    key={`trend-${selectedRiskStudent.student_id}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.16 }}
+                    style={s.card}
+                  >
+                    <div style={s.cardHeader}>
+                      <div>
+                        <div style={s.cardHeaderTitle}>
+                          {selectedRiskStudent.student_name || `Student #${selectedRiskStudent.student_id}`} · Risk Over Time
+                        </div>
+                        <div style={s.cardHeaderSub}>Risk score across every saved assessment run for this student</div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedRiskStudent(null)}
+                        style={{
+                          background: "white", border: "1px solid #ede9e1", borderRadius: 8,
+                          padding: "5px 12px", fontSize: 12, color: "#8a8480", cursor: "pointer",
+                          fontFamily: "'DM Sans', sans-serif",
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div style={s.cardBody}>
+                      {riskTrendLoading && (
+                        <div style={{ padding: "30px 0", textAlign: "center", color: "#b0a898", fontSize: 12.5 }}>
+                          <i className="ti ti-loader-2" style={{ fontSize: 16, animation: "spin 0.8s linear infinite", marginRight: 6 }} />
+                          Loading trend…
+                        </div>
+                      )}
+                      {!riskTrendLoading && riskTrend?.points.length > 0 && (
+                        <>
+                          <RiskTrendChart points={riskTrend.points} />
+                          {riskTrend.points.length === 1 && (
+                            <div style={{ fontSize: 11, color: "#b0a898", marginTop: 8 }}>
+                              Only one assessment run so far — run another assessment later to see this change over time.
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {!riskTrendLoading && riskTrend?.points.length === 0 && (
+                        <div style={{ padding: "30px 0", textAlign: "center", color: "#b0a898", fontSize: 12.5 }}>
+                          No trend data available for this student.
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>

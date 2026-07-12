@@ -145,6 +145,18 @@ export async function callGemini(context_type, payload) {
   return res.data; // { interpretation: string }
 }
 
+// ── At-risk student prediction (persisted risk scoring) ───────────────────────
+export const runRiskAssessment = (payload) =>
+  enrollmentClient.post("/ai/risk-assessment/run/", payload).then((r) => r.data);
+
+export const getRiskAssessmentLatest = (params = {}) =>
+  enrollmentClient.get("/ai/risk-assessment/latest/", { params }).then((r) => r.data);
+
+export const getRiskAssessmentTrend = (studentId) =>
+  enrollmentClient
+    .get("/ai/risk-assessment/trend/", { params: { student_id: studentId } })
+    .then((r) => r.data);
+
 // ── Requirement types (enrollment-service mirror) ─────────────────────────────
 export const getRequirementTypes = (params = {}) =>
   enrollmentClient.get("/requirement-types/", { params }).then((r) => r.data);

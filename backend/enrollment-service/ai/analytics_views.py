@@ -87,25 +87,17 @@ from collections import defaultdict
 
 import numpy as np
 import requests
-from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import HasRole
-from attendance.models import AttendanceRecord
-from enrollments.models import Enrollment, Student
-from grades.models import Grade, NarrativeReport
 from subjects.models import Subject
 
-logger = logging.getLogger(__name__)
+from .services import build_student_features
 
-NARRATIVE_SCORE = {
-    "outstanding":       3.0,
-    "satisfactory":      2.0,
-    "needs_improvement": 1.0,
-}
+logger = logging.getLogger(__name__)
 
 CLUSTER_COLORS = [
     "#ef4444",
@@ -254,57 +246,19 @@ class ClusterAnalyticsView(APIView):
         n_clusters = max(2, min(n_clusters, 7))
         is_overall_period = grading_period == "overall"
 
-        # ── Fetch grades ──────────────────────────────────────────────────
-        grades_qs = Grade.objects.select_related(
-            "enrollment", "enrollment__student", "subject"
-        ).filter(
-            enrollment__school_year=school_year,
-            enrollment__enrollment_status="enrolled",
-        )
-
-        if not is_overall_period:
-            grades_qs = grades_qs.filter(grading_period=grading_period)
-        if school_level:
-            grades_qs = grades_qs.filter(enrollment__school_level=school_level)
-        if grade_level:
-            grades_qs = grades_qs.filter(enrollment__grade_level=grade_level)
-
-        subject_name = "Overall"
-        if subject_id:
-            grades_qs = grades_qs.filter(subject_id=subject_id)
-            try:
-                subject_name = Subject.objects.get(pk=subject_id).subject_name
-            except Subject.DoesNotExist:
-                return Response(
-                    {"error": f"Subject {subject_id} not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        # ── Build per-student grade data ──────────────────────────────────
-        # Accumulate into lists so multiple periods (overall mode) are
-        # averaged rather than the last-seen value silently overwriting.
-        student_data = {}  # student_id → dict
-
-        for g in grades_qs:
-            sid = g.enrollment.student_id
-            if sid not in student_data:
-                s = g.enrollment.student
-                student_data[sid] = {
-                    "student_id":    s.student_id,
-                    "enrollment_id": g.enrollment.enrollment_id,
-                    "student_name":  f"{s.last_name}, {s.first_name}"
-                                     + (f" {s.middle_name[0]}." if s.middle_name else ""),
-                    "student_number": s.student_number,
-                    "grade_accum":   defaultdict(list),
-                }
-            student_data[sid]["grade_accum"][g.subject.subject_name].append(float(g.numeric_grade))
-
-        # Resolve accumulated lists → per-subject mean
-        for sd in student_data.values():
-            sd["grades"] = {
-                subj: float(np.mean(vals))
-                for subj, vals in sd["grade_accum"].items()
-            }
+        # ── Build per-student features (grades, attendance, narrative) ────
+        # Shared with the persisted at-risk scoring endpoint (ai/risk_views.py)
+        # via ai/services.py, so the two never drift apart with separately
+        # maintained query logic.
+        try:
+            student_data, subject_name = build_student_features(
+                school_year, grading_period, subject_id, school_level, grade_level,
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject {subject_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         if len(student_data) < n_clusters:
             return Response(
@@ -317,50 +271,6 @@ class ClusterAnalyticsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        enrollment_ids = [sd["enrollment_id"] for sd in student_data.values()]
-
-        # ── Fetch attendance (full school year) ───────────────────────────
-        att_qs = (
-            AttendanceRecord.objects
-            .filter(
-                enrollment_id__in=enrollment_ids,
-                enrollment__school_year=school_year,
-            )
-            .values("enrollment_id")
-            .annotate(
-                total=Count("attendance_id"),
-                absent=Count("attendance_id", filter=Q(status="A")),
-            )
-        )
-        att_map = {row["enrollment_id"]: row for row in att_qs}
-
-        # ── Fetch narrative reports ───────────────────────────────────────
-        narrative_qs = NarrativeReport.objects.filter(enrollment_id__in=enrollment_ids)
-        if not is_overall_period:
-            narrative_qs = narrative_qs.filter(grading_period=grading_period)
-
-        narrative_map = defaultdict(list)
-        narrative_ratings_map = defaultdict(list)
-        for nr in narrative_qs:
-            score = NARRATIVE_SCORE.get(nr.rating)
-            if score is not None:
-                narrative_map[nr.enrollment_id].append(score)
-                narrative_ratings_map[nr.enrollment_id].append(nr.rating)
-
-        # ── Attach attendance_rate and avg_narrative ───────────────────────
-        for sd in student_data.values():
-            eid = sd["enrollment_id"]
-
-            att = att_map.get(eid)
-            if att and att["total"] > 0:
-                sd["attendance_rate"] = (att["total"] - att["absent"]) / att["total"]
-            else:
-                sd["attendance_rate"] = np.nan
-
-            scores = narrative_map.get(eid, [])
-            sd["avg_narrative"] = float(np.mean(scores)) if scores else np.nan
-            sd["narrative_ratings"] = narrative_ratings_map.get(eid, [])
-
         # ── Build grade feature matrix ────────────────────────────────────
         # Always a single averaged-grade column (same as the subject_id
         # case), never one column per subject. A student taking 8 subjects
@@ -371,7 +281,7 @@ class ClusterAnalyticsView(APIView):
         student_ids = list(student_data.keys())
 
         grade_features = np.array([
-            [np.mean(list(student_data[sid]["grades"].values()))]
+            [student_data[sid]["grade"]]
             for sid in student_ids
         ])
 
