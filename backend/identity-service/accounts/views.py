@@ -1,5 +1,6 @@
 import base64
 import re
+import uuid
 
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
@@ -15,6 +16,7 @@ from .authentication import NoOpAuthentication
 from .models import AuditLog, User, VALID_ROLES
 from .permissions import HasRole
 from .serializers import LoginSerializer, AuditLogSerializer, UserSerializer
+from .services.auth_service import stamp_session_id
 from .throttles import LoginRateThrottle
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -48,8 +50,11 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         remember_me = serializer.validated_data.get("remember_me", True)
 
+        session_id = uuid.uuid4()
         refresh = RefreshToken.for_user(user)
+        refresh["sid"] = str(session_id)
         access_token = str(refresh.access_token)
+        stamp_session_id(user.user_id, session_id)
 
         response = Response(
             {
@@ -96,10 +101,15 @@ class RefreshView(APIView):
 
         try:
             refresh = RefreshToken(refresh_token)
-            access_token = str(refresh.access_token)
         except TokenError:
             return Response({"detail": "Invalid refresh token."}, status=401)
 
+        sid = refresh.get("sid")
+        user = User.objects.filter(user_id=refresh.get("user_id")).first()
+        if not sid or not user or str(user.current_session_id) != str(sid):
+            return Response({"detail": "Session no longer active."}, status=401)
+
+        access_token = str(refresh.access_token)
         return Response({"access": access_token}, status=200)
 
 
@@ -117,6 +127,11 @@ class LogoutView(APIView):
                     token.blacklist()
             except TokenError:
                 pass
+
+        # request.resolved_user was only resolved because resolve_user_from_request()
+        # already confirmed this token's sid matches the current session, so
+        # it's always safe to clear it here.
+        User.objects.filter(user_id=user.user_id).update(current_session_id=None)
 
         record_audit_event(
             request,

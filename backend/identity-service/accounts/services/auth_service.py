@@ -14,3 +14,12 @@ def find_user(identifier, password):
         return None, "Invalid credentials."
 
     return user, None
+
+
+def stamp_session_id(user_id, session_id):
+    """
+    Marks `session_id` as the user's one valid session, superseding any
+    previous login. A filtered update (not user.save()) so it works
+    regardless of whether the caller holds a full model instance.
+    """
+    User.objects.filter(user_id=user_id).update(current_session_id=session_id)

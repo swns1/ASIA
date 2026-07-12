@@ -29,8 +29,9 @@ def _fake_user(**overrides):
 
 
 @pytest.mark.django_db
+@patch("accounts.views.stamp_session_id")
 @patch("accounts.serializers.find_user")
-def test_login_with_correct_credentials_returns_token_and_sets_refresh_cookie(mock_find_user):
+def test_login_with_correct_credentials_returns_token_and_sets_refresh_cookie(mock_find_user, mock_stamp_session_id):
     mock_find_user.return_value = (_fake_user(), None)
 
     response = APIClient().post(
@@ -45,11 +46,14 @@ def test_login_with_correct_credentials_returns_token_and_sets_refresh_cookie(mo
     assert response.data["user"]["role"] == "teacher"
     assert "refresh" in response.cookies
     assert response.cookies["refresh"]["httponly"]
+    mock_stamp_session_id.assert_called_once()
+    assert mock_stamp_session_id.call_args[0][0] == 1  # user_id from _fake_user()
 
 
 @pytest.mark.django_db
+@patch("accounts.views.stamp_session_id")
 @patch("accounts.serializers.find_user")
-def test_login_with_wrong_password_is_rejected(mock_find_user):
+def test_login_with_wrong_password_is_rejected(mock_find_user, mock_stamp_session_id):
     mock_find_user.return_value = (None, "Invalid credentials.")
 
     response = APIClient().post(

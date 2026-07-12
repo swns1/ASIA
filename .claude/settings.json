@@ -65,7 +65,22 @@
       "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' -X POST http://localhost:8003/api/send-enrollment-email/ -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgzNzk3MzUxLCJpYXQiOjE3ODM3OTAxNTEsImp0aSI6ImNmMmRkMWNhYmQyNTQwZDJhZTgxODllZGI0MDg2OWMzIiwidXNlcl9pZCI6IjEifQ.g9uwKKgW9sA-0PeoXDQx9Pdh2WOW8G6MpgZbRoFKzGY' -H 'Content-Type: application/json' -d '{\"enrollment_id\": 9999999}')",
       "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' -X POST http://localhost:8003/api/send-enrollment-email/ -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgzNzk3MzUxLCJpYXQiOjE3ODM3OTAxNTEsImp0aSI6ImNmMmRkMWNhYmQyNTQwZDJhZTgxODllZGI0MDg2OWMzIiwidXNlcl9pZCI6IjEifQ.g9uwKKgW9sA-0PeoXDQx9Pdh2WOW8G6MpgZbRoFKzGY' -H 'Content-Type: application/json' -d '{\"enrollment_id\": 268, \"student_email\": \"attacker@evil.example\", \"student_name\": \"Spoofed Name\"}')",
       "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' -X POST http://localhost:8003/api/send-enrollment-email/ -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgzNzk3MzUxLCJpYXQiOjE3ODM3OTAxNTEsImp0aSI6ImNmMmRkMWNhYmQyNTQwZDJhZTgxODllZGI0MDg2OWMzIiwidXNlcl9pZCI6IjEifQ.g9uwKKgW9sA-0PeoXDQx9Pdh2WOW8G6MpgZbRoFKzGY' -H 'Content-Type: application/json' -d '{}')",
-      "Bash(pkill -f \"manage.py runserver 8003\")"
+      "Bash(pkill -f \"manage.py runserver 8003\")",
+      "Bash(gh api *)",
+      "PowerShell(gh --version 2>&1)",
+      "PowerShell(gh api search/code -X GET -f q='restoreSession repo:Zaiii12/SLIS-Mobile-App' 2>&1)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(python manage.py migrate accounts)",
+      "Bash(python manage.py dbshell -c \"\\\\d users\")",
+      "Bash(python manage.py showmigrations accounts)",
+      "Bash(python -m pytest accounts -q)",
+      "Bash(python manage.py runserver 8001)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(kill 2413)",
+      "Bash(kill 2435)",
+      "Bash(pkill -f \"manage.py runserver 8002\")",
+      "Bash(python -c ' *)"
     ]
   }
 }
