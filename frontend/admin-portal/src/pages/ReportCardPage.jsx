@@ -1,6 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getReportCard } from "../api/enrollmentApi";
 import logo from "../assets/logo.png";
 
@@ -33,18 +33,20 @@ export default function ReportCardPage() {
   const { enrollmentId } = useParams();
   const navigate = useNavigate();
   const printRef = useRef();
+  const [searchParams] = useSearchParams();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [period, setPeriod] = useState(searchParams.get("period") || "");
 
   useEffect(() => {
-    setLoading(true);
-    getReportCard(enrollmentId)
+    if (!data) setLoading(true);
+    getReportCard(enrollmentId, period ? { grading_period: period } : {})
       .then(setData)
       .catch((e) => setError(e.response?.data?.detail || e.message || "Failed to load report card."))
       .finally(() => setLoading(false));
-  }, [enrollmentId]);
+  }, [enrollmentId, period]);
 
   function handlePrint() {
     window.print();
@@ -71,7 +73,7 @@ export default function ReportCardPage() {
     );
   }
 
-  const { enrollment, student, grading_periods, subjects, overall_gpa } = data;
+  const { enrollment, student, grading_periods, subjects, overall_gpa, available_periods } = data;
   const fullName = [student.last_name, student.first_name, student.middle_name]
     .filter(Boolean).join(", ");
   const statusMeta = STATUS_META[enrollment.enrollment_status] || STATUS_META.enrolled;
@@ -86,6 +88,16 @@ export default function ReportCardPage() {
         >
           <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Back
         </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>Grading Period:</span>
+          <select value={period} onChange={(e) => setPeriod(e.target.value)}
+            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, color: "white", padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
+            <option value="" style={{ background: C.dark }}>All Periods</option>
+            {available_periods.map((p) => (
+              <option key={p.key} value={p.key} style={{ background: C.dark }}>{p.label}</option>
+            ))}
+          </select>
+        </div>
         <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
           Report Card — {fullName} · SY {enrollment.school_year}
         </div>

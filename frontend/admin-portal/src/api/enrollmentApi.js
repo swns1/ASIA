@@ -174,8 +174,8 @@ export const promoteConfirm = (payload) =>
   enrollmentClient.post("/enrollments/promote/confirm/", payload).then((r) => r.data);
 
 // ── Report card ───────────────────────────────────────────────────────────────
-export const getReportCard = (enrollmentId) =>
-  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`).then((r) => r.data);
+export const getReportCard = (enrollmentId, params = {}) =>
+  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`, { params }).then((r) => r.data);
 
 // ── Narrative categories ──────────────────────────────────────────────────────
 export const getNarrativeCategories = (params = {}) =>

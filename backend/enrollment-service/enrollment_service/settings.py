@@ -148,7 +148,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon":    "30/minute",   # unauthenticated (should be rare)
-        "user":    "120/minute",  # authenticated — grades/enrollments need frequent reads
+        "user":    "300/minute",  # authenticated — shared across 9 sub-apps, raised from 120 to stop false 429s on normal staff usage
         "cluster": "20/minute",   # clustering is CPU-heavy but needs room for iteration
     },
     # ─────────────────────────────────────────────────────────────────────

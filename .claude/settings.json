@@ -80,7 +80,12 @@
       "Bash(kill 2413)",
       "Bash(kill 2435)",
       "Bash(pkill -f \"manage.py runserver 8002\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(/c/SLIS-Prototype/.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(/c/SLIS-Prototype/.venv/Scripts/python.exe manage.py runserver 8003)",
+      "Bash(curl -s -o /dev/null -w \"identity :8001 -> %{http_code}\\\\n\" http://localhost:8001/api/accounts/login/ -X OPTIONS)",
+      "Bash(curl -s -o /dev/null -w \"enrollment:8003 -> %{http_code}\\\\n\" http://localhost:8003/api/enrollments/ -X OPTIONS)",
+      "Bash(node _verify_probe.mjs)"
     ]
   }
 }

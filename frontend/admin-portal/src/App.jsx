@@ -72,6 +72,7 @@ export default function App() {
         <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingTemplatesPage /></P>} />
         <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
         <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradeEntryPage /></P>} />
+        <Route path="/grades/summary"         element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
         <Route path="/scholarship-types"      element={<P roles={ACADEMIC_STAFF}><ScholarshipTypesPage /></P>} />
         <Route path="/scholarships"           element={<P roles={ACADEMIC_STAFF}><ScholarshipsPage /></P>} />
         <Route path="/settings"              element={<P roles={BILLING_ROLES}><SchoolSettingsPage /></P>} />
