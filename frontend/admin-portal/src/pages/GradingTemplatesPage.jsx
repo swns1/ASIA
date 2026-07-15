@@ -6,6 +6,7 @@ import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 import {
   getGradingTemplates as _getTemplates,
@@ -87,7 +88,7 @@ function WeightBar({ components }) {
 }
 
 // ── Template Card ─────────────────────────────────────────────────────────────
-function TemplateCard({ template, onEdit, onDelete }) {
+function TemplateCard({ template, onEdit, onDelete, canManage }) {
   const lvl    = getLevelMeta(template.school_level);
   const total  = calcTotal(template.components);
   const totalOk = Math.abs(total - 100) < 0.01;
@@ -131,12 +132,14 @@ function TemplateCard({ template, onEdit, onDelete }) {
               style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
               <i className="ti ti-pencil" style={{ fontSize: 13 }} />
             </motion.button>
-            <motion.button onClick={() => onDelete(template)} title="Delete"
-              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-              whileTap={{ scale: 0.93 }}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
-              <i className="ti ti-trash" style={{ fontSize: 13 }} />
-            </motion.button>
+            {canManage && (
+              <motion.button onClick={() => onDelete(template)} title="Delete"
+                whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+                whileTap={{ scale: 0.93 }}
+                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+              </motion.button>
+            )}
           </div>
         </div>
 
@@ -482,6 +485,7 @@ function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
 export default function GradingTemplatesPage() {
   usePageTitle("Grading Templates");
   const navigate = useNavigate();
+  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [templates,   setTemplates]   = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -769,7 +773,8 @@ export default function GradingTemplatesPage() {
             {filtered.map((tpl) => (
               <TemplateCard key={tpl.grading_template_id} template={tpl}
                 onEdit={(t) => setModal({ mode: "edit", template: t })}
-                onDelete={(t) => { setToDelete(t); setDeleteError(""); }} />
+                onDelete={(t) => { setToDelete(t); setDeleteError(""); }}
+                canManage={canManage} />
             ))}
           </motion.div>
         )}

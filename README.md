@@ -77,7 +77,7 @@ No `.env` is required for local development — every API client already default
 
 ## Known in-progress work
 
-- **RBAC**: role is captured at login and stored, but enforcement is incomplete on both sides. Several backend endpoints (billing, grades, student records) currently only require *any* authenticated user, not a specific role, and the frontend has no per-route role guard beyond the Audit Trail page.
+- **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. Remaining hardening work: the 3 non-identity services still fall back to plain `IsAuthenticated` (not role-aware) if a future endpoint omits explicit `permission_classes`, and `backend/shared/` is an empty placeholder — the permission/authentication classes are hand-copied across services rather than truly shared.
 - **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`), but results aren't persisted and hyperparameters are hardcoded.
 
 ## Testing

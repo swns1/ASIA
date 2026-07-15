@@ -3,7 +3,6 @@ from google import genai
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from accounts.permissions import HasRole
 
@@ -93,7 +92,6 @@ Student Data:
 
 
 class GeminiInterpretView(APIView):
-    authentication_classes = [JWTAuthentication]
     permission_classes = [HasRole]
     required_roles = {"super_admin", "admin", "registrar"}
 

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 import {
   getNarrativeCategories as _getCategories,
@@ -20,7 +21,7 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
 
-function CategoryRow({ cat, onUpdated, onDeleted }) {
+function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
   const [editing,  setEditing]  = useState(false);
   const [name,     setName]     = useState(cat.name);
   const [desc,     setDesc]     = useState(cat.description ?? "");
@@ -111,7 +112,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
               onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; }}>
               <i className="ti ti-pencil" style={{ fontSize: 12 }} />
             </button>
-            {confirm ? (
+            {canManage && (confirm ? (
               <div style={{ display: "flex", gap: 4 }}>
                 <button onClick={handleDelete} disabled={deleting}
                   style={{ height: 28, padding: "0 10px", border: "none", borderRadius: 7, background: "#e03131", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
@@ -127,7 +128,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
                 onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}>
                 <i className="ti ti-trash" style={{ fontSize: 12 }} />
               </button>
-            )}
+            ))}
           </div>
         </div>
       )}
@@ -137,6 +138,7 @@ function CategoryRow({ cat, onUpdated, onDeleted }) {
 
 export default function NarrativeCategoriesPage() {
   usePageTitle("Narrative Categories");
+  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const [categories, setCategories] = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [adding,     setAdding]     = useState(false);
@@ -267,6 +269,7 @@ export default function NarrativeCategoriesPage() {
                 <CategoryRow key={cat.category_id} cat={cat}
                   onUpdated={(updated) => setCategories((prev) => prev.map((c) => c.category_id === updated.category_id ? updated : c))}
                   onDeleted={(id) => setCategories((prev) => prev.filter((c) => c.category_id !== id))}
+                  canManage={canManage}
                 />
               ))}
             </AnimatePresence>

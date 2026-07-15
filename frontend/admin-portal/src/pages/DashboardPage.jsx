@@ -102,7 +102,7 @@ const Sk = ({ w = "100%", h = 18, r = 6 }) => (
 );
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters, filterValues, onFilterChange }) {
+function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters, filterValues, onFilterChange, onClick }) {
   const [showFilters, setShowFilters] = useState(false);
   const chips = {
     up:      { bg: "#eaf3de", color: "#3b6d11" },
@@ -118,7 +118,7 @@ function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters,
     fontFamily: "'DM Sans',sans-serif", outline: "none", minWidth: 0,
   };
   return (
-    <div style={s.statCard}>
+    <div style={{ ...s.statCard, cursor: onClick ? "pointer" : undefined }} onClick={onClick}>
       <div style={s.statTop}>
         <span style={s.statLabel}>{label}</span>
         <div style={s.statIcon}>
@@ -134,7 +134,7 @@ function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters,
           : <span style={{ ...s.chip, background: chip.bg, color: chip.color }}>{chipText}</span>
         }
         {filters?.length > 0 && (
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4 }} onClick={(e) => e.stopPropagation()}>
             {hasActiveFilter && (
               <button
                 onClick={() => filters.forEach((f) => onFilterChange(f.key, null))}
@@ -177,6 +177,7 @@ function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters,
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
             style={{ overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", gap: 4, paddingTop: 6, borderTop: "1px solid #f9f0f0", marginTop: 2 }}>
               {filters.map((f) => (
@@ -222,13 +223,14 @@ export default function DashboardPage() {
   const now         = useClock();
 
   // ── per-card filter state ──
-  const [studentsFilters,    setStudentsFilters]    = useState({ level: null, grade: null });
+  // Total Students and Scholarships Awarded have no level/grade/year filter here:
+  // the backend doesn't support filtering those endpoints by that data (it lives on
+  // Enrollment records, not Student/Scholarship ones), so the dropdown was a no-op.
   const [enrolledFilters,    setEnrolledFilters]    = useState({ year: null, level: null, grade: null });
   const [pendingFilters,     setPendingFilters]     = useState({ year: null, level: null, grade: null });
-  const [scholarshipFilters, setScholarshipFilters] = useState({ year: null, level: null, grade: null });
   const [financialYear,        setFinancialYear]        = useState(null);
   const [showFinancialFilters, setShowFinancialFilters] = useState(false);
-  const [showAmounts,          setShowAmounts]          = useState(false);
+  const [showAmounts,          setShowAmounts]          = useState(true);
 
   function updateFilter(setter) {
     return (key, val) => setter((prev) => {
@@ -262,10 +264,8 @@ export default function DashboardPage() {
 
   const schoolYear = currentSchoolYear();
 
-  const isFirstStudentsFetch    = useRef(true);
   const isFirstEnrolledFetch    = useRef(true);
   const isFirstPendingFetch     = useRef(true);
-  const isFirstScholarshipFetch = useRef(true);
   const isFirstFinancialFetch   = useRef(true);
 
   async function fetchAll() {
@@ -298,11 +298,17 @@ export default function DashboardPage() {
     return {};
   }
 
+  function cardLink(path, params) {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ""))
+    ).toString();
+    return qs ? `${path}?${qs}` : path;
+  }
+
   async function fetchStudentStats() {
-    const gpParams = parseGp(studentsFilters);
     const [data, active] = await Promise.all([
-      _getStudents({ page_size: 1, ...gpParams }),
-      _getStudents({ status: "active", page_size: 1, ...gpParams }),
+      _getStudents({ page_size: 1 }),
+      _getStudents({ status: "active", page_size: 1 }),
     ]);
     setTotalStudents(data.count ?? 0);
     setActiveStudents(active.count ?? 0);
@@ -343,8 +349,7 @@ export default function DashboardPage() {
   }
 
   async function fetchScholarships() {
-    const sy = scholarshipFilters.year ?? schoolYear;
-    const data = await _getEnrollmentScholarships({ page_size: 4, school_year: sy, ...parseGp(scholarshipFilters) });
+    const data = await _getEnrollmentScholarships({ page_size: 4, school_year: schoolYear });
     const results = Array.isArray(data) ? data : data.results ?? [];
     setScholarships(results);
     setScholarshipCount(results.length);
@@ -377,10 +382,10 @@ export default function DashboardPage() {
         _getEnrollments({ enrollment_status: "pending", school_year: currentSchoolYear(), page_size: 1 }).catch(() => null),
       ]);
       if (unpaidData?.count > 0) {
-        newAlerts.push({ id: "unpaid", icon: "ti-receipt-off", color: "#a32d2d", bg: "#fde8e8", message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`, link: "/invoices" });
+        newAlerts.push({ id: "unpaid", icon: "ti-receipt-off", color: "#a32d2d", bg: "#fde8e8", message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`, link: "/invoices?status=unpaid" });
       }
       if (pendingEnrData?.count > 0) {
-        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: "/enrollments" });
+        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: `/enrollments?enrollment_status=pending&school_year=${currentSchoolYear()}` });
       }
     } catch { /* alerts are non-critical */ }
     setAlerts(newAlerts);
@@ -393,10 +398,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (isFirstStudentsFetch.current) { isFirstStudentsFetch.current = false; return; }
-    fetchStudentStats();
-  }, [studentsFilters]);
-  useEffect(() => {
     if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
     fetchEnrollmentStats();
   }, [enrolledFilters]);
@@ -404,10 +405,6 @@ export default function DashboardPage() {
     if (isFirstPendingFetch.current) { isFirstPendingFetch.current = false; return; }
     fetchPendingStats();
   }, [pendingFilters]);
-  useEffect(() => {
-    if (isFirstScholarshipFetch.current) { isFirstScholarshipFetch.current = false; return; }
-    fetchScholarships();
-  }, [scholarshipFilters]);
   useEffect(() => {
     if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
     fetchFinancialSummary();
@@ -495,12 +492,7 @@ export default function DashboardPage() {
                 chipText={`${activeStudents.toLocaleString()} active`}
                 chipType="up"
                 loading={loading}
-                filters={[
-                  { key: "level", options: levelOpts, placeholder: "All Levels" },
-                  ...(studentsFilters.level ? [{ key: "grade", options: gradeOpts(studentsFilters), placeholder: "All Grades" }] : []),
-                ]}
-                filterValues={studentsFilters}
-                onFilterChange={updateFilter(setStudentsFilters)}
+                onClick={() => navigate("/students")}
               />
               <StatCard
                 label="Enrolled this S.Y."
@@ -516,6 +508,11 @@ export default function DashboardPage() {
                 ]}
                 filterValues={enrolledFilters}
                 onFilterChange={updateFilter(setEnrolledFilters)}
+                onClick={() => navigate(cardLink("/enrollments", {
+                  enrollment_status: "enrolled",
+                  school_year: enrolledFilters.year ?? schoolYear,
+                  ...parseGp(enrolledFilters),
+                }))}
               />
               <StatCard
                 label="Pending Enrollment"
@@ -531,34 +528,33 @@ export default function DashboardPage() {
                 ]}
                 filterValues={pendingFilters}
                 onFilterChange={updateFilter(setPendingFilters)}
+                onClick={() => navigate(cardLink("/enrollments", {
+                  enrollment_status: "pending",
+                  school_year: pendingFilters.year ?? schoolYear,
+                  ...parseGp(pendingFilters),
+                }))}
               />
               <StatCard
                 label="Scholarships Awarded"
                 icon="ti-award"
                 rawValue={scholarshipCount}
-                chipText={`S.Y. ${scholarshipFilters.year ?? schoolYear}`}
+                chipText={`S.Y. ${schoolYear}`}
                 chipType="info"
                 loading={loading}
-                filters={[
-                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
-                  { key: "level", options: levelOpts, placeholder: "All Levels" },
-                  ...(scholarshipFilters.level ? [{ key: "grade", options: gradeOpts(scholarshipFilters), placeholder: "All Grades" }] : []),
-                ]}
-                filterValues={scholarshipFilters}
-                onFilterChange={updateFilter(setScholarshipFilters)}
+                onClick={() => navigate("/scholarships")}
               />
             </motion.div>
 
             {/* ── Revenue strip ── */}
             <div style={s.revenueStrip}>
               {[
-                { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd" },
-                { label: "Collected",   key: "total_collected", icon: "ti-cash",         color: "#2e6b0d", bg: "#e8f5e0" },
-                { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", color: "#a32d2d", bg: "#fde8e8" },
+                { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd", link: "/invoices" },
+                { label: "Collected",   key: "total_collected", icon: "ti-cash",         color: "#2e6b0d", bg: "#e8f5e0", link: "/invoices?status=paid" },
+                { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", color: "#a32d2d", bg: "#fde8e8", link: "/invoices?status=unpaid" },
               ].map((item) => {
                 const raw = financialSummary ? parseFloat(financialSummary[item.key] ?? 0) : 0;
                 return (
-                  <div key={item.key} onClick={() => navigate("/invoices")} style={{ ...s.revenueCell, cursor: "pointer" }} onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                  <div key={item.key} onClick={() => navigate(item.link)} style={{ ...s.revenueCell, cursor: "pointer" }} onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 28, height: 28, borderRadius: 8, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />

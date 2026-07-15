@@ -674,7 +674,7 @@ export default function InvoicesPage() {
     const p = searchParams.get("selected");
     return p ? parseInt(p) : null;
   });
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "all");
   const [planFilter,   setPlanFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [inputVal,     setInputVal]     = useState("");
@@ -718,7 +718,8 @@ export default function InvoicesPage() {
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
-    fetchInvoices(1, "all", "all", "", "-invoice_id");
+    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
   const handleSearch = () => {

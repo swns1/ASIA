@@ -49,6 +49,15 @@ export function isTokenValid() {
   }
 }
 
+// Role sets matching the backend permission matrix. STAFF_ALL is every staff
+// role — used to keep guardians out of routes that any staff member may see
+// but a parent must not (e.g. dashboard, students, the printable pages).
+export const STAFF_ADMIN     = ["super_admin", "admin"];
+export const ACADEMIC_STAFF  = ["super_admin", "admin", "registrar"];
+export const GRADE_ROLES     = ["super_admin", "admin", "registrar", "teacher"];
+export const BILLING_ROLES   = ["super_admin", "admin", "accounting"];
+export const STAFF_ALL       = ["super_admin", "admin", "registrar", "teacher", "accounting"];
+
 export function isAdminRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return ["admin", "super_admin", "superadmin"].includes(normalized);

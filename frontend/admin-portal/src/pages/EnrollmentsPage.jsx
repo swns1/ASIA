@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import EmptyState from "../components/EmptyState";
@@ -18,6 +18,7 @@ import {
   promoteConfirm,
 } from "../api/enrollmentApi";
 import { getStudents as apiGetStudents } from "../api/studentApi";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -1116,6 +1117,8 @@ function StatCard({ label, value, icon, color, bg, loading }) {
 export default function EnrollmentsPage() {
   usePageTitle("Enrollments");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const token = sessionStorage.getItem("access_token");
   const [rowsAnimated, setRowsAnimated] = useState(false);
   const [enrollments,    setEnrollments]    = useState([]);
@@ -1127,19 +1130,24 @@ export default function EnrollmentsPage() {
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
 
-  // Filters
-  const [schoolYear,   setSchoolYear]   = useState("");
-  const [schoolLevel,  setSchoolLevel]  = useState("");
-  const [gradeLevel,   setGradeLevel]   = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered
+  const [schoolYear,   setSchoolYear]   = useState(() => searchParams.get("school_year") ?? "");
+  const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
+  const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
 
   const schoolYearOptions = buildSchoolYearOptions();
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
 
-  // Reset grade when level changes
-  useEffect(() => { setGradeLevel(""); }, [schoolLevel]);
+  // Reset grade when level changes — but not on the initial mount, so a URL-seeded
+  // grade_level (alongside school_level) isn't immediately wiped out.
+  const skipLevelReset = useRef(true);
+  useEffect(() => {
+    if (skipLevelReset.current) { skipLevelReset.current = false; return; }
+    setGradeLevel("");
+  }, [schoolLevel]);
 
   // Fetch status counts once on mount for stat cards
   useEffect(() => {
@@ -1238,16 +1246,18 @@ export default function EnrollmentsPage() {
               </div>
             </div>
             <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.12 }}
-                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                onClick={() => setShowPromote(true)}
-                onMouseEnter={(e) => { e.currentTarget.style.background="#eff6ff"; e.currentTarget.style.borderColor="#2563eb"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#93c5fd"; }}>
-                <i className="ti ti-arrow-up-right" style={{ fontSize:15 }} />Promote Section
-              </motion.button>
+              {canManage && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={{ duration: 0.12 }}
+                  style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                  onClick={() => setShowPromote(true)}
+                  onMouseEnter={(e) => { e.currentTarget.style.background="#eff6ff"; e.currentTarget.style.borderColor="#2563eb"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#93c5fd"; }}>
+                  <i className="ti ti-arrow-up-right" style={{ fontSize:15 }} />Promote Section
+                </motion.button>
+              )}
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}

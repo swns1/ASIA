@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteStudent, getStudents } from "../api/studentApi";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -118,6 +119,8 @@ function StatCard({ label, value, icon, color, bg, loading }) {
 export default function StudentsPage() {
   usePageTitle("Students");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const [students, setStudents]   = useState([]);
   const [search, setSearch]       = useState("");
   const [inputVal, setInputVal]   = useState("");
@@ -126,7 +129,7 @@ export default function StudentsPage() {
   const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading]     = useState(true);
   const [toDelete, setToDelete]   = useState(null);
-  const [statusFilter, setStatus] = useState("all");
+  const [statusFilter, setStatus] = useState(() => searchParams.get("status") ?? "all");
   const [sexFilter, setSexFilter] = useState("");
   const [ordering, setOrdering]   = useState("-student_id");
   const [isRecents, setIsRecents] = useState(false);
@@ -185,8 +188,9 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
-    fetchStudents(1, "", "all", "", "-student_id");
+    fetchStudents(1, "", statusFilter, "", "-student_id");
     fetchCounts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSearch = () => {
@@ -724,13 +728,15 @@ export default function StudentsPage() {
                                   >
                                     <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                   </button>
-                                  <button
-                                    className="row-action danger" title="Delete" aria-label={`Delete ${st.first_name} ${st.last_name}`}
-                                    style={{ color: "#c09090" }}
-                                    onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
-                                  >
-                                    <i className="ti ti-trash" style={{ fontSize: 14 }} />
-                                  </button>
+                                  {canManage && (
+                                    <button
+                                      className="row-action danger" title="Delete" aria-label={`Delete ${st.first_name} ${st.last_name}`}
+                                      style={{ color: "#c09090" }}
+                                      onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
+                                    >
+                                      <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </motion.tr>

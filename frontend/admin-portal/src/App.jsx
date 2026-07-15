@@ -39,19 +39,12 @@ import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
 import GuardianHomePage from "./pages/GuardianHomePage";
 import GuardianChildPage from "./pages/GuardianChildPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import { STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES, STAFF_ALL } from "./utils/auth";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
 
-// Role sets matching the backend permission matrix. STAFF_ALL is every staff
-// role — used to keep guardians out of routes that any staff member may see
-// but a parent must not (e.g. dashboard, students, the printable pages).
-const STAFF_ADMIN     = ["super_admin", "admin"];
-const ACADEMIC_STAFF  = ["super_admin", "admin", "registrar"];
-const GRADE_ROLES     = ["super_admin", "admin", "registrar", "teacher"];
-const BILLING_ROLES   = ["super_admin", "admin", "accounting"];
-const STAFF_ALL       = ["super_admin", "admin", "registrar", "teacher", "accounting"];
-const GUARDIAN        = ["guardian"];
+const GUARDIAN = ["guardian"];
 
 export default function App() {
   return (

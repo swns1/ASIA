@@ -7,6 +7,7 @@ import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { modalVariants, springTransition } from "../utils/motion";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -329,6 +330,7 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
 export default function SubjectsPage() {
   usePageTitle("Subjects");
   const navigate    = useNavigate();
+  const canManage   = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [subjects,     setSubjects]    = useState([]);
   const [templates,    setTemplates]   = useState([]);
@@ -709,9 +711,11 @@ export default function SubjectsPage() {
                                 <button className="row-action" title="Edit" onClick={() => setModal({ mode: "edit", subject: sub })}>
                                   <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                                 </button>
-                                <button className="row-action danger" title="Delete" style={{ color: "#c09090" }} onClick={() => setToDelete(sub)}>
-                                  <i className="ti ti-trash" style={{ fontSize: 13 }} />
-                                </button>
+                                {canManage && (
+                                  <button className="row-action danger" title="Delete" style={{ color: "#c09090" }} onClick={() => setToDelete(sub)}>
+                                    <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </motion.tr>

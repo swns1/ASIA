@@ -4,16 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 
 const MotionLink = motion.create(Link);
-import { hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor } from "../utils/auth";
+import {
+  hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
+  STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
+} from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
-
-// Role sets matching the backend permission matrix (see App.jsx).
-const STAFF_ADMIN    = ["super_admin", "admin"];
-const ACADEMIC_STAFF = ["super_admin", "admin", "registrar"];
-const GRADE_ROLES    = ["super_admin", "admin", "registrar", "teacher"];
-const BILLING_ROLES  = ["super_admin", "admin", "accounting"];
 
 const NAV = [
   {
