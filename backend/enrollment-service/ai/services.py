@@ -114,6 +114,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
         .annotate(
             total=Count("attendance_id"),
             absent=Count("attendance_id", filter=Q(status="A")),
+            excused=Count("attendance_id", filter=Q(status="E")),
         )
     )
     att_map = {row["enrollment_id"]: row for row in att_qs}
@@ -137,7 +138,11 @@ def build_student_features(school_year, grading_period, subject_id=None,
 
         att = att_map.get(eid)
         if att and att["total"] > 0:
-            sd["attendance_rate"] = (att["total"] - att["absent"]) / att["total"]
+            # Present + Late count as attended; Excused still counts against
+            # the rate (it's the reason that's excused, not the absence
+            # itself) — matches the convention used everywhere else
+            # (see frontend/admin-portal/src/utils/attendance.js).
+            sd["attendance_rate"] = (att["total"] - att["absent"] - att["excused"]) / att["total"]
         else:
             sd["attendance_rate"] = np.nan
 

@@ -4,6 +4,7 @@ import { getSchoolSettings } from "../../api/billingApi";
 import { getEnrollments } from "../../api/enrollmentApi";
 import { getAttendance } from "../../api/attendanceApi";
 import { downloadAsPDF } from "../../utils/pdfExport";
+import { isPresentStatus } from "../../utils/attendance";
 import logo from "../../assets/logo.png";
 
 function getDaysInMonth(ym) {
@@ -187,8 +188,9 @@ export default function SF2PrintPage() {
               let present = 0, absent = 0;
               schoolDays.forEach(d => {
                 const s = rec[d.date];
-                if (s === "P" || s === "L") present++;
-                else if (s === "A" || s === "E") absent++;
+                if (!s) return;
+                if (isPresentStatus(s)) present++;
+                else absent++;
               });
 
               return (

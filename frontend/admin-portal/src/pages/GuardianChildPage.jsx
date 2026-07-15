@@ -6,6 +6,7 @@ import GuardianLayout from "../components/GuardianLayout";
 import { getReportCard } from "../api/enrollmentApi";
 import { getAttendanceSummary } from "../api/attendanceApi";
 import { getStudentLedger } from "../api/billingApi";
+import { attendanceRate } from "../utils/attendance";
 
 const LEVEL_LABELS = {
   nursery: "Nursery", kindergarten: "Kindergarten", elementary: "Elementary",
@@ -92,7 +93,7 @@ function AttendanceTab({ summary, loading }) {
     { label: "Excused", value: totals.excused, color: "#1455a0", bg: "#e3f0fd", icon: "ti-file-check" },
   ];
   const total = totals.total || 0;
-  const rate = total ? Math.round(((totals.present || 0) + (totals.late || 0)) / total * 100) : null;
+  const rate = attendanceRate(totals);
 
   return (
     <div style={{ ...card, padding: 22 }}>

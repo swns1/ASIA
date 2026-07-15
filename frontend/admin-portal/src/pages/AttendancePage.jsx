@@ -5,6 +5,7 @@ import AppLayout from "../components/AppLayout";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getSchoolSettings } from "../api/billingApi";
 import { getAttendance, bulkAttendance, getAttendanceSummary } from "../api/attendanceApi";
+import { attendanceRate } from "../utils/attendance";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const C = { dark:"#1a0a0a", muted:"#7a5050", border:"#f5eaea", red:"#e03131" };
@@ -281,7 +282,7 @@ function SummaryTable({ classInfo, data }) {
             <tr><td colSpan={8} style={{padding:"40px",textAlign:"center",fontSize:13,color:"#b09090"}}>No attendance records found for this class.</td></tr>
           ) : rows.map((row,idx)=>{
             const total=row.total||0;
-            const pct=total>0?Math.round((row.present/total)*100):null;
+            const pct=attendanceRate(row);
             const rc=pct===null?{c:"#b09090",bg:"#f5f5f5"}:pct>=90?{c:"#16a34a",bg:"#e8f5e0"}:pct>=75?{c:"#d97706",bg:"#fef3e2"}:{c:"#e03131",bg:"#fff0f0"};
             return (
               <tr key={row.enrollment_id} style={{borderBottom:`1px solid ${C.border}`}}
