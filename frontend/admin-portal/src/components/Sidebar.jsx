@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 
 const MotionLink = motion.create(Link);
-import { hasAnyRole, clearAuthSession, getCurrentUser } from "../utils/auth";
+import { hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
@@ -151,7 +151,7 @@ export default function Sidebar({ user: userProp }) {
             <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>South Lakes IS</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Admin Portal</div>
+              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>{portalLabelFor(currentUser?.role)}</div>
             </div>
           </div>
         </motion.div>

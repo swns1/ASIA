@@ -54,6 +54,19 @@ export function isAdminRole(role) {
   return ["admin", "super_admin", "superadmin"].includes(normalized);
 }
 
+const PORTAL_LABELS = {
+  super_admin: "Admin Portal",
+  admin: "Admin Portal",
+  registrar: "Registrar Portal",
+  teacher: "Teacher Portal",
+  accounting: "Accounting Portal",
+  guardian: "Parent Portal",
+};
+
+export function portalLabelFor(role) {
+  return PORTAL_LABELS[String(role || "").trim().toLowerCase()] || "Staff Portal";
+}
+
 export function canViewAuditTrail(user = getCurrentUser()) {
   return isAdminRole(user?.role);
 }
