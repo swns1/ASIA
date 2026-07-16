@@ -7,6 +7,7 @@ from django.db import transaction
 
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
+    IsAdvisoryTeacherOrStaff,
     IsStaffOrOwnerGuardianReadOnly,
     guardian_student_ids,
     teacher_student_ids,

@@ -426,6 +426,7 @@ function AttendanceTab({ advisory }) {
 function SectionCard({ entry, expanded, onToggle }) {
   const { advisory, student_count, students, subjects } = entry;
   const [tab, setTab] = useState("students");
+  const navigate = useNavigate();
 
   return (
     <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 16, overflow: "hidden" }}>
@@ -494,7 +495,7 @@ function SectionCard({ entry, expanded, onToggle }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#fdfafa" }}>
-                    {["Name", "LRN", "Student No.", "Sex"].map((label) => (
+                    {["Name", "LRN", "Student No.", "Sex", ""].map((label) => (
                       <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 22px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                         {label}
                       </th>
@@ -510,6 +511,21 @@ function SectionCard({ entry, expanded, onToggle }) {
                       <td style={{ padding: "11px 22px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.lrn}</td>
                       <td style={{ padding: "11px 22px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.student_number}</td>
                       <td style={{ padding: "11px 22px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.sex}</td>
+                      <td style={{ padding: "11px 22px", borderBottom: "1px solid #f9f0f0" }}>
+                        <button
+                          onClick={() => navigate(`/grades?student=${s.student_id}`)}
+                          title="View Grades"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            border: "1px solid #f0e4e4", borderRadius: 8, background: "white",
+                            padding: "5px 10px", fontSize: 12, color: "#9a7070", cursor: "pointer",
+                            fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
+                          }}
+                        >
+                          <i className="ti ti-chart-bar" style={{ fontSize: 13 }} />
+                          Grades
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
