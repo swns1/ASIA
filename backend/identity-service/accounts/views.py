@@ -1,5 +1,6 @@
 import base64
 import re
+import uuid
 
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
@@ -10,9 +11,12 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-from .audit import is_audit_admin, record_audit_event, resolve_user_from_request
+from .audit import ADMIN_ROLES, is_audit_admin, record_audit_event
+from .authentication import NoOpAuthentication
 from .models import AuditLog, User, VALID_ROLES
+from .permissions import HasRole
 from .serializers import LoginSerializer, AuditLogSerializer, UserSerializer
+from .services.auth_service import stamp_session_id
 from .throttles import LoginRateThrottle
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -46,8 +50,11 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         remember_me = serializer.validated_data.get("remember_me", True)
 
+        session_id = uuid.uuid4()
         refresh = RefreshToken.for_user(user)
+        refresh["sid"] = str(session_id)
         access_token = str(refresh.access_token)
+        stamp_session_id(user.user_id, session_id)
 
         response = Response(
             {
@@ -94,19 +101,24 @@ class RefreshView(APIView):
 
         try:
             refresh = RefreshToken(refresh_token)
-            access_token = str(refresh.access_token)
         except TokenError:
             return Response({"detail": "Invalid refresh token."}, status=401)
 
+        sid = refresh.get("sid")
+        user = User.objects.filter(user_id=refresh.get("user_id")).first()
+        if not sid or not user or str(user.current_session_id) != str(sid):
+            return Response({"detail": "Session no longer active."}, status=401)
+
+        access_token = str(refresh.access_token)
         return Response({"access": access_token}, status=200)
 
 
 class LogoutView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [NoOpAuthentication]
+    permission_classes = [HasRole]
 
     def post(self, request):
-        user = resolve_user_from_request(request)
+        user = request.resolved_user
         refresh_token = request.COOKIES.get("refresh")
         if refresh_token:
             try:
@@ -115,6 +127,11 @@ class LogoutView(APIView):
                     token.blacklist()
             except TokenError:
                 pass
+
+        # request.resolved_user was only resolved because resolve_user_from_request()
+        # already confirmed this token's sid matches the current session, so
+        # it's always safe to clear it here.
+        User.objects.filter(user_id=user.user_id).update(current_session_id=None)
 
         record_audit_event(
             request,
@@ -134,26 +151,16 @@ class LogoutView(APIView):
 class UserListView(APIView):
     """GET /api/auth/users/  — list all users (admin only)
        POST /api/auth/users/ — create a new user (admin only)"""
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [NoOpAuthentication]
+    permission_classes = [HasRole]
+    required_roles = ADMIN_ROLES
 
     def get(self, request):
-        requester = resolve_user_from_request(request)
-        if not requester:
-            return Response({"detail": "Authentication required."}, status=401)
-        if not is_audit_admin(requester):
-            return Response({"detail": "Only Admin and Super Admin can view users."}, status=403)
-
         users = User.objects.all().order_by("user_id")
         return Response(UserSerializer(users, many=True).data)
 
     def post(self, request):
-        requester = resolve_user_from_request(request)
-        if not requester:
-            return Response({"detail": "Authentication required."}, status=401)
-        if not is_audit_admin(requester):
-            return Response({"detail": "Only Admin and Super Admin can create users."}, status=403)
-
+        requester = request.resolved_user
         data = request.data
         name     = (data.get("name") or "").strip()
         email    = (data.get("email") or "").strip()
@@ -194,8 +201,8 @@ class UserDetailView(APIView):
     """GET /api/auth/users/<id>/   — view a user
        PATCH /api/auth/users/<id>/ — edit a user
        DELETE /api/auth/users/<id>/ — delete a user (admin only)"""
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [NoOpAuthentication]
+    permission_classes = [HasRole]
 
     def _get_target(self, user_id):
         try:
@@ -204,9 +211,7 @@ class UserDetailView(APIView):
             return None
 
     def get(self, request, user_id):
-        requester = resolve_user_from_request(request)
-        if not requester:
-            return Response({"detail": "Authentication required."}, status=401)
+        requester = request.resolved_user
 
         if requester.user_id != int(user_id) and not is_audit_admin(requester):
             return Response({"detail": "Permission denied."}, status=403)
@@ -218,9 +223,7 @@ class UserDetailView(APIView):
         return Response(UserSerializer(target).data)
 
     def patch(self, request, user_id):
-        requester = resolve_user_from_request(request)
-        if not requester:
-            return Response({"detail": "Authentication required."}, status=401)
+        requester = request.resolved_user
 
         is_own_profile = requester.user_id == int(user_id)
         is_admin       = is_audit_admin(requester)
@@ -323,9 +326,7 @@ class UserDetailView(APIView):
         return Response(UserSerializer(target).data)
 
     def delete(self, request, user_id):
-        requester = resolve_user_from_request(request)
-        if not requester:
-            return Response({"detail": "Authentication required."}, status=401)
+        requester = request.resolved_user
         if not is_audit_admin(requester):
             return Response({"detail": "Only admins can delete users."}, status=403)
         if requester.user_id == int(user_id):
@@ -360,14 +361,11 @@ class AuditLogPagination(PageNumberPagination):
 
 
 class AuditLogListView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [NoOpAuthentication]
+    permission_classes = [HasRole]
+    required_roles = ADMIN_ROLES
 
     def get(self, request):
-        user = resolve_user_from_request(request)
-        if not is_audit_admin(user):
-            return Response({"detail": "Only Admin and Super Admin users can view audit records."}, status=403)
-
         queryset = AuditLog.objects.all()
 
         role = request.query_params.get("role")

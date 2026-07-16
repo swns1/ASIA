@@ -4,7 +4,7 @@ from rest_framework import filters, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from accounts.permissions import IsAdvisoryTeacherOrStaff, teacher_student_ids
+from accounts.permissions import IsAdvisoryTeacherOrStaff, guardian_student_ids, teacher_student_ids
 from enrollments.models import Enrollment
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer, BulkAttendanceSerializer
@@ -32,8 +32,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if getattr(self.request.user, "role", None) == "teacher":
+        role = getattr(self.request.user, "role", None)
+        if role == "teacher":
             qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+        elif role == "guardian":
+            qs = qs.filter(enrollment__student_id__in=guardian_student_ids(self.request.user))
         return qs
 
     def perform_create(self, serializer):
@@ -88,8 +91,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         qs = AttendanceRecord.objects.all()
-        if getattr(request.user, "role", None) == "teacher":
+        role = getattr(request.user, "role", None)
+        if role == "teacher":
             qs = qs.filter(enrollment__student_id__in=teacher_student_ids(request.user))
+        elif role == "guardian":
+            qs = qs.filter(enrollment__student_id__in=guardian_student_ids(request.user))
 
         school_year = request.query_params.get("school_year")
         grade_level = request.query_params.get("grade_level")

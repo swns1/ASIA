@@ -19,7 +19,7 @@ def _admin_user(**overrides):
 
 
 @pytest.mark.django_db
-@patch("accounts.views.resolve_user_from_request")
+@patch("accounts.permissions.resolve_user_from_request")
 def test_create_user_rejects_invalid_role(mock_resolve):
     mock_resolve.return_value = _admin_user()
 
@@ -34,7 +34,7 @@ def test_create_user_rejects_invalid_role(mock_resolve):
 
 
 @pytest.mark.django_db
-@patch("accounts.views.resolve_user_from_request")
+@patch("accounts.permissions.resolve_user_from_request")
 @patch("accounts.views.User")
 def test_create_user_accepts_valid_role(mock_user_model, mock_resolve):
     mock_resolve.return_value = _admin_user()
@@ -56,7 +56,7 @@ def test_create_user_accepts_valid_role(mock_user_model, mock_resolve):
 
 
 @pytest.mark.django_db
-@patch("accounts.views.resolve_user_from_request")
+@patch("accounts.permissions.resolve_user_from_request")
 @patch("accounts.views.UserDetailView._get_target")
 def test_patch_rejects_invalid_role(mock_get_target, mock_resolve):
     mock_resolve.return_value = _admin_user()

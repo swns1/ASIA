@@ -28,6 +28,9 @@ resend
 numpy
 scikit-learn
 
+# ── OCR / Image Processing ────────────────────────────────────────────────────
+Pillow
+
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest
 pytest-django

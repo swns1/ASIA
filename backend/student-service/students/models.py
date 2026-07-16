@@ -143,6 +143,15 @@ class Guardian(models.Model):
     mobile_number = models.CharField(max_length=20, null=True, blank=True)
     is_primary_contact = models.BooleanField(default=False)
 
+    # Links this contact record to a `role=guardian` login account
+    # (identity-service `users` table). NOT unique — one guardian/parent can
+    # be linked across multiple Guardian rows (siblings), each pointing at
+    # the same user_id. Null until an admin links the account (see
+    # GuardianViewSet). This table is managed=False; the column was added
+    # via raw SQL directly against the DB, not a Django migration — see the
+    # README's database setup section for the ALTER TABLE statement.
+    user_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+
     class Meta:
         db_table = "guardians"
         managed = False

@@ -63,3 +63,10 @@ export function hasAnyRole(user, roles) {
   const normalized = String(user?.role || "").trim().toLowerCase();
   return roles.map((r) => r.toLowerCase()).includes(normalized);
 }
+
+// Where to send a logged-in user who lacks access to the route they hit.
+// Guardians go to their own portal; everyone else to the staff dashboard.
+// (Sending a guardian to /dashboard would loop, since that route is staff-only.)
+export function homeFor(user) {
+  return user?.role === "guardian" ? "/guardian" : "/dashboard";
+}

@@ -8,7 +8,11 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from accounts.permissions import HasRole
+from accounts.permissions import (
+    HasRole,
+    IsBillingStaffOrOwnerGuardianReadOnly,
+    guardian_enrollment_ids,
+)
 
 BILLING_ROLES = {"super_admin", "admin", "accounting"}
 
@@ -108,12 +112,20 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         .order_by("-invoice_id")
     )
     serializer_class = StudentInvoiceSerializer
-    permission_classes = [HasRole]
-    required_roles = BILLING_ROLES
+    permission_classes = [IsBillingStaffOrOwnerGuardianReadOnly]
+    owner_enrollment_id_field = "enrollment_id"
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("status", "payment_plan", "enrollment_id")
     ordering_fields = ("invoice_id", "invoice_date", "due_date")
     ordering = ("-invoice_id",)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Guardians only ever see invoices for their own child(ren)'s
+        # enrollments; an unlinked guardian gets an empty list (fail closed).
+        if getattr(self.request.user, "role", None) == "guardian":
+            qs = qs.filter(enrollment_id__in=guardian_enrollment_ids(self.request.user))
+        return qs
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
@@ -164,6 +176,8 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         Returns real aggregate counts across ALL invoices (not just the current page).
         Accepts the same status/payment_plan/enrollment_id filter params as the list view.
         """
+        if getattr(request.user, "role", None) == "guardian":
+            return Response({"detail": "You do not have access to this record."}, status=403)
         qs = StudentInvoice.objects.all()
         enrollment_id = request.query_params.get("enrollment_id")
         payment_plan  = request.query_params.get("payment_plan")
@@ -197,6 +211,9 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         """
         from django.db.models import Sum
         from .enrollment_mirror import EnrollmentMirror
+
+        if getattr(request.user, "role", None) == "guardian":
+            return Response({"detail": "You do not have access to this record."}, status=403)
 
         school_year = request.query_params.get("school_year")
 
@@ -299,6 +316,12 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             student_id = int(student_id)
         except ValueError:
             return Response({"detail": "student_id must be an integer."}, status=400)
+
+        # Guardians may only pull the ledger for their own child(ren).
+        if getattr(request.user, "role", None) == "guardian":
+            from accounts.permissions import guardian_student_ids
+            if student_id not in guardian_student_ids(request.user):
+                return Response({"detail": "You do not have access to this record."}, status=403)
 
         # Fetch all enrollment IDs for this student via mirror
         enrollment_rows = (
@@ -486,10 +509,18 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = InvoiceInstallment.objects.all().order_by("invoice_id", "sequence")
     serializer_class = InvoiceInstallmentSerializer
-    permission_classes = [HasRole]
-    required_roles = BILLING_ROLES
+    permission_classes = [IsBillingStaffOrOwnerGuardianReadOnly]
+    owner_enrollment_id_field = "invoice__enrollment_id"
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("invoice", "status")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Guardians only ever see installments for their own child(ren)'s
+        # invoices; an unlinked guardian gets an empty list (fail closed).
+        if getattr(self.request.user, "role", None) == "guardian":
+            qs = qs.filter(invoice__enrollment_id__in=guardian_enrollment_ids(self.request.user))
+        return qs
 
     def _flag_overdue(self):
         today = timezone.now().date()

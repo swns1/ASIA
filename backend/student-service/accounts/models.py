@@ -13,6 +13,7 @@ ROLE_CHOICES = [
     ("registrar",   "Registrar"),
     ("teacher",     "Teacher"),
     ("accounting",  "Accounting"),
+    ("guardian",    "Guardian"),
 ]
 
 
@@ -27,6 +28,7 @@ class User(models.Model):
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=30, choices=ROLE_CHOICES)
     password = models.CharField(max_length=255)
+    current_session_id = models.UUIDField(null=True, blank=True)
 
     class Meta:
         managed = False

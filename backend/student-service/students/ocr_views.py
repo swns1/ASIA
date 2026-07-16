@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from student_service.throttles import StatelessUserRateThrottle
 
 from accounts.permissions import HasRole
+from .image_preprocessing import preprocess_for_ocr
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,18 @@ Rules:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _image_to_base64(image_file) -> tuple[str, str]:
-    """Read uploaded file and return (base64_data, mime_type)."""
-    content_type = getattr(image_file, "content_type", "image/jpeg")
-    if content_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
-        content_type = "image/jpeg"
-    data = base64.b64encode(image_file.read()).decode("utf-8")
-    return data, content_type
+    """Read uploaded file, run local preprocessing, and return (base64_data, mime_type)."""
+    raw = image_file.read()
+    try:
+        processed = preprocess_for_ocr(raw)
+        mime_type = "image/jpeg"
+    except Exception:
+        logger.warning("OCR preprocessing failed, using raw image", exc_info=True)
+        processed = raw
+        mime_type = getattr(image_file, "content_type", "image/jpeg")
+        if mime_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+            mime_type = "image/jpeg"
+    return base64.b64encode(processed).decode("utf-8"), mime_type
 
 
 def _call_groq(base64_data: str, mime_type: str) -> dict:

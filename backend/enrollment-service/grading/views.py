@@ -5,7 +5,12 @@ from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly, IsAdvisoryTeacherOrStaff, teacher_student_ids
+from accounts.permissions import (
+    IsAdminRegistrarOrReadOnly,
+    IsAdvisoryTeacherOrStaff,
+    guardian_student_ids,
+    teacher_student_ids,
+)
 from enrollments.models import Enrollment
 from subjects.models import Subject
 from .models import GradingTemplate, GradingComponent, ScoreEntry
@@ -67,8 +72,11 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
             qs = qs.filter(grading_period=params["grading_period"])
         if params.get("grading_component_id"):
             qs = qs.filter(grading_component_id=params["grading_component_id"])
-        if getattr(self.request.user, "role", None) == "teacher":
+        role = getattr(self.request.user, "role", None)
+        if role == "teacher":
             qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+        elif role == "guardian":
+            qs = qs.filter(enrollment__student_id__in=guardian_student_ids(self.request.user))
         return qs
 
     @action(detail=False, methods=["get"], url_path="compute")
@@ -88,11 +96,13 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
                 status=400,
             )
 
-        if getattr(request.user, "role", None) == "teacher":
+        role = getattr(request.user, "role", None)
+        if role in ("teacher", "guardian"):
             student_id = Enrollment.objects.filter(pk=enrollment_id).values_list("student_id", flat=True).first()
-            if student_id not in teacher_student_ids(request.user):
+            allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
+            if student_id not in allowed:
                 return Response(
-                    {"detail": "You can only view grade computations for your own advisory section."},
+                    {"detail": "You do not have access to this record."},
                     status=403,
                 )
 

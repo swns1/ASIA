@@ -33,7 +33,8 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem("remember_login_until");
       }
-      navigate("/dashboard");
+      // Guardians land in the parent portal; staff go to the admin dashboard.
+      navigate(res.user?.role === "guardian" ? "/guardian" : "/dashboard");
     } catch (err) {
       setError(
         err?.response?.data?.detail ||

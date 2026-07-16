@@ -21,6 +21,13 @@ export async function updateGuardian(id, payload) {
   return res.data;
 }
 
+// Partial update — used to link/unlink a guardian contact record to a
+// `role=guardian` login account (guardians.user_id).
+export async function patchGuardian(id, payload) {
+  const res = await studentClient.patch(`/guardians/${id}/`, payload);
+  return res.data;
+}
+
 export async function deleteGuardian(id) {
   const res = await studentClient.delete(`/guardians/${id}/`);
   return res.data;

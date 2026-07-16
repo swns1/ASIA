@@ -41,9 +41,23 @@ def resolve_user_from_request(request):
         return None
 
     try:
-        return User.objects.filter(user_id=user_id).first()
+        user = User.objects.filter(user_id=user_id).first()
     except DatabaseError:
         return None
+
+    if not user:
+        return None
+
+    # Single-active-session enforcement: a token whose sid claim doesn't
+    # match the user's current session is stale (superseded by a later
+    # login elsewhere) — treat it as unauthenticated rather than resolving
+    # it. Missing sid on either side fails closed (forces re-login), which
+    # also covers tokens issued before this claim existed.
+    sid = access.get("sid")
+    if not sid or not user.current_session_id or str(user.current_session_id) != str(sid):
+        return None
+
+    return user
 
 
 def record_audit_event(

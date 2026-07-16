@@ -145,6 +145,18 @@ export async function callGemini(context_type, payload) {
   return res.data; // { interpretation: string }
 }
 
+// ── At-risk student prediction (persisted risk scoring) ───────────────────────
+export const runRiskAssessment = (payload) =>
+  enrollmentClient.post("/ai/risk-assessment/run/", payload).then((r) => r.data);
+
+export const getRiskAssessmentLatest = (params = {}) =>
+  enrollmentClient.get("/ai/risk-assessment/latest/", { params }).then((r) => r.data);
+
+export const getRiskAssessmentTrend = (studentId) =>
+  enrollmentClient
+    .get("/ai/risk-assessment/trend/", { params: { student_id: studentId } })
+    .then((r) => r.data);
+
 // ── Requirement types (enrollment-service mirror) ─────────────────────────────
 export const getRequirementTypes = (params = {}) =>
   enrollmentClient.get("/requirement-types/", { params }).then((r) => r.data);
@@ -162,8 +174,8 @@ export const promoteConfirm = (payload) =>
   enrollmentClient.post("/enrollments/promote/confirm/", payload).then((r) => r.data);
 
 // ── Report card ───────────────────────────────────────────────────────────────
-export const getReportCard = (enrollmentId) =>
-  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`).then((r) => r.data);
+export const getReportCard = (enrollmentId, params = {}) =>
+  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`, { params }).then((r) => r.data);
 
 // ── Narrative categories ──────────────────────────────────────────────────────
 export const getNarrativeCategories = (params = {}) =>

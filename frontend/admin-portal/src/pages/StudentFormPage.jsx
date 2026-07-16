@@ -917,7 +917,7 @@ function DocViewModal({ url, name, onClose }) {
   );
 }
 
-function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrConfidence }) {
+function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrConfidence, ocrFieldCount, onApplyOcr, onDiscardOcr }) {
   const CONF_DOT = { high: DC.green, medium: "#b7791f", low: "#b91c1c" };
   const icon = reqIcon(req.requirement_code);
 
@@ -980,12 +980,30 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
         {ocrState === "done" && ocrConfidence && (
           <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: CONF_DOT[ocrConfidence] }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: CONF_DOT[ocrConfidence] }} />
-            OCR: {ocrConfidence} confidence
+            OCR: {ocrConfidence} confidence — applied to form
           </div>
         )}
         {ocrState === "error" && (
           <div style={{ fontSize: 11, color: "#b91c1c", display: "flex", alignItems: "center", gap: 4 }}>
             <i className="ti ti-alert-circle" style={{ fontSize: 12 }} />OCR failed — form not auto-filled
+          </div>
+        )}
+        {ocrState === "review" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: CONF_DOT[ocrConfidence] || C.muted }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: CONF_DOT[ocrConfidence] || DC.pale }} />
+              OCR found {ocrFieldCount} field{ocrFieldCount !== 1 ? "s" : ""} ({ocrConfidence} confidence) — review before applying
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button type="button" onClick={onDiscardOcr}
+                style={{ flex: 1, height: 30, border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                Discard
+              </button>
+              <button type="button" onClick={onApplyOcr}
+                style={{ flex: 1, height: 30, border: "none", borderRadius: 8, background: C.red, color: C.white, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                Apply to form
+              </button>
+            </div>
           </div>
         )}
         {isEdit && req.submitted_at && (
@@ -1029,11 +1047,11 @@ function DocumentsStep({
   isEdit, requirementTypes,
   pendingUploads, setPendingUploads,
   existingDocs, setExistingDocs,
+  ocrStates, setOcrStates,
   studentId, onOcrExtracted, onViewDoc,
 }) {
   const [uploadModal, setUploadModal] = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
-  const [ocrStates, setOcrStates] = useState({}); // { [reqTypeId]: { state, confidence } }
   const [editLoading, setEditLoading] = useState(false);
   const [docError, setDocError] = useState("");
 
@@ -1041,8 +1059,25 @@ function DocumentsStep({
     const previewUrl = URL.createObjectURL(file);
     const isImage = file.type.startsWith("image/");
 
+    async function runOcr() {
+      try {
+        const token = sessionStorage.getItem("access_token");
+        const data = await scanDocument(file, token);
+        if (data.success) {
+          setOcrStates((prev) => ({
+            ...prev,
+            [reqTypeId]: { state: "review", confidence: data.confidence, extracted: data.extracted },
+          }));
+        } else {
+          setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null, extracted: null } }));
+        }
+      } catch {
+        setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null, extracted: null } }));
+      }
+    }
+
     if (!isEdit) {
-      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null } }));
+      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null, extracted: null } }));
       setPendingUploads((prev) => {
         const old = prev.find((p) => p.requirementTypeId === reqTypeId);
         if (old) URL.revokeObjectURL(old.previewUrl);
@@ -1052,23 +1087,13 @@ function DocumentsStep({
         ];
       });
 
-      if (isImage) {
-        try {
-          const token = sessionStorage.getItem("access_token");
-          const data = await scanDocument(file, token);
-          if (data.success) {
-            onOcrExtracted(data.extracted);
-            setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "done", confidence: data.confidence } }));
-          } else {
-            setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null } }));
-          }
-        } catch {
-          setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null } }));
-        }
-      }
+      if (isImage) await runOcr();
     } else {
       setEditLoading(true);
       setDocError("");
+      if (isImage) {
+        setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "scanning", confidence: null, extracted: null } }));
+      }
       try {
         const existingEntry = existingDocs.find((d) => d.requirement_type_id === reqTypeId);
         if (existingEntry?.submission_id) {
@@ -1084,15 +1109,23 @@ function DocumentsStep({
         setEditLoading(false);
       }
 
-      if (isImage) {
-        try {
-          const token = sessionStorage.getItem("access_token");
-          const data = await scanDocument(file, token);
-          if (data.success) onOcrExtracted(data.extracted);
-        } catch { /* OCR failure is non-fatal */ }
-      }
+      if (isImage) await runOcr();
       URL.revokeObjectURL(previewUrl);
     }
+  }
+
+  // Apply/discard gate: a successful scan lands in "review" state with the
+  // extracted fields stashed, not applied yet -- the user must explicitly
+  // confirm before form fields are overwritten.
+  function handleApplyOcr(reqTypeId) {
+    const entry = ocrStates[reqTypeId];
+    if (!entry?.extracted) return;
+    onOcrExtracted(entry.extracted);
+    setOcrStates((prev) => ({ ...prev, [reqTypeId]: { ...entry, state: "done" } }));
+  }
+
+  function handleDiscardOcr(reqTypeId) {
+    setOcrStates((prev) => ({ ...prev, [reqTypeId]: { ...prev[reqTypeId], state: "discarded" } }));
   }
 
   async function handleRemoveConfirm() {
@@ -1185,7 +1218,7 @@ function DocumentsStep({
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
           {cards.map((req) => {
-            const ocr = ocrStates[req.requirement_type_id] || { state: "idle", confidence: null };
+            const ocr = ocrStates[req.requirement_type_id] || { state: "idle", confidence: null, extracted: null };
             return (
               <DocCard
                 key={req.requirement_type_id}
@@ -1197,6 +1230,9 @@ function DocumentsStep({
                 onRemove={(r) => setRemoveModal(r)}
                 ocrState={ocr.state}
                 ocrConfidence={ocr.confidence}
+                ocrFieldCount={ocr.extracted ? Object.keys(ocr.extracted).length : 0}
+                onApplyOcr={() => handleApplyOcr(req.requirement_type_id)}
+                onDiscardOcr={() => handleDiscardOcr(req.requirement_type_id)}
               />
             );
           })}
@@ -1443,6 +1479,10 @@ export default function StudentFormPage() {
   const [existingDocs,     setExistingDocs]     = useState([]);
   const [pendingUploads,   setPendingUploads]   = useState([]);
   const [docViewModal,     setDocViewModal]     = useState(null); // { url, name }
+  // Lifted (not local to DocumentsStep) so a pending OCR review survives the
+  // user navigating to another step and back -- DocumentsStep unmounts when
+  // step !== 0, which would otherwise silently drop the stashed extraction.
+  const [ocrStates,        setOcrStates]        = useState({}); // { [reqTypeId]: { state, confidence, extracted } }
 
   // Track which existing records were removed in edit mode (so we can DELETE them on submit)
   const [removedGuardianIds, setRemovedGuardianIds] = useState([]);
@@ -2100,6 +2140,8 @@ export default function StudentFormPage() {
                   setPendingUploads={setPendingUploads}
                   existingDocs={existingDocs}
                   setExistingDocs={setExistingDocs}
+                  ocrStates={ocrStates}
+                  setOcrStates={setOcrStates}
                   studentId={id}
                   onOcrExtracted={handleOcrExtracted}
                   onViewDoc={(url, name) => setDocViewModal({ url, name })}

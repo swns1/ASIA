@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
-from accounts.permissions import GRADE_READ_ROLES, HasRole
+from accounts.permissions import GRADE_READ_ROLES, HasRole, guardian_student_ids, teacher_student_ids
 from .models import Enrollment
 from grades.models import Grade
 from subjects.models import Subject
@@ -39,23 +39,32 @@ def report_card(request, enrollment_id):
     except Enrollment.DoesNotExist:
         raise NotFound("Enrollment not found.")
 
-    if getattr(request.user, "role", None) == "teacher":
-        from accounts.permissions import teacher_student_ids
-        if enrollment.student_id not in teacher_student_ids(request.user):
+    role = getattr(request.user, "role", None)
+    if role in ("teacher", "guardian"):
+        allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
+        if enrollment.student_id not in allowed:
             return Response(
-                {"detail": "You can only view report cards for your own advisory section."},
+                {"detail": "You do not have access to this record."},
                 status=403,
             )
 
     student = enrollment.student
 
     # Fetch all grades for this enrollment with subject info
-    grades_qs = (
+    base_qs = (
         Grade.objects
         .filter(enrollment_id=enrollment_id)
         .select_related("subject")
         .order_by("subject__subject_name", "grading_period")
     )
+
+    # Full set of periods with data, regardless of the filter below — lets the
+    # frontend keep offering every period in its selector even while filtered.
+    periods_with_data = set(base_qs.values_list("grading_period", flat=True))
+    available_periods = [p for p in GRADING_PERIOD_ORDER if p in periods_with_data]
+
+    grading_period = request.query_params.get("grading_period")
+    grades_qs = base_qs.filter(grading_period=grading_period) if grading_period else base_qs
 
     # Build subject → period → grade map
     subject_map = {}
@@ -126,10 +135,15 @@ def report_card(request, enrollment_id):
         "grading_periods": [
             {"key": p, "label": GRADING_PERIOD_LABELS[p]} for p in ordered_periods
         ],
+        "available_periods": [
+            {"key": p, "label": GRADING_PERIOD_LABELS[p]} for p in available_periods
+        ],
         "subjects":     subjects_list,
         "overall_gpa":  overall_gpa,
         "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
     })
 
 
-report_card.cls.required_roles = GRADE_READ_ROLES
+# Staff who may read report cards, plus guardians (scoped to their own child
+# by the ownership check inside the view above).
+report_card.cls.required_roles = GRADE_READ_ROLES | {"guardian"}

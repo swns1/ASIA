@@ -15,6 +15,7 @@ class User(models.Model):
     role = models.CharField(max_length=30)
     password = models.CharField(max_length=255)
     profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist
+    current_session_id = models.UUIDField(null=True, blank=True)
 
     class Meta:
         db_table = "users"
