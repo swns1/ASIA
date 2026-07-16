@@ -7,8 +7,16 @@ from django.db import transaction
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
 from .models import Enrollment, EnrollmentOverride, SectionAdvisory
-from .serializers import EnrollmentSerializer, GRADE_ORDER, get_next_grade_level, SectionAdvisorySerializer
+from .serializers import (
+    EnrollmentSerializer,
+    GRADE_ORDER,
+    get_next_grade_level,
+    SectionAdvisorySerializer,
+    StudentSummarySerializer,
+)
 from .filters import EnrollmentFilter
+
+ACADEMIC_STAFF_ROLES = ("super_admin", "admin", "registrar")
 
 
 class SectionAdvisoryViewSet(viewsets.ModelViewSet):
@@ -29,6 +37,97 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("teacher_user_id", "school_year", "school_level", "grade_level", "section")
+
+    @action(detail=False, methods=["get"], url_path="my-sections")
+    def my_sections(self, request):
+        """
+        GET /api/section-advisories/my-sections/
+
+        Returns the requesting teacher's own advisory assignments, each
+        enriched with its student roster and matching subjects — the data
+        backing the teacher-facing "My Sections" page.
+
+        - role=teacher: always scoped to the caller's own user id. A
+          ?teacher_user_id= param is ignored (a teacher may only ever see
+          their own sections).
+        - role=admin/registrar/super_admin: must pass ?teacher_user_id=<id>
+          to view that teacher's sections (used by the admin teacher-picker).
+        - Any other role: 403.
+        """
+        from subjects.models import Subject
+
+        role = getattr(request.user, "role", None)
+
+        if role == "teacher":
+            teacher_user_id = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
+        elif role in ACADEMIC_STAFF_ROLES:
+            raw = request.query_params.get("teacher_user_id")
+            if not raw:
+                return Response(
+                    {"detail": "teacher_user_id is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                teacher_user_id = int(raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "teacher_user_id must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            return Response(
+                {"detail": "You do not have access to this resource."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        advisories = SectionAdvisory.objects.filter(
+            teacher_user_id=teacher_user_id
+        ).order_by("-school_year", "grade_level", "section")
+
+        results = []
+        for advisory in advisories:
+            enrollment_qs = Enrollment.objects.filter(
+                school_year=advisory.school_year,
+                school_level=advisory.school_level,
+                grade_level=advisory.grade_level,
+                section=advisory.section,
+                enrollment_status="enrolled",
+            ).select_related("student")
+            if advisory.strand:
+                enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+
+            students = []
+            for e in enrollment_qs.order_by("student__last_name", "student__first_name"):
+                student_data = StudentSummarySerializer(e.student).data
+                student_data["enrollment_id"] = e.enrollment_id
+                students.append(student_data)
+
+            subject_qs = Subject.objects.filter(
+                school_level=advisory.school_level,
+                grade_level=advisory.grade_level,
+            )
+            subject_qs = (
+                subject_qs.filter(strand=advisory.strand) if advisory.strand
+                else subject_qs.filter(strand__isnull=True)
+            )
+            subjects = [
+                {
+                    "subject_id": s.subject_id,
+                    "subject_code": s.subject_code,
+                    "subject_name": s.subject_name,
+                    "semester": s.semester,
+                }
+                for s in subject_qs
+            ]
+
+            results.append({
+                "advisory": SectionAdvisorySerializer(advisory).data,
+                "student_count": len(students),
+                "students": students,
+                "subjects": subjects,
+            })
+
+        return Response(results)
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):

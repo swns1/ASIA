@@ -92,6 +92,16 @@
   border-color: #e03131;
 }
 
+.nav-item:hover {
+  background: #fff4f4;
+}
+
+.sidebar-logout-btn:hover {
+  background: #fff0f0;
+  border-color: #fca5a5;
+  color: #e03131;
+}
+
 /* Full-screen reset */
 html, body, #root {
   width: 100%;

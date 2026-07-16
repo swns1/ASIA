@@ -36,6 +36,7 @@ import SF9PrintPage from "./pages/print/SF9PrintPage";
 import SF10PrintPage from "./pages/print/SF10PrintPage";
 import NarrativeCategoriesPage from "./pages/NarrativeCategoriesPage";
 import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
+import TeacherSectionsPage from "./pages/TeacherSectionsPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/print/sf10/:studentId" element={<P><SF10PrintPage /></P>} />
         <Route path="/narrative-categories" element={<P roles={GRADE_ROLES}><NarrativeCategoriesPage /></P>} />
         <Route path="/teacher-advisories"   element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
+        <Route path="/my-sections"          element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
       </Routes>
     </BrowserRouter>
   );

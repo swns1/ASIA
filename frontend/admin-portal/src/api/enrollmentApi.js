@@ -191,6 +191,9 @@ export const updateSectionAdvisory = (id, payload) =>
 export const deleteSectionAdvisory = (id) =>
   enrollmentClient.delete(`/section-advisories/${id}/`).then((r) => r.data);
 
+export const getMySections = (params = {}) =>
+  enrollmentClient.get("/section-advisories/my-sections/", { params }).then((r) => r.data);
+
 // ── Narrative reports ─────────────────────────────────────────────────────────
 export const getNarrativeReports = (params = {}) =>
   enrollmentClient.get("/narrative-reports/", { params }).then((r) => r.data);
