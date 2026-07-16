@@ -719,6 +719,12 @@ export default function StudentsPage() {
                               >
                                 <div style={{ display: "flex", gap: 4 }}>
                                   <button
+                                    className="row-action" title="View Grades" aria-label={`View grades for ${st.first_name} ${st.last_name}`}
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/grades?student=${st.student_id}`); }}
+                                  >
+                                    <i className="ti ti-chart-bar" style={{ fontSize: 14 }} />
+                                  </button>
+                                  <button
                                     className="row-action" title="Edit" aria-label={`Edit ${st.first_name} ${st.last_name}`}
                                     onClick={(e) => { e.stopPropagation(); navigate(`/students/${st.student_id}/edit`); }}
                                   >

@@ -5,7 +5,11 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
+from accounts.permissions import (
+    IsAdminRegistrarOrReadOnly,
+    IsAdvisoryTeacherOrStaff,
+    teacher_student_ids,
+)
 from .models import Enrollment, EnrollmentOverride, SectionAdvisory
 from .serializers import (
     EnrollmentSerializer,
@@ -37,6 +41,16 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("teacher_user_id", "school_year", "school_level", "grade_level", "section")
+
+    def get_permissions(self):
+        # section-grades/section-attendance let a teacher POST for their own
+        # roster — IsAdvisoryTeacherOrStaff (same class Grade/AttendanceViewSet
+        # use) allows that, whereas the viewset's default
+        # IsAdminRegistrarOrReadOnly would 403 a teacher's write. my-sections
+        # is GET-only so either class covers it.
+        if self.action in ("section_grades", "section_attendance"):
+            return [IsAdvisoryTeacherOrStaff()]
+        return super().get_permissions()
 
     @action(detail=False, methods=["get"], url_path="my-sections")
     def my_sections(self, request):
@@ -128,6 +142,277 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             })
 
         return Response(results)
+
+    def _resolve_teacher_user_id(self, request):
+        """Same role/scoping rule as my_sections: teachers are pinned to
+        themselves, staff must specify ?teacher_user_id=. Returns
+        (teacher_user_id, error_response)."""
+        role = getattr(request.user, "role", None)
+        if role == "teacher":
+            return (
+                getattr(request.user, "user_id", None) or getattr(request.user, "id", None),
+                None,
+            )
+        if role in ACADEMIC_STAFF_ROLES:
+            raw = request.query_params.get("teacher_user_id") or request.data.get("teacher_user_id")
+            if not raw:
+                return None, Response(
+                    {"detail": "teacher_user_id is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                return int(raw), None
+            except (TypeError, ValueError):
+                return None, Response(
+                    {"detail": "teacher_user_id must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return None, Response(
+            {"detail": "You do not have access to this resource."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    @action(detail=False, methods=["get", "post"], url_path="section-grades")
+    def section_grades(self, request):
+        """
+        GET /api/section-advisories/section-grades/
+            ?advisory_id=<id>&subject_id=<id>&grading_period=<period>
+
+        Returns each roster student alongside their existing Grade (or null)
+        for the given subject + grading period — the data backing the
+        "quick grade entry" grid on the My Sections page, so a teacher can
+        grade their whole section for one subject/period without leaving
+        the page.
+
+        POST same body (JSON) plus `grades`: [{student_id, numeric_grade,
+        remarks}, ...] — creates or updates a Grade per student in one call.
+
+        Scoping is identical to my-sections: teachers are pinned to their own
+        advisories; staff must pass ?teacher_user_id=.
+        """
+        from grades.models import Grade
+        from grades.serializers import GradeSerializer
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        params = request.data if request.method == "POST" else request.query_params
+        advisory_id = params.get("advisory_id")
+        subject_id = params.get("subject_id")
+        grading_period = params.get("grading_period")
+
+        missing = [f for f, v in [
+            ("advisory_id", advisory_id),
+            ("subject_id", subject_id),
+            ("grading_period", grading_period),
+        ] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        ).select_related("student")
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollments_by_student = {e.student_id: e for e in enrollment_qs}
+
+        if request.method == "POST":
+            entries = request.data.get("grades", [])
+            if not isinstance(entries, list) or not entries:
+                return Response(
+                    {"detail": "A non-empty 'grades' list is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            saved, failed = [], []
+            with transaction.atomic():
+                for entry in entries:
+                    student_id = entry.get("student_id")
+                    enrollment = enrollments_by_student.get(student_id)
+                    if enrollment is None:
+                        failed.append({"student_id": student_id, "reason": "Not in this section's roster."})
+                        continue
+                    payload = {
+                        "enrollment": enrollment.enrollment_id,
+                        "subject": subject_id,
+                        "grading_period": grading_period,
+                        "numeric_grade": entry.get("numeric_grade"),
+                        "remarks": entry.get("remarks"),
+                    }
+                    existing = Grade.objects.filter(
+                        enrollment=enrollment, subject_id=subject_id, grading_period=grading_period,
+                    ).first()
+                    serializer = GradeSerializer(
+                        instance=existing, data=payload, context={"request": request},
+                    )
+                    if not serializer.is_valid():
+                        failed.append({"student_id": student_id, "reason": str(serializer.errors)})
+                        continue
+                    grade = serializer.save()
+                    saved.append({"student_id": student_id, "grade_id": grade.grade_id})
+
+            return Response(
+                {"saved": saved, "failed": failed},
+                status=status.HTTP_207_MULTI_STATUS if failed else status.HTTP_200_OK,
+            )
+
+        # GET: return roster + existing grades for this subject/period
+        existing_grades = {
+            g.enrollment.student_id: g
+            for g in Grade.objects.filter(
+                enrollment__in=enrollments_by_student.values(),
+                subject_id=subject_id,
+                grading_period=grading_period,
+            ).select_related("enrollment")
+        }
+
+        rows = []
+        for e in sorted(
+            enrollments_by_student.values(),
+            key=lambda e: (e.student.last_name, e.student.first_name),
+        ):
+            grade = existing_grades.get(e.student_id)
+            rows.append({
+                "student": StudentSummarySerializer(e.student).data,
+                "enrollment_id": e.enrollment_id,
+                "grade": GradeSerializer(grade).data if grade else None,
+            })
+
+        return Response(rows)
+
+    @action(detail=False, methods=["get", "post"], url_path="section-attendance")
+    def section_attendance(self, request):
+        """
+        GET /api/section-advisories/section-attendance/
+            ?advisory_id=<id>&date=YYYY-MM-DD
+
+        Returns each roster student alongside their existing
+        AttendanceRecord (or null) for that date — the data backing the
+        "quick attendance" grid on the My Sections page, so a teacher can
+        mark their whole section for the day without leaving the page.
+
+        POST same body (JSON) plus `records`: [{student_id, status, remarks},
+        ...] — creates or updates one AttendanceRecord per student for that
+        date in a single call (status one of P/A/L/E).
+
+        Scoping is identical to section-grades: teachers are pinned to their
+        own advisories; staff must pass ?teacher_user_id=.
+        """
+        from attendance.models import AttendanceRecord
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        params = request.data if request.method == "POST" else request.query_params
+        advisory_id = params.get("advisory_id")
+        date = params.get("date")
+
+        missing = [f for f, v in [("advisory_id", advisory_id), ("date", date)] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        ).select_related("student")
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollments_by_student = {e.student_id: e for e in enrollment_qs}
+
+        if request.method == "POST":
+            entries = request.data.get("records", [])
+            valid_statuses = {"P", "A", "L", "E"}
+            if not isinstance(entries, list) or not entries:
+                return Response(
+                    {"detail": "A non-empty 'records' list is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            saved, failed = [], []
+            recorded_by = getattr(request, "user_id", None) or getattr(request.user, "id", None)
+            with transaction.atomic():
+                for entry in entries:
+                    student_id = entry.get("student_id")
+                    enrollment = enrollments_by_student.get(student_id)
+                    if enrollment is None:
+                        failed.append({"student_id": student_id, "reason": "Not in this section's roster."})
+                        continue
+                    entry_status = entry.get("status")
+                    if entry_status not in valid_statuses:
+                        failed.append({"student_id": student_id, "reason": "Invalid status."})
+                        continue
+                    record, _ = AttendanceRecord.objects.update_or_create(
+                        enrollment=enrollment,
+                        date=date,
+                        defaults={
+                            "status": entry_status,
+                            "remarks": entry.get("remarks") or "",
+                            "recorded_by": recorded_by,
+                        },
+                    )
+                    saved.append({"student_id": student_id, "attendance_id": record.attendance_id})
+
+            return Response(
+                {"saved": saved, "failed": failed},
+                status=status.HTTP_207_MULTI_STATUS if failed else status.HTTP_200_OK,
+            )
+
+        # GET: return roster + existing attendance for this date
+        existing_records = {
+            r.enrollment.student_id: r
+            for r in AttendanceRecord.objects.filter(
+                enrollment__in=enrollments_by_student.values(), date=date,
+            ).select_related("enrollment")
+        }
+
+        rows = []
+        for e in sorted(
+            enrollments_by_student.values(),
+            key=lambda e: (e.student.last_name, e.student.first_name),
+        ):
+            record = existing_records.get(e.student_id)
+            rows.append({
+                "student": StudentSummarySerializer(e.student).data,
+                "enrollment_id": e.enrollment_id,
+                "attendance": {
+                    "attendance_id": record.attendance_id,
+                    "status": record.status,
+                    "remarks": record.remarks,
+                } if record else None,
+            })
+
+        return Response(rows)
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):

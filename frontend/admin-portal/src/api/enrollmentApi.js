@@ -194,6 +194,18 @@ export const deleteSectionAdvisory = (id) =>
 export const getMySections = (params = {}) =>
   enrollmentClient.get("/section-advisories/my-sections/", { params }).then((r) => r.data);
 
+export const getSectionGrades = (params = {}) =>
+  enrollmentClient.get("/section-advisories/section-grades/", { params }).then((r) => r.data);
+
+export const saveSectionGrades = (payload) =>
+  enrollmentClient.post("/section-advisories/section-grades/", payload).then((r) => r.data);
+
+export const getSectionAttendance = (params = {}) =>
+  enrollmentClient.get("/section-advisories/section-attendance/", { params }).then((r) => r.data);
+
+export const saveSectionAttendance = (payload) =>
+  enrollmentClient.post("/section-advisories/section-attendance/", payload).then((r) => r.data);
+
 // ── Narrative reports ─────────────────────────────────────────────────────────
 export const getNarrativeReports = (params = {}) =>
   enrollmentClient.get("/narrative-reports/", { params }).then((r) => r.data);

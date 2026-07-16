@@ -28,9 +28,10 @@ import {
   deleteNarrativeReport as _deleteNarrativeReport,
   callGemini,
 } from "../api/enrollmentApi";
-import { getStudents as _getStudents } from "../api/studentApi";
+import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 
 const getStudents            = (p = {}) => _getStudents(p);
+const getStudent              = (id)     => _getStudent(id);
 const getEnrollments         = (p = {}) => _getEnrollments(p);
 const getSubjects            = (p = {}) => _getSubjects(p);
 const getGrades              = (p = {}) => _getGrades(p);
@@ -1281,6 +1282,17 @@ export default function GradesPage() {
   const [narrativeReports,      setNarrativeReports]      = useState([]);
   const [loadingNarrative,      setLoadingNarrative]      = useState(false);
   const [narrativeSavingStates, setNarrativeSavingStates] = useState({});
+
+  // ── Deep link: /grades?student=<id> preselects a student (e.g. from a
+  // "View Grades" quick-link on the Students list) so staff land straight on
+  // the overview tab instead of using the manual picker. ──────────────────────
+  useEffect(() => {
+    const studentId = new URLSearchParams(location.search).get("student");
+    if (!studentId) return;
+    getStudent(studentId)
+      .then((s) => { if (s) setStudent(s); })
+      .catch(() => toast.error("Could not load the requested student."));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load enrollments when student changes ──────────────────────────────────
   // Summary loads all enrollments (historical); Entry only loads active ones.
