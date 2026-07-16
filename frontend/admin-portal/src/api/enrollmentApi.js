@@ -212,12 +212,6 @@ export const getSectionGrades = (params = {}) =>
 export const saveSectionGrades = (payload) =>
   enrollmentClient.post("/section-advisories/section-grades/", payload).then((r) => r.data);
 
-export const getSectionAttendance = (params = {}) =>
-  enrollmentClient.get("/section-advisories/section-attendance/", { params }).then((r) => r.data);
-
-export const saveSectionAttendance = (payload) =>
-  enrollmentClient.post("/section-advisories/section-attendance/", payload).then((r) => r.data);
-
 // ── Narrative reports ─────────────────────────────────────────────────────────
 export const getNarrativeReports = (params = {}) =>
   enrollmentClient.get("/narrative-reports/", { params }).then((r) => r.data);

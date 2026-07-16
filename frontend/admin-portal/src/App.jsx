@@ -39,11 +39,8 @@ import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
 import GuardianHomePage from "./pages/GuardianHomePage";
 import GuardianChildPage from "./pages/GuardianChildPage";
 import NotFoundPage from "./pages/NotFoundPage";
-<<<<<<< HEAD
 import { STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES, STAFF_ALL } from "./utils/auth";
-=======
 import TeacherSectionsPage from "./pages/TeacherSectionsPage";
->>>>>>> main
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;

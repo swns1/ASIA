@@ -1,16 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 
-<<<<<<< HEAD
-const MotionLink = motion.create(Link);
 import {
   hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
-import { modalVariants, springTransition } from "../utils/motion";
-=======
-import { hasAnyRole, clearAuthSession, getCurrentUser } from "../utils/auth";
->>>>>>> main
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
 

@@ -70,8 +70,12 @@ GRADE_READ_ROLES = {"super_admin", "admin", "registrar", "teacher"}
 def teacher_student_ids(user):
     """
     Resolve a role=teacher user's `SectionAdvisory` assignment(s) into the set
-    of student_ids they're allowed to touch. Returns an empty set (never
-    raises) when the teacher has no advisory assignment yet — fail closed.
+    of student_ids they're allowed to touch. Only students currently
+    `enrolled` count — once a student is dropped/transferred out of the
+    section, their former teacher loses access to that student's records,
+    matching the my-sections/section-grades scoping. Returns an empty set
+    (never raises) when the teacher has no advisory assignment yet — fail
+    closed.
     """
     from enrollments.models import Enrollment, SectionAdvisory
 
@@ -86,6 +90,7 @@ def teacher_student_ids(user):
             school_level=advisory.school_level,
             grade_level=advisory.grade_level,
             section=advisory.section,
+            enrollment_status="enrolled",
         )
         if advisory.strand:
             qs = qs.filter(strand=advisory.strand)

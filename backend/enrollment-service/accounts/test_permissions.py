@@ -127,7 +127,7 @@ class TestTeacherStudentIds:
         assert result == {10, 11, 12}
         mock_enrollment.objects.filter.assert_called_once_with(
             school_year="2025-2026", school_level="junior_highschool",
-            grade_level="Grade 7", section="Rizal",
+            grade_level="Grade 7", section="Rizal", enrollment_status="enrolled",
         )
         mock_qs.filter.assert_not_called()  # no strand set, shouldn't narrow further
 

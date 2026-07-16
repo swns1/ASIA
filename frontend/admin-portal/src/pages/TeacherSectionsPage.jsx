@@ -7,9 +7,8 @@ import {
   getMySections,
   getSectionGrades,
   saveSectionGrades,
-  getSectionAttendance,
-  saveSectionAttendance,
 } from "../api/enrollmentApi";
+import { getAttendance, bulkAttendance } from "../api/attendanceApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
 
@@ -267,9 +266,11 @@ function GradesTab({ advisory, subjects }) {
 }
 
 // ── Attendance tab: date picker + per-student status grid for that day ──────
-function AttendanceTab({ advisory }) {
+// Reuses the same GET /attendance/ + POST /attendance/bulk/ endpoints as the
+// standalone Attendance page (via attendanceApi) instead of a section-scoped
+// duplicate — the roster itself comes from the `students` prop (my-sections).
+function AttendanceTab({ advisory, students }) {
   const [date, setDate] = useState(todayISO());
-  const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({}); // student_id -> { status, remarks }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -278,46 +279,43 @@ function AttendanceTab({ advisory }) {
     if (!date) return;
     setLoading(true);
     try {
-      const data = await getSectionAttendance({ advisory_id: advisory.advisory_id, date });
-      const list = Array.isArray(data) ? data : [];
-      setRows(list);
+      const data = await getAttendance({
+        enrollment__school_year: advisory.school_year,
+        enrollment__grade_level: advisory.grade_level,
+        enrollment__section: advisory.section,
+        date,
+      });
+      const list = Array.isArray(data) ? data : data?.results ?? [];
+      const byEnrollment = {};
+      list.forEach((r) => { byEnrollment[r.enrollment] = r; });
       const nextDrafts = {};
-      list.forEach((r) => {
-        nextDrafts[r.student.student_id] = {
-          status: r.attendance?.status ?? "P",
-          remarks: r.attendance?.remarks ?? "",
+      students.forEach((s) => {
+        const record = byEnrollment[s.enrollment_id];
+        nextDrafts[s.student_id] = {
+          status: record?.status ?? "P",
+          remarks: record?.remarks ?? "",
         };
       });
       setDrafts(nextDrafts);
     } catch (e) {
       toast.error(e.message || "Failed to load attendance.");
-      setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [advisory.advisory_id, date]);
+  }, [advisory.school_year, advisory.grade_level, advisory.section, date, students]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
   const handleSaveAll = async () => {
-    const entries = rows.map((r) => {
-      const sid = r.student.student_id;
-      const d = drafts[sid] ?? { status: "P", remarks: "" };
-      return { student_id: sid, status: d.status, remarks: d.remarks };
+    const records = students.map((s) => {
+      const d = drafts[s.student_id] ?? { status: "P", remarks: "" };
+      return { enrollment_id: s.enrollment_id, status: d.status, remarks: d.remarks };
     });
 
     setSaving(true);
     try {
-      const result = await saveSectionAttendance({
-        advisory_id: advisory.advisory_id,
-        date,
-        records: entries,
-      });
-      if (result.failed?.length) {
-        toast.error(`${result.failed.length} record(s) failed to save.`);
-      } else {
-        toast.success("Attendance saved.");
-      }
+      await bulkAttendance({ date, records });
+      toast.success("Attendance saved.");
       await loadGrid();
     } catch (e) {
       toast.error(e.message || "Failed to save attendance.");
@@ -325,6 +323,14 @@ function AttendanceTab({ advisory }) {
       setSaving(false);
     }
   };
+
+  if (students.length === 0) {
+    return (
+      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        No enrolled students in this section.
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -355,10 +361,6 @@ function AttendanceTab({ advisory }) {
         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
         </div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
-          No enrolled students in this section.
-        </div>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
@@ -371,33 +373,33 @@ function AttendanceTab({ advisory }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
-              const sid = r.student.student_id;
+            {students.map((s) => {
+              const sid = s.student_id;
               const draft = drafts[sid] ?? { status: "P", remarks: "" };
               return (
                 <tr key={sid}>
                   <td style={{ padding: "9px 22px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
-                    {fullName(r.student)}
+                    {fullName(s)}
                   </td>
                   <td style={{ padding: "9px 22px", borderBottom: "1px solid #f9f0f0" }}>
                     <div style={{ display: "flex", gap: 4 }}>
-                      {ATTENDANCE_STATUSES.map((s) => {
-                        const active = draft.status === s.value;
+                      {ATTENDANCE_STATUSES.map((opt) => {
+                        const active = draft.status === opt.value;
                         return (
                           <button
-                            key={s.value}
-                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: s.value } }))}
-                            title={s.label}
+                            key={opt.value}
+                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: opt.value } }))}
+                            title={opt.label}
                             style={{
                               width: 30, height: 26, borderRadius: 7,
-                              border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
-                              background: active ? s.bg : "white",
-                              color: active ? s.color : "#9a7070",
+                              border: `1.5px solid ${active ? opt.color : "#f0e4e4"}`,
+                              background: active ? opt.bg : "white",
+                              color: active ? opt.color : "#9a7070",
                               fontSize: 11.5, fontWeight: 700, cursor: "pointer",
                               fontFamily: "'DM Sans',sans-serif",
                             }}
                           >
-                            {s.value}
+                            {opt.value}
                           </button>
                         );
                       })}
@@ -548,7 +550,7 @@ function SectionCard({ entry, expanded, onToggle }) {
 
           {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} />}
 
-          {tab === "attendance" && <AttendanceTab advisory={advisory} />}
+          {tab === "attendance" && <AttendanceTab advisory={advisory} students={students} />}
         </div>
       )}
     </div>
