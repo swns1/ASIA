@@ -174,8 +174,8 @@ export const promoteConfirm = (payload) =>
   enrollmentClient.post("/enrollments/promote/confirm/", payload).then((r) => r.data);
 
 // ── Report card ───────────────────────────────────────────────────────────────
-export const getReportCard = (enrollmentId) =>
-  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`).then((r) => r.data);
+export const getReportCard = (enrollmentId, params = {}) =>
+  enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`, { params }).then((r) => r.data);
 
 // ── Narrative categories ──────────────────────────────────────────────────────
 export const getNarrativeCategories = (params = {}) =>
@@ -202,6 +202,21 @@ export const updateSectionAdvisory = (id, payload) =>
 
 export const deleteSectionAdvisory = (id) =>
   enrollmentClient.delete(`/section-advisories/${id}/`).then((r) => r.data);
+
+export const getMySections = (params = {}) =>
+  enrollmentClient.get("/section-advisories/my-sections/", { params }).then((r) => r.data);
+
+export const getSectionGrades = (params = {}) =>
+  enrollmentClient.get("/section-advisories/section-grades/", { params }).then((r) => r.data);
+
+export const saveSectionGrades = (payload) =>
+  enrollmentClient.post("/section-advisories/section-grades/", payload).then((r) => r.data);
+
+export const getSectionAttendance = (params = {}) =>
+  enrollmentClient.get("/section-advisories/section-attendance/", { params }).then((r) => r.data);
+
+export const saveSectionAttendance = (payload) =>
+  enrollmentClient.post("/section-advisories/section-attendance/", payload).then((r) => r.data);
 
 // ── Narrative reports ─────────────────────────────────────────────────────────
 export const getNarrativeReports = (params = {}) =>

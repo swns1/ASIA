@@ -51,12 +51,20 @@ def report_card(request, enrollment_id):
     student = enrollment.student
 
     # Fetch all grades for this enrollment with subject info
-    grades_qs = (
+    base_qs = (
         Grade.objects
         .filter(enrollment_id=enrollment_id)
         .select_related("subject")
         .order_by("subject__subject_name", "grading_period")
     )
+
+    # Full set of periods with data, regardless of the filter below — lets the
+    # frontend keep offering every period in its selector even while filtered.
+    periods_with_data = set(base_qs.values_list("grading_period", flat=True))
+    available_periods = [p for p in GRADING_PERIOD_ORDER if p in periods_with_data]
+
+    grading_period = request.query_params.get("grading_period")
+    grades_qs = base_qs.filter(grading_period=grading_period) if grading_period else base_qs
 
     # Build subject → period → grade map
     subject_map = {}
@@ -126,6 +134,9 @@ def report_card(request, enrollment_id):
         },
         "grading_periods": [
             {"key": p, "label": GRADING_PERIOD_LABELS[p]} for p in ordered_periods
+        ],
+        "available_periods": [
+            {"key": p, "label": GRADING_PERIOD_LABELS[p]} for p in available_periods
         ],
         "subjects":     subjects_list,
         "overall_gpa":  overall_gpa,

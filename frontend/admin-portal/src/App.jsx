@@ -39,7 +39,11 @@ import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
 import GuardianHomePage from "./pages/GuardianHomePage";
 import GuardianChildPage from "./pages/GuardianChildPage";
 import NotFoundPage from "./pages/NotFoundPage";
+<<<<<<< HEAD
 import { STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES, STAFF_ALL } from "./utils/auth";
+=======
+import TeacherSectionsPage from "./pages/TeacherSectionsPage";
+>>>>>>> main
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
@@ -65,6 +69,7 @@ export default function App() {
         <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingTemplatesPage /></P>} />
         <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
         <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradeEntryPage /></P>} />
+        <Route path="/grades/summary"         element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
         <Route path="/scholarship-types"      element={<P roles={ACADEMIC_STAFF}><ScholarshipTypesPage /></P>} />
         <Route path="/scholarships"           element={<P roles={ACADEMIC_STAFF}><ScholarshipsPage /></P>} />
         <Route path="/settings"              element={<P roles={BILLING_ROLES}><SchoolSettingsPage /></P>} />
@@ -95,6 +100,7 @@ export default function App() {
         <Route path="/guardian"                    element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
         <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
         <Route path="/teacher-advisories"   element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
+        <Route path="/my-sections"          element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
 
         {/* Catch-all: must stay outside PrivateRoute so a bad URL always
             shows 404 regardless of auth state. */}

@@ -11,6 +11,22 @@ const IDENTITY_REFRESH_URL =
   (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth").replace(/\/+$/, "") +
   "/refresh/";
 
+// DRF validation errors come back as { field: ["msg", ...], non_field_errors: [...] }
+// rather than the single `detail` string used for 403s. Flatten that shape into
+// one readable line so callers get the real reason instead of axios's generic
+// "Request failed with status code 400".
+function extractValidationMessage(data) {
+  if (!data || typeof data !== "object") return null;
+  if (typeof data.detail === "string") return data.detail;
+
+  const messages = [];
+  for (const value of Object.values(data)) {
+    if (Array.isArray(value)) messages.push(...value.map(String));
+    else if (typeof value === "string") messages.push(value);
+  }
+  return messages.length ? messages.join(" ") : null;
+}
+
 export function createApiClient({ baseURL, timeout = 10000, withCredentials = false }) {
   const client = axios.create({ baseURL, timeout, withCredentials });
 
@@ -46,6 +62,10 @@ export function createApiClient({ baseURL, timeout = 10000, withCredentials = fa
         // `e.message || "fallback"` show something useful instead of axios's
         // generic "Request failed with status code 403".
         error.message = error.response?.data?.detail || "This action is forbidden.";
+      }
+      if (error.response?.status === 400) {
+        const msg = extractValidationMessage(error.response?.data);
+        if (msg) error.message = msg;
       }
       return Promise.reject(error);
     }
