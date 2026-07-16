@@ -15,6 +15,7 @@ import {
   getRiskAssessmentLatest as _getRiskAssessmentLatest,
   getRiskAssessmentTrend as _getRiskAssessmentTrend,
 } from "../api/enrollmentApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -44,21 +45,6 @@ const GRADE_LEVELS_BY_LEVEL = {
   junior_highschool: ["All Grades", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
   senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
 };
-
-function buildSchoolYearOptions() {
-  const current = new Date().getFullYear();
-  const opts = [{ value: "", label: "All Years" }];
-  for (let y = current + 1; y >= current - 3; y--) {
-    opts.push({ value: `${y - 1}-${y}`, label: `${y - 1}–${y}` });
-  }
-  return opts;
-}
-
-function currentSchoolYear() {
-  const now = new Date();
-  const yr  = now.getFullYear();
-  return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
-}
 
 // Fixed status palette (good/warning/serious/critical) — reserved for state,
 // never reused as a categorical series color. Exact validated hexes (see the
@@ -775,21 +761,25 @@ function RiskTable({ scores, selectedStudentId, onSelectStudent, sortKey, sortDi
 export default function AnalyticsPage() {
   usePageTitle("Analytics");
 
-  const [schoolYear,      setSchoolYear]      = useState(currentSchoolYear());
+  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  const [schoolYear,      setSchoolYear]      = useState(globalSchoolYear || "");
   const [gradingPeriod,   setGradingPeriod]   = useState("1st_quarter");
   const [subjectId,       setSubjectId]       = useState("");
   const [schoolLevel,     setSchoolLevel]     = useState("");
   const [gradeLevel,      setGradeLevel]      = useState("");
   const [nClusters,       setNClusters]       = useState(3);
 
-  const schoolYearOptions = buildSchoolYearOptions();
+  // Follow the global school year selector while this page stays mounted.
+  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
+
+  const schoolYearOptions = [{ value: "", label: "All Years" }, ...globalYearOptions.map((y) => ({ value: y, label: y }))];
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
-  const hasFilters        = schoolYear !== currentSchoolYear() || gradingPeriod !== "1st_quarter" || schoolLevel || gradeLevel || subjectId || nClusters !== 3;
+  const hasFilters        = schoolYear !== globalSchoolYear || gradingPeriod !== "1st_quarter" || schoolLevel || gradeLevel || subjectId || nClusters !== 3;
 
   useEffect(() => { setGradeLevel(""); }, [schoolLevel]);
 
   function clearFilters() {
-    setSchoolYear(currentSchoolYear());
+    setSchoolYear(globalSchoolYear);
     setGradingPeriod("1st_quarter");
     setSchoolLevel("");
     setGradeLevel("");

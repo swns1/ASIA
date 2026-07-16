@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
+import { SchoolYearProvider } from "./context/SchoolYearContext";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import StudentsPage from "./pages/StudentsPage";
@@ -49,6 +50,7 @@ const GUARDIAN = ["guardian"];
 
 export default function App() {
   return (
+    <SchoolYearProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
@@ -104,5 +106,6 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
+    </SchoolYearProvider>
   );
 }

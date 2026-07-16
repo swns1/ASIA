@@ -16,6 +16,7 @@ import {
   createEnrollmentScholarship as _createEnrollmentScholarship,
   deleteEnrollmentScholarship as _deleteEnrollmentScholarship,
 } from "../api/enrollmentApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 const getEnrollmentScholarships   = (p = {}) => _getEnrollmentScholarships(p);
 const getScholarshipTypes         = ()       => _getScholarshipTypes({ is_active: true, page_size: 100 });
@@ -89,11 +90,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
   const [error,       setError]       = useState("");
   const [open,        setOpen]        = useState(false);
 
-  const currentSY = (() => {
-    const now = new Date();
-    const yr = now.getFullYear();
-    return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
-  })();
+  const { schoolYear: currentSY } = useSchoolYear();
 
   useEffect(() => {
     if (!search.trim()) { setStudents([]); return; }
@@ -813,13 +810,10 @@ function EligibilityTab({ scholarshipTypes }) {
   const [applyModal,    setApplyModal]    = useState(false);
   const [, setSavedCount] = useState(0);
 
-  const syOptions = useMemo(() => {
-    const d = new Date();
-    const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-    return Array.from({ length:4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y+1}`; });
-  }, []);
+  const { schoolYear: globalSchoolYear, options: syOptions } = useSchoolYear();
 
-  useEffect(() => { setSchoolYear(syOptions[0]); }, []);
+  // Follow the global school year selector while this tab stays mounted.
+  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
 
   const handleScan = async () => {
     if (!schoolYear) return;

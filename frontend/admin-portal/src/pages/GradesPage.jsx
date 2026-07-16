@@ -29,6 +29,7 @@ import {
   callGemini,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 const getStudents            = (p = {}) => _getStudents(p);
 const getStudent              = (id)     => _getStudent(id);
@@ -47,16 +48,6 @@ const getNarrativeReports    = (p = {}) => _getNarrativeReports(p);
 const createNarrativeReport  = (p)      => _createNarrativeReport(p);
 const updateNarrativeReport  = (id, p)  => _updateNarrativeReport(id, p);
 const deleteNarrativeReport  = (id)     => _deleteNarrativeReport(id);
-
-// ── School year chip options (same helper as EnrollmentsPage) ─────────────────
-function buildSchoolYearOptions() {
-  const current = new Date().getFullYear();
-  const opts = [{ value: "", label: "All Years" }];
-  for (let y = current + 1; y >= current - 3; y--) {
-    opts.push({ value: `${y - 1}-${y}`, label: `${y - 1}–${y}` });
-  }
-  return opts;
-}
 
 const OVERVIEW_SCHOOL_LEVELS = [
   { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#e03131" },
@@ -85,7 +76,9 @@ function SortIcon({ k, sortKey, sortDir }) {
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
 
-  const [schoolYear,    setSchoolYear]    = useState("");
+  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  const [schoolYear,    setSchoolYear]    = useState(globalSchoolYear || "");
+  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
   const [schoolLevel,   setSchoolLevel]   = useState("");
   const [gradeLevel,    setGradeLevel]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("");
@@ -107,7 +100,7 @@ function OverviewTab({ onNavigate }) {
     return () => clearTimeout(t);
   }, [search]);
 
-  const schoolYearOptions = buildSchoolYearOptions();
+  const schoolYearOptions = [{ value: "", label: "All Years" }, ...globalYearOptions.map((y) => ({ value: y, label: y }))];
   const gradeLevelOptions = schoolLevel ? (OVERVIEW_GRADE_LEVELS[schoolLevel] ?? []) : [];
   const periodOptions     = schoolLevel
     ? (GRADING_PERIODS_BY_LEVEL[schoolLevel] ?? [])

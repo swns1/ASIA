@@ -19,6 +19,7 @@ import {
 } from "../api/enrollmentApi";
 import { getStudents as apiGetStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -67,16 +68,6 @@ const LEVEL_ICONS = {
   senior_highschool: "ti-certificate",
 };
 
-function buildSchoolYearOptions() {
-  const d = new Date();
-  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-  const opts = [{ value: "", label: "All Years" }];
-  for (let i = 1; i >= -2; i--) {
-    const y = base + i;
-    opts.push({ value: `${y}-${y + 1}`, label: `${y}-${y + 1}` });
-  }
-  return opts;
-}
 
 
 const PALETTES = [
@@ -1130,15 +1121,26 @@ export default function EnrollmentsPage() {
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
 
-  // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered
-  const [schoolYear,   setSchoolYear]   = useState(() => searchParams.get("school_year") ?? "");
+  // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered,
+  // falling back to the global school-year selector (Sidebar) rather than "All Years".
+  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  const [schoolYear,   setSchoolYear]   = useState(() => searchParams.get("school_year") ?? globalSchoolYear ?? "");
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
 
-  const schoolYearOptions = buildSchoolYearOptions();
+  // Follow the global school year while this page stays mounted — unless the
+  // URL explicitly pinned one (e.g. a Dashboard card link), in which case we
+  // honor that once and resync on subsequent global changes after.
+  const skipYearSync = useRef(Boolean(searchParams.get("school_year")));
+  useEffect(() => {
+    if (skipYearSync.current) { skipYearSync.current = false; return; }
+    setSchoolYear(globalSchoolYear);
+  }, [globalSchoolYear]);
+
+  const schoolYearOptions = [{ value: "", label: "All Years" }, ...globalYearOptions.map((y) => ({ value: y, label: y }))];
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
 
   // Reset grade when level changes — but not on the initial mount, so a URL-seeded

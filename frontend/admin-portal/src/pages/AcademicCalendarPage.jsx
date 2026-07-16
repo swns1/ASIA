@@ -17,6 +17,7 @@ import {
   deleteCalendarEvent as _deleteEvent,
 } from "../api/enrollmentApi";
 import { getSchoolSettings as _getSchoolSettings } from "../api/billingApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 const getEvents         = (sy)    => _getEvents({ school_year: sy, page_size: 200 });
 const createEvent       = (p)     => _createEvent(p);
@@ -101,16 +102,6 @@ let EVENT_TYPES = buildEventTypes(loadColorOverrides());
 function eventMeta(type) {
   return EVENT_TYPES.find((t) => t.value === type) ?? EVENT_TYPES[EVENT_TYPES.length - 1];
 }
-
-// ── School years ──────────────────────────────────────────────────────────────
-
-const SCHOOL_YEARS = (() => {
-  const now = new Date();
-  const cur = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  return Array.from({ length: 5 }, (_, i) => { const y = cur - 1 + i; return `${y}-${y + 1}`; });
-})();
-
-const DEFAULT_SY = SCHOOL_YEARS[1];
 
 // ── Philippine Public Holidays ────────────────────────────────────────────────
 // Regular + special non-working holidays per Proclamation. Add future years here.
@@ -1426,7 +1417,11 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 export default function AcademicCalendarPage() {
   usePageTitle("Academic Calendar");
   const navigate = useNavigate();
-  const [schoolYear,  setSchoolYear]  = useState(DEFAULT_SY);
+  const { schoolYear: globalSchoolYear, options: SCHOOL_YEARS } = useSchoolYear();
+  const [schoolYear,  setSchoolYear]  = useState(globalSchoolYear || "");
+
+  // Follow the global school year selector while this page stays mounted.
+  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
   const [events,      setEvents]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");

@@ -14,6 +14,7 @@ import {
   getSubjects as _getSubjects,
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
@@ -26,16 +27,6 @@ function AnimatedCount({ target, loading }) {
   if (loading) return null;
   return <motion.span style={{ fontVariantNumeric: "tabular-nums" }}>{display}</motion.span>;
 }
-
-// ── Filter constants ──────────────────────────────────────────────────────────
-const SCHOOL_YEARS = (() => {
-  const now = new Date();
-  const cur = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return Array.from({ length: 5 }, (_, i) => {
-    const y = cur - i;
-    return `${y}-${y + 1}`;
-  });
-})();
 
 const LEVEL_GRADES = {
   "":                [],
@@ -87,13 +78,6 @@ function useClock() {
     return () => clearInterval(id);
   }, []);
   return now;
-}
-
-// Current school year helper
-function currentSchoolYear() {
-  const now = new Date();
-  const yr  = now.getFullYear();
-  return now.getMonth() >= 7 ? `${yr}-${yr + 1}` : `${yr - 1}-${yr}`;
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -262,7 +246,7 @@ export default function DashboardPage() {
   // ── Alert state ──
   const [alerts, setAlerts] = useState([]);
 
-  const schoolYear = currentSchoolYear();
+  const { schoolYear, options: schoolYearOptions } = useSchoolYear();
 
   const isFirstEnrolledFetch    = useRef(true);
   const isFirstPendingFetch     = useRef(true);
@@ -379,13 +363,13 @@ export default function DashboardPage() {
     try {
       const [unpaidData, pendingEnrData] = await Promise.all([
         _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null),
-        _getEnrollments({ enrollment_status: "pending", school_year: currentSchoolYear(), page_size: 1 }).catch(() => null),
+        _getEnrollments({ enrollment_status: "pending", school_year: schoolYear, page_size: 1 }).catch(() => null),
       ]);
       if (unpaidData?.count > 0) {
         newAlerts.push({ id: "unpaid", icon: "ti-receipt-off", color: "#a32d2d", bg: "#fde8e8", message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`, link: "/invoices?status=unpaid" });
       }
       if (pendingEnrData?.count > 0) {
-        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: `/enrollments?enrollment_status=pending&school_year=${currentSchoolYear()}` });
+        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: `/enrollments?enrollment_status=pending&school_year=${schoolYear}` });
       }
     } catch { /* alerts are non-critical */ }
     setAlerts(newAlerts);
@@ -394,8 +378,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
+    if (!schoolYear) return; // global school year still resolving
     fetchAll();
-  }, []);
+  }, [schoolYear]);
 
   useEffect(() => {
     if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
@@ -424,7 +409,7 @@ export default function DashboardPage() {
     .slice(0, 4);
 
   // ── filter option lists ──
-  const yearOpts  = SCHOOL_YEARS.map((y) => ({ value: y, label: y }));
+  const yearOpts  = schoolYearOptions.map((y) => ({ value: y, label: y }));
   const levelOpts = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }));
   function gradeOpts(f) {
     return (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
@@ -602,7 +587,7 @@ export default function DashboardPage() {
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
                           <select value={financialYear ?? ""} onChange={(e) => setFinancialYear(e.target.value || null)} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #f0e0e0", fontSize: 11, color: "#5a3a3a", background: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", outline: "none", marginTop: 4 }}>
                             <option value="">Current ({schoolYear})</option>
-                            {SCHOOL_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                            {schoolYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
                           </select>
                         </motion.div>
                       )}

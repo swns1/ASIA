@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Sidebar from "./Sidebar";
 import { clearAuthSession } from "../utils/auth";
 import { refreshToken } from "../api/identityApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
@@ -82,6 +83,13 @@ function SessionTimeoutWarning() {
 }
 
 export default function AppLayout({ children, user }) {
+  // AppLayout is the first thing to mount once a user is actually
+  // authenticated (SchoolYearProvider itself mounts before login, when
+  // there's no token yet to resolve a default against) — retry here so the
+  // global school year gets its backend-sourced default right after login.
+  const { ensureDefault } = useSchoolYear();
+  useEffect(() => { ensureDefault(); }, [ensureDefault]);
+
   return (
     <>
       <style>{`

@@ -5,8 +5,36 @@ import {
   hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
+import { useSchoolYear } from "../context/SchoolYearContext";
 import logo from "../assets/logo.png";
 import logoutIcon from "../assets/logout.svg";
+
+// ── Global school-year filter: sets the default year every year-scoped
+// module (Dashboard, Enrollments, Grades, Attendance, Analytics,
+// Scholarships, Academic Calendar, Teacher Advisories) opens to. Individual
+// pages may still switch to a different year locally without affecting this.
+function SchoolYearPicker() {
+  const { schoolYear, setSchoolYear, options } = useSchoolYear();
+  if (!schoolYear) return null; // still resolving the default on first load
+
+  return (
+    <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #f5eaea" }}>
+      <label style={{ display: "block", fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 5 }}>
+        School Year
+      </label>
+      <select
+        value={schoolYear}
+        onChange={(e) => setSchoolYear(e.target.value)}
+        title="Applies to Dashboard, Enrollments, Grades, Attendance, Analytics, Scholarships, Academic Calendar, and Teacher Advisories"
+        style={{ width: "100%", border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", cursor: "pointer", fontWeight: 600 }}
+      >
+        {options.map((y) => (
+          <option key={y} value={y}>{y}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 const NAV = [
   {
@@ -114,6 +142,8 @@ export default function Sidebar({ user: userProp }) {
             </div>
           </div>
         </div>
+
+        <SchoolYearPicker />
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>

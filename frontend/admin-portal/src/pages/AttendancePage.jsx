@@ -3,8 +3,8 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import { getEnrollments } from "../api/enrollmentApi";
-import { getSchoolSettings } from "../api/billingApi";
 import { getAttendance, bulkAttendance, getAttendanceSummary } from "../api/attendanceApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 import { attendanceRate } from "../utils/attendance";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -318,7 +318,8 @@ export default function AttendancePage() {
   const [tab, setTab] = useState("daily");
 
   // ── Shared filters ──
-  const [schoolYear, setSchoolYear] = useState("");
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
+  const [schoolYear, setSchoolYear] = useState(globalSchoolYear || "");
   const [gradeLevel, setGradeLevel] = useState("");
   const [section,    setSection]    = useState("");
 
@@ -345,12 +346,9 @@ export default function AttendancePage() {
   // ── Notifications ──
   const [error, setError] = useState("");
 
-  // Pre-fill school year
-  useEffect(() => {
-    getSchoolSettings()
-      .then((s) => { if (s?.current_school_year) setSchoolYear(s.current_school_year); })
-      .catch(() => {});
-  }, []);
+  // Follow the global school year selector (still freely editable below —
+  // this is a free-text lookup field, not a locked dropdown).
+  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
 
   // Reload daily records when date changes (if a class is already loaded)
   useEffect(() => {

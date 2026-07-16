@@ -14,6 +14,7 @@ import {
   deleteSectionAdvisory,
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
 const SCHOOL_LEVELS = [
@@ -38,12 +39,6 @@ const SHS_STRANDS = [
 
 const SCHOOL_LEVEL_LABELS = Object.fromEntries(SCHOOL_LEVELS.map((l) => [l.value, l.label]));
 
-function currentSchoolYear() {
-  const now = new Date();
-  const y = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1; // school year starts ~June
-  return `${y}-${y + 1}`;
-}
-
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
@@ -64,10 +59,11 @@ function AnimatedCount({ value, style }) {
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
 function AdvisoryModal({ advisory, teachers, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
 
   const [form, setForm] = useState({
     teacher_user_id: advisory?.teacher_user_id ?? "",
-    school_year:     advisory?.school_year     ?? currentSchoolYear(),
+    school_year:     advisory?.school_year     ?? globalSchoolYear,
     school_level:    advisory?.school_level    ?? "elementary",
     grade_level:     advisory?.grade_level     ?? "",
     section:         advisory?.section         ?? "",
@@ -332,6 +328,11 @@ export default function TeacherAdvisoriesPage() {
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [yearFilter, setYearFilter] = useState("all");
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
+
+  // Default the list to the global school year once it resolves — still
+  // freely switchable back to "All Years" or any other year in use below.
+  useEffect(() => { if (globalSchoolYear) setYearFilter(globalSchoolYear); }, [globalSchoolYear]);
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
