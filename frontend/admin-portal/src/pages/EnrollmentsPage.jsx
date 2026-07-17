@@ -1001,13 +1001,27 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                   {resultData.skipped?.length > 0 && (
                     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ duration:0.2, delay:0.24 }}
                       style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#7a4a00" }}>
-                      <strong>{resultData.skipped.length}</strong> student{resultData.skipped.length !== 1 ? "s were" : " was"} skipped — check the preview list for reasons.
+                      <div style={{ fontWeight:700, marginBottom:6 }}>
+                        <strong>{resultData.skipped.length}</strong> student{resultData.skipped.length !== 1 ? "s were" : " was"} skipped:
+                      </div>
+                      {resultData.skipped.map((s, i) => (
+                        <div key={s.student_id ?? i} style={{ fontSize:11.5, marginTop:3 }}>
+                          · {s.student_name ?? `Student #${s.student_id}`}: {s.reason}
+                        </div>
+                      ))}
                     </motion.div>
                   )}
                   {resultData.failed?.length > 0 && (
                     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ duration:0.2, delay:0.3 }}
                       style={{ background:"#fde8e8", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#9a2020" }}>
-                      <strong>{resultData.failed.length}</strong> student{resultData.failed.length !== 1 ? "s" : ""} failed to create — check server logs.
+                      <div style={{ fontWeight:700, marginBottom:6 }}>
+                        <strong>{resultData.failed.length}</strong> student{resultData.failed.length !== 1 ? "s" : ""} failed to create:
+                      </div>
+                      {resultData.failed.map((s, i) => (
+                        <div key={s.student_id ?? i} style={{ fontSize:11.5, marginTop:3 }}>
+                          · {s.student_name ?? `Student #${s.student_id}`}: {s.reason}
+                        </div>
+                      ))}
                     </motion.div>
                   )}
                 </div>

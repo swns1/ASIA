@@ -64,6 +64,8 @@ class GradeSerializer(serializers.ModelSerializer):
 
         if subject and subject.school_level != enrollment.school_level:
             raise serializers.ValidationError({"subject": f"Subject is for {subject.school_level} but enrollment is for {enrollment.school_level}."})
+        if subject and subject.grade_level != enrollment.grade_level:
+            raise serializers.ValidationError({"subject": f"Subject '{subject.subject_name}' is tagged for {subject.grade_level}, but this enrollment is {enrollment.grade_level}."})
 
         qs = Grade.objects.filter(enrollment=enrollment, subject=subject, grading_period=period)
         if self.instance is not None:

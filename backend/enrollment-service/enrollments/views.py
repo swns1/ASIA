@@ -321,10 +321,15 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        role = getattr(self.request.user, "role", None)
         # Guardians only ever see their own child(ren)'s enrollments; an
         # unlinked guardian gets an empty list (fail closed).
-        if getattr(self.request.user, "role", None) == "guardian":
+        if role == "guardian":
             qs = qs.filter(student_id__in=guardian_student_ids(self.request.user))
+        # Teachers only see their own SectionAdvisory roster — matches how
+        # grades/attendance are already scoped for the teacher role.
+        elif role == "teacher":
+            qs = qs.filter(student_id__in=teacher_student_ids(self.request.user))
         return qs
     search_fields = (
         "student__first_name",
@@ -604,10 +609,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         created  = []
         failed_c = []
 
-        with transaction.atomic():
-            for entry in to_promote:
-                student_obj = entry["_student_obj"]
-                try:
+        for entry in to_promote:
+            student_obj = entry["_student_obj"]
+            try:
+                with transaction.atomic():
                     enr = Enrollment.objects.create(
                         student=student_obj,
                         school_year=to_school_year,
@@ -616,17 +621,17 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                         section=to_section,
                         enrollment_status="pending",
                     )
-                    created.append({
-                        "enrollment_id": enr.enrollment_id,
-                        "student_id":    student_obj.student_id,
-                        "student_name":  entry["student_name"],
-                    })
-                except Exception as exc:
-                    failed_c.append({
-                        "student_id":   student_obj.student_id,
-                        "student_name": entry["student_name"],
-                        "reason":       str(exc),
-                    })
+                created.append({
+                    "enrollment_id": enr.enrollment_id,
+                    "student_id":    student_obj.student_id,
+                    "student_name":  entry["student_name"],
+                })
+            except Exception as exc:
+                failed_c.append({
+                    "student_id":   student_obj.student_id,
+                    "student_name": entry["student_name"],
+                    "reason":       str(exc),
+                })
 
         return Response(
             {

@@ -201,7 +201,15 @@ export default function EnrollmentDetailPage() {
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.dark }}>{studentName}</h2>
+              <h2
+                onClick={() => studentId && navigate(`/students/${studentId}`)}
+                title="View student profile"
+                style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.dark, cursor: studentId ? "pointer" : "default" }}
+                onMouseEnter={(e) => { if (studentId) e.currentTarget.style.color = C.red; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = C.dark; }}
+              >
+                {studentName}
+              </h2>
               <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>
                 Enrollment #{id}
               </p>

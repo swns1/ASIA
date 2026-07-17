@@ -170,9 +170,13 @@ class IsStaffOrOwnerGuardianReadOnly(BasePermission):
     """
     For staff-CRUD resources a guardian is also allowed to READ, scoped to
     their own child(ren) — currently the EnrollmentViewSet:
-      - super_admin/admin/registrar: full write + read (existing behavior).
-      - teacher/accounting: read-only, any student (existing "any
-        authenticated staff read").
+      - super_admin/admin/registrar/accounting: full write (staff roles) or
+        read-only (accounting), any student (existing "any authenticated
+        staff read" behavior).
+      - teacher: read-only, scoped to their own SectionAdvisory roster via
+        `teacher_student_ids()` — matches how grades/attendance are already
+        scoped under IsAdvisoryTeacherOrStaff, so a teacher can't browse
+        enrollment records for students outside their own section(s).
       - guardian: read-only, scoped to their own child(ren) by the view's
         get_queryset() (list) and has_object_permission() (detail).
 
@@ -191,9 +195,15 @@ class IsStaffOrOwnerGuardianReadOnly(BasePermission):
         return getattr(request.user, "role", None) in WRITE_ROLES_DEFAULT
 
     def has_object_permission(self, request, view, obj):
-        if getattr(request.user, "role", None) == "guardian":
+        role = getattr(request.user, "role", None)
+        if role == "guardian":
             return (
                 request.method in SAFE_METHODS
                 and _resolve_student_id(view, obj) in guardian_student_ids(request.user)
+            )
+        if role == "teacher":
+            return (
+                request.method in SAFE_METHODS
+                and _resolve_student_id(view, obj) in teacher_student_ids(request.user)
             )
         return True

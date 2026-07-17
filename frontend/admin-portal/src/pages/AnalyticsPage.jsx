@@ -777,6 +777,10 @@ export default function AnalyticsPage() {
   const hasFilters        = schoolYear !== globalSchoolYear || gradingPeriod !== "1st_quarter" || schoolLevel || gradeLevel || subjectId || nClusters !== 3;
 
   useEffect(() => { setGradeLevel(""); }, [schoolLevel]);
+  // A subject picked under one level/grade scope may not exist in another —
+  // clear the selection so `subjectId` never silently points at a subject
+  // the dropdown below no longer lists.
+  useEffect(() => { setSubjectId(""); }, [schoolLevel, gradeLevel]);
 
   function clearFilters() {
     setSchoolYear(globalSchoolYear);
@@ -793,11 +797,17 @@ export default function AnalyticsPage() {
   const [selectedStudent, setSelectedStudent] = useState(null);
 
   useEffect(() => {
-    _getSubjects().then((data) => {
+    // page_size=500 (this API's max) so the dropdown can't silently drop
+    // subjects once the catalog grows past the default page size of 20;
+    // school_level/grade_level scope the list to match the chips above.
+    const params = { page_size: 500 };
+    if (schoolLevel) params.school_level = schoolLevel;
+    if (gradeLevel)  params.grade_level  = gradeLevel;
+    _getSubjects(params).then((data) => {
       const list = Array.isArray(data) ? data : data.results || [];
       setSubjects(list);
     }).catch(() => {});
-  }, []);
+  }, [schoolLevel, gradeLevel]);
 
   const runClustering = useCallback(async () => {
     setLoading(true);

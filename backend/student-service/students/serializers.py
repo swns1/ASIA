@@ -78,9 +78,18 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class GuardianSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Guardian
         fields = "__all__"
+
+    def get_student_name(self, obj):
+        s = obj.student
+        if not s:
+            return None
+        parts = [s.first_name, s.middle_name, s.last_name, s.suffix]
+        return " ".join(p for p in parts if p)
 
     def validate(self, attrs):
         if attrs.get("is_primary_contact"):

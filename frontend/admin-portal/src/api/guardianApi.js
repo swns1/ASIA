@@ -32,3 +32,14 @@ export async function deleteGuardian(id) {
   const res = await studentClient.delete(`/guardians/${id}/`);
   return res.data;
 }
+
+// Fetches every Guardian row already linked to any of the given user_ids —
+// used to warn an admin when a candidate login account is already linked to
+// a different student before they link it again.
+export async function getGuardiansByUserIds(userIds) {
+  if (!userIds || userIds.length === 0) return [];
+  const res = await studentClient.get("/guardians/", {
+    params: { user_id__in: userIds.join(","), page_size: 500 },
+  });
+  return res.data;
+}
