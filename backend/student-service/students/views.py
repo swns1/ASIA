@@ -134,6 +134,11 @@ class GuardianViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(relationship=params["relationship"])
         if params.get("is_primary_contact") in ["true", "false"]:
             queryset = queryset.filter(is_primary_contact=params["is_primary_contact"] == "true")
+        if params.get("user_id"):
+            queryset = queryset.filter(user_id=params["user_id"])
+        if params.get("user_id__in"):
+            ids = [v.strip() for v in params["user_id__in"].split(",") if v.strip()]
+            queryset = queryset.filter(user_id__in=ids)
         return queryset
 
 

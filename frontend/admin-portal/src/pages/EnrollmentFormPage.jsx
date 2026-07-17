@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
@@ -17,9 +17,11 @@ import {
   getScholarshipTypes as _getScholarshipTypes,
   createEnrollmentScholarship as _createEnrollmentScholarship,
   sendEnrollmentEmail as _sendEnrollmentEmail,
+  transferInEnrollment as _transferInEnrollment,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 import { generateInvoice as _generateInvoice } from "../api/billingApi";
+import { createPreviousSchool as _createPreviousSchool } from "../api/previousSchoolApi";
 
 const getStudents                 = (p = {}) => _getStudents(p);
 const getStudent                  = (id)     => _getStudent(id);
@@ -31,6 +33,8 @@ const createEnrollmentScholarship = (p)      => _createEnrollmentScholarship(p);
 const sendEnrollmentEmail         = (p)      => _sendEnrollmentEmail(p);
 const getStudentEnrollments       = (sid)    => _getEnrollments({ student: sid, page_size: 100 });
 const getStudentEligibility       = (sid)    => _getEligibility(sid);
+const transferInEnrollment        = (id, p)  => _transferInEnrollment(id, p);
+const createPreviousSchool        = (p)      => _createPreviousSchool(p);
 
 // ─── Style tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -108,6 +112,8 @@ function buildSchoolYearOptions() {
   const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
   return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
 }
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" }, { bg: "#e8f0fd", color: "#2563eb" },
@@ -448,6 +454,7 @@ export default function EnrollmentFormPage() {
   usePageTitle("Enrollment Form");
   const { id }   = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isEdit   = Boolean(id);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
 
@@ -463,6 +470,13 @@ export default function EnrollmentFormPage() {
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [overrideMode,       setOverrideMode]       = useState(false);
   const [overrideReason,     setOverrideReason]     = useState("");
+
+  // Transfer-in state (new enrollment, student with no prior local records)
+  const [isTransferIn,           setIsTransferIn]           = useState(false);
+  const [transferInDate,         setTransferInDate]         = useState(todayISO());
+  const [transferInReason,       setTransferInReason]       = useState("");
+  const [transferInSchoolName,   setTransferInSchoolName]   = useState("");
+  const [transferInSchoolAddress, setTransferInSchoolAddress] = useState("");
 
   // Edit-mode grade placement unlock state
   const [gradePlacementUnlocked, setGradePlacementUnlocked] = useState(false);
@@ -521,20 +535,6 @@ export default function EnrollmentFormPage() {
       .finally(() => setLoading(false));
   }, [id, isEdit]);
 
-  const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
-  const isSHS        = form.school_level === "senior_highschool";
-
-  useEffect(() => {
-    setForm((f) => {
-      const next = { ...f };
-      if (!gradeOptions.includes(f.grade_level)) next.grade_level = gradeOptions[0] ?? "";
-      if (isSHS) { if (!next.semester) next.semester = "1st"; }
-      else       { next.strand = ""; next.semester = ""; }
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.school_level]);
-
   const nextAllowedGrade = studentLastGrade ? getNextGradeLevel(studentLastGrade) : null;
 
   const handleStudentChange = (st, lastGrade) => {
@@ -544,12 +544,22 @@ export default function EnrollmentFormPage() {
       setEligibility(null);
       setOverrideMode(false);
       setOverrideReason("");
+      setIsTransferIn(false);
+      setTransferInDate(todayISO());
+      setTransferInReason("");
+      setTransferInSchoolName("");
+      setTransferInSchoolAddress("");
       return;
     }
     setStudent(st);
     setStudentLastGrade(lastGrade ?? null);
     setOverrideMode(false);
     setOverrideReason("");
+    setIsTransferIn(false);
+    setTransferInDate(todayISO());
+    setTransferInReason("");
+    setTransferInSchoolName("");
+    setTransferInSchoolAddress("");
 
     if (lastGrade) {
       const next = getNextGradeLevel(lastGrade);
@@ -574,6 +584,48 @@ export default function EnrollmentFormPage() {
       .catch(() => setEligibility(null))
       .finally(() => setEligibilityLoading(false));
   };
+
+  // Deep link from the student's profile (e.g. "New Enrollment" on
+  // StudentDetailPage) — preselect that student instead of leaving the
+  // picker empty. Only applies when creating a new enrollment.
+  useEffect(() => {
+    if (isEdit) return;
+    const preselectId = searchParams.get("student");
+    if (!preselectId) return;
+    (async () => {
+      const st = await getStudent(preselectId).catch(() => null);
+      if (!st) return;
+      let lastGrade = null;
+      try {
+        const enData = await getStudentEnrollments(st.student_id);
+        const enrollments = enData.results ?? enData ?? [];
+        if (enrollments.length) {
+          const latest = enrollments.reduce((a, b) => {
+            if (a.school_year > b.school_year) return a;
+            if (b.school_year > a.school_year) return b;
+            return (a.enrollment_id ?? 0) > (b.enrollment_id ?? 0) ? a : b;
+          });
+          lastGrade = latest.grade_level ?? null;
+        }
+      } catch { /* non-critical */ }
+      handleStudentChange(st, lastGrade);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
+  const isSHS        = form.school_level === "senior_highschool";
+
+  useEffect(() => {
+    setForm((f) => {
+      const next = { ...f };
+      if (!gradeOptions.includes(f.grade_level)) next.grade_level = gradeOptions[0] ?? "";
+      if (isSHS) { if (!next.semester) next.semester = "1st"; }
+      else       { next.strand = ""; next.semester = ""; }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.school_level]);
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleScholarship = (sid) =>
@@ -606,8 +658,14 @@ export default function EnrollmentFormPage() {
       return "An override reason is required when bypassing grade progression rules.";
     if (isEdit && gradePlacementChanged && !gradePlacementReason.trim())
       return "A reason is required when changing grade placement on an existing enrollment.";
+    if (!isEdit && isTransferIn && !transferInDate)
+      return "Effective date is required for a transfer-in.";
+    if (!isEdit && isTransferIn && !transferInSchoolName.trim())
+      return "Previous school name is required for a transfer-in.";
+    if (!isEdit && isTransferIn && !transferInSchoolAddress.trim())
+      return "Previous school address is required for a transfer-in.";
     return "";
-  }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason]);
+  }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason, isTransferIn, transferInDate, transferInSchoolName, transferInSchoolAddress]);
 
     const handleSubmit = async () => {
       setError("");
@@ -628,6 +686,24 @@ export default function EnrollmentFormPage() {
         } else {
           const created = await createEnrollment(payload);
 
+          if (isTransferIn) {
+            try {
+              const prevSchool = await createPreviousSchool({
+                student: student.student_id,
+                school_name: transferInSchoolName.trim(),
+                school_address: transferInSchoolAddress.trim(),
+              });
+              await transferInEnrollment(created.enrollment_id, {
+                effective_date: transferInDate,
+                reason: transferInReason.trim(),
+                origin_school_name: prevSchool?.school_name || transferInSchoolName.trim(),
+              });
+            } catch (e) {
+              console.error("transfer-in recording failed (non-critical):", e);
+              toast.error("Enrollment created, but recording the transfer-in details failed. You can add them manually later.");
+            }
+          }
+
           for (const stId of selectedScholarships) {
             await createEnrollmentScholarship({
               enrollment: created.enrollment_id,
@@ -647,7 +723,11 @@ export default function EnrollmentFormPage() {
           // Prompt to generate invoice when enrollment status is enrolled
           if (form.enrollment_status === "enrolled") {
             const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ");
-            setInvoicePrompt({ enrollmentId: created.enrollment_id, studentName: fullName || `Enrollment #${created.enrollment_id}` });
+            setInvoicePrompt({
+              enrollmentId: created.enrollment_id,
+              studentName: fullName || `Enrollment #${created.enrollment_id}`,
+              effectiveDate: isTransferIn ? transferInDate : null,
+            });
             setSaving(false);
             return;
           }
@@ -760,6 +840,47 @@ export default function EnrollmentFormPage() {
                     onChangeReason={setOverrideReason}
                     isAdmin={isAdmin}
                   />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Transfer-in toggle — only makes sense for a student with no prior local records */}
+            <AnimatePresence>
+              {!isEdit && student && eligibility?.is_new_student && (
+                <motion.div
+                  key="transfer-in"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  style={{ background: "#fff8f0", border: "1px solid #f0d9a8", borderRadius: 14, padding: "16px 20px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                    <input type="checkbox" checked={isTransferIn}
+                      onChange={(e) => setIsTransferIn(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: C.red, cursor: "pointer" }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#7a4a08" }}>
+                      This student is transferring in from another school mid-year
+                    </span>
+                  </label>
+                  {isTransferIn && (
+                    <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                      <Field label="Effective Date" required>
+                        <Input type="date" value={transferInDate} onChange={(e) => setTransferInDate(e.target.value)} />
+                      </Field>
+                      <Field label="Previous School Name" required>
+                        <Input type="text" value={transferInSchoolName} onChange={(e) => setTransferInSchoolName(e.target.value)}
+                          placeholder="e.g. Iloilo National High School" />
+                      </Field>
+                      <Field label="Previous School Address" required>
+                        <Input type="text" value={transferInSchoolAddress} onChange={(e) => setTransferInSchoolAddress(e.target.value)}
+                          placeholder="e.g. Iloilo City" />
+                      </Field>
+                      <Field label="Reason / Notes" hint="Optional">
+                        <Input type="text" value={transferInReason} onChange={(e) => setTransferInReason(e.target.value)}
+                          placeholder="e.g. Family relocated" />
+                      </Field>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1022,6 +1143,7 @@ export default function EnrollmentFormPage() {
         <InvoicePromptModal
           enrollmentId={invoicePrompt.enrollmentId}
           studentName={invoicePrompt.studentName}
+          effectiveDate={invoicePrompt.effectiveDate}
           onClose={() => { setInvoicePrompt(null); navigate("/enrollments"); }}
           onGoToInvoices={() => navigate(`/invoices?enrollment_id=${invoicePrompt.enrollmentId}`)}
         />
@@ -1031,7 +1153,7 @@ export default function EnrollmentFormPage() {
   );
 }
 
-function InvoicePromptModal({ enrollmentId, studentName, onClose, onGoToInvoices }) {
+function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose, onGoToInvoices }) {
   const [generating, setGenerating] = useState(false);
   const [plan, setPlan] = useState("monthly");
   const [done, setDone] = useState(false);
@@ -1041,7 +1163,11 @@ function InvoicePromptModal({ enrollmentId, studentName, onClose, onGoToInvoices
     setGenerating(true);
     setError("");
     try {
-      await _generateInvoice({ enrollment_id: enrollmentId, payment_plan: plan });
+      await _generateInvoice({
+        enrollment_id: enrollmentId,
+        payment_plan: plan,
+        ...(effectiveDate ? { effective_date: effectiveDate } : {}),
+      });
       setDone(true);
     } catch (err) {
       setError(err?.response?.data?.detail || "Failed to generate invoice.");
@@ -1092,6 +1218,11 @@ function InvoicePromptModal({ enrollmentId, studentName, onClose, onGoToInvoices
                 <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
                   <strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?
                 </p>
+                {effectiveDate && (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#b45309", fontStyle: "italic" }}>
+                    Transfer-in student — the installment schedule will be prorated to start from {effectiveDate}.
+                  </p>
+                )}
               </div>
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, color: "#5a3a3a", display: "block", marginBottom: 6 }}>Payment Plan</label>

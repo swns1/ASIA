@@ -198,6 +198,38 @@ def generate_installment_schedule(grand_total: Decimal, payment_plan: str, sy_st
     raise ValueError(f"Unknown payment plan: {payment_plan}")
 
 
+def generate_installment_schedule_prorated(grand_total: Decimal, payment_plan: str, sy_start: date, start_from_date: date):
+    """
+    Same total schedule as generate_installment_schedule(), but drops any
+    installment slot whose due_date has already passed relative to
+    start_from_date and redistributes the FULL grand_total across the
+    remaining slots. Used for a transfer-in student enrolling mid-year — the
+    grade-level fee total isn't discounted for arriving late (matches how
+    DepEd-adjacent private schools actually bill transferees), only the
+    payment schedule is compressed into what's left of the year.
+
+    Falls back to a single installment on the last scheduled due date if
+    every slot has already passed (e.g. transferring in during the final
+    month of the school year).
+    """
+    full = generate_installment_schedule(grand_total, payment_plan, sy_start)
+    remaining = [inst for inst in full if inst["due_date"] >= start_from_date] or [full[-1]]
+
+    n = len(remaining)
+    grand_total = Decimal(grand_total)
+    per_inst = (grand_total / Decimal(n)).quantize(Decimal("0.01"))
+    rounding_adjust = grand_total - (per_inst * n)
+
+    return [
+        {
+            "sequence": i,
+            "due_date": inst["due_date"],
+            "amount": per_inst + rounding_adjust if i == n else per_inst,
+        }
+        for i, inst in enumerate(remaining, start=1)
+    ]
+
+
 # ── Invoice generation ───────────────────────────────────────────────────────
 
 def _read_fee_schedule(school_level: str, grade_level: str):
@@ -284,10 +316,15 @@ def _scholarship_discount_on_tuition(tuition: Decimal, scholarships: list) -> De
 
 
 @transaction.atomic
-def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "monthly"):
+def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "monthly", effective_date: date = None):
     """
     Auto-generate an invoice for an enrollment. Idempotent — if an invoice
     already exists for this enrollment, returns the existing one.
+
+    When effective_date is given (a mid-year transfer-in student), the
+    installment schedule is prorated via generate_installment_schedule_prorated()
+    instead of the normal full-year schedule — see that function for why the
+    fee total itself isn't discounted, only the payment schedule is compressed.
 
     Returns the StudentInvoice instance.
     """
@@ -382,7 +419,12 @@ def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "mon
     # 7) Generate installments
     settings = _get_school_settings()
     sy_start = settings.sy_start_date if settings else date(today.year if today.month >= 6 else today.year - 1, 6, 1)
-    schedule = generate_installment_schedule(Decimal(waterfall["grand_total"]), payment_plan, sy_start)
+    if effective_date:
+        schedule = generate_installment_schedule_prorated(
+            Decimal(waterfall["grand_total"]), payment_plan, sy_start, effective_date
+        )
+    else:
+        schedule = generate_installment_schedule(Decimal(waterfall["grand_total"]), payment_plan, sy_start)
     for inst in schedule:
         InvoiceInstallment.objects.create(
             invoice=invoice,
@@ -573,6 +615,76 @@ def apply_payment(invoice_id: int, amount_paid: Decimal):
     total_amt  = sum((Decimal(i.amount) for i in invoice.installments.all()), Decimal("0"))
     total_paid = sum((Decimal(i.amount_paid) for i in invoice.installments.all()), Decimal("0"))
     if total_paid >= total_amt:
+        invoice.status = "paid"
+    elif total_paid > 0:
+        invoice.status = "partially_paid"
+    else:
+        invoice.status = "unpaid"
+    invoice.save(update_fields=["status"])
+
+    return invoice
+
+
+# ── Close out an invoice on transfer-out ──────────────────────────────────────
+
+@transaction.atomic
+def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
+    """
+    Cancels the part of an invoice covering periods after a student's
+    transfer-out effective_date. Installments already due (due_date <=
+    effective_date) are left untouched — the family legitimately owes for
+    time already attended. Future installments are either capped down to
+    whatever was already pre-paid, or voided outright if nothing was paid.
+
+    Also adds a compensating StudentInvoiceDiscount for the total amount
+    waived — StudentInvoice.balance/net_amount are computed from
+    StudentInvoiceItem/StudentInvoiceDiscount (see StudentInvoiceSerializer.
+    get_net_amount/get_balance), entirely independent of the installment
+    schedule, so voiding installments alone would leave the invoice-level
+    balance overstated (still showing the full original year's fees owed)
+    even though the per-installment schedule looks closed out.
+
+    Deliberately narrower than recalculate_invoices_for_schedule(): this
+    never rebuilds line items, it only closes out the installment schedule
+    going forward and records the resulting reduction as a discount. Not a
+    substitute for voidInvoice() either — that only flips the parent
+    invoice's status and never touches child InvoiceInstallment rows, which
+    would leave pending/overdue installments inconsistent with a "void"
+    parent in ledger views.
+    """
+    invoice = StudentInvoice.objects.select_for_update().filter(invoice_id=invoice_id).first()
+    if not invoice:
+        raise ValueError(f"Invoice #{invoice_id} not found.")
+
+    total_waived = Decimal("0")
+    for inst in invoice.installments.filter(due_date__gt=effective_date):
+        outstanding = Decimal(inst.amount) - Decimal(inst.amount_paid)
+        if outstanding <= 0:
+            continue
+        total_waived += outstanding
+        if Decimal(inst.amount_paid) > 0:
+            inst.amount = Decimal(inst.amount_paid)
+            inst.status = "paid"
+            inst.save(update_fields=["amount", "status"])
+        else:
+            inst.status = "voided"
+            inst.save(update_fields=["status"])
+
+    if total_waived > 0:
+        StudentInvoiceDiscount.objects.create(
+            invoice=invoice,
+            description=f"Transfer-out adjustment (effective {effective_date}) — remaining installments waived",
+            amount=total_waived,
+        )
+
+    # Recompute overall invoice status the same way apply_payment() does,
+    # excluding voided installments — that money is no longer owed.
+    active_installments = invoice.installments.exclude(status="voided")
+    total_amt  = sum((Decimal(i.amount) for i in active_installments), Decimal("0"))
+    total_paid = sum((Decimal(i.amount_paid) for i in active_installments), Decimal("0"))
+    if total_amt <= 0:
+        invoice.status = "void"
+    elif total_paid >= total_amt:
         invoice.status = "paid"
     elif total_paid > 0:
         invoice.status = "partially_paid"

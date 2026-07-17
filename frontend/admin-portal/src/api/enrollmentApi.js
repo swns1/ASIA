@@ -29,6 +29,16 @@ export const getEnrollmentEligibility = (studentId) =>
     .get("/enrollments/eligibility/", { params: { student_id: studentId } })
     .then((r) => r.data);
 
+// ── Mid-year transfers ───────────────────────────────────────────────────────
+export const transferOutEnrollment = (id, payload) =>
+  enrollmentClient.post(`/enrollments/${id}/transfer-out/`, payload).then((r) => r.data);
+
+export const transferInEnrollment = (id, payload) =>
+  enrollmentClient.post(`/enrollments/${id}/transfer-in/`, payload).then((r) => r.data);
+
+export const getEnrollmentTransfers = (params = {}) =>
+  enrollmentClient.get("/enrollment-transfers/", { params }).then((r) => r.data);
+
 export const sendEnrollmentEmail = (payload) =>
   enrollmentClient.post("/send-enrollment-email/", payload).then((r) => r.data);
 

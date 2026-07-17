@@ -30,8 +30,20 @@ from .services import (
     generate_invoice_for_enrollment,
     recalculate_invoices_for_schedule,
     apply_payment,
+    close_out_invoice_for_transfer,
     compute_discount_waterfall,
 )
+
+
+def _parse_date(value):
+    """Parse a 'YYYY-MM-DD' string into a date; returns None if missing/invalid."""
+    if not value:
+        return None
+    from datetime import date
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 # ── Fee schedules ────────────────────────────────────────────────────────────
@@ -156,18 +168,59 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):
+        """
+        POST /api/invoices/generate/
+        body: { enrollment_id, payment_plan, effective_date? }
+
+        effective_date is optional — pass it for a mid-year transfer-in
+        student so the installment schedule is prorated to start from that
+        date instead of the normal full school year (see
+        generate_installment_schedule_prorated()).
+        """
         enrollment_id = request.data.get("enrollment_id")
         payment_plan  = request.data.get("payment_plan", "monthly")
         if not enrollment_id:
             return Response({"detail": "enrollment_id required."}, status=400)
         if payment_plan not in {"monthly", "quarterly", "semi_annual", "annual"}:
             return Response({"detail": "Invalid payment_plan."}, status=400)
+
+        effective_date = None
+        if request.data.get("effective_date"):
+            effective_date = _parse_date(request.data.get("effective_date"))
+            if effective_date is None:
+                return Response({"detail": "effective_date must be a valid date (YYYY-MM-DD)."}, status=400)
+
         try:
-            invoice = generate_invoice_for_enrollment(int(enrollment_id), payment_plan)
+            invoice = generate_invoice_for_enrollment(int(enrollment_id), payment_plan, effective_date=effective_date)
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
         ser = StudentInvoiceSerializer(invoice)
         return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="close-out-transfer")
+    def close_out_transfer(self, request, pk=None):
+        """
+        POST /api/invoices/{id}/close-out-transfer/
+        body: { effective_date }
+
+        Voids installments due after effective_date (or caps them to
+        whatever was already pre-paid), leaving installments already due
+        untouched. Called by the frontend right after a transfer-out action
+        on the matching enrollment — see EnrollmentDetailPage's Transfer Out
+        flow, which calls this after enrollment-service's /transfer-out/.
+        """
+        effective_date = _parse_date(request.data.get("effective_date"))
+        if effective_date is None:
+            return Response(
+                {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
+                status=400,
+            )
+        try:
+            invoice = close_out_invoice_for_transfer(int(pk), effective_date)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        ser = StudentInvoiceSerializer(invoice)
+        return Response(ser.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):

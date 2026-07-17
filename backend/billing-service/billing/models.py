@@ -198,6 +198,7 @@ class InvoiceInstallment(models.Model):
         ("partially_paid", "Partially paid"),
         ("paid",           "Paid"),
         ("overdue",        "Overdue"),
+        ("voided",         "Voided"),
     ]
 
     installment_id = models.BigAutoField(primary_key=True)

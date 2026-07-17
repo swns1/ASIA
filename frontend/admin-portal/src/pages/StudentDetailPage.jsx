@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import { useNavigate, useParams } from "react-router-dom";
 import { getStudent } from "../api/studentApi";
-import { getGuardiansByStudent, patchGuardian } from "../api/guardianApi";
+import { getGuardiansByStudent, patchGuardian, getGuardiansByUserIds } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
@@ -20,17 +20,32 @@ const CAN_LINK_ROLES = ["super_admin", "admin", "registrar"];
 // ── Guardian account-linking modal ────────────────────────────────────────────
 function LinkAccountModal({ guardian, onClose, onLinked }) {
   const [users, setUsers]     = useState([]);
+  const [linkedMap, setLinkedMap] = useState({}); // user_id -> [student names already linked elsewhere]
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(guardian.user_id ?? "");
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
 
   useEffect(() => {
     getUsers()
-      .then((data) => setUsers((Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian")))
+      .then(async (data) => {
+        const guardianUsers = (Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian");
+        setUsers(guardianUsers);
+        try {
+          const linkedData = await getGuardiansByUserIds(guardianUsers.map((u) => u.user_id));
+          const linkedRows = Array.isArray(linkedData) ? linkedData : linkedData?.results ?? [];
+          const map = {};
+          for (const row of linkedRows) {
+            if (row.guardian_id === guardian.guardian_id || !row.student_name) continue;
+            (map[row.user_id] ??= []).push(row.student_name);
+          }
+          setLinkedMap(map);
+        } catch { /* non-critical — hints just won't show */ }
+      })
       .catch((e) => setError(e.message || "Failed to load guardian accounts."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [guardian.guardian_id]);
 
   async function handleSave(unlink = false) {
     setSaving(true); setError("");
@@ -75,7 +90,14 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
           ) : (
             <select value={selected} onChange={(e) => setSelected(e.target.value)} style={inp}>
               <option value="">— Not linked —</option>
-              {users.map((u) => <option key={u.user_id} value={u.user_id}>{u.name} ({u.email})</option>)}
+              {users.map((u) => {
+                const linkedTo = linkedMap[u.user_id];
+                return (
+                  <option key={u.user_id} value={u.user_id}>
+                    {u.name} ({u.email}){linkedTo?.length ? ` — linked to: ${linkedTo.join(", ")}` : ""}
+                  </option>
+                );
+              })}
             </select>
           )}
           <div style={{ fontSize: 11, color: "#b09090", marginTop: 8, lineHeight: 1.5 }}>
@@ -85,10 +107,24 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <div>
             {guardian.user_id && (
-              <button onClick={() => handleSave(true)} disabled={saving}
-                style={{ background: "transparent", color: "#c92a2a", border: "1.5px solid #fca5a5", borderRadius: 50, padding: "9px 18px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer" }}>
-                Unlink
-              </button>
+              confirmUnlink ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "#7a5050" }}>Unlink this account?</span>
+                  <button onClick={() => setConfirmUnlink(false)} disabled={saving}
+                    style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 14px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer" }}>
+                    No
+                  </button>
+                  <button onClick={() => handleSave(true)} disabled={saving}
+                    style={{ background: "transparent", color: "#c92a2a", border: "1.5px solid #fca5a5", borderRadius: 50, padding: "9px 18px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer" }}>
+                    Yes, unlink
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmUnlink(true)} disabled={saving}
+                  style={{ background: "transparent", color: "#c92a2a", border: "1.5px solid #fca5a5", borderRadius: 50, padding: "9px 18px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer" }}>
+                  Unlink
+                </button>
+              )
             )}
           </div>
           <div style={{ display: "flex", gap: 10 }}>
@@ -810,18 +846,28 @@ export default function StudentDetailPage() {
                     )}
 
                     {/* ENROLLMENTS TAB */}
-                    {activeTab === "enrollments" && (
-                      enrollments.length === 0 ? (
+                    {activeTab === "enrollments" && (<>
+                      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
+                        <button
+                          onClick={() => navigate(`/enrollments/new?student=${student.student_id}`)}
+                          style={{ display:"flex", alignItems:"center", gap:8, height:36, padding:"0 16px", border:"none", borderRadius:10, background:"#e03131", color:"white", fontSize:13, fontFamily:"'DM Sans', sans-serif", fontWeight:700, cursor:"pointer" }}
+                        >
+                          <i className="ti ti-clipboard-plus" style={{ fontSize:14 }} />
+                          New Enrollment
+                        </button>
+                      </div>
+                      {enrollments.length === 0 ? (
                         <SectionCard title="Enrollment History" icon="ti-clipboard-list"
                           motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
                           <EmptySection message="No enrollment records found for this student." />
                         </SectionCard>
                       ) : enrollments.map((en, i) => {
                         const statusColors = {
-                          enrolled:  { color:"#2e6b0d", bg:"#e8f5e0" },
-                          pending:   { color:"#854f0b", bg:"#faeeda" },
-                          completed: { color:"#1455a0", bg:"#e3f0fd" },
-                          cancelled: { color:"#5c5752", bg:"#f0ede8" },
+                          enrolled:        { color:"#2e6b0d", bg:"#e8f5e0", label:"Enrolled" },
+                          pending:         { color:"#854f0b", bg:"#faeeda", label:"Pending" },
+                          completed:       { color:"#1455a0", bg:"#e3f0fd", label:"Completed" },
+                          cancelled:       { color:"#5c5752", bg:"#f0ede8", label:"Cancelled" },
+                          transferred_out: { color:"#7a4a08", bg:"#fef3e2", label:"Transferred Out" },
                         };
                         const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
                         return (
@@ -848,14 +894,14 @@ export default function StudentDetailPage() {
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
-                                {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
+                                {sc.label}
                               </span>
                               <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#b09090" }} />
                             </div>
                           </motion.div>
                         );
-                      })
-                    )}
+                      })}
+                    </>)}
 
                     {/* LEDGER TAB */}
                     {activeTab === "ledger" && (<>

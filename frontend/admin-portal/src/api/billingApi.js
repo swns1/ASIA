@@ -72,6 +72,12 @@ export const updateInvoice = (id, payload) =>
 export const voidInvoice = (id) =>
   billingClient.patch(`/invoices/${id}/`, { status: "void" }).then((r) => r.data);
 
+// Voids/caps remaining installments due after a student's transfer-out
+// effective_date — unlike voidInvoice(), this keeps child installments
+// consistent instead of just flipping the parent invoice's status.
+export const closeOutInvoiceForTransfer = (invoiceId, payload) =>
+  billingClient.post(`/invoices/${invoiceId}/close-out-transfer/`, payload).then((r) => r.data);
+
 // ── Payments ──────────────────────────────────────────────────────────────────
 export const getPayments = (params = {}) =>
   billingClient.get("/payments/", { params }).then((r) => r.data);

@@ -49,10 +49,18 @@ function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("en-PH", { month:"long", day:"numeric", year:"numeric" }) : "—";
 }
 
+const NON_COMPLETED_STATUS_LABELS = {
+  enrolled:        "Enrolled",
+  pending:         "Pending",
+  cancelled:       "Cancelled",
+  transferred_out: "Transferred Out",
+};
+
 function promotionRemark(enr, gwa) {
   if (enr.enrollment_status !== "completed") {
     return enr.enrollment_status
-      ? enr.enrollment_status.charAt(0).toUpperCase() + enr.enrollment_status.slice(1)
+      ? NON_COMPLETED_STATUS_LABELS[enr.enrollment_status]
+        ?? (enr.enrollment_status.charAt(0).toUpperCase() + enr.enrollment_status.slice(1))
       : "—";
   }
   if (gwa == null) return "Completed";

@@ -245,7 +245,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                     Full balance {fmt(balance)}
                   </button>
                   {invoice.installments?.length > 0 && (() => {
-                    const next    = invoice.installments.find((i) => i.status !== "paid");
+                    const next    = invoice.installments.find((i) => i.status !== "paid" && i.status !== "voided");
                     if (!next) return null;
                     const nextBal = parseFloat(next.amount) - parseFloat(next.amount_paid);
                     return (
