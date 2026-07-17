@@ -22,6 +22,9 @@ export default defineConfig([
       // library), which is exactly what this rule flags. Downgraded to warn
       // rather than rearchitecting data-fetching across the whole app.
       'react-hooks/set-state-in-effect': 'warn',
+      // Context modules pair a Provider component with a `useX` accessor hook
+      // in the same file by design — allow that one named export per file.
+      'react-refresh/only-export-components': ['error', { allowExportNames: ['useSchoolYear'] }],
     },
   },
 ])

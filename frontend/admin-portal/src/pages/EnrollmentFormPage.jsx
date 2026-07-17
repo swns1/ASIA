@@ -535,48 +535,6 @@ export default function EnrollmentFormPage() {
       .finally(() => setLoading(false));
   }, [id, isEdit]);
 
-  // Deep link from the student's profile (e.g. "New Enrollment" on
-  // StudentDetailPage) — preselect that student instead of leaving the
-  // picker empty. Only applies when creating a new enrollment.
-  useEffect(() => {
-    if (isEdit) return;
-    const preselectId = searchParams.get("student");
-    if (!preselectId) return;
-    (async () => {
-      const st = await getStudent(preselectId).catch(() => null);
-      if (!st) return;
-      let lastGrade = null;
-      try {
-        const enData = await getStudentEnrollments(st.student_id);
-        const enrollments = enData.results ?? enData ?? [];
-        if (enrollments.length) {
-          const latest = enrollments.reduce((a, b) => {
-            if (a.school_year > b.school_year) return a;
-            if (b.school_year > a.school_year) return b;
-            return (a.enrollment_id ?? 0) > (b.enrollment_id ?? 0) ? a : b;
-          });
-          lastGrade = latest.grade_level ?? null;
-        }
-      } catch { /* non-critical */ }
-      handleStudentChange(st, lastGrade);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
-  const isSHS        = form.school_level === "senior_highschool";
-
-  useEffect(() => {
-    setForm((f) => {
-      const next = { ...f };
-      if (!gradeOptions.includes(f.grade_level)) next.grade_level = gradeOptions[0] ?? "";
-      if (isSHS) { if (!next.semester) next.semester = "1st"; }
-      else       { next.strand = ""; next.semester = ""; }
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.school_level]);
-
   const nextAllowedGrade = studentLastGrade ? getNextGradeLevel(studentLastGrade) : null;
 
   const handleStudentChange = (st, lastGrade) => {
@@ -618,6 +576,48 @@ export default function EnrollmentFormPage() {
       .catch(() => setEligibility(null))
       .finally(() => setEligibilityLoading(false));
   };
+
+  // Deep link from the student's profile (e.g. "New Enrollment" on
+  // StudentDetailPage) — preselect that student instead of leaving the
+  // picker empty. Only applies when creating a new enrollment.
+  useEffect(() => {
+    if (isEdit) return;
+    const preselectId = searchParams.get("student");
+    if (!preselectId) return;
+    (async () => {
+      const st = await getStudent(preselectId).catch(() => null);
+      if (!st) return;
+      let lastGrade = null;
+      try {
+        const enData = await getStudentEnrollments(st.student_id);
+        const enrollments = enData.results ?? enData ?? [];
+        if (enrollments.length) {
+          const latest = enrollments.reduce((a, b) => {
+            if (a.school_year > b.school_year) return a;
+            if (b.school_year > a.school_year) return b;
+            return (a.enrollment_id ?? 0) > (b.enrollment_id ?? 0) ? a : b;
+          });
+          lastGrade = latest.grade_level ?? null;
+        }
+      } catch { /* non-critical */ }
+      handleStudentChange(st, lastGrade);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
+  const isSHS        = form.school_level === "senior_highschool";
+
+  useEffect(() => {
+    setForm((f) => {
+      const next = { ...f };
+      if (!gradeOptions.includes(f.grade_level)) next.grade_level = gradeOptions[0] ?? "";
+      if (isSHS) { if (!next.semester) next.semester = "1st"; }
+      else       { next.strand = ""; next.semester = ""; }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.school_level]);
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const toggleScholarship = (sid) =>
