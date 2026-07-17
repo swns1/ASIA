@@ -13,7 +13,6 @@ import {
   getSectionAttendanceStats,
   getSectionGradesSummary,
 } from "../api/enrollmentApi";
-import { getAttendance, bulkAttendance } from "../api/attendanceApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
 
@@ -461,6 +460,7 @@ function GradesTab({ advisory, subjects }) {
 // ── Attendance tab: date nav + per-student status grid for that day ─────────
 function AttendanceTab({ advisory, onTodayChange }) {
   const [date, setDate] = useState(todayISO());
+  const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({}); // student_id -> { status, remarks }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -469,27 +469,21 @@ function AttendanceTab({ advisory, onTodayChange }) {
     if (!date) return;
     setLoading(true);
     try {
-      const data = await getAttendance({
-        enrollment__school_year: advisory.school_year,
-        enrollment__grade_level: advisory.grade_level,
-        enrollment__section: advisory.section,
-        date,
-      });
-      const list = Array.isArray(data) ? data : data?.results ?? [];
-      const byEnrollment = {};
-      list.forEach((r) => { byEnrollment[r.enrollment] = r; });
+      const data = await getSectionAttendance({ advisory_id: advisory.advisory_id, date });
+      const list = Array.isArray(data) ? data : [];
+      setRows(list);
       const nextDrafts = {};
-      students.forEach((s) => {
-        const record = byEnrollment[s.enrollment_id];
-        nextDrafts[s.student_id] = {
-          status: record?.status ?? "P",
-          remarks: record?.remarks ?? "",
+      list.forEach((r) => {
+        nextDrafts[r.student.student_id] = {
+          status: r.attendance?.status ?? "P",
+          remarks: r.attendance?.remarks ?? "",
         };
       });
       setDrafts(nextDrafts);
       if (date === todayISO() && onTodayChange) onTodayChange(nextDrafts);
     } catch (e) {
       toast.error(e.message || "Failed to load attendance.");
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -498,15 +492,24 @@ function AttendanceTab({ advisory, onTodayChange }) {
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
   const handleSaveAll = async () => {
-    const records = students.map((s) => {
-      const d = drafts[s.student_id] ?? { status: "P", remarks: "" };
-      return { enrollment_id: s.enrollment_id, status: d.status, remarks: d.remarks };
+    const entries = rows.map((r) => {
+      const sid = r.student.student_id;
+      const d = drafts[sid] ?? { status: "P", remarks: "" };
+      return { student_id: sid, status: d.status, remarks: d.remarks };
     });
 
     setSaving(true);
     try {
-      await bulkAttendance({ date, records });
-      toast.success("Attendance saved.");
+      const result = await saveSectionAttendance({
+        advisory_id: advisory.advisory_id,
+        date,
+        records: entries,
+      });
+      if (result.failed?.length) {
+        toast.error(`${result.failed.length} record(s) failed to save.`);
+      } else {
+        toast.success("Attendance saved.");
+      }
       await loadGrid();
     } catch (e) {
       toast.error(e.message || "Failed to save attendance.");
@@ -632,8 +635,8 @@ function AttendanceTab({ advisory, onTodayChange }) {
             </tr>
           </thead>
           <tbody>
-            {students.map((s) => {
-              const sid = s.student_id;
+            {rows.map((r) => {
+              const sid = r.student.student_id;
               const draft = drafts[sid] ?? { status: "P", remarks: "" };
               return (
                 <tr key={sid}>
@@ -642,23 +645,23 @@ function AttendanceTab({ advisory, onTodayChange }) {
                   </td>
                   <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0" }}>
                     <div style={{ display: "flex", gap: 4 }}>
-                      {ATTENDANCE_STATUSES.map((opt) => {
-                        const active = draft.status === opt.value;
+                      {ATTENDANCE_STATUSES.map((s) => {
+                        const active = draft.status === s.value;
                         return (
                           <button
-                            key={opt.value}
-                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: opt.value } }))}
-                            title={opt.label}
+                            key={s.value}
+                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: s.value } }))}
+                            title={s.label}
                             style={{
                               width: 30, height: 26, borderRadius: 7,
-                              border: `1.5px solid ${active ? opt.color : "#f0e4e4"}`,
-                              background: active ? opt.bg : "white",
-                              color: active ? opt.color : "#9a7070",
+                              border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
+                              background: active ? s.bg : "white",
+                              color: active ? s.color : "#9a7070",
                               fontSize: 11.5, fontWeight: 700, cursor: "pointer",
                               fontFamily: "'DM Sans',sans-serif",
                             }}
                           >
-                            {opt.value}
+                            {s.value}
                           </button>
                         );
                       })}
