@@ -654,7 +654,7 @@ function UserRow({ user, currentUser, isAdmin, onSaved, onDeleted }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const STAT_DEFS = [
-  { key: "total",      label: "Total Users",  icon: "ti-users",        color: C.red,      bg: C.redLight },
+  { key: "total",      label: "Total Users",  icon: "ti-users",        color: C.red,      bg: C.redLight, clickable: true },
   { key: "admins",     label: "Admins",        icon: "ti-shield-check", color: "#6d28d9",  bg: "#f0e8fd" },
   { key: "staff",      label: "Staff",         icon: "ti-user",         color: "#1455a0",  bg: "#e3f0fd" },
   { key: "active",     label: "Online Now",    icon: "ti-circle-check", color: "#2e6b0d",  bg: "#e8f5e0" },
@@ -753,19 +753,40 @@ export default function UsersPage() {
           transition={{ duration: 0.28, delay: 0.08, ease: "easeOut" }}
           style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}
         >
-          {STAT_DEFS.map(s => (
-            <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: C.text, lineHeight: 1 }}>
-                  {loading ? <Sk w={36} h={22} r={6} /> : <AnimatedCount value={stats[s.key]} />}
+          {STAT_DEFS.map(s => {
+            const isActive = s.clickable && roleFilter === "all";
+            return (
+              <motion.div
+                key={s.key}
+                onClick={s.clickable ? () => setRoleFilter("all") : undefined}
+                whileHover={s.clickable ? { boxShadow: isActive ? `0 8px 24px ${s.color}28` : "0 8px 24px rgba(0,0,0,0.08)" } : {}}
+                whileTap={s.clickable ? { scale: 0.98 } : {}}
+                transition={{ duration: 0.16 }}
+                style={{
+                  background: isActive ? s.bg : C.white, borderRadius: 14,
+                  border: `1.5px solid ${isActive ? s.color : C.border}`,
+                  padding: "16px 20px", display: "flex", alignItems: "center", gap: 14,
+                  cursor: s.clickable ? "pointer" : "default",
+                  boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
+                  transition: "border-color 0.15s ease, background-color 0.15s ease",
+                }}
+              >
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12, background: isActive ? "white" : s.bg,
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  transition: "background 0.15s",
+                }}>
+                  <i className={`ti ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
                 </div>
-                <div style={{ fontSize: 11, color: C.pale, marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
-              </div>
-            </div>
-          ))}
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? s.color : C.text, lineHeight: 1 }}>
+                    {loading ? <Sk w={36} h={22} r={6} /> : <AnimatedCount value={stats[s.key]} />}
+                  </div>
+                  <div style={{ fontSize: 11, color: isActive ? s.color : C.pale, marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+                </div>
+              </motion.div>
+            );
+          })}
         </motion.div>
 
         {/* Filter panel */}

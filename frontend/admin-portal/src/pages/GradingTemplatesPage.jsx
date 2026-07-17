@@ -1,6 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
@@ -54,19 +54,6 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
     backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite",
   }} />
 );
-
-// ── AnimatedCount ─────────────────────────────────────────────────────────────
-function AnimatedCount({ value, style }) {
-  const mv = useMotionValue(value);
-  const sp = useSpring(mv, { stiffness: 90, damping: 18 });
-  const display = useTransform(sp, Math.round);
-  const [shown, setShown] = useState(value);
-
-  useEffect(() => { mv.set(value); }, [value, mv]);
-  useEffect(() => display.on("change", setShown), [display]);
-
-  return <span style={style}>{shown}</span>;
-}
 
 // ── Weight Bar ────────────────────────────────────────────────────────────────
 function WeightBar({ components }) {
@@ -519,7 +506,6 @@ export default function GradingTemplatesPage() {
   const totalCount      = templates.length;
   const activeCount     = templates.filter((t) => t.is_active).length;
   const completeCount   = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) < 0.01).length;
-  const incompleteCount = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) >= 0.01).length;
 
   // ── Client-side filtered list ──────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -561,13 +547,6 @@ export default function GradingTemplatesPage() {
     }
   };
 
-  const STATS = [
-    { label: "Total Templates", value: totalCount,      icon: "ti-report-analytics",       color: "#e03131", bg: "#fff0f0" },
-    { label: "Active",          value: activeCount,     icon: "ti-circle-check",            color: "#2e6b0d", bg: "#e8f5e0" },
-    { label: "Complete",        value: completeCount,   icon: "ti-rosette-discount-check",  color: "#1455a0", bg: "#e3f0fd" },
-    { label: "Incomplete",      value: incompleteCount, icon: "ti-alert-triangle",          color: "#854f0b", bg: "#faeeda" },
-  ];
-
   return (
     <AppLayout>
       {/* ── Topbar ── */}
@@ -596,30 +575,6 @@ export default function GradingTemplatesPage() {
 
       {/* ── Content ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
-
-        {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}>
-          {STATS.map((s, idx) => (
-            <motion.div
-              key={s.label}
-              initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.28, delay: 0.06 + idx * 0.06, ease: "easeOut" }}
-              style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}
-            >
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize: 18, color: s.color }} />
-              </div>
-              <div>
-                {loading
-                  ? <Sk w={40} h={20} r={4} />
-                  : <AnimatedCount value={s.value} style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }} />
-                }
-                <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
 
         {/* Filter panel */}
         <motion.div

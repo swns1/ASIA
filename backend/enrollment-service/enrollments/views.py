@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
+    IsAdvisoryTeacherOrStaff,
     IsStaffOrOwnerGuardianReadOnly,
     guardian_student_ids,
     teacher_student_ids,
@@ -58,13 +59,15 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
     filterset_fields = ("teacher_user_id", "school_year", "school_level", "grade_level", "section")
 
     def get_permissions(self):
-        # section-grades lets a teacher POST for their own roster —
-        # IsAdvisoryTeacherOrStaff (same class Grade/AttendanceViewSet use)
-        # allows that, whereas the viewset's default IsAdminRegistrarOrReadOnly
-        # would 403 a teacher's write. my-sections is GET-only so either class
-        # covers it. Bulk attendance for a section is handled by the existing
-        # AttendanceViewSet.bulk action instead of a duplicate endpoint here.
-        if self.action == "section_grades":
+        # section-grades/section-attendance let a teacher POST for their own
+        # roster — IsAdvisoryTeacherOrStaff (same class Grade/AttendanceViewSet
+        # use) allows that, whereas the viewset's default
+        # IsAdminRegistrarOrReadOnly would 403 a teacher's write. my-sections
+        # is GET-only so either class covers it.
+        if self.action in (
+            "section_grades", "section_attendance",
+            "section_attendance_stats", "section_grades_summary",
+        ):
             return [IsAdvisoryTeacherOrStaff()]
         return super().get_permissions()
 
@@ -311,6 +314,336 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             })
 
         return Response(rows)
+
+    @action(detail=False, methods=["get", "post"], url_path="section-attendance")
+    def section_attendance(self, request):
+        """
+        GET /api/section-advisories/section-attendance/
+            ?advisory_id=<id>&date=YYYY-MM-DD
+
+        Returns each roster student alongside their existing
+        AttendanceRecord (or null) for that date — the data backing the
+        "quick attendance" grid on the My Sections page, so a teacher can
+        mark their whole section for the day without leaving the page.
+
+        POST same body (JSON) plus `records`: [{student_id, status, remarks},
+        ...] — creates or updates one AttendanceRecord per student for that
+        date in a single call (status one of P/A/L/E).
+
+        Scoping is identical to section-grades: teachers are pinned to their
+        own advisories; staff must pass ?teacher_user_id=.
+        """
+        from attendance.models import AttendanceRecord
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        params = request.data if request.method == "POST" else request.query_params
+        advisory_id = params.get("advisory_id")
+        date = params.get("date")
+
+        missing = [f for f, v in [("advisory_id", advisory_id), ("date", date)] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        ).select_related("student")
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollments_by_student = {e.student_id: e for e in enrollment_qs}
+
+        if request.method == "POST":
+            entries = request.data.get("records", [])
+            valid_statuses = {"P", "A", "L", "E"}
+            if not isinstance(entries, list) or not entries:
+                return Response(
+                    {"detail": "A non-empty 'records' list is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            saved, failed = [], []
+            recorded_by = getattr(request, "user_id", None) or getattr(request.user, "id", None)
+            with transaction.atomic():
+                for entry in entries:
+                    student_id = entry.get("student_id")
+                    enrollment = enrollments_by_student.get(student_id)
+                    if enrollment is None:
+                        failed.append({"student_id": student_id, "reason": "Not in this section's roster."})
+                        continue
+                    entry_status = entry.get("status")
+                    if entry_status not in valid_statuses:
+                        failed.append({"student_id": student_id, "reason": "Invalid status."})
+                        continue
+                    record, _ = AttendanceRecord.objects.update_or_create(
+                        enrollment=enrollment,
+                        date=date,
+                        defaults={
+                            "status": entry_status,
+                            "remarks": entry.get("remarks") or "",
+                            "recorded_by": recorded_by,
+                        },
+                    )
+                    saved.append({"student_id": student_id, "attendance_id": record.attendance_id})
+
+            return Response(
+                {"saved": saved, "failed": failed},
+                status=status.HTTP_207_MULTI_STATUS if failed else status.HTTP_200_OK,
+            )
+
+        # GET: return roster + existing attendance for this date
+        existing_records = {
+            r.enrollment.student_id: r
+            for r in AttendanceRecord.objects.filter(
+                enrollment__in=enrollments_by_student.values(), date=date,
+            ).select_related("enrollment")
+        }
+
+        rows = []
+        for e in sorted(
+            enrollments_by_student.values(),
+            key=lambda e: (e.student.last_name, e.student.first_name),
+        ):
+            record = existing_records.get(e.student_id)
+            rows.append({
+                "student": StudentSummarySerializer(e.student).data,
+                "enrollment_id": e.enrollment_id,
+                "attendance": {
+                    "attendance_id": record.attendance_id,
+                    "status": record.status,
+                    "remarks": record.remarks,
+                } if record else None,
+            })
+
+        return Response(rows)
+
+    @action(detail=False, methods=["get"], url_path="section-attendance-stats")
+    def section_attendance_stats(self, request):
+        """
+        GET /api/section-advisories/section-attendance-stats/
+            ?advisory_id=<id>&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+        Aggregated attendance stats for a teacher's section over a date
+        range (defaults to the advisory's whole school_year if omitted) —
+        backs the "Stats" tab on the My Sections page.
+
+        "Total school days" is defined as the count of distinct dates on
+        which at least one AttendanceRecord was recorded for this section
+        (there is no stored semester-date-range config to derive it from
+        otherwise) — so it reflects days actually taken, not the calendar.
+
+        Returns:
+          {
+            "date_from", "date_to", "total_school_days",
+            "totals": {present, absent, late, excused, total_marks},
+            "daily": [{date, present, absent, late, excused, total}, ...],
+            "per_student": [{student_id, name, lrn, present, absent, late,
+                              excused, total, attendance_rate}, ...],
+          }
+        """
+        from django.db.models import Count, Q
+        from attendance.models import AttendanceRecord
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        advisory_id = request.query_params.get("advisory_id")
+        if not advisory_id:
+            return Response(
+                {"detail": "Missing required field: advisory_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        ).select_related("student")
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollments_by_student = {e.student_id: e for e in enrollment_qs}
+
+        records_qs = AttendanceRecord.objects.filter(
+            enrollment__in=enrollments_by_student.values()
+        )
+
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            records_qs = records_qs.filter(date__gte=date_from)
+        if date_to:
+            records_qs = records_qs.filter(date__lte=date_to)
+
+        totals = records_qs.aggregate(
+            total_marks=Count("attendance_id"),
+            present=Count("attendance_id", filter=Q(status="P")),
+            absent=Count("attendance_id", filter=Q(status="A")),
+            late=Count("attendance_id", filter=Q(status="L")),
+            excused=Count("attendance_id", filter=Q(status="E")),
+        )
+
+        daily = list(
+            records_qs.values("date")
+            .annotate(
+                present=Count("attendance_id", filter=Q(status="P")),
+                absent=Count("attendance_id", filter=Q(status="A")),
+                late=Count("attendance_id", filter=Q(status="L")),
+                excused=Count("attendance_id", filter=Q(status="E")),
+                total=Count("attendance_id"),
+            )
+            .order_by("date")
+        )
+
+        per_student_rows = (
+            records_qs.values("enrollment_id")
+            .annotate(
+                present=Count("attendance_id", filter=Q(status="P")),
+                absent=Count("attendance_id", filter=Q(status="A")),
+                late=Count("attendance_id", filter=Q(status="L")),
+                excused=Count("attendance_id", filter=Q(status="E")),
+                total=Count("attendance_id"),
+            )
+        )
+        stats_by_enrollment = {row["enrollment_id"]: row for row in per_student_rows}
+
+        per_student = []
+        for e in sorted(
+            enrollments_by_student.values(),
+            key=lambda e: (e.student.last_name, e.student.first_name),
+        ):
+            row = stats_by_enrollment.get(e.enrollment_id)
+            present = row["present"] if row else 0
+            absent = row["absent"] if row else 0
+            late = row["late"] if row else 0
+            excused = row["excused"] if row else 0
+            total = row["total"] if row else 0
+            per_student.append({
+                "student_id": e.student_id,
+                "name": " ".join(filter(None, [
+                    e.student.first_name, e.student.middle_name,
+                    e.student.last_name, e.student.suffix,
+                ])),
+                "lrn": e.student.lrn,
+                "present": present,
+                "absent": absent,
+                "late": late,
+                "excused": excused,
+                "total": total,
+                "attendance_rate": round((present + late) / total * 100, 1) if total else None,
+            })
+
+        return Response({
+            "date_from": date_from,
+            "date_to": date_to,
+            "total_school_days": len(daily),
+            "totals": totals,
+            "daily": daily,
+            "per_student": per_student,
+        })
+
+    @action(detail=False, methods=["get"], url_path="section-grades-summary")
+    def section_grades_summary(self, request):
+        """
+        GET /api/section-advisories/section-grades-summary/?advisory_id=<id>
+
+        Section-wide grade metrics across every subject/period recorded so
+        far this school year — backs the Stats tab's average grade, pass
+        rate, and grade-distribution panel. Unlike section-grades (which is
+        scoped to one subject + period for the entry grid), this rolls up
+        every Grade row for the roster's current enrollments.
+
+        Returns:
+          {
+            "average": float|null, "pass_rate": float|null, "graded_count": int,
+            "distribution": {"90_100": int, "75_89": int, "below_75": int},
+          }
+        """
+        from django.db.models import Avg, Count, Q
+        from grades.models import Grade
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        advisory_id = request.query_params.get("advisory_id")
+        if not advisory_id:
+            return Response(
+                {"detail": "Missing required field: advisory_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        )
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+
+        grades_qs = Grade.objects.filter(enrollment__in=enrollment_qs)
+
+        agg = grades_qs.aggregate(
+            average=Avg("numeric_grade"),
+            graded_count=Count("grade_id"),
+            passed=Count("grade_id", filter=Q(numeric_grade__gte=75)),
+            above_90=Count("grade_id", filter=Q(numeric_grade__gte=90)),
+            mid_75_89=Count("grade_id", filter=Q(numeric_grade__gte=75, numeric_grade__lt=90)),
+            below_75=Count("grade_id", filter=Q(numeric_grade__lt=75)),
+        )
+
+        graded_count = agg["graded_count"]
+        average = round(float(agg["average"]), 1) if agg["average"] is not None else None
+        pass_rate = round(agg["passed"] / graded_count * 100, 1) if graded_count else None
+
+        return Response({
+            "average": average,
+            "pass_rate": pass_rate,
+            "graded_count": graded_count,
+            "distribution": {
+                "90_100": agg["above_90"],
+                "75_89": agg["mid_75_89"],
+                "below_75": agg["below_75"],
+            },
+        })
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
