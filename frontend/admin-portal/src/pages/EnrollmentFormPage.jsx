@@ -562,7 +562,15 @@ export default function EnrollmentFormPage() {
     // Fetch eligibility report for the selected student
     setEligibilityLoading(true);
     getStudentEligibility(st.student_id)
-      .then((data) => setEligibility(data))
+      .then((data) => {
+        setEligibility(data);
+        // Brand-new students (no prior enrollment history) default to
+        // Pending rather than Enrolled — they typically still need to
+        // submit documents before being fully activated.
+        if (data?.is_new_student) {
+          setForm((f) => ({ ...f, enrollment_status: "pending" }));
+        }
+      })
       .catch(() => setEligibility(null))
       .finally(() => setEligibilityLoading(false));
   };
@@ -590,7 +598,7 @@ export default function EnrollmentFormPage() {
     if (!form.section.trim())         return "Section is required.";
     if (isSHS && !form.semester)      return "Semester is required for Senior HS.";
     if (isSHS && !form.strand.trim()) return "Strand is required for Senior HS.";
-    if (!isEdit && eligibility && !eligibility.is_eligible && !overrideMode)
+    if (!isEdit && eligibility && !eligibility.is_new_student && !eligibility.is_eligible && !overrideMode)
       return "Student is not eligible for enrollment. Review the eligibility panel above.";
     if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade && !overrideMode)
       return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
