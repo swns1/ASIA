@@ -1278,14 +1278,37 @@ export default function GradesPage() {
 
   // ── Deep link: /grades?student=<id> preselects a student (e.g. from a
   // "View Grades" quick-link on the Students list) so staff land straight on
-  // the overview tab instead of using the manual picker. ──────────────────────
+  // the overview tab instead of using the manual picker. Adding
+  // &tab=summary&enrollment=<id> (e.g. from My Sections' per-row "Summary"
+  // link) instead jumps straight to that enrollment's grade table, the same
+  // place OverviewTab's own "Summary" action lands on. ─────────────────────
+  const deepLinkRef = useRef(null);
   useEffect(() => {
-    const studentId = new URLSearchParams(location.search).get("student");
+    const params = new URLSearchParams(location.search);
+    const studentId = params.get("student");
     if (!studentId) return;
+    deepLinkRef.current = {
+      tab: params.get("tab"),
+      enrollmentId: params.get("enrollment"),
+    };
     getStudent(studentId)
       .then((s) => { if (s) setStudent(s); })
       .catch(() => toast.error("Could not load the requested student."));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once that student's enrollments have loaded, finish the summary deep
+  // link: pick the requested enrollment (or the most recent one) and switch
+  // to the Summary tab — mirrors what OverviewTab's onNavigate does manually.
+  useEffect(() => {
+    const pending = deepLinkRef.current;
+    if (!pending || pending.tab !== "summary" || enrollments.length === 0) return;
+    deepLinkRef.current = null;
+    const match = pending.enrollmentId
+      ? enrollments.find((e) => String(e.enrollment_id) === String(pending.enrollmentId))
+      : null;
+    setEnrollment(match ?? enrollments[0]);
+    setTab("summary");
+  }, [enrollments]);
 
   // ── Load enrollments when student changes ──────────────────────────────────
   // Summary loads all enrollments (historical); Entry only loads active ones.
