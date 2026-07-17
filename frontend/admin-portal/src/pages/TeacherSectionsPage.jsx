@@ -2,6 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "../components/AppLayout";
 import {
   getMySections,
@@ -9,6 +10,7 @@ import {
   saveSectionGrades,
   getSectionAttendance,
   saveSectionAttendance,
+  getSectionAttendanceStats,
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
@@ -53,6 +55,19 @@ function todayISO() {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+// School year strings look like "2026-2027" → academic year runs Jun 1–May 31.
+function schoolYearRange(schoolYear) {
+  const [y1, y2] = String(schoolYear || "").split("-").map((n) => parseInt(n, 10));
+  if (!y1 || !y2) return { from: "", to: "" };
+  return { from: `${y1}-06-01`, to: `${y2}-05-31` };
+}
+
+function formatShortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -422,6 +437,287 @@ function AttendanceTab({ advisory }) {
   );
 }
 
+// ── Stats tab: semester + per-day + per-student attendance analytics ────────
+function StatTile({ label, value, sub, color }) {
+  return (
+    <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || "#1a0a0a", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11.5, color: "#b09090" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function DailyBarChart({ daily }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const maxTotal = Math.max(1, ...daily.map((d) => d.total));
+
+  if (daily.length === 0) {
+    return (
+      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        No attendance recorded yet for this range.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "18px 22px" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 140, position: "relative" }}>
+        {daily.map((d, i) => {
+          const segments = ATTENDANCE_STATUSES.map((s) => ({
+            ...s,
+            count: d[{ P: "present", A: "absent", L: "late", E: "excused" }[s.value]] || 0,
+          })).filter((s) => s.count > 0);
+          const barHeight = Math.max(4, (d.total / maxTotal) * 132);
+          const hovered = hoverIdx === i;
+          return (
+            <div
+              key={d.date}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx((h) => (h === i ? null : h))}
+              style={{ flex: "1 1 0", minWidth: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", cursor: "pointer", position: "relative" }}
+            >
+              {hovered && (
+                <div style={{
+                  position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
+                  marginBottom: 8, background: "#1a0a0a", color: "white", borderRadius: 8,
+                  padding: "8px 11px", fontSize: 11, whiteSpace: "nowrap", zIndex: 10,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.22)", fontFamily: "'DM Sans',sans-serif",
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>{formatShortDate(d.date)}</div>
+                  {ATTENDANCE_STATUSES.map((s) => {
+                    const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
+                    if (!d[key]) return null;
+                    return (
+                      <div key={s.value} style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.92 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+                        {s.label}: {d[key]}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column-reverse", width: "100%", height: barHeight, borderRadius: "4px 4px 0 0", overflow: "hidden", gap: 1.5, outline: hovered ? "2px solid #e03131" : "none", outlineOffset: 1 }}>
+                {segments.map((s) => (
+                  <div
+                    key={s.value}
+                    style={{ width: "100%", flex: `${s.count} 0 0`, background: s.color, minHeight: 2 }}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#c0a0a0" }}>
+        <span>{formatShortDate(daily[0]?.date)}</span>
+        {daily.length > 1 && <span>{formatShortDate(daily[daily.length - 1]?.date)}</span>}
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
+        {ATTENDANCE_STATUSES.map((s) => (
+          <div key={s.value} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#7a5050", fontWeight: 600 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color }} />
+            {s.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StudentRateRow({ row }) {
+  const rate = row.attendance_rate;
+  const meterColor = rate === null ? "#e0d0d0" : rate >= 90 ? "#2e6b0d" : rate >= 75 ? "#b45309" : "#9b2020";
+  return (
+    <tr>
+      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
+        {row.name}
+      </td>
+      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0" }}>
+        <div style={{ display: "flex", gap: 10, fontSize: 11.5 }}>
+          {ATTENDANCE_STATUSES.map((s) => {
+            const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
+            return (
+              <span key={s.value} style={{ color: s.color, fontWeight: 700 }}>
+                {row[key]}<span style={{ color: "#c0a0a0", fontWeight: 500 }}>{s.value}</span>
+              </span>
+            );
+          })}
+        </div>
+      </td>
+      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, maxWidth: 120, height: 7, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
+            <div style={{ width: `${rate ?? 0}%`, height: "100%", background: meterColor, borderRadius: 99, transition: "width 0.4s ease" }} />
+          </div>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: meterColor, minWidth: 42 }}>
+            {rate === null ? "—" : `${rate}%`}
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function StatsTab({ advisory }) {
+  const defaultRange = useMemo(() => schoolYearRange(advisory.school_year), [advisory.school_year]);
+  const [dateFrom, setDateFrom] = useState(defaultRange.from);
+  const [dateTo, setDateTo] = useState(defaultRange.to);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState("name"); // "name" | "rate"
+
+  const loadStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getSectionAttendanceStats({
+        advisory_id: advisory.advisory_id,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
+      setStats(data);
+    } catch (e) {
+      toast.error(e.message || "Failed to load attendance stats.");
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisory.advisory_id, dateFrom, dateTo]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  const perStudentSorted = useMemo(() => {
+    if (!stats) return [];
+    const rows = [...stats.per_student];
+    if (sortBy === "rate") {
+      rows.sort((a, b) => (b.attendance_rate ?? -1) - (a.attendance_rate ?? -1));
+    }
+    return rows;
+  }, [stats, sortBy]);
+
+  const totals = stats?.totals;
+  const sectionRate = totals?.total_marks
+    ? Math.round(((totals.present + totals.late) / totals.total_marks) * 1000) / 10
+    : null;
+
+  return (
+    <div>
+      {/* Date range controls */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "14px 22px", borderBottom: "1px solid #f5eaea" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em" }}>Range</span>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+        />
+        <span style={{ color: "#c0a0a0", fontSize: 12 }}>to</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+        />
+        <button
+          onClick={() => { setDateFrom(defaultRange.from); setDateTo(defaultRange.to); }}
+          style={{
+            border: "1.5px solid #f0e4e4", borderRadius: 8, background: "white",
+            padding: "7px 12px", fontSize: 12, color: "#9a7070", cursor: "pointer",
+            fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
+          }}
+        >
+          Full School Year
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}>
+            {[1, 2, 3, 4].map((i) => <Sk key={i} h={72} r={14} />)}
+          </div>
+          <Sk h={140} r={12} />
+        </div>
+      ) : !stats || totals.total_marks === 0 ? (
+        <div style={{ padding: "40px 22px", textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <i className="ti ti-chart-bar" style={{ fontSize: 20, color: "#e08080" }} />
+          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#7a5050" }}>No attendance data in this range</div>
+          <div style={{ fontSize: 12, color: "#b09090", marginTop: 4 }}>Mark attendance on the Attendance tab to see stats here.</div>
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${dateFrom}-${dateTo}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+          >
+            {/* Section-wide totals */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, padding: "18px 22px 4px" }}>
+              <StatTile label="School Days" value={stats.total_school_days} sub={`${dateFrom || "start"} – ${dateTo || "now"}`} />
+              <StatTile label="Attendance Rate" value={sectionRate !== null ? `${sectionRate}%` : "—"} sub="Present + Late ÷ total marks" color={sectionRate >= 90 ? "#2e6b0d" : sectionRate >= 75 ? "#b45309" : "#9b2020"} />
+              <StatTile label="Present" value={totals.present} sub={`${totals.late} late · ${totals.excused} excused`} color="#2e6b0d" />
+              <StatTile label="Absent" value={totals.absent} sub={`of ${totals.total_marks} total marks`} color="#9b2020" />
+            </div>
+
+            {/* Per-day composition chart */}
+            <div style={{ margin: "14px 22px 0", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 14 }}>
+              <div style={{ padding: "12px 22px 0", fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Daily Breakdown
+              </div>
+              <DailyBarChart daily={stats.daily} />
+            </div>
+
+            {/* Per-student table */}
+            <div style={{ marginTop: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 22px 10px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Per-Student Attendance
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[{ key: "name", label: "Name" }, { key: "rate", label: "Rate" }].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setSortBy(opt.key)}
+                      style={{
+                        padding: "5px 11px", borderRadius: 7,
+                        border: `1.5px solid ${sortBy === opt.key ? "#e03131" : "#f0e4e4"}`,
+                        background: sortBy === opt.key ? "#fff0f0" : "white",
+                        color: sortBy === opt.key ? "#e03131" : "#9a7070",
+                        fontSize: 11, fontWeight: 700, cursor: "pointer",
+                        fontFamily: "'DM Sans',sans-serif",
+                      }}
+                    >
+                      Sort: {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#fdfafa" }}>
+                    {["Name", "P / A / L / E", "Rate"].map((label) => (
+                      <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 22px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {perStudentSorted.map((row) => (
+                    <StudentRateRow key={row.student_id} row={row} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      )}
+    </div>
+  );
+}
+
 // ── Section card ──────────────────────────────────────────────────────────────
 function SectionCard({ entry, expanded, onToggle }) {
   const { advisory, student_count, students, subjects } = entry;
@@ -465,6 +761,7 @@ function SectionCard({ entry, expanded, onToggle }) {
               { key: "subjects", label: `Subjects (${subjects.length})`, icon: "ti-book" },
               { key: "grades", label: "Grades", icon: "ti-chart-bar" },
               { key: "attendance", label: "Attendance", icon: "ti-calendar-check" },
+              { key: "stats", label: "Stats", icon: "ti-chart-histogram" },
             ].map((t) => {
               const active = tab === t.key;
               return (
@@ -565,6 +862,8 @@ function SectionCard({ entry, expanded, onToggle }) {
           {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} />}
 
           {tab === "attendance" && <AttendanceTab advisory={advisory} />}
+
+          {tab === "stats" && <StatsTab advisory={advisory} />}
         </div>
       )}
     </div>
