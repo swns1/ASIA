@@ -54,37 +54,6 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   }} />
 );
 
-// ── Stat card — matches StudentsPage exactly ──────────────────────────────────
-function StatCard({ label, value, icon, color, bg, loading }) {
-  return (
-    <motion.div
-      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.16 }}
-      style={{
-        background: "white", borderRadius: 14, padding: "16px 20px",
-        border: "1px solid #f5eaea", width: "100%",
-        display: "flex", alignItems: "center", gap: 14,
-        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
-      }}
-    >
-      <div style={{
-        width: 42, height: 42, borderRadius: 12, background: bg,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
-      </div>
-      <div>
-        {loading
-          ? <Sk w={40} h={20} r={4} />
-          : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{value?.toLocaleString?.() ?? value ?? "—"}</div>
-        }
-        <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      </div>
-    </motion.div>
-  );
-}
-
 // ── Form Modal ────────────────────────────────────────────────────────────────
 function SubjectModal({ subject, templates, onSave, onClose }) {
   const isEdit = Boolean(subject?.subject_id);
@@ -393,10 +362,6 @@ export default function SubjectsPage() {
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
-  const withTemplate    = subjects.filter((s) => s.grading_template_detail).length;
-  const withoutTemplate = subjects.filter((s) => !s.grading_template_detail).length;
-  const activeLevels    = new Set(subjects.map((s) => s.school_level)).size;
-
   const isFirstRender = useIsFirstRender();
 
   return (
@@ -422,26 +387,6 @@ export default function SubjectsPage() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
-
-        {/* Stat cards — matches StudentsPage layout */}
-        <div style={{ display: "flex", gap: 12 }}>
-          {[
-            { label: "Total Subjects",   icon: "ti-books",           value: pageMeta.count,  color: "#e03131", bg: "#fff0f0" },
-            { label: "With Template",    icon: "ti-report-analytics", value: withTemplate,    color: "#2e6b0d", bg: "#e8f5e0" },
-            { label: "No Template",      icon: "ti-alert-triangle",  value: withoutTemplate, color: "#d97706", bg: "#fdf5e8" },
-            { label: "Levels Active",    icon: "ti-layout-grid",     value: activeLevels,    color: "#1455a0", bg: "#e3f0fd" },
-          ].map((card, i) => (
-            <motion.div
-              key={card.label}
-              initial={isFirstRender ? { y: 14, opacity: 0 } : false}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              <StatCard {...card} loading={loading} />
-            </motion.div>
-          ))}
-        </div>
 
         {/* Search + filters */}
         <motion.div

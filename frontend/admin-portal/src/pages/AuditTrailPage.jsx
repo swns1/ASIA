@@ -30,13 +30,6 @@ const STATUS_META = {
   pending: { label: "Pending", bg: "#e3f0fd", color: "#1455a0", border: "#93c5fd", icon: "ti-clock"       },
 };
 
-const STAT_DEFS = [
-  { key: "total",   label: "Total Logs",      icon: "ti-list-details", color: C.red,     bg: C.redLight },
-  { key: "visible", label: "Visible Records",  icon: "ti-filter-check", color: "#1455a0", bg: "#e3f0fd"  },
-  { key: "failed",  label: "Failed Actions",   icon: "ti-circle-x",     color: "#9b2020", bg: "#fde8e8"  },
-  { key: "invalid", label: "Invalid Dates",    icon: "ti-calendar-x",   color: "#7a4a08", bg: "#fef3e2"  },
-];
-
 // ── Data helpers ──────────────────────────────────────────────────────────────
 
 function normalizeRole(role) {
@@ -415,14 +408,6 @@ export default function AuditTrailPage() {
 
   const isFirstRender = useIsFirstRender();
 
-  const stats = {
-    total: logs.length,
-    visible: filteredLogs.length,
-    failed: logs.filter(l => l.status === "failed").length,
-    invalid: invalidCount,
-  };
-
-
   if (!allowed && !loading) return <AccessDenied navigate={navigate} />;
 
   return (
@@ -476,28 +461,6 @@ export default function AuditTrailPage() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Stat cards */}
-        <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.08, ease: "easeOut" }}
-          style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}
-        >
-          {STAT_DEFS.map(s => (
-            <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: C.text, lineHeight: 1 }}>
-                  {loading ? <Sk w={36} h={22} r={6} /> : <AnimatedCount value={stats[s.key]} />}
-                </div>
-                <div style={{ fontSize: 11, color: C.pale, marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
-              </div>
-            </div>
-          ))}
-        </motion.div>
 
         {/* Filter panel */}
         <motion.div

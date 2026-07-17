@@ -198,52 +198,11 @@ function OverviewTab({ onNavigate }) {
   }
 
   const totalPages   = Math.ceil(pageMeta.count / OVERVIEW_PAGE_SIZE);
-  const passedCount  = rows.filter((r) => r.avg !== null && r.avg >= 75).length;
-  const failedCount  = rows.filter((r) => r.avg !== null && r.avg <  75).length;
-  const noGradeCount = rows.filter((r) => r.avg === null).length;
-  const overallMean  = (() => { const n = rows.filter((r) => r.avg !== null); return n.length > 0 ? n.reduce((s, r) => s + r.avg, 0) / n.length : null; })();
 
   const isFirstRender = useIsFirstRender();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-
-      {/* ── Stat cards (always visible, stagger in on first render) ── */}
-      <div style={{ display: "flex", gap: 12 }}>
-        {[
-          { label: "Total Students", icon: "ti-users",          value: loading ? null : rows.length,     color: "#e03131", bg: "#fff0f0" },
-          { label: "Passing",        icon: "ti-circle-check",   value: loading ? null : passedCount,     color: "#2e6b0d", bg: "#e8f5e0" },
-          { label: "Failing",        icon: "ti-circle-x",       value: loading ? null : failedCount,     color: "#9b2020", bg: "#fde8e8" },
-          { label: "No Grades Yet",  icon: "ti-alert-triangle", value: loading ? null : noGradeCount,    color: "#854f0b", bg: "#faeeda" },
-          { label: "Class Average",  icon: "ti-chart-bar",      value: loading ? null : (overallMean !== null ? overallMean.toFixed(2) : "—"), color: "#1455a0", bg: "#e3f0fd" },
-        ].map((card, i) => (
-          <motion.div
-            key={card.label}
-            initial={isFirstRender ? { y: 14, opacity: 0 } : false}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
-            style={{ flex: 1, minWidth: 0 }}
-          >
-            <motion.div
-              whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.16 }}
-              style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", width: "100%", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}
-            >
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: card.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className={`ti ${card.icon}`} style={{ fontSize: 18, color: card.color }} />
-              </div>
-              <div>
-                {loading
-                  ? <Sk w={40} h={20} r={4} />
-                  : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{card.value ?? "—"}</div>
-                }
-                <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{card.label}</div>
-              </div>
-            </motion.div>
-          </motion.div>
-        ))}
-      </div>
 
       {/* ── Filter white card ── */}
       <motion.div

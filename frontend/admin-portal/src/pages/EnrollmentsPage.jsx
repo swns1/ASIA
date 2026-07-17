@@ -1075,28 +1075,34 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
 }
 
 // ── Stat card — matches StudentsPage / SubjectsPage exactly ──────────────────
-function StatCard({ label, value, icon, color, bg, loading }) {
+function StatCard({ label, value, icon, color, bg, loading, isActive, onClick }) {
   return (
     <motion.div
-      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(224,49,49,0.12)" }}
+      onClick={onClick}
+      whileHover={{ boxShadow: isActive ? `0 8px 24px ${color}28` : "0 8px 24px rgba(0,0,0,0.08)" }}
       whileTap={{ scale: 0.98 }}
       transition={{ duration: 0.16 }}
       style={{
-        background: "white", borderRadius: 14, padding: "16px 20px",
-        border: "1px solid #f5eaea", width: "100%",
-        display: "flex", alignItems: "center", gap: 14,
+        background: isActive ? bg : "white", borderRadius: 14, padding: "16px 20px",
+        border: `1.5px solid ${isActive ? color : "#f5eaea"}`, width: "100%",
+        display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
         boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
+        transition: "border-color 0.15s ease, background-color 0.15s ease",
       }}
     >
-      <div style={{ width: 42, height: 42, borderRadius: 12, background: bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <div style={{
+        width: 42, height: 42, borderRadius: 12, background: isActive ? "white" : bg,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        transition: "background 0.15s",
+      }}>
         <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
       </div>
       <div>
         {loading
           ? <Sk w={40} h={20} r={4} />
-          : <div style={{ fontSize: 22, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
+          : <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? color : (value > 0 ? "#1a0a0a" : "#c0a0a0"), lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
         }
-        <div style={{ fontSize: 11, color: "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+        <div style={{ fontSize: 11, color: isActive ? color : "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
       </div>
     </motion.div>
   );
@@ -1287,11 +1293,11 @@ export default function EnrollmentsPage() {
             {/* ── Stat cards ── */}
             <div style={{ display:"flex", gap:12 }}>
               {[
-                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#e03131", bg:"#fff0f0" },
-                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  color:"#2e6b0d", bg:"#e8f5e0" },
-                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   color:"#7a4a08", bg:"#fef3e2" },
-                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, color:"#1455a0", bg:"#e3f0fd" },
-                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, color:"#9b2020", bg:"#fde8e8" },
+                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#e03131", bg:"#fff0f0", status:"" },
+                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  color:"#2e6b0d", bg:"#e8f5e0", status:"enrolled" },
+                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   color:"#7a4a08", bg:"#fef3e2", status:"pending" },
+                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, color:"#1455a0", bg:"#e3f0fd", status:"completed" },
+                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, color:"#9b2020", bg:"#fde8e8", status:"cancelled" },
               ].map((card, i) => (
                 <motion.div
                   key={card.label}
@@ -1300,7 +1306,12 @@ export default function EnrollmentsPage() {
                   transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
                   style={{ flex:1, minWidth:0 }}
                 >
-                  <StatCard {...card} loading={countsLoading} />
+                  <StatCard
+                    {...card}
+                    loading={countsLoading}
+                    isActive={statusFilter === card.status}
+                    onClick={() => setStatusFilter(statusFilter === card.status ? "" : card.status)}
+                  />
                 </motion.div>
               ))}
             </div>
