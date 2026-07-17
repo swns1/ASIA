@@ -50,7 +50,10 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         # use) allows that, whereas the viewset's default
         # IsAdminRegistrarOrReadOnly would 403 a teacher's write. my-sections
         # is GET-only so either class covers it.
-        if self.action in ("section_grades", "section_attendance", "section_attendance_stats"):
+        if self.action in (
+            "section_grades", "section_attendance",
+            "section_attendance_stats", "section_grades_summary",
+        ):
             return [IsAdvisoryTeacherOrStaff()]
         return super().get_permissions()
 
@@ -550,6 +553,82 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             "totals": totals,
             "daily": daily,
             "per_student": per_student,
+        })
+
+    @action(detail=False, methods=["get"], url_path="section-grades-summary")
+    def section_grades_summary(self, request):
+        """
+        GET /api/section-advisories/section-grades-summary/?advisory_id=<id>
+
+        Section-wide grade metrics across every subject/period recorded so
+        far this school year — backs the Stats tab's average grade, pass
+        rate, and grade-distribution panel. Unlike section-grades (which is
+        scoped to one subject + period for the entry grid), this rolls up
+        every Grade row for the roster's current enrollments.
+
+        Returns:
+          {
+            "average": float|null, "pass_rate": float|null, "graded_count": int,
+            "distribution": {"90_100": int, "75_89": int, "below_75": int},
+          }
+        """
+        from django.db.models import Avg, Count, Q
+        from grades.models import Grade
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        advisory_id = request.query_params.get("advisory_id")
+        if not advisory_id:
+            return Response(
+                {"detail": "Missing required field: advisory_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        )
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+
+        grades_qs = Grade.objects.filter(enrollment__in=enrollment_qs)
+
+        agg = grades_qs.aggregate(
+            average=Avg("numeric_grade"),
+            graded_count=Count("grade_id"),
+            passed=Count("grade_id", filter=Q(numeric_grade__gte=75)),
+            above_90=Count("grade_id", filter=Q(numeric_grade__gte=90)),
+            mid_75_89=Count("grade_id", filter=Q(numeric_grade__gte=75, numeric_grade__lt=90)),
+            below_75=Count("grade_id", filter=Q(numeric_grade__lt=75)),
+        )
+
+        graded_count = agg["graded_count"]
+        average = round(float(agg["average"]), 1) if agg["average"] is not None else None
+        pass_rate = round(agg["passed"] / graded_count * 100, 1) if graded_count else None
+
+        return Response({
+            "average": average,
+            "pass_rate": pass_rate,
+            "graded_count": graded_count,
+            "distribution": {
+                "90_100": agg["above_90"],
+                "75_89": agg["mid_75_89"],
+                "below_75": agg["below_75"],
+            },
         })
 
 
