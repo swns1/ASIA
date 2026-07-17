@@ -509,7 +509,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               </thead>
               <tbody>
                 {(invoice.installments ?? []).map((inst) => {
-                  const stMeta = { pending:STATUS_META.unpaid, partially_paid:STATUS_META.partially_paid, paid:STATUS_META.paid, overdue:{ label:"Overdue", color:"#7c3aed", bg:"#f0e8fd" } }[inst.status] ?? STATUS_META.unpaid;
+                  const stMeta = { pending:STATUS_META.unpaid, partially_paid:STATUS_META.partially_paid, paid:STATUS_META.paid, overdue:{ label:"Overdue", color:"#7c3aed", bg:"#f0e8fd" }, voided:{ label:"Voided", color:"#5c5752", bg:"#f0ede8" } }[inst.status] ?? STATUS_META.unpaid;
                   const bal = parseFloat(inst.amount) - parseFloat(inst.amount_paid);
                   return (
                     <tr key={inst.installment_id} style={{ borderBottom:"1px solid #f9f0f0" }}

@@ -43,6 +43,11 @@ export async function updateStudent(id, payload) {
   return res.data;
 }
 
+export async function updateStudentStatus(id, status) {
+  const res = await studentClient.patch(`/students/${id}/`, { status });
+  return res.data;
+}
+
 export async function deleteStudent(id) {
   const res = await studentClient.delete(`/students/${id}/`);
   return res.data;

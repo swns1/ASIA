@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Enrollment, SectionAdvisory, Student
+from .models import Enrollment, EnrollmentTransfer, SectionAdvisory, Student
 
 
 class SectionAdvisorySerializer(serializers.ModelSerializer):
@@ -11,6 +11,22 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("advisory_id", "created_at")
+
+
+class EnrollmentTransferSerializer(serializers.ModelSerializer):
+    student_id = serializers.IntegerField(source="enrollment.student_id", read_only=True)
+
+    class Meta:
+        model = EnrollmentTransfer
+        fields = (
+            "transfer_id", "enrollment", "student_id", "transfer_type",
+            "effective_date", "reason",
+            "from_grade_level", "from_section", "from_strand",
+            "to_grade_level", "to_section", "to_strand",
+            "destination_school_name", "origin_school_name",
+            "initiated_by", "created_at",
+        )
+        read_only_fields = ("transfer_id", "initiated_by", "created_at")
 
 # ── Grade progression helpers ─────────────────────────────────────────────────
 GRADE_ORDER = [

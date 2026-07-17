@@ -54,10 +54,11 @@ const GRADE_LEVELS_BY_LEVEL = {
 };
 
 const STATUS_META = {
-  enrolled:  { bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50", label: "Enrolled"  },
-  pending:   { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Pending"   },
-  cancelled: { bg: "#fde8e8", color: "#9b2020", dot: "#f44336", label: "Cancelled" },
-  completed: { bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3", label: "Completed" },
+  enrolled:        { bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50", label: "Enrolled"  },
+  pending:         { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Pending"   },
+  cancelled:       { bg: "#fde8e8", color: "#9b2020", dot: "#f44336", label: "Cancelled" },
+  completed:       { bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3", label: "Completed" },
+  transferred_out: { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Transferred Out" },
 };
 
 const LEVEL_ICONS = {

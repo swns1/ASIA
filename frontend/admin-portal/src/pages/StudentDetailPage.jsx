@@ -863,10 +863,11 @@ export default function StudentDetailPage() {
                         </SectionCard>
                       ) : enrollments.map((en, i) => {
                         const statusColors = {
-                          enrolled:  { color:"#2e6b0d", bg:"#e8f5e0" },
-                          pending:   { color:"#854f0b", bg:"#faeeda" },
-                          completed: { color:"#1455a0", bg:"#e3f0fd" },
-                          cancelled: { color:"#5c5752", bg:"#f0ede8" },
+                          enrolled:        { color:"#2e6b0d", bg:"#e8f5e0", label:"Enrolled" },
+                          pending:         { color:"#854f0b", bg:"#faeeda", label:"Pending" },
+                          completed:       { color:"#1455a0", bg:"#e3f0fd", label:"Completed" },
+                          cancelled:       { color:"#5c5752", bg:"#f0ede8", label:"Cancelled" },
+                          transferred_out: { color:"#7a4a08", bg:"#fef3e2", label:"Transferred Out" },
                         };
                         const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
                         return (
@@ -893,7 +894,7 @@ export default function StudentDetailPage() {
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
-                                {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
+                                {sc.label}
                               </span>
                               <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#b09090" }} />
                             </div>

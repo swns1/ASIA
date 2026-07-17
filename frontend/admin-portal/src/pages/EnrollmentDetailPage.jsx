@@ -7,9 +7,11 @@ import {
   getGrades,
   getEnrollmentScholarships,
   updateEnrollment,
+  transferOutEnrollment,
 } from "../api/enrollmentApi";
-import { getInvoices } from "../api/billingApi";
+import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 import { getRequirementTypes, getStudentRequirementSubmissions } from "../api/enrollmentApi";
+import { updateStudentStatus } from "../api/studentApi";
 
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
@@ -17,11 +19,14 @@ const C = {
 };
 
 const STATUS_META = {
-  enrolled:   { label: "Enrolled",   color: "#2e6b0d", bg: "#e8f5e0" },
-  pending:    { label: "Pending",    color: "#854f0b", bg: "#faeeda" },
-  completed:  { label: "Completed",  color: "#1455a0", bg: "#e3f0fd" },
-  cancelled:  { label: "Cancelled",  color: "#5c5752", bg: "#f0ede8" },
+  enrolled:         { label: "Enrolled",        color: "#2e6b0d", bg: "#e8f5e0" },
+  pending:          { label: "Pending",         color: "#854f0b", bg: "#faeeda" },
+  completed:        { label: "Completed",       color: "#1455a0", bg: "#e3f0fd" },
+  cancelled:        { label: "Cancelled",       color: "#5c5752", bg: "#f0ede8" },
+  transferred_out:  { label: "Transferred Out", color: "#7a4a08", bg: "#fef3e2" },
 };
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const INVOICE_STATUS_META = {
   unpaid:         { label: "Unpaid",   color: "#a32d2d", bg: "#fde8e8" },
@@ -84,6 +89,13 @@ export default function EnrollmentDetailPage() {
   const [completeError, setCompleteError] = useState("");
   const [completeConfirm, setCompleteConfirm] = useState(false);
 
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState("");
+  const [transferConfirm, setTransferConfirm] = useState(false);
+  const [transferEffectiveDate, setTransferEffectiveDate] = useState(todayISO());
+  const [transferReason, setTransferReason] = useState("");
+  const [transferDestSchool, setTransferDestSchool] = useState("");
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -124,6 +136,49 @@ export default function EnrollmentDetailPage() {
       setCompleteError(err?.response?.data?.detail || "Failed to mark as completed.");
     } finally {
       setCompleting(false);
+    }
+  }
+
+  async function handleTransferOut() {
+    setTransferring(true);
+    setTransferError("");
+    try {
+      const result = await transferOutEnrollment(id, {
+        effective_date: transferEffectiveDate,
+        reason: transferReason,
+        destination_school_name: transferDestSchool.trim() || undefined,
+      });
+      setEnrollment(result.enrollment);
+      setTransferConfirm(false);
+      setTransferReason("");
+      setTransferDestSchool("");
+
+      // Close out any existing invoice's remaining installments — same
+      // frontend-orchestration approach as the status flip below. Only
+      // attempted when an invoice actually exists for this enrollment.
+      if (invoice) {
+        closeOutInvoiceForTransfer(invoice.invoice_id, { effective_date: transferEffectiveDate })
+          .then(setInvoice)
+          .catch(() =>
+            setError("Enrollment transferred out, but closing out the invoice's remaining installments failed — review it manually on the Invoices page.")
+          );
+      }
+
+      // Flip the student's overall status separately — this codebase
+      // orchestrates cross-service writes from the frontend rather than
+      // backend-to-backend calls (same pattern as enroll → generate invoice).
+      // If it fails, the transfer itself already succeeded, so surface the
+      // problem rather than rolling anything back.
+      const sid = result.enrollment?.student_id ?? result.enrollment?.student;
+      if (sid) {
+        updateStudentStatus(sid, "transferred").catch(() =>
+          setError("Enrollment transferred out, but updating the student's overall status failed — update it manually on the student's profile.")
+        );
+      }
+    } catch (err) {
+      setTransferError(err?.response?.data?.detail || "Failed to transfer out.");
+    } finally {
+      setTransferring(false);
     }
   }
 
@@ -238,6 +293,12 @@ export default function EnrollmentDetailPage() {
                 <button onClick={() => setCompleteConfirm(true)}
                   style={{ background: "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   <i className="ti ti-circle-check" style={{ fontSize: 12, marginRight: 4 }} />Mark Completed
+                </button>
+              )}
+              {canMarkCompleted && (
+                <button onClick={() => setTransferConfirm(true)}
+                  style={{ background: "transparent", border: "1.5px solid #f0a830", color: "#7a4a08", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  <i className="ti ti-transfer" style={{ fontSize: 12, marginRight: 4 }} />Transfer Out
                 </button>
               )}
             </div>
@@ -420,6 +481,63 @@ export default function EnrollmentDetailPage() {
               <button onClick={handleMarkCompleted} disabled={completing}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: completing ? "#9ab5d4" : "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", fontWeight: 700, cursor: completing ? "not-allowed" : "pointer" }}>
                 {completing ? "Saving…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Out Confirm Modal */}
+      {transferConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "white", borderRadius: 16, padding: 28, maxWidth: 440, width: "100%", boxShadow: "0 8px 40px rgba(122,74,8,0.15)", fontFamily: "'DM Sans', sans-serif" }}>
+            <h3 style={{ margin: "0 0 10px", color: C.dark }}>Transfer Out Student?</h3>
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: C.muted }}>
+              This will change enrollment status to <strong>Transferred Out</strong> and mark the student's overall status as transferred. Grades and attendance already recorded are kept as-is.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
+                Effective Date
+                <input
+                  type="date"
+                  value={transferEffectiveDate}
+                  onChange={(e) => setTransferEffectiveDate(e.target.value)}
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+                />
+              </label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
+                Destination School <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
+                <input
+                  type="text"
+                  value={transferDestSchool}
+                  onChange={(e) => setTransferDestSchool(e.target.value)}
+                  placeholder="e.g. Cebu City National High School"
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+                />
+              </label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
+                Reason
+                <textarea
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  rows={2}
+                  placeholder="Explain why the student is transferring out (e.g. family relocating)…"
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box", resize: "vertical" }}
+                />
+              </label>
+            </div>
+
+            {transferError && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{transferError}</p>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setTransferConfirm(false); setTransferError(""); }}
+                disabled={transferring}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #f0e0d0", background: "transparent", color: C.muted, fontWeight: 600, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleTransferOut} disabled={transferring || !transferReason.trim() || !transferEffectiveDate}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: transferring ? "#f0c890" : "linear-gradient(135deg,#f0a830,#c97e08)", color: "white", fontWeight: 700, cursor: transferring ? "not-allowed" : "pointer" }}>
+                {transferring ? "Saving…" : "Confirm"}
               </button>
             </div>
           </div>

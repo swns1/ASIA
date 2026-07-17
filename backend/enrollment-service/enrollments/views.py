@@ -1,9 +1,12 @@
+from datetime import date
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
@@ -11,9 +14,10 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
-from .models import Enrollment, EnrollmentOverride, SectionAdvisory
+from .models import Enrollment, EnrollmentOverride, EnrollmentTransfer, SectionAdvisory
 from .serializers import (
     EnrollmentSerializer,
+    EnrollmentTransferSerializer,
     GRADE_ORDER,
     get_next_grade_level,
     SectionAdvisorySerializer,
@@ -22,6 +26,16 @@ from .serializers import (
 from .filters import EnrollmentFilter
 
 ACADEMIC_STAFF_ROLES = ("super_admin", "admin", "registrar")
+
+
+def _parse_date(value):
+    """Parse a 'YYYY-MM-DD' string into a date; returns None if missing/invalid."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 class SectionAdvisoryViewSet(viewsets.ModelViewSet):
@@ -360,15 +374,172 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             },
         )
 
+    # Placement fields an "internal move" (grade/section/strand change within
+    # SLIS) can touch. Deliberately wider than serializers.PLACEMENT_FIELDS —
+    # that guard excludes `section` (freely PATCHable, no override required),
+    # but a section-only change is still a real move worth an audit row.
+    _MOVE_TRACKED_FIELDS = ("grade_level", "school_level", "strand", "section")
+
+    def _log_internal_move_if_changed(self, serializer, before, enrollment):
+        """Write an append-only EnrollmentTransfer row when a PATCH actually
+        changed grade/section/strand placement — fires regardless of whether
+        progression_override was used, so section-only moves get logged too
+        (unlike EnrollmentOverride, which only fires on override and
+        overwrites the previous reason rather than keeping history)."""
+        changed = any(
+            before.get(f) != getattr(enrollment, f, None) for f in self._MOVE_TRACKED_FIELDS
+        )
+        if not changed:
+            return
+        user_id = getattr(self.request.user, "id", None) or 0
+        reason = getattr(serializer, "_progression_override_reason", "") or ""
+        EnrollmentTransfer.objects.create(
+            enrollment=enrollment,
+            transfer_type="internal_move",
+            effective_date=timezone.now().date(),
+            reason=reason,
+            from_grade_level=before.get("grade_level"),
+            from_section=before.get("section"),
+            from_strand=before.get("strand"),
+            to_grade_level=enrollment.grade_level,
+            to_section=enrollment.section,
+            to_strand=enrollment.strand,
+            initiated_by=user_id,
+        )
+
     def perform_create(self, serializer):
         enrollment = serializer.save()
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
 
     def perform_update(self, serializer):
+        before = {f: getattr(serializer.instance, f, None) for f in self._MOVE_TRACKED_FIELDS}
         enrollment = serializer.save()
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
+        self._log_internal_move_if_changed(serializer, before, enrollment)
+
+    @action(detail=True, methods=["post"], url_path="transfer-out")
+    def transfer_out(self, request, pk=None):
+        """
+        POST /api/enrollments/{id}/transfer-out/
+
+        Marks a currently-enrolled student as having left SLIS mid-year for
+        another school: flips this enrollment's status to "transferred_out"
+        and records an EnrollmentTransfer audit row. Deliberately does NOT
+        touch Student.status or billing here — the frontend calls those
+        separately in sequence, matching this codebase's existing
+        frontend-orchestrated cross-service pattern (e.g. enroll -> then
+        prompt to generate an invoice) rather than a backend-to-backend call.
+
+        Body:
+          {
+            "effective_date": "2026-07-17",
+            "reason": "Family relocating to Cebu",
+            "destination_school_name": "Cebu City National HS"   // optional
+          }
+        """
+        enrollment = self.get_object()
+
+        if enrollment.enrollment_status != "enrolled":
+            return Response(
+                {
+                    "detail": (
+                        f"Cannot transfer out an enrollment with status "
+                        f"'{enrollment.enrollment_status}'. Only 'enrolled' records can be transferred out."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            return Response({"detail": "reason is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        effective_date = _parse_date(request.data.get("effective_date"))
+        if effective_date is None:
+            return Response(
+                {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        destination_school_name = (request.data.get("destination_school_name") or "").strip() or None
+
+        with transaction.atomic():
+            enrollment.enrollment_status = "transferred_out"
+            enrollment.save(update_fields=["enrollment_status"])
+
+            transfer = EnrollmentTransfer.objects.create(
+                enrollment=enrollment,
+                transfer_type="transfer_out",
+                effective_date=effective_date,
+                reason=reason,
+                from_grade_level=enrollment.grade_level,
+                from_section=enrollment.section,
+                from_strand=enrollment.strand,
+                destination_school_name=destination_school_name,
+                initiated_by=getattr(request.user, "id", None) or 0,
+            )
+
+        return Response(
+            {
+                "enrollment": EnrollmentSerializer(enrollment).data,
+                "transfer": EnrollmentTransferSerializer(transfer).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="transfer-in")
+    def transfer_in(self, request, pk=None):
+        """
+        POST /api/enrollments/{id}/transfer-in/
+
+        Records the audit trail for a student arriving mid-year from another
+        school. Call this right after creating the new Enrollment row — it
+        never creates or modifies the enrollment itself. No extra grade-
+        progression gating is needed here: EnrollmentSerializer.validate()
+        already skips that gate whenever the student has no prior completed
+        enrollment in this DB, which is exactly the transfer-in case — their
+        academic history lives at their previous school, not here.
+
+        Body:
+          {
+            "effective_date": "2026-07-17",
+            "reason": "Transferee from another school",
+            "origin_school_name": "Cebu City National HS"   // optional
+          }
+        """
+        enrollment = self.get_object()
+
+        effective_date = _parse_date(request.data.get("effective_date"))
+        if effective_date is None:
+            return Response(
+                {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = (request.data.get("reason") or "").strip()
+        origin_school_name = (request.data.get("origin_school_name") or "").strip() or None
+
+        transfer = EnrollmentTransfer.objects.create(
+            enrollment=enrollment,
+            transfer_type="transfer_in",
+            effective_date=effective_date,
+            reason=reason,
+            to_grade_level=enrollment.grade_level,
+            to_section=enrollment.section,
+            to_strand=enrollment.strand,
+            origin_school_name=origin_school_name,
+            initiated_by=getattr(request.user, "id", None) or 0,
+        )
+
+        return Response(
+            {
+                "enrollment": EnrollmentSerializer(enrollment).data,
+                "transfer": EnrollmentTransferSerializer(transfer).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["post"], url_path="bulk")
     def bulk_create(self, request):
@@ -813,3 +984,39 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "admin_override_required": has_grade_blocks,
             "is_new_student": last_any is None,
         })
+
+
+class EnrollmentTransferViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    /api/enrollment-transfers/
+
+    Read-only audit trail of transfer-out / transfer-in / internal-move
+    events. Rows are written by EnrollmentViewSet's transfer actions and by
+    perform_update()'s internal-move auto-logging — never created directly
+    through this endpoint.
+
+    Filters:
+      ?enrollment=42
+      ?student=12       (student_id, resolved through the enrollment FK)
+      ?transfer_type=transfer_out
+    """
+
+    queryset = EnrollmentTransfer.objects.select_related("enrollment").all()
+    serializer_class = EnrollmentTransferSerializer
+    permission_classes = [IsStaffOrOwnerGuardianReadOnly]
+
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ("enrollment", "transfer_type")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        role = getattr(self.request.user, "role", None)
+        if role == "guardian":
+            qs = qs.filter(enrollment__student_id__in=guardian_student_ids(self.request.user))
+        elif role == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(self.request.user))
+
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            qs = qs.filter(enrollment__student_id=student_id)
+        return qs

@@ -56,10 +56,11 @@ class Enrollment(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ("enrolled",  "Enrolled"),
-        ("pending",   "Pending"),
-        ("cancelled", "Cancelled"),
-        ("completed", "Completed"),
+        ("enrolled",        "Enrolled"),
+        ("pending",         "Pending"),
+        ("cancelled",       "Cancelled"),
+        ("completed",       "Completed"),
+        ("transferred_out", "Transferred Out"),
     ]
 
     enrollment_id = models.BigAutoField(primary_key=True)
@@ -148,3 +149,65 @@ class SectionAdvisory(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"Teacher #{self.teacher_user_id} → {self.school_year} {self.grade_level}-{self.section}"
+
+
+# ─── Transfer audit log ───────────────────────────────────────────────────────
+class EnrollmentTransfer(models.Model):
+    """
+    Append-only audit log covering all three mid-year transfer scenarios:
+    a student leaving SLIS (transfer_out), a student arriving mid-year from
+    another school (transfer_in), and a currently-enrolled student changing
+    grade/section/strand within SLIS (internal_move).
+
+    Distinct from EnrollmentOverride, which upserts a single row per
+    enrollment and is scoped only to progression-rule bypasses — this table
+    keeps a full chronological history instead, since a single enrollment can
+    reasonably accumulate more than one transfer/move event over its life.
+    New data genuinely owned by enrollment-service, so like SectionAdvisory
+    this one IS Django-managed (real migration).
+    """
+
+    TRANSFER_TYPE_CHOICES = [
+        ("transfer_out",  "Transfer Out"),
+        ("transfer_in",   "Transfer In"),
+        ("internal_move", "Internal Move"),
+    ]
+
+    transfer_id = models.BigAutoField(primary_key=True)
+
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        db_column="enrollment_id",
+        related_name="transfers",
+    )
+
+    transfer_type  = models.CharField(max_length=20, choices=TRANSFER_TYPE_CHOICES)
+    effective_date = models.DateField()
+    reason         = models.TextField(blank=True)
+
+    # Snapshot of placement at the moment of the event — survives later edits
+    # to the enrollment row itself.
+    from_grade_level = models.CharField(max_length=20, null=True, blank=True)
+    from_section     = models.CharField(max_length=50, null=True, blank=True)
+    from_strand      = models.CharField(max_length=50, null=True, blank=True)
+    to_grade_level   = models.CharField(max_length=20, null=True, blank=True)
+    to_section       = models.CharField(max_length=50, null=True, blank=True)
+    to_strand        = models.CharField(max_length=50, null=True, blank=True)
+
+    # transfer_out only: where the student is going.
+    destination_school_name = models.CharField(max_length=150, null=True, blank=True)
+    # transfer_in only: where the student came from (mirrors student-service's
+    # PreviousSchool, kept here too since that table isn't owned by this service).
+    origin_school_name      = models.CharField(max_length=150, null=True, blank=True)
+
+    initiated_by = models.IntegerField()  # user_id from identity-service JWT
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "enrollment_transfers"
+        ordering = ["-created_at"]
+
+    def __str__(self):  # pragma: no cover
+        return f"{self.get_transfer_type_display()} · enrollment #{self.enrollment_id} · {self.effective_date}"
