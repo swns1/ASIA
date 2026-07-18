@@ -59,6 +59,27 @@ const RISK_LEVEL_META = {
 };
 const RISK_LEVEL_ORDER = ["low", "moderate", "high", "critical"];
 
+// Narrative-rating status palette (Outstanding/Satisfactory/Needs
+// Improvement) — reserved for narrative-rating state inside ClusterLegend's
+// narrative_distribution row, never reused as a cluster identity color.
+// Deliberately distinct from both RISK_LEVEL_META (risk state, above) and
+// the backend's CLUSTER_COLOR_STEPS (cluster identity, ai/analytics_views.py)
+// so the same hue never carries two different meanings on this page — in
+// particular, red is avoided here on purpose because CLUSTER_COLOR_STEPS now
+// uses a red family for the lowest-performing cluster; validate_palette.js
+// confirmed a red "Needs Improvement" dot collides with it (ΔE 3.2, hard
+// FAIL), so magenta stands in for the "needs attention" tier instead.
+// Validated via scripts/validate_palette.js: passes all-pairs on its own
+// (light mode; this app has no dark mode) and, cross-checked against every
+// CLUSTER_COLOR_STEPS array, none of these three hexes appear in any
+// failing pair — the only failures in that combined run are pre-existing,
+// by-design close-lightness pairs within the cluster ramp's own arms.
+const NARRATIVE_RATING_META = {
+  outstanding:       { label: "Outstanding",       color: "#008300" },
+  satisfactory:      { label: "Satisfactory",      color: "#eda100" },
+  needs_improvement: { label: "Needs Improvement", color: "#e87ba4" },
+};
+
 function riskLevelMeta(level) {
   return RISK_LEVEL_META[level] || { label: level || "Unknown", order: -1, color: "#a09890", icon: "ti-help-circle" };
 }
@@ -200,6 +221,39 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 
   const showPassingLine = PASSING_GRADE > xMin - xPad && PASSING_GRADE < xMax + xPad;
 
+  // Deterministic jitter: students with near-identical grade/attendance
+  // render on (or very near) the same pixel and would otherwise fully
+  // overlap. Bucket by *rendered* pixel position (finer, 5px grid — smaller
+  // than any bubble's own diameter — so this only fires on real visual
+  // overlap, not just nearby data values), then ring-offset every member
+  // past the first. Sorted by student_id (not API response order) and
+  // derived fresh from props each render (no useState/useRef) so identical
+  // input always produces identical layout.
+  const JITTER_RING_PX = 6;
+  const buckets = new Map();
+  for (const pt of allPoints) {
+    const key = `${Math.round(scaleX(pt.plotX) / 5)},${Math.round(scaleY(pt.plotY) / 5)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(pt);
+  }
+  const jitteredPoints = [];
+  for (const members of buckets.values()) {
+    members.sort((a, b) => a.student_id - b.student_id);
+    members.forEach((pt, i) => {
+      const cx = scaleX(pt.plotX), cy = scaleY(pt.plotY);
+      let jcx = cx, jcy = cy;
+      if (i > 0) {
+        const ring = Math.ceil(i / 8);
+        const posInRing = (i - 1) % 8;
+        const angle = posInRing * (2 * Math.PI / 8);
+        const radius = JITTER_RING_PX * ring;
+        jcx = cx + radius * Math.cos(angle);
+        jcy = cy + radius * Math.sin(angle);
+      }
+      jitteredPoints.push({ ...pt, jcx, jcy });
+    });
+  }
+
   return (
     <>
       <svg
@@ -245,6 +299,33 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
         <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#d8d4cc" />
         <line x1={PAD} x2={PAD}     y1={PAD}     y2={H - PAD} stroke="#d8d4cc" />
 
+        {/* Axis tick labels — same styling convention as RiskTrendChart's
+            ticks below (fontSize 10, #a09890, DM Sans) */}
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const xVal = Math.round(xMin - xPad + frac * xRange);
+          return (
+            <text
+              key={`x-${frac}`}
+              x={scaleX(xVal)} y={H - PAD + 14} textAnchor="middle"
+              fontSize="10" fill="#a09890" fontFamily="DM Sans"
+            >
+              {xVal}
+            </text>
+          );
+        })}
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const yVal = Math.round(yMin - yPad + frac * yRange);
+          return (
+            <text
+              key={`y-${frac}`}
+              x={PAD - 8} y={scaleY(yVal) + 3} textAnchor="end"
+              fontSize="10" fill="#a09890" fontFamily="DM Sans"
+            >
+              {yVal}%
+            </text>
+          );
+        })}
+
         {/* Axis labels */}
         <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#a09890" fontFamily="DM Sans">
           Average Grade
@@ -257,25 +338,32 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
         </text>
 
         {/* Data points */}
-        {allPoints.map((pt) => {
-          const cx = scaleX(pt.plotX);
-          const cy = scaleY(pt.plotY);
+        {jitteredPoints.map((pt) => {
           const isSelected = selectedStudent?.student_id === pt.student_id;
           const isHov      = hovered?.student_id === pt.student_id;
           const baseR      = narrativeRadius(pt.avg_narrative);
           const r          = isSelected ? baseR + 3 : isHov ? baseR + 2 : baseR;
           return (
             <g key={pt.student_id}>
+              {/* Hit target — enlarged, invisible, carries all interaction.
+                  fill="transparent" (not "none") so SVG's default
+                  pointer-events (visiblePainted) still fires on it. */}
               <circle
-                cx={cx} cy={cy} r={r}
+                cx={pt.jcx} cy={pt.jcy} r={Math.max(r, 12)}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHovered(pt)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => onSelectStudent(pt)}
+              />
+              {/* Visual mark — encoded radius/fill/stroke only, no interaction */}
+              <circle
+                cx={pt.jcx} cy={pt.jcy} r={r}
                 fill={pt.color}
                 fillOpacity={isSelected ? 1 : 0.75}
                 stroke={isSelected ? "#1a0a0a" : isHov ? "#fff" : "none"}
                 strokeWidth={isSelected ? 2.5 : 1.5}
-                style={{ cursor: "pointer", transition: "r 0.15s, stroke 0.15s" }}
-                onMouseEnter={() => setHovered(pt)}
-                onMouseLeave={() => setHovered(null)}
-                onClick={() => onSelectStudent(pt)}
+                style={{ pointerEvents: "none", transition: "r 0.15s, stroke 0.15s" }}
               />
             </g>
           );
@@ -283,8 +371,8 @@ function ScatterPlot({ clusters, selectedStudent, onSelectStudent }) {
 
         {/* Tooltip */}
         {hovered && (() => {
-          const tx    = scaleX(hovered.plotX);
-          const ty    = scaleY(hovered.plotY);
+          const tx    = hovered.jcx;
+          const ty    = hovered.jcy;
           const tipW  = 210, tipH = 70;
           const flipX = tx + tipW + 10 > W - PAD;
           const flipY = ty - tipH - 10 < PAD;
@@ -378,9 +466,11 @@ function ClusterLegend({ clusters }) {
           </div>
           {c.narrative_distribution && (
             <div style={{ fontSize: 10.5, color: "#a09890", marginTop: 4, display: "flex", gap: 7 }}>
-              <span title="Outstanding"><span style={{ color: "#22c55e" }}>●</span> {c.narrative_distribution.outstanding}</span>
-              <span title="Satisfactory"><span style={{ color: "#f59e0b" }}>●</span> {c.narrative_distribution.satisfactory}</span>
-              <span title="Needs Improvement"><span style={{ color: "#ef4444" }}>●</span> {c.narrative_distribution.needs_improvement}</span>
+              {Object.entries(NARRATIVE_RATING_META).map(([key, meta]) => (
+                <span key={key} title={meta.label}>
+                  <span style={{ color: meta.color }}>●</span> {c.narrative_distribution[key]}
+                </span>
+              ))}
             </div>
           )}
         </motion.div>

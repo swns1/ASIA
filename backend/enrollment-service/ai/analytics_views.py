@@ -99,15 +99,47 @@ from .services import build_student_features
 
 logger = logging.getLogger(__name__)
 
-CLUSTER_COLORS = [
-    "#ef4444",
-    "#3b82f6",
-    "#22c55e",
-    "#f59e0b",
-    "#8b5cf6",
-    "#ec4899",
-    "#14b8a6",
-]
+# Fixed, ordered red↔blue diverging ramp, keyed by n_clusters (2-7, matching
+# the clamp below) — index i is rank i's color for THAT n_clusters, ascending
+# worst (reddest) -> best (bluest), with a neutral gray at the exact middle
+# for odd n_clusters. Anchored on the dataviz skill's pre-validated diverging
+# pair (red #e34948 / blue #2a78d6) and its documented blue sequential ramp
+# (steps 250-700 in the skill's palette.md), with an analogous red arm
+# derived at matching OKLCH lightness/chroma. Deliberately NOT a single
+# n_clusters-agnostic array indexed by rank alone: the reddest/bluest ends
+# mean "worst/best of THIS k", so a cluster's color must depend on both its
+# rank and k, not rank alone (rank 0 of k=2 is as bad as it gets; rank 0 of
+# k=7 is only the worst of 7 groups).
+#
+# Chosen deliberately over a red/amber/green/teal rainbow (the original
+# design direction) after that direction hard-failed
+# scripts/validate_palette.js's colorblind-safety checks under --pairs all
+# (required for scatter/bubble charts, where any two cluster bubbles can be
+# visual neighbors) — clustering 4 distinct hue families in a narrow band is
+# inherently unsafe for red-green colorblindness, the most common form.
+#
+# Validated via scripts/validate_palette.js: each arm (the red steps and the
+# blue steps used at every n_clusters) passes validateOrdinal (monotone
+# lightness, adjacent ΔL >= 0.06, light-end contrast >= 2:1, single hue) in
+# both light and dark mode. Running the full assembled array through the
+# plain categorical validator additionally confirms CVD separation and the
+# normal-vision floor PASS at every n_clusters — the accessibility-critical
+# checks. That same run also flags "Lightness band"/"Chroma floor" FAILs and
+# some sub-3:1 contrast WARNs; both are the *expected*, by-design signature
+# of any legitimate diverging/sequential ramp (a ramp spans the band and its
+# neutral midpoint reads as gray on purpose) — the skill's own docs say not
+# to "fix" a good ramp to satisfy those two categorical-only checks. The
+# WARN-band contrast steps are legal because every cluster is always
+# text-labeled (ClusterLegend cards + the scatter tooltip), never color
+# alone — the skill's required mitigation.
+CLUSTER_COLOR_STEPS = {
+    2: ["#c74845", "#2a78d6"],
+    3: ["#c74845", "#f0efec", "#2a78d6"],
+    4: ["#892b2a", "#e4857e", "#6da7ec", "#184f95"],
+    5: ["#892b2a", "#e4857e", "#f0efec", "#6da7ec", "#184f95"],
+    6: ["#762221", "#c74845", "#ea9a93", "#86b6ef", "#2a78d6", "#104281"],
+    7: ["#762221", "#c74845", "#ea9a93", "#f0efec", "#86b6ef", "#2a78d6", "#104281"],
+}
 
 CLUSTER_INTERPRETATION_PROMPT = """
 You are an academic analytics assistant for a Philippine basic education school (DepEd K–12 system).
@@ -202,6 +234,39 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
             "cluster_names": [],
             "interpretation": f"AI interpretation temporarily unavailable ({type(e).__name__}).",
         }
+
+
+# Fallback cluster names used whenever Groq/GROQ_API_KEY is unavailable
+# (_call_groq_for_interpretation returns cluster_names: [] in that case —
+# both the "unset key" branch above and the "exception" branch above). Keyed
+# by n_clusters (2-7, matching the clamp `n_clusters = max(2, min(n_clusters,
+# 7))` below), each list is exactly n_clusters long, ascending worst->best to
+# match sorted_clusters' ascending avg_grade sort — rank 0 is always the
+# lowest-avg-grade cluster. Purely rank-based, not AI-derived, and
+# deliberately not named after a fixed DepEd grade band (e.g. "Outstanding" =
+# 90-100): KMeans cluster boundaries are data-driven and also factor in
+# attendance/narrative, not grade alone, so a cluster's actual grade range
+# (already shown via min_grade/max_grade) might not match that band.
+FALLBACK_CLUSTER_NAMES = {
+    2: ["Needs Support", "High Achieving"],
+    3: ["Needs Support", "Average", "High Achieving"],
+    4: ["Needs Support", "Developing", "Average", "High Achieving"],
+    5: ["Needs Support", "Developing", "Average", "Above Average", "High Achieving"],
+    6: ["Needs Immediate Support", "Needs Support", "Developing", "Average",
+        "Above Average", "High Achieving"],
+    7: ["Needs Immediate Support", "Needs Support", "Developing", "Average",
+        "Above Average", "High Achieving", "Top Performing"],
+}
+
+
+def _fallback_cluster_name(rank: int, n_clusters: int) -> str:
+    """Grade-tier name for a cluster when no AI name is available, keyed by
+    the cluster's rank (0 = lowest avg grade) among n_clusters total. Relies
+    on n_clusters already being clamped to [2, 7]; not defensive on purpose —
+    if that clamp is ever removed, this should fail loudly rather than
+    silently mislabel a cluster.
+    """
+    return FALLBACK_CLUSTER_NAMES[n_clusters][rank]
 
 
 def _impute_col_mean(arr: np.ndarray) -> None:
@@ -403,8 +468,8 @@ class ClusterAnalyticsView(APIView):
             )
             clusters_response.append({
                 **summary,
-                "label":    f"Cluster {new_id}",
-                "color":    CLUSTER_COLORS[new_id % len(CLUSTER_COLORS)],
+                "label":    _fallback_cluster_name(new_id, n_clusters),
+                "color":    CLUSTER_COLOR_STEPS[n_clusters][new_id],
                 "students": students,
             })
 
