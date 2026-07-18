@@ -1172,16 +1172,22 @@ export default function EnrollmentsPage() {
     setGradeLevel("");
   }, [schoolLevel]);
 
-  // Fetch status counts once on mount for stat cards
+  // Fetch status counts scoped to the same school year / level / grade as the list below,
+  // so the stat-card numbers always match what clicking into them actually shows.
   useEffect(() => {
     if (!token) return;
     setCountsLoading(true);
+    const scope = {};
+    if (schoolYear)  scope.school_year  = schoolYear;
+    if (schoolLevel) scope.school_level = schoolLevel;
+    if (gradeLevel)  scope.grade_level  = gradeLevel;
+
     Promise.all([
-      apiGetEnrollments({ page_size: 1 }),
-      apiGetEnrollments({ page_size: 1, enrollment_status: "enrolled"  }),
-      apiGetEnrollments({ page_size: 1, enrollment_status: "pending"   }),
-      apiGetEnrollments({ page_size: 1, enrollment_status: "completed" }),
-      apiGetEnrollments({ page_size: 1, enrollment_status: "cancelled" }),
+      apiGetEnrollments({ ...scope, page_size: 1 }),
+      apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "enrolled"  }),
+      apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "pending"   }),
+      apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "completed" }),
+      apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "cancelled" }),
     ]).then(([all, enrolled, pending, completed, cancelled]) => {
       setStatusCounts({
         total:     all.count       ?? 0,
@@ -1191,8 +1197,7 @@ export default function EnrollmentsPage() {
         cancelled: cancelled.count ?? 0,
       });
     }).catch(() => {}).finally(() => setCountsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token, schoolYear, schoolLevel, gradeLevel]);
 
   const fetchEnrollments = useCallback(async (pg = 1) => {
     if (!token) { navigate("/"); return; }
