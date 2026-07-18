@@ -152,10 +152,8 @@ REST_FRAMEWORK = {
         "cluster": "20/minute",   # clustering is CPU-heavy but needs room for iteration
     },
     # ─────────────────────────────────────────────────────────────────────
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "enrollment_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
-    "PAGE_SIZE_QUERY_PARAM": "page_size",
-    "MAX_PAGE_SIZE": 500,
 }
 
 

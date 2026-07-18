@@ -43,7 +43,7 @@ class HasRole(BasePermission):
         return getattr(request.user, "role", None) in required
 
 
-BILLING_ROLES = {"super_admin", "admin", "accounting"}
+BILLING_ROLES = {"super_admin", "admin", "accounting", "registrar"}
 
 
 def guardian_student_ids(user):
@@ -84,10 +84,10 @@ class IsBillingStaffOrOwnerGuardianReadOnly(BasePermission):
     """
     For invoice / installment viewsets a guardian may READ, scoped to their
     own child(ren):
-      - super_admin/admin/accounting: full access (existing billing staff).
+      - super_admin/admin/accounting/registrar: full access (billing staff).
       - guardian: read-only, scoped by the view's get_queryset() (list) and
         has_object_permission() (detail), keyed on enrollment_id.
-      - everyone else (registrar/teacher): no access.
+      - everyone else (teacher): no access.
 
     Set `owner_enrollment_id_field` on the view to the `__`-path from the
     object to its enrollment_id (default "enrollment_id" for StudentInvoice;

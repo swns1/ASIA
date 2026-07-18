@@ -104,7 +104,7 @@ REST_FRAMEWORK = {
         "user": "60/minute",  # authenticated — billing actions are deliberate, keep tighter
     },
     # ─────────────────────────────────────────────────────────────────────
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "billing_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
 }
 
