@@ -209,7 +209,7 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "temperature": 0.2,
                 "max_tokens": 512,
                 "messages": [{"role": "user", "content": prompt}],

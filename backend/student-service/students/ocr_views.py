@@ -10,6 +10,7 @@ Auth: JWT required (same as rest of student-service)
 import base64
 import json
 import logging
+import re
 
 import requests
 from django.conf import settings
@@ -96,7 +97,7 @@ def _call_groq(base64_data: str, mime_type: str) -> dict:
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         json={
-            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            "model": "qwen/qwen3.6-27b",
             "temperature": 0.1,
             "max_tokens": 1024,
             "messages": [
@@ -129,6 +130,11 @@ def _call_groq(base64_data: str, mime_type: str) -> dict:
     except (KeyError, IndexError) as e:
         logger.error("Unexpected Groq response structure: %s", result)
         raise ValueError("Could not parse Groq response.") from e
+
+    # Reasoning-capable models (e.g. qwen/qwen3.6-27b) emit a <think>...</think>
+    # preamble ahead of the actual answer -- strip it before markdown-fence
+    # handling below, or json.loads sees the reasoning text, not the JSON.
+    raw_text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL).strip()
 
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]

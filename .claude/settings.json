@@ -94,7 +94,15 @@
       "Bash(curl -s -X POST http://localhost:8001/api/auth/login/ -H \"Content-Type: application/json\" -d '{\"email\":\"claude-verify-temp@example.com\",\"password\":\"TempVerify123!\"}')",
       "Bash(curl -s -X POST http://localhost:8001/api/auth/login/ -H \"Content-Type: application/json\" -d '{\"identifier\":\"claude-verify-temp@example.com\",\"password\":\"TempVerify123!\"}')",
       "Bash(python -m json.tool)",
-      "Bash(npx --yes playwright --version)"
+      "Bash(npx --yes playwright --version)",
+      "Bash(curl -s -o /dev/null -w \"enrollment-service\\(8003\\): %{http_code}\\\\n\" http://localhost:8003/api/ai/cluster/)",
+      "Bash(curl -s -o /dev/null -w \"identity-service\\(8001\\): %{http_code}\\\\n\" http://localhost:8001/api/auth/login/)",
+      "Bash(curl -s -o /dev/null -w \"frontend\\(5173\\): %{http_code}\\\\n\" http://localhost:5173/)",
+      "Read(//c/Users/WINDOW~1/AppData/Local/Temp/claude/c--SLIS-Prototype/e3b63314-2346-4f59-8bf2-e5ff94c87297/scratchpad/**)",
+      "Bash(node verify_hover.mjs)",
+      "Bash(git check-ignore *)",
+      "Bash(SECRET_KEY=dev-only-check DB_NAME=\"SLIS THESIS FINAL\" DB_USER=postgres DB_PASSWORD=admin123 DB_HOST=localhost DB_PORT=5432 python manage.py check)",
+      "Bash"
     ]
   }
 }

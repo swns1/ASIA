@@ -1091,9 +1091,7 @@ function DocumentsStep({
     } else {
       setEditLoading(true);
       setDocError("");
-      if (isImage) {
-        setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "scanning", confidence: null, extracted: null } }));
-      }
+      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null, extracted: null } }));
       try {
         const existingEntry = existingDocs.find((d) => d.requirement_type_id === reqTypeId);
         if (existingEntry?.submission_id) {
