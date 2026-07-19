@@ -15,6 +15,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,13 @@ export default function DashboardPage() {
   const navigate    = useNavigate();
   const now         = useClock();
 
+  // Revenue figures come from billing-service, which already 403s
+  // non-billing roles (see StudentInvoiceViewSet.financial_summary) — this
+  // just keeps the UI from showing a misleading ₱0.00 strip (from the
+  // silently-caught 403) to roles that were never going to get real numbers,
+  // and skips the doomed fetch entirely.
+  const canViewFinancials = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+
   // ── per-card filter state ──
   // Total Students and Scholarships Awarded have no level/grade/year filter here:
   // the backend doesn't support filtering those endpoints by that data (it lives on
@@ -265,7 +273,7 @@ export default function DashboardPage() {
         fetchScholarships(),
         fetchSubjectCount(),
         fetchAlerts(),
-        fetchFinancialSummary(),
+        ...(canViewFinancials ? [fetchFinancialSummary()] : []),
         fetchCompletedCount(),
       ]);
     } catch (e) {
@@ -530,7 +538,10 @@ export default function DashboardPage() {
               />
             </motion.div>
 
-            {/* ── Revenue strip ── */}
+            {/* ── Revenue strip — billing roles only (super_admin/admin/accounting);
+                 backend already 403s everyone else, this just keeps the UI
+                 from showing them a misleading ₱0.00 strip instead of hiding it ── */}
+            {canViewFinancials && (
             <div style={s.revenueStrip}>
               {[
                 { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd", link: "/invoices" },
@@ -600,6 +611,7 @@ export default function DashboardPage() {
                 );
               })()}
             </div>
+            )}
 
             {/* ── Recent enrollments + Funnel + Level breakdown ── */}
             <motion.div
