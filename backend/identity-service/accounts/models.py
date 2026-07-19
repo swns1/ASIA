@@ -1,10 +1,16 @@
 from django.db import models
 
-# Canonical role set for the whole system. `role` has no DB-level constraint
-# (see Meta.managed = False below), so this is the only place enforcing it —
-# identity-service's UserListView/UserDetailView validate against this set
-# whenever a role is assigned. Mirrored (informational only) in the other
-# three services' accounts/models.py ROLE_CHOICES.
+# Canonical role set for the whole system. identity-service's
+# UserListView/UserDetailView validate against this set whenever a role is
+# assigned. Mirrored (informational only) in the other three services'
+# accounts/models.py ROLE_CHOICES.
+#
+# The `users` table (Meta.managed = False below, schema hand-built via
+# pgAdmin) also has its own Postgres CHECK constraint on `role`
+# (users_role_check) that must be kept in sync with this set by hand —
+# Django's own validation here does NOT guarantee the DB will accept the
+# value. Forgetting to update the constraint when adding a role here
+# produces a 500 (IntegrityError) on create/update, not a clean 400.
 VALID_ROLES = {"super_admin", "admin", "registrar", "teacher", "accounting", "guardian"}
 
 
