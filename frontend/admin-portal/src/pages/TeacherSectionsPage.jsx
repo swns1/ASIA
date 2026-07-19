@@ -282,6 +282,7 @@ function GradesTab({ advisory, subjects }) {
         advisory_id: advisory.advisory_id,
         subject_id: subjectId,
         grading_period: period,
+        teacher_user_id: advisory.teacher_user_id,
       });
       const list = Array.isArray(data) ? data : [];
       setRows(list);
@@ -296,7 +297,7 @@ function GradesTab({ advisory, subjects }) {
     } finally {
       setLoading(false);
     }
-  }, [advisory.advisory_id, subjectId, period]);
+  }, [advisory.advisory_id, subjectId, period]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -327,6 +328,7 @@ function GradesTab({ advisory, subjects }) {
         subject_id: subjectId,
         grading_period: period,
         grades: entries,
+        teacher_user_id: advisory.teacher_user_id,
       });
       if (result.failed?.length) {
         toast.error(`${result.failed.length} grade(s) failed to save.`);
@@ -469,7 +471,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
     if (!date) return;
     setLoading(true);
     try {
-      const data = await getSectionAttendance({ advisory_id: advisory.advisory_id, date });
+      const data = await getSectionAttendance({ advisory_id: advisory.advisory_id, date, teacher_user_id: advisory.teacher_user_id });
       const list = Array.isArray(data) ? data : [];
       setRows(list);
       const nextDrafts = {};
@@ -504,6 +506,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
         advisory_id: advisory.advisory_id,
         date,
         records: entries,
+        teacher_user_id: advisory.teacher_user_id,
       });
       if (result.failed?.length) {
         toast.error(`${result.failed.length} record(s) failed to save.`);
@@ -853,8 +856,9 @@ function StatsTab({ advisory }) {
           advisory_id: advisory.advisory_id,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
+          teacher_user_id: advisory.teacher_user_id,
         }),
-        getSectionGradesSummary({ advisory_id: advisory.advisory_id }),
+        getSectionGradesSummary({ advisory_id: advisory.advisory_id, teacher_user_id: advisory.teacher_user_id }),
       ]);
       setStats(attendanceData);
       setGradeSummary(gradesData);
@@ -865,7 +869,7 @@ function StatsTab({ advisory }) {
     } finally {
       setLoading(false);
     }
-  }, [advisory.advisory_id, dateFrom, dateTo]);
+  }, [advisory.advisory_id, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
@@ -1173,20 +1177,28 @@ export default function TeacherSectionsPage() {
   const isTeacher = currentUser?.role === "teacher";
 
   const [teachers, setTeachers] = useState([]);
+  const [teachersUnavailable, setTeachersUnavailable] = useState(false);
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState(null);
 
-  // Admin/registrar: load the teacher list for the picker.
+  // Admin/registrar: load the teacher list for the picker. getUsers() is
+  // admin-only on identity-service (full user list, by design), so this
+  // 403s for registrar even though this route allows them — caught here so
+  // the page still loads, with teachersUnavailable explaining the empty picker.
   useEffect(() => {
     if (isTeacher) return;
     getUsers()
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.results ?? [];
         setTeachers(list.filter((u) => u.role === "teacher"));
+        setTeachersUnavailable(false);
       })
-      .catch(() => toast.error("Failed to load teacher list."));
+      .catch(() => {
+        setTeachers([]);
+        setTeachersUnavailable(true);
+      });
   }, [isTeacher]);
 
   const fetchSections = useCallback(async (teacherUserId) => {
@@ -1248,7 +1260,12 @@ export default function TeacherSectionsPage() {
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
                 <i className="ti ti-user-search" style={{ fontSize: 22, color: "#e08080" }} />
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>Select a teacher to view their sections</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
+                {teachersUnavailable ? "Teacher list unavailable" : "Select a teacher to view their sections"}
+              </div>
+              {teachersUnavailable && (
+                <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>Listing users requires admin access.</div>
+              )}
             </div>
           </div>
         </div>

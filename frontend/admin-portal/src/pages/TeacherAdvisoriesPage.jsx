@@ -45,7 +45,7 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
 );
 
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
-function AdvisoryModal({ advisory, teachers, onClose, onSaved }) {
+function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
   const { schoolYear: globalSchoolYear } = useSchoolYear();
 
@@ -162,6 +162,12 @@ function AdvisoryModal({ advisory, teachers, onClose, onSaved }) {
                 <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
               ))}
             </select>
+            {teachersUnavailable && (
+              <div style={{ fontSize: 11, color: "#854f0b", marginTop: 5 }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 11, marginRight: 3 }} />
+                Teacher list unavailable — listing users requires admin access.
+              </div>
+            )}
           </div>
 
           {/* School year */}
@@ -311,8 +317,9 @@ export default function TeacherAdvisoriesPage() {
   usePageTitle("Teacher Advisories");
   const navigate = useNavigate();
 
-  const [advisories, setAdvisories] = useState([]);
-  const [teachers,   setTeachers]   = useState([]);
+  const [advisories, setAdvisories]         = useState([]);
+  const [teachers,   setTeachers]           = useState([]);
+  const [teachersUnavailable, setTeachersUnavailable] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [yearFilter, setYearFilter] = useState("all");
@@ -337,12 +344,23 @@ export default function TeacherAdvisoriesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // getUsers() is admin-only on identity-service (full user list, by
+      // design) even though this route allows registrar too — caught on its
+      // own so a 403 here doesn't reject the whole Promise.all and blank
+      // the advisories list for registrar. teachersUnavailable then tells
+      // the assign-teacher picker why it has no options.
       const [advisoryData, userData] = await Promise.all([
         getSectionAdvisories({ page_size: 500 }),
-        getUsers(),
+        getUsers().catch(() => null),
       ]);
       setAdvisories(Array.isArray(advisoryData) ? advisoryData : advisoryData?.results ?? []);
-      setTeachers((Array.isArray(userData) ? userData : userData?.results ?? []).filter((u) => u.role === "teacher"));
+      if (userData == null) {
+        setTeachers([]);
+        setTeachersUnavailable(true);
+      } else {
+        setTeachers((Array.isArray(userData) ? userData : userData?.results ?? []).filter((u) => u.role === "teacher"));
+        setTeachersUnavailable(false);
+      }
     } catch (e) {
       toast.error(e.message || "Failed to load advisory assignments.");
     } finally {
@@ -580,6 +598,7 @@ export default function TeacherAdvisoriesPage() {
             key="advisory-modal"
             advisory={modal.mode === "edit" ? modal.advisory : null}
             teachers={teachers}
+            teachersUnavailable={teachersUnavailable}
             onClose={() => setModal(null)}
             onSaved={fetchData}
           />

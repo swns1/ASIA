@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
+import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API calls ─────────────────────────────────────────────────────────────
@@ -457,6 +457,11 @@ export default function EnrollmentFormPage() {
   const [searchParams] = useSearchParams();
   const isEdit   = Boolean(id);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
+  // Invoice generation is BILLING_ROLES-only on billing-service, even though
+  // this route allows every staff role — skip the "Generate Invoice?" prompt
+  // entirely for teacher/registrar rather than offering an action that ends
+  // in "This action is forbidden." if clicked.
+  const canGenerateInvoice = hasAnyRole(getCurrentUser(), BILLING_ROLES);
 
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
@@ -721,7 +726,8 @@ export default function EnrollmentFormPage() {
           }
 
           // Prompt to generate invoice when enrollment status is enrolled
-          if (form.enrollment_status === "enrolled") {
+          // (billing roles only — see canGenerateInvoice above)
+          if (form.enrollment_status === "enrolled" && canGenerateInvoice) {
             const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ");
             setInvoicePrompt({
               enrollmentId: created.enrollment_id,

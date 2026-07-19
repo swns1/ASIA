@@ -48,7 +48,6 @@ const NAV = [
       { label: "Grades",            icon: "ti-chart-bar",         path: "/grades",             allowedRoles: GRADE_ROLES },
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
-      { label: "Attendance",    icon: "ti-calendar-check", path: "/attendance",   allowedRoles: GRADE_ROLES },
       { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
       { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: ACADEMIC_STAFF },
     ],

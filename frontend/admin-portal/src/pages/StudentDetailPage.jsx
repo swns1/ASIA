@@ -12,7 +12,7 @@ import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudentLedger } from "../api/billingApi";
 import { getUsers } from "../api/identityApi";
-import { getCurrentUser, hasAnyRole } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
 const CAN_LINK_ROLES = ["super_admin", "admin", "registrar"];
@@ -303,6 +303,12 @@ export default function StudentDetailPage() {
   const [linkGuardian,  setLinkGuardian]  = useState(null); // guardian being linked to an account
 
   const canLink = hasAnyRole(getCurrentUser(), CAN_LINK_ROLES);
+  // getStudentLedger hits a billing-service endpoint that's BILLING_ROLES-only
+  // even though this route allows every staff role — skip the doomed fetch
+  // for teacher/registrar and show an accurate message instead of "Failed to
+  // load financial history. Check that the billing service is running."
+  // (which is misleading — the service is fine, the role just can't see it).
+  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_ROLES);
 
   const prevTabRef    = useRef("personal");
   const visitedTabs   = useRef(new Set(["personal"]));
@@ -338,12 +344,13 @@ export default function StudentDetailPage() {
   // Lazy-load ledger only when the tab is first opened
   useEffect(() => {
     if (activeTab !== "ledger" || ledger !== null || !id) return;
+    if (!canViewBilling) { setLedger({ forbidden: true }); return; }
     setLedgerLoading(true);
     getStudentLedger(id)
       .then(setLedger)
       .catch(() => setLedger({ error: true }))
       .finally(() => setLedgerLoading(false));
-  }, [activeTab, id, ledger]);
+  }, [activeTab, id, ledger, canViewBilling]);
 
   const TABS = [
     { id: "personal",    label: "Personal",     icon: "ti-user"           },
@@ -911,6 +918,12 @@ export default function StudentDetailPage() {
                           <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"8px 0" }}>
                             {[1,2,3].map((k) => <Sk key={k} h={52} r={10} />)}
                           </div>
+                        </SectionCard>
+                      )}
+                      {!ledgerLoading && ledger?.forbidden && (
+                        <SectionCard title="Financial History" icon="ti-receipt"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ duration:0.22 } }}>
+                          <EmptySection message="Financial history is only visible to billing staff." />
                         </SectionCard>
                       )}
                       {!ledgerLoading && ledger?.error && (
