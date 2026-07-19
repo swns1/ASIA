@@ -629,6 +629,17 @@ const PERIOD_LABELS = {
   "2nd_semester": "2nd Semester",
 };
 
+// Matches Grade.REMARKS_CHOICES (backend/enrollment-service/grades/models.py).
+// computeGrade() can only ever auto-produce "passed"/"failed"/null — a
+// teacher picks "incomplete"/"dropped" manually, there's no path to those
+// from the computed score.
+const REMARKS_META = {
+  passed:     { label: "Passed",     color: "#2e6b0d", bg: "#e8f5e0" },
+  failed:     { label: "Failed",     color: "#9b2020", bg: "#fde8e8" },
+  incomplete: { label: "Incomplete", color: "#854f0b", bg: "#faeeda" },
+  dropped:    { label: "Dropped",    color: "#5c5752", bg: "#f0ede8" },
+};
+
 const PERIOD_FULL = {
   "1st_quarter":  "1st Quarter",
   "2nd_quarter":  "2nd Quarter",
@@ -1222,6 +1233,7 @@ export default function GradesPage() {
   const [gradingPeriod,  setGradingPeriod]  = useState("");
   const [scoreEntries,   setScoreEntries]   = useState([]);
   const [computation,    setComputation]    = useState(null);
+  const [manualRemarks,  setManualRemarks]  = useState(""); // teacher-editable override of computation.remarks
   const [existingGrade,  setExistingGrade]  = useState(null);
   const [loadingScores,  setLoadingScores]  = useState(false);
   const [computing,      setComputing]      = useState(false);
@@ -1328,8 +1340,10 @@ export default function GradesPage() {
       });
       setScoreEntries(Array.isArray(data) ? data : data?.results ?? []);
       const g = await getGrades({ enrollment: enrollment.enrollment_id, subject: subject.subject_id, grading_period: gradingPeriod });
-      setExistingGrade((Array.isArray(g) ? g : g?.results ?? [])[0] ?? null);
+      const existing = (Array.isArray(g) ? g : g?.results ?? [])[0] ?? null;
+      setExistingGrade(existing);
       setComputation(null);
+      setManualRemarks(existing?.remarks ?? "");
     } catch (e) { console.error(e); }
     finally { setLoadingScores(false); }
   }, [enrollment, subject, gradingPeriod]);
@@ -1380,6 +1394,7 @@ export default function GradesPage() {
     try {
       const result = await computeGrade({ enrollment_id: enrollment.enrollment_id, subject_id: subject.subject_id, grading_period: gradingPeriod });
       setComputation(result);
+      setManualRemarks(result.remarks ?? "");
     } catch (e) { setEntryError(e.message || "Failed to compute grade."); }
     finally { setComputing(false); }
   };
@@ -1388,9 +1403,9 @@ export default function GradesPage() {
     if (!computation) return;
     setSavingFinal(true); setEntryError("");
     try {
-      const payload = { enrollment: enrollment.enrollment_id, subject: subject.subject_id, grading_period: gradingPeriod, numeric_grade: computation.final_grade, remarks: computation.remarks };
+      const payload = { enrollment: enrollment.enrollment_id, subject: subject.subject_id, grading_period: gradingPeriod, numeric_grade: computation.final_grade, remarks: manualRemarks || null };
       if (existingGrade) {
-        await updateGrade(existingGrade.grade_id, { numeric_grade: computation.final_grade, remarks: computation.remarks });
+        await updateGrade(existingGrade.grade_id, { numeric_grade: computation.final_grade, remarks: manualRemarks || null });
       } else {
         await saveGrade(payload);
       }
@@ -1933,9 +1948,21 @@ export default function GradesPage() {
               {computation && (
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ fontSize:28, fontWeight:700, padding:"6px 18px", borderRadius:12, ...gc }}>{computation.final_grade}</span>
-                  <span style={{ fontSize:13, fontWeight:600, padding:"4px 12px", borderRadius:99, background: computation.remarks==="passed"?"#e8f5e0":"#fde8e8", color: computation.remarks==="passed"?"#2e6b0d":"#9b2020" }}>
-                    {computation.remarks ?? "—"}
-                  </span>
+                  <select
+                    value={manualRemarks}
+                    onChange={(e) => setManualRemarks(e.target.value)}
+                    style={{
+                      fontSize:13, fontWeight:700, padding:"6px 14px", borderRadius:99, border:"1.5px solid transparent",
+                      fontFamily:"'DM Sans',sans-serif", cursor:"pointer", outline:"none",
+                      color: REMARKS_META[manualRemarks]?.color ?? "#9a7070",
+                      background: REMARKS_META[manualRemarks]?.bg ?? "#f9f4f4",
+                    }}
+                  >
+                    <option value="">— No remarks —</option>
+                    {Object.entries(REMARKS_META).map(([value, meta]) => (
+                      <option key={value} value={value}>{meta.label}</option>
+                    ))}
+                  </select>
                 </div>
               )}
               <motion.button

@@ -50,6 +50,13 @@ const nullify = (obj, fields) => {
   return out;
 };
 
+// `guardians` is a single key holding a list — count each guardian found as
+// its own field rather than letting Object.keys collapse mother+father into 1.
+const countOcrFields = (extracted) => {
+  const { guardians, ...rest } = extracted;
+  return Object.keys(rest).length + (Array.isArray(guardians) ? guardians.length : 0);
+};
+
 // ─── initial shapes ─────────────────────────────────────────────────────────
 const emptyStudent = {
   lrn: "", first_name: "", middle_name: "", last_name: "", suffix: "",
@@ -1228,7 +1235,7 @@ function DocumentsStep({
                 onRemove={(r) => setRemoveModal(r)}
                 ocrState={ocr.state}
                 ocrConfidence={ocr.confidence}
-                ocrFieldCount={ocr.extracted ? Object.keys(ocr.extracted).length : 0}
+                ocrFieldCount={ocr.extracted ? countOcrFields(ocr.extracted) : 0}
                 onApplyOcr={() => handleApplyOcr(req.requirement_type_id)}
                 onDiscardOcr={() => handleDiscardOcr(req.requirement_type_id)}
               />
@@ -1543,17 +1550,27 @@ export default function StudentFormPage() {
     );
     setStudent((prev) => ({ ...prev, ...studentFields }));
 
-    if (fields.guardian_full_name) {
+    if (Array.isArray(fields.guardians) && fields.guardians.length > 0) {
       setGuardians((prev) => {
         const updated = [...prev];
-        if (updated.length === 0) updated.push({ ...emptyGuardian });
-        updated[0] = {
-          ...updated[0],
-          full_name:     fields.guardian_full_name,
-          relationship:  fields.guardian_relationship  || updated[0].relationship,
-          mobile_number: fields.guardian_mobile_number || updated[0].mobile_number,
-          email_address: fields.guardian_email         || updated[0].email_address,
-        };
+        // Birth certificates list both a mother and a father — match each
+        // incoming entry to an existing guardian by relationship (mother
+        // updates the mother card, father updates the father card) so both
+        // land as separate guardians instead of one overwriting the other.
+        fields.guardians.forEach((incoming) => {
+          if (!incoming?.full_name) return;
+          const idx = updated.findIndex((g) => g.relationship === incoming.relationship);
+          const base = idx >= 0 ? updated[idx] : { ...emptyGuardian };
+          const merged = {
+            ...base,
+            full_name:     incoming.full_name,
+            relationship:  incoming.relationship  || base.relationship,
+            mobile_number: incoming.mobile_number || base.mobile_number,
+            email_address: incoming.email         || base.email_address,
+          };
+          if (idx >= 0) updated[idx] = merged;
+          else updated.push(merged);
+        });
         return updated;
       });
     }

@@ -149,11 +149,14 @@ class LogoutView(APIView):
 # ── Users ──────────────────────────────────────────────────────────────────────
 
 class UserListView(APIView):
-    """GET /api/auth/users/  — list all users (admin only)
-       POST /api/auth/users/ — create a new user (admin only)"""
+    """GET /api/auth/users/  — list all users (admin, super_admin, or registrar
+       — registrar needs this to populate the teacher picker on the My
+       Sections page, see TeacherSectionsPage.jsx)
+       POST /api/auth/users/ — create a new user (admin only, enforced below
+       since required_roles here also has to allow registrar's GET)"""
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
-    required_roles = ADMIN_ROLES
+    required_roles = ADMIN_ROLES | {"registrar"}
 
     def get(self, request):
         users = User.objects.all().order_by("user_id")
@@ -161,6 +164,9 @@ class UserListView(APIView):
 
     def post(self, request):
         requester = request.resolved_user
+        if getattr(requester, "role", None) not in ADMIN_ROLES:
+            return Response({"detail": "Only admins can create users."}, status=403)
+
         data = request.data
         name     = (data.get("name") or "").strip()
         email    = (data.get("email") or "").strip()

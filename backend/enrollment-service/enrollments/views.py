@@ -65,7 +65,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         # IsAdminRegistrarOrReadOnly would 403 a teacher's write. my-sections
         # is GET-only so either class covers it.
         if self.action in (
-            "section_grades", "section_attendance",
+            "section_grades", "section_attendance", "section_narrative_reports",
             "section_attendance_stats", "section_grades_summary",
         ):
             return [IsAdvisoryTeacherOrStaff()]
@@ -311,6 +311,127 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 "student": StudentSummarySerializer(e.student).data,
                 "enrollment_id": e.enrollment_id,
                 "grade": GradeSerializer(grade).data if grade else None,
+            })
+
+        return Response(rows)
+
+    @action(detail=False, methods=["get", "post"], url_path="section-narrative-reports")
+    def section_narrative_reports(self, request):
+        """
+        GET /api/section-advisories/section-narrative-reports/
+            ?advisory_id=<id>&grading_period=<period>
+
+        Returns each roster student alongside their existing narrative
+        ratings (keyed by category_id) for the given grading period — the
+        data backing the "Narrative Report" grid on the My Sections page.
+        Active categories themselves come from the existing
+        /narrative-categories/ endpoint (teacher-read-only, managed by
+        admin/registrar), not from here.
+
+        POST same body (JSON) plus `ratings`: [{student_id, category_id,
+        rating}, ...] — creates or updates a NarrativeReport per
+        (student, category) in one call.
+
+        Scoping is identical to section-grades: teachers are pinned to their
+        own advisories; staff must pass ?teacher_user_id=.
+        """
+        from grades.models import NarrativeReport
+        from grades.serializers import NarrativeReportSerializer
+
+        teacher_user_id, error = self._resolve_teacher_user_id(request)
+        if error:
+            return error
+
+        params = request.data if request.method == "POST" else request.query_params
+        advisory_id = params.get("advisory_id")
+        grading_period = params.get("grading_period")
+
+        missing = [f for f, v in [
+            ("advisory_id", advisory_id),
+            ("grading_period", grading_period),
+        ] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        advisory = SectionAdvisory.objects.filter(
+            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+        ).first()
+        if advisory is None:
+            return Response(
+                {"detail": "Advisory not found or not assigned to this teacher."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        enrollment_qs = Enrollment.objects.filter(
+            school_year=advisory.school_year,
+            school_level=advisory.school_level,
+            grade_level=advisory.grade_level,
+            section=advisory.section,
+            enrollment_status="enrolled",
+        ).select_related("student")
+        if advisory.strand:
+            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollments_by_student = {e.student_id: e for e in enrollment_qs}
+
+        if request.method == "POST":
+            entries = request.data.get("ratings", [])
+            if not isinstance(entries, list) or not entries:
+                return Response(
+                    {"detail": "A non-empty 'ratings' list is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            saved, failed = [], []
+            with transaction.atomic():
+                for entry in entries:
+                    student_id = entry.get("student_id")
+                    enrollment = enrollments_by_student.get(student_id)
+                    if enrollment is None:
+                        failed.append({"student_id": student_id, "reason": "Not in this section's roster."})
+                        continue
+                    category_id = entry.get("category_id")
+                    payload = {
+                        "enrollment": enrollment.enrollment_id,
+                        "category": category_id,
+                        "grading_period": grading_period,
+                        "rating": entry.get("rating"),
+                    }
+                    existing = NarrativeReport.objects.filter(
+                        enrollment=enrollment, category_id=category_id, grading_period=grading_period,
+                    ).first()
+                    serializer = NarrativeReportSerializer(
+                        instance=existing, data=payload, context={"request": request},
+                    )
+                    if not serializer.is_valid():
+                        failed.append({"student_id": student_id, "reason": str(serializer.errors)})
+                        continue
+                    report = serializer.save()
+                    saved.append({"student_id": student_id, "report_id": report.report_id})
+
+            return Response(
+                {"saved": saved, "failed": failed},
+                status=status.HTTP_207_MULTI_STATUS if failed else status.HTTP_200_OK,
+            )
+
+        # GET: return roster + existing ratings for this period
+        existing_reports = NarrativeReport.objects.filter(
+            enrollment__in=enrollments_by_student.values(), grading_period=grading_period,
+        ).select_related("enrollment")
+        ratings_by_student = {}
+        for r in existing_reports:
+            ratings_by_student.setdefault(r.enrollment.student_id, {})[r.category_id] = r.rating
+
+        rows = []
+        for e in sorted(
+            enrollments_by_student.values(),
+            key=lambda e: (e.student.last_name, e.student.first_name),
+        ):
+            rows.append({
+                "student": StudentSummarySerializer(e.student).data,
+                "enrollment_id": e.enrollment_id,
+                "ratings": ratings_by_student.get(e.student_id, {}),
             })
 
         return Response(rows)

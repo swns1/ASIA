@@ -12,6 +12,9 @@ import {
   saveSectionAttendance,
   getSectionAttendanceStats,
   getSectionGradesSummary,
+  getNarrativeCategories,
+  getSectionNarrativeReports,
+  saveSectionNarrativeReports,
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
@@ -54,6 +57,19 @@ const PERIOD_LABELS = {
 };
 
 const PASS_THRESHOLD = 75;
+
+// Same palette as GradesPage.jsx's NarrativeSection, so a rating reads the
+// same color whether it's set here or on the per-student Grades page.
+const NARRATIVE_RATINGS = [
+  { value: "outstanding",       label: "Outstanding",       color: "#1455a0", bg: "#e3f0fd" },
+  { value: "satisfactory",      label: "Satisfactory",      color: "#2e6b0d", bg: "#e8f5e0" },
+  { value: "needs_improvement", label: "Needs Improvement", color: "#854f0b", bg: "#faeeda" },
+];
+
+function narrativeRatingColor(value) {
+  const r = NARRATIVE_RATINGS.find((x) => x.value === value);
+  return r ? { color: r.color, bg: r.bg } : { color: "#7a5050", bg: "#fffbfb" };
+}
 
 const ATTENDANCE_STATUSES = [
   { value: "P", label: "Present", color: "#2e6b0d", bg: "#e8f5e0" },
@@ -454,6 +470,201 @@ function GradesTab({ advisory, subjects }) {
             })}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+// ── Narrative Report tab: per-student rating grid, one column per category ──
+function NarrativeTab({ advisory }) {
+  const [period, setPeriod] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+  const [drafts, setDrafts] = useState({}); // student_id -> { category_id: rating }
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const periods = GRADING_PERIODS_BY_LEVEL[advisory.school_level] ?? [];
+
+  useEffect(() => {
+    setPeriod(periods[0] ?? "");
+  }, [advisory.school_level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    getNarrativeCategories({ is_active: true })
+      .then((data) => setCategories(Array.isArray(data) ? data : data?.results ?? []))
+      .catch(() => setCategories([]))
+      .finally(() => setCategoriesLoading(false));
+  }, []);
+
+  const loadGrid = useCallback(async () => {
+    if (!period) return;
+    setLoading(true);
+    try {
+      const data = await getSectionNarrativeReports({
+        advisory_id: advisory.advisory_id,
+        grading_period: period,
+        teacher_user_id: advisory.teacher_user_id,
+      });
+      const list = Array.isArray(data) ? data : [];
+      setRows(list);
+      const nextDrafts = {};
+      list.forEach((r) => {
+        nextDrafts[r.student.student_id] = { ...r.ratings };
+      });
+      setDrafts(nextDrafts);
+    } catch (e) {
+      toast.error(e.message || "Failed to load narrative reports.");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [advisory.advisory_id, advisory.teacher_user_id, period]);
+
+  useEffect(() => { loadGrid(); }, [loadGrid]);
+
+  const setRating = (studentId, categoryId, value) => {
+    setDrafts((d) => ({ ...d, [studentId]: { ...d[studentId], [categoryId]: value } }));
+  };
+
+  const handleSaveAll = async () => {
+    const entries = [];
+    rows.forEach((r) => {
+      const sid = r.student.student_id;
+      const draft = drafts[sid] || {};
+      categories.forEach((c) => {
+        const rating = draft[c.category_id];
+        if (rating) entries.push({ student_id: sid, category_id: c.category_id, rating });
+      });
+    });
+
+    if (entries.length === 0) {
+      toast.error("Set at least one rating before saving.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await saveSectionNarrativeReports({
+        advisory_id: advisory.advisory_id,
+        grading_period: period,
+        ratings: entries,
+        teacher_user_id: advisory.teacher_user_id,
+      });
+      if (result.failed?.length) {
+        toast.error(`${result.failed.length} rating(s) failed to save.`);
+      } else {
+        toast.success("Narrative reports saved.");
+      }
+      await loadGrid();
+    } catch (e) {
+      toast.error(e.message || "Failed to save narrative reports.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectStyle = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+
+  if (categoriesLoading || loading) {
+    return (
+      <div style={{ padding: "20px 26px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
+      </div>
+    );
+  }
+
+  if (categories.length === 0) {
+    return (
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        No narrative categories configured yet.{" "}
+        <a href="/narrative-categories" style={{ color: "#e03131", fontWeight: 600 }}>Ask an admin to add some</a>.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Selectors */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
+        <select value={period} onChange={(e) => setPeriod(e.target.value)} style={selectStyle}>
+          {periods.map((p) => (
+            <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleSaveAll}
+          disabled={saving}
+          style={{
+            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+            background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+            borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
+            cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
+          }}
+        >
+          <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
+          {saving ? "Saving…" : "Save Ratings"}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+          No enrolled students in this section.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#fdfafa" }}>
+                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                  Name
+                </th>
+                {categories.map((c) => (
+                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 16px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                    {c.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const sid = r.student.student_id;
+                const draft = drafts[sid] || {};
+                return (
+                  <tr key={sid}>
+                    <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a", whiteSpace: "nowrap" }}>
+                      {fullName(r.student)}
+                    </td>
+                    {categories.map((c) => {
+                      const value = draft[c.category_id] || "";
+                      const rc = narrativeRatingColor(value);
+                      return (
+                        <td key={c.category_id} style={{ padding: "9px 16px", borderBottom: "1px solid #f9f0f0" }}>
+                          <select
+                            value={value}
+                            onChange={(e) => setRating(sid, c.category_id, e.target.value)}
+                            style={{
+                              border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 10px",
+                              fontSize: 12, fontFamily: "'DM Sans',sans-serif", outline: "none",
+                              color: rc.color, background: value ? rc.bg : "#fffbfb",
+                              fontWeight: value ? 700 : 400,
+                            }}
+                          >
+                            <option value="">—</option>
+                            {NARRATIVE_RATINGS.map((nr) => (
+                              <option key={nr.value} value={nr.value}>{nr.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -1033,6 +1244,7 @@ function SectionDetail({ entry }) {
     { key: "students", label: `Students (${students.length})`, icon: "ti-users" },
     { key: "subjects", label: `Subjects (${subjects.length})`, icon: "ti-book" },
     { key: "grades", label: "Grades", icon: "ti-chart-bar" },
+    { key: "narrative", label: "Narrative Report", icon: "ti-clipboard-text" },
     { key: "attendance", label: "Attendance", icon: "ti-calendar-check" },
     { key: "stats", label: "Stats", icon: "ti-chart-dots-3" },
   ];
@@ -1089,6 +1301,7 @@ function SectionDetail({ entry }) {
         {tab === "students" && <StudentsTab students={students} todayAttendanceByStudent={todayAttendance} />}
         {tab === "subjects" && <SubjectsTab subjects={subjects} />}
         {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} />}
+        {tab === "narrative" && <NarrativeTab advisory={advisory} />}
         {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} />}
         {tab === "stats" && <StatsTab advisory={advisory} />}
       </div>
@@ -1183,10 +1396,11 @@ export default function TeacherSectionsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState(null);
 
-  // Admin/registrar: load the teacher list for the picker. getUsers() is
-  // admin-only on identity-service (full user list, by design), so this
-  // 403s for registrar even though this route allows them — caught here so
-  // the page still loads, with teachersUnavailable explaining the empty picker.
+  // Admin/registrar: load the teacher list for the picker. getUsers()
+  // (GET /api/auth/users/) allows admin/super_admin/registrar (see
+  // UserListView.required_roles in identity-service). Errors still caught
+  // here — teachersUnavailable covers any other failure (network, etc.)
+  // so the page still loads instead of hanging on a blank picker.
   useEffect(() => {
     if (isTeacher) return;
     getUsers()
