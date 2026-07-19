@@ -22,10 +22,17 @@ function persist(year) {
   }
 }
 
+// Extends `options` to include `year` if missing, instead of recentering the
+// whole list around it — keeps the range anchored to the real current year.
+function withYearIncluded(options, year) {
+  if (!year || options.includes(year)) return options;
+  return [...options, year].sort().reverse();
+}
+
 export function SchoolYearProvider({ children }) {
   const [schoolYear, setSchoolYearState] = useState(readPersisted);
   const [options, setOptions] = useState(() =>
-    buildSchoolYearOptions(readPersisted() || computeDefaultSchoolYear())
+    withYearIncluded(buildSchoolYearOptions(computeDefaultSchoolYear()), readPersisted())
   );
   const fetchedDefault = useRef(false);
 
@@ -38,7 +45,7 @@ export function SchoolYearProvider({ children }) {
       .then((s) => {
         const backendYear = s?.current_school_year?.trim();
         const resolved = backendYear || computeDefaultSchoolYear();
-        setOptions(buildSchoolYearOptions(resolved));
+        setOptions(withYearIncluded(buildSchoolYearOptions(resolved), readPersisted()));
         setSchoolYearState((prev) => prev || resolved);
         persist(resolved);
       })
@@ -56,7 +63,7 @@ export function SchoolYearProvider({ children }) {
   const setSchoolYear = useCallback((year) => {
     setSchoolYearState(year);
     persist(year);
-    setOptions((prev) => (prev.includes(year) ? prev : buildSchoolYearOptions(year)));
+    setOptions((prev) => withYearIncluded(prev, year));
   }, []);
 
   return (

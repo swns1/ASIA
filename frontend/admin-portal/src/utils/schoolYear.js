@@ -3,11 +3,12 @@
 // this is the single source of truth those pages now read from, seeded by
 // the global SchoolYearContext.
 
-// School year starts in August: before August, we're still in the tail end
-// of the previous year's calendar (e.g. March 2026 is still S.Y. 2025-2026).
+// School year runs July 1 – June 30 (matches EventModal's syMin/syMax in
+// AcademicCalendarPage.jsx): before July, we're still in the tail end of the
+// previous year's calendar (e.g. March 2026 is still S.Y. 2025-2026).
 export function computeDefaultSchoolYear(today = new Date()) {
   const y = today.getFullYear();
-  return today.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  return today.getMonth() >= 6 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
 
 export function buildSchoolYearOptions(centerYear, { past = 3, future = 1 } = {}) {
