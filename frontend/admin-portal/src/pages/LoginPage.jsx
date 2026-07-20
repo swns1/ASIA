@@ -12,6 +12,7 @@ export default function LoginPage() {
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -429,7 +430,7 @@ export default function LoginPage() {
                   </svg>
                 </span>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -439,7 +440,7 @@ export default function LoginPage() {
                     width: "100%",
                     border: "1.5px solid #f0ceca",
                     borderRadius: 12,
-                    padding: "12px 14px 12px 42px",
+                    padding: "12px 42px 12px 42px",
                     fontSize: 14,
                     fontFamily: "'DM Sans', sans-serif",
                     color: "#2d1a1a",
@@ -460,6 +461,26 @@ export default function LoginPage() {
                     e.target.style.background = "#fffbfb";
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute",
+                    right: 14,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    color: "#cca9a4",
+                    cursor: "pointer",
+                    zIndex: 1,
+                    fontSize: 15,
+                  }}
+                >
+                  <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} />
+                </button>
               </div>
             </div>
 
