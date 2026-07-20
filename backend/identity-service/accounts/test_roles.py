@@ -18,6 +18,41 @@ def _admin_user(**overrides):
     return SimpleNamespace(**defaults)
 
 
+def _registrar_user(**overrides):
+    defaults = dict(user_id=3, name="Registrar User", email="registrar@example.com", role="registrar")
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+@pytest.mark.django_db
+@patch("accounts.permissions.resolve_user_from_request")
+@patch("accounts.views.User")
+def test_registrar_can_list_users(mock_user_model, mock_resolve):
+    """Registrar needs GET /api/auth/users/ to populate the teacher picker
+    on the My Sections page (see TeacherSectionsPage.jsx) — this must not
+    403 even though registrar can't create/edit/delete users."""
+    mock_resolve.return_value = _registrar_user()
+    mock_user_model.objects.all.return_value.order_by.return_value = []
+
+    response = APIClient().get("/api/auth/users/")
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+@patch("accounts.permissions.resolve_user_from_request")
+def test_registrar_cannot_create_user(mock_resolve):
+    mock_resolve.return_value = _registrar_user()
+
+    response = APIClient().post(
+        "/api/auth/users/",
+        {"name": "New Teacher", "email": "new@example.com", "role": "teacher", "password": "x" * 10},
+        format="json",
+    )
+
+    assert response.status_code == 403
+
+
 @pytest.mark.django_db
 @patch("accounts.permissions.resolve_user_from_request")
 def test_create_user_rejects_invalid_role(mock_resolve):

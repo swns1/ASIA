@@ -11,14 +11,16 @@ import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudentLedger } from "../api/billingApi";
-import { getUsers } from "../api/identityApi";
-import { getCurrentUser, hasAnyRole } from "../utils/auth";
+import { getUsers, createUser } from "../api/identityApi";
+import { getCurrentUser, hasAnyRole, isAdminRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
 const CAN_LINK_ROLES = ["super_admin", "admin", "registrar"];
 
 // ── Guardian account-linking modal ────────────────────────────────────────────
 function LinkAccountModal({ guardian, onClose, onLinked }) {
+  const canCreateAccount = isAdminRole(getCurrentUser()?.role);
+
   const [users, setUsers]     = useState([]);
   const [linkedMap, setLinkedMap] = useState({}); // user_id -> [student names already linked elsewhere]
   const [loading, setLoading] = useState(true);
@@ -27,11 +29,25 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
   const [error, setError]     = useState("");
   const [confirmUnlink, setConfirmUnlink] = useState(false);
 
+  // "select" = pick an existing guardian account (also links siblings to the
+  // same account); "create" = spin up a brand-new one and link it in one go.
+  // Only admins can create accounts (identity-service restricts POST /users/
+  // to ADMIN_ROLES — registrars can link but not create), so non-admins are
+  // always locked to "select".
+  const [mode, setMode] = useState("select");
+  const [newName,     setNewName]     = useState(guardian.full_name || "");
+  const [newEmail,    setNewEmail]    = useState(guardian.email_address || "");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPw,       setShowPw]      = useState(false);
+  const [creating,     setCreating]    = useState(false);
+  const [createError,  setCreateError] = useState("");
+
   useEffect(() => {
     getUsers()
       .then(async (data) => {
         const guardianUsers = (Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian");
         setUsers(guardianUsers);
+        if (guardianUsers.length === 0 && canCreateAccount) setMode("create");
         try {
           const linkedData = await getGuardiansByUserIds(guardianUsers.map((u) => u.user_id));
           const linkedRows = Array.isArray(linkedData) ? linkedData : linkedData?.results ?? [];
@@ -45,7 +61,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
       })
       .catch((e) => setError(e.message || "Failed to load guardian accounts."))
       .finally(() => setLoading(false));
-  }, [guardian.guardian_id]);
+  }, [guardian.guardian_id, canCreateAccount]);
 
   async function handleSave(unlink = false) {
     setSaving(true); setError("");
@@ -63,7 +79,47 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
     }
   }
 
+  async function handleCreateAndLink() {
+    setCreateError("");
+    if (!newName.trim() || !newEmail.trim() || !newPassword) {
+      setCreateError("Name, email, and password are required.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setCreateError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setCreating(true);
+    let created;
+    try {
+      created = await createUser({ name: newName.trim(), email: newEmail.trim(), role: "guardian", password: newPassword });
+    } catch (err) {
+      setCreateError(err?.response?.data?.detail || "Network error. Please try again.");
+      setCreating(false);
+      return;
+    }
+
+    try {
+      const updated = await patchGuardian(guardian.guardian_id, { user_id: created.user_id });
+      toast.success(`Account created for ${created.name} and linked.`);
+      onLinked(updated);
+      onClose();
+    } catch {
+      // Account exists now even though the link failed — don't strand it.
+      // Drop back to "select" mode with it pre-picked so the admin can just
+      // hit "Save link" instead of losing the account they just created.
+      toast.error("Account created, but linking failed — try “Save link” below.");
+      setUsers((prev) => [...prev, created]);
+      setSelected(String(created.user_id));
+      setMode("select");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   const inp = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box" };
+  const smallLabel = { display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
@@ -80,33 +136,76 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
           {error && (
             <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16 }}>{error}</div>
           )}
-          <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Guardian account</label>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <label style={{ ...smallLabel, marginBottom: 0 }}>Guardian account</label>
+            {!loading && canCreateAccount && users.length > 0 && (
+              <button onClick={() => { setMode(m => m === "select" ? "create" : "select"); setCreateError(""); }}
+                style={{ background: "none", border: "none", color: "#c92a2a", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                {mode === "select" ? "+ Create new account" : "← Choose existing account"}
+              </button>
+            )}
+          </div>
+
           {loading ? (
             <div style={{ fontSize: 13, color: "#b09090" }}>Loading accounts…</div>
+          ) : mode === "create" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={smallLabel}>Full name</label>
+                <input style={inp} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Maria Santos" />
+              </div>
+              <div>
+                <label style={smallLabel}>Email address</label>
+                <input style={inp} type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="e.g. maria@gmail.com" />
+              </div>
+              <div>
+                <label style={smallLabel}>Password</label>
+                <div style={{ position: "relative" }}>
+                  <input style={{ ...inp, paddingRight: 40 }} type={showPw ? "text" : "password"} value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+                  <button onClick={() => setShowPw((v) => !v)}
+                    style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#b09090", fontSize: 14 }}>
+                    <i className={`ti ${showPw ? "ti-eye-off" : "ti-eye"}`} />
+                  </button>
+                </div>
+              </div>
+              {createError && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c" }}>{createError}</div>
+              )}
+              <div style={{ fontSize: 11, color: "#b09090", lineHeight: 1.5 }}>
+                If {guardian.full_name} already has an account from another child, use “Choose existing account” instead — don't create a second one for the same parent.
+              </div>
+            </div>
           ) : users.length === 0 ? (
             <div style={{ fontSize: 12.5, color: "#a07878", lineHeight: 1.6, background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10, padding: "12px 14px" }}>
-              No guardian login accounts exist yet. Create one first in <strong>Users</strong> (role “Guardian”), then return here to link it.
+              No guardian login accounts exist yet.{" "}
+              {canCreateAccount
+                ? "Create one below."
+                : <>Ask an admin to create one first in <strong>Users</strong> (role "Guardian"), then return here to link it.</>}
             </div>
           ) : (
-            <select value={selected} onChange={(e) => setSelected(e.target.value)} style={inp}>
-              <option value="">— Not linked —</option>
-              {users.map((u) => {
-                const linkedTo = linkedMap[u.user_id];
-                return (
-                  <option key={u.user_id} value={u.user_id}>
-                    {u.name} ({u.email}){linkedTo?.length ? ` — linked to: ${linkedTo.join(", ")}` : ""}
-                  </option>
-                );
-              })}
-            </select>
+            <>
+              <select value={selected} onChange={(e) => setSelected(e.target.value)} style={inp}>
+                <option value="">— Not linked —</option>
+                {users.map((u) => {
+                  const linkedTo = linkedMap[u.user_id];
+                  return (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.name} ({u.email}){linkedTo?.length ? ` — linked to: ${linkedTo.join(", ")}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              <div style={{ fontSize: 11, color: "#b09090", marginTop: 8, lineHeight: 1.5 }}>
+                Tip: link the same account across each of a parent's children so they see all of them in one portal.
+              </div>
+            </>
           )}
-          <div style={{ fontSize: 11, color: "#b09090", marginTop: 8, lineHeight: 1.5 }}>
-            Tip: link the same account across each of a parent's children so they see all of them in one portal.
-          </div>
         </div>
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "space-between", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <div>
-            {guardian.user_id && (
+            {guardian.user_id && mode === "select" && (
               confirmUnlink ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 12, color: "#7a5050" }}>Unlink this account?</span>
@@ -129,10 +228,17 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onClose} style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>Cancel</button>
-            <button onClick={() => handleSave(false)} disabled={saving || loading || users.length === 0}
-              style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving || loading ? "not-allowed" : "pointer" }}>
-              {saving ? "Saving…" : "Save link"}
-            </button>
+            {mode === "create" ? (
+              <button onClick={handleCreateAndLink} disabled={creating}
+                style={{ background: creating ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: creating ? "not-allowed" : "pointer" }}>
+                {creating ? "Creating…" : "Create & Link"}
+              </button>
+            ) : (
+              <button onClick={() => handleSave(false)} disabled={saving || loading || users.length === 0}
+                style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving || loading ? "not-allowed" : "pointer" }}>
+                {saving ? "Saving…" : "Save link"}
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
@@ -303,6 +409,12 @@ export default function StudentDetailPage() {
   const [linkGuardian,  setLinkGuardian]  = useState(null); // guardian being linked to an account
 
   const canLink = hasAnyRole(getCurrentUser(), CAN_LINK_ROLES);
+  // getStudentLedger hits a billing-service endpoint that's BILLING_ROLES-only
+  // even though this route allows every staff role — skip the doomed fetch
+  // for teacher/registrar and show an accurate message instead of "Failed to
+  // load financial history. Check that the billing service is running."
+  // (which is misleading — the service is fine, the role just can't see it).
+  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_ROLES);
 
   const prevTabRef    = useRef("personal");
   const visitedTabs   = useRef(new Set(["personal"]));
@@ -338,12 +450,13 @@ export default function StudentDetailPage() {
   // Lazy-load ledger only when the tab is first opened
   useEffect(() => {
     if (activeTab !== "ledger" || ledger !== null || !id) return;
+    if (!canViewBilling) { setLedger({ forbidden: true }); return; }
     setLedgerLoading(true);
     getStudentLedger(id)
       .then(setLedger)
       .catch(() => setLedger({ error: true }))
       .finally(() => setLedgerLoading(false));
-  }, [activeTab, id, ledger]);
+  }, [activeTab, id, ledger, canViewBilling]);
 
   const TABS = [
     { id: "personal",    label: "Personal",     icon: "ti-user"           },
@@ -911,6 +1024,12 @@ export default function StudentDetailPage() {
                           <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"8px 0" }}>
                             {[1,2,3].map((k) => <Sk key={k} h={52} r={10} />)}
                           </div>
+                        </SectionCard>
+                      )}
+                      {!ledgerLoading && ledger?.forbidden && (
+                        <SectionCard title="Financial History" icon="ti-receipt"
+                          motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ duration:0.22 } }}>
+                          <EmptySection message="Financial history is only visible to billing staff." />
                         </SectionCard>
                       )}
                       {!ledgerLoading && ledger?.error && (

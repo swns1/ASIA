@@ -17,8 +17,5 @@ export const updateAttendance = (id, payload) =>
 export const deleteAttendance = (id) =>
   enrollmentClient.delete(`/attendance/${id}/`).then((r) => r.data);
 
-export const bulkAttendance = (payload) =>
-  enrollmentClient.post("/attendance/bulk/", payload).then((r) => r.data);
-
 export const getAttendanceSummary = (params = {}) =>
   enrollmentClient.get("/attendance/summary/", { params }).then((r) => r.data);

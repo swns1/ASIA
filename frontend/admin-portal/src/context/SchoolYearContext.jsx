@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getSchoolSettings } from "../api/billingApi";
-import { isTokenValid } from "../utils/auth";
+import { isTokenValid, getCurrentUser } from "../utils/auth";
 import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
 
 const STORAGE_KEY = "selected_school_year";
@@ -41,6 +41,18 @@ export function SchoolYearProvider({ children }) {
   const ensureDefault = useCallback(() => {
     if (fetchedDefault.current || schoolYear || !isTokenValid()) return;
     fetchedDefault.current = true;
+
+    // Guardians never see the school-year picker (their portal is scoped to
+    // their own children's enrollments, not filtered by a year), and
+    // /api/school-settings/ is admin/accounting-only, so skip straight to
+    // the computed fallback instead of firing a request that will 403.
+    if (getCurrentUser()?.role === "guardian") {
+      const fallback = computeDefaultSchoolYear();
+      setSchoolYearState((prev) => prev || fallback);
+      persist(fallback);
+      return;
+    }
+
     getSchoolSettings()
       .then((s) => {
         const backendYear = s?.current_school_year?.trim();

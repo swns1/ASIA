@@ -45,7 +45,7 @@ export default function SF2PrintPage() {
     (async () => {
       try {
         const [sett, enrData] = await Promise.all([
-          getSchoolSettings(),
+          getSchoolSettings().catch(() => null),
           getEnrollments({ school_year, grade_level, section, enrollment_status: "enrolled", page_size: 300 }),
         ]);
         setSettings(sett);

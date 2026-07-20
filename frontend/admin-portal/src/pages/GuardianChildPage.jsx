@@ -29,7 +29,7 @@ const Sk = ({ w = "100%", h = 14, r = 6 }) => (
 const card = { background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.06)" };
 
 // ── Report card tab ───────────────────────────────────────────────────────────
-function ReportCardTab({ data, enrollmentId }) {
+function ReportCardTab({ data }) {
   if (!data) return null;
   const periods = data.grading_periods || [];
   return (
@@ -42,10 +42,6 @@ function ReportCardTab({ data, enrollmentId }) {
               GPA {data.overall_gpa}
             </span>
           )}
-          <a href={`/report-card/${enrollmentId}`} target="_blank" rel="noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#e03131", textDecoration: "none", border: "1px solid #fde2de", borderRadius: 8, padding: "5px 10px" }}>
-            <i className="ti ti-printer" style={{ fontSize: 13 }} />Printable
-          </a>
         </div>
       </div>
       <div style={{ overflowX: "auto" }}>
@@ -277,7 +273,7 @@ export default function GuardianChildPage() {
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.18 }}
         >
-          {tab === "grades" && (loading ? <div style={{ ...card, padding: 22 }}><Sk h={160} r={12} /></div> : <ReportCardTab data={report} enrollmentId={enrollmentId} />)}
+          {tab === "grades" && (loading ? <div style={{ ...card, padding: 22 }}><Sk h={160} r={12} /></div> : <ReportCardTab data={report} />)}
           {tab === "attendance" && <AttendanceTab summary={attendance} loading={attLoading} />}
           {tab === "billing" && <BillingTab ledger={ledger} loading={ledgerLoading} />}
         </motion.div>

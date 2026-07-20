@@ -36,11 +36,6 @@ function SchoolYearPicker() {
   );
 }
 
-// Roles allowed to see items that registrars should no longer have access to
-// (My Sections, Attendance, Analytics, Narrative Categories, Teacher Advisories).
-const GRADE_ROLES_NO_REGISTRAR    = GRADE_ROLES.filter((r) => r !== "registrar");
-const ACADEMIC_STAFF_NO_REGISTRAR = ACADEMIC_STAFF.filter((r) => r !== "registrar");
-
 const NAV = [
   {
     section: "Main",
@@ -48,14 +43,13 @@ const NAV = [
       { label: "Dashboard",         icon: "ti-layout-dashboard",  path: "/dashboard"           },
       { label: "Students",          icon: "ti-users",             path: "/students"            },
       { label: "Enrollments",       icon: "ti-clipboard-list",    path: "/enrollments"         },
-      { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: GRADE_ROLES_NO_REGISTRAR },
+      { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: GRADE_ROLES },
       { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },
       { label: "Grades",            icon: "ti-chart-bar",         path: "/grades",             allowedRoles: GRADE_ROLES },
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
-      { label: "Attendance",    icon: "ti-calendar-check", path: "/attendance",   allowedRoles: GRADE_ROLES_NO_REGISTRAR },
       { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
-      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: ACADEMIC_STAFF_NO_REGISTRAR },
+      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: ACADEMIC_STAFF },
     ],
   },
   {
@@ -73,8 +67,8 @@ const NAV = [
       { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail",         allowedRoles: STAFF_ADMIN },
       { label: "School Settings",   icon: "ti-settings",         path: "/settings",            allowedRoles: BILLING_ROLES },
       { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates",   allowedRoles: GRADE_ROLES },
-      { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories", allowedRoles: GRADE_ROLES_NO_REGISTRAR },
-      { label: "Teacher Advisories", icon: "ti-user-check",     path: "/teacher-advisories",  allowedRoles: ACADEMIC_STAFF_NO_REGISTRAR },
+      { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories", allowedRoles: GRADE_ROLES },
+      { label: "Teacher Advisories", icon: "ti-user-check",     path: "/teacher-advisories",  allowedRoles: ACADEMIC_STAFF },
       { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types",   allowedRoles: ACADEMIC_STAFF },
       { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules",       allowedRoles: BILLING_ROLES },
     ],

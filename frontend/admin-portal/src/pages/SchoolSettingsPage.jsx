@@ -10,6 +10,7 @@ import {
   getSchoolSettings as _getSettings,
   updateSchoolSettings as _updateSettings,
 } from "../api/billingApi";
+import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -337,8 +338,12 @@ export default function SchoolSettingsPage() {
                 </div>
               ) : (
                 <>
-                  <Field label="Current School Year" required hint="Format: YYYY-YYYY e.g. 2025-2026">
-                    <input className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} placeholder="2025-2026" style={inputStyle} />
+                  <Field label="Current School Year" required>
+                    <select className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
+                      {buildSchoolYearOptions(form.current_school_year || computeDefaultSchoolYear()).map(sy => (
+                        <option key={sy} value={sy}>{sy}</option>
+                      ))}
+                    </select>
                   </Field>
                   <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

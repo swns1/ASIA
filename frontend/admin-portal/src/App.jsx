@@ -31,7 +31,6 @@ import GradeSlipPrintPage from "./pages/print/GradeSlipPrintPage";
 import ReceiptPrintPage   from "./pages/print/ReceiptPrintPage";
 import InvoicePrintPage   from "./pages/print/InvoicePrintPage";
 import SF1PrintPage from "./pages/print/SF1PrintPage";
-import AttendancePage    from "./pages/AttendancePage";
 import SF2PrintPage     from "./pages/print/SF2PrintPage";
 import SF9PrintPage from "./pages/print/SF9PrintPage";
 import SF10PrintPage from "./pages/print/SF10PrintPage";
@@ -89,7 +88,6 @@ export default function App() {
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
         <Route path="/school-forms"          element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
         <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />
-        <Route path="/attendance"    element={<P roles={GRADE_ROLES}><AttendancePage /></P>} />
         <Route path="/print/sf2"     element={<P roles={STAFF_ALL}><SF2PrintPage /></P>} />
         <Route path="/print/sf9/:enrollmentId" element={<P roles={STAFF_ALL}><SF9PrintPage /></P>} />
         <Route path="/print/sf10/:studentId" element={<P roles={STAFF_ALL}><SF10PrintPage /></P>} />

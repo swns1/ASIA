@@ -10,6 +10,7 @@ Auth: JWT required (same as rest of student-service)
 import base64
 import json
 import logging
+import re
 
 import requests
 from django.conf import settings
@@ -51,10 +52,14 @@ Return ONLY a valid JSON object with these exact keys (use null for fields you c
   "mobile_number": "string or null",
   "current_address": "string or null",
   "permanent_address": "string or null",
-  "guardian_full_name": "string or null",
-  "guardian_relationship": "mother, father, or guardian — lowercase, or null",
-  "guardian_mobile_number": "string or null",
-  "guardian_email": "string or null",
+  "guardians": [
+    {
+      "full_name": "string",
+      "relationship": "mother, father, or guardian — lowercase",
+      "mobile_number": "string or null",
+      "email": "string or null"
+    }
+  ],
   "previous_school_name": "string or null",
   "previous_school_address": "string or null",
   "confidence": "high, medium, or low — your overall confidence in the extraction"
@@ -65,6 +70,10 @@ Rules:
 - LRN is exactly 12 digits — strip spaces/dashes if present
 - Dates must be YYYY-MM-DD; if only year is visible, use YYYY-01-01
 - For sex: map "M", "Male", "Lalaki" -> "male"; "F", "Female", "Babae" -> "female"
+- "guardians" is a list — include ONE ENTRY PER PARENT/GUARDIAN found. A birth
+  certificate usually lists both a mother and a father: include both as
+  separate entries, not merged into one. Skip anyone whose name you cannot
+  find. Use an empty list if none are found.
 - If the document is not a student-related document, still extract whatever is relevant
 - Do NOT wrap the JSON in markdown code blocks — return raw JSON only
 """
@@ -87,65 +96,105 @@ def _image_to_base64(image_file) -> tuple[str, str]:
     return base64.b64encode(processed).decode("utf-8"), mime_type
 
 
+GROQ_MAX_ATTEMPTS = 3  # safety net for transient truncation/invalid-JSON responses
+
+
 def _call_groq(base64_data: str, mime_type: str) -> dict:
-    """Call Groq LLaMA Vision API and return parsed JSON result."""
+    """Call Groq LLaMA Vision API and return parsed JSON result.
+
+    reasoning_effort="none" disables this model's <think> chain-of-thought
+    preamble entirely. Without it, dense documents (many fields to
+    cross-reference, e.g. a birth certificate) can send the model into a
+    long or even runaway reasoning loop that eats the whole completion
+    budget before it ever reaches the JSON answer -- and this Groq account
+    is on the free "on_demand" tier, which caps requests at 8000 tokens per
+    minute (counted as prompt_tokens + max_tokens, not actual usage), so
+    raising max_tokens to compensate isn't viable here. Skipping reasoning
+    keeps completions around ~200-300 tokens instead of ~4000+, which both
+    avoids the loop and stays comfortably under the TPM cap.
+    """
     api_key = settings.GROQ_API_KEY
     if not api_key:
         raise ValueError("GROQ_API_KEY is not configured in settings.")
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        json={
-            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-            "temperature": 0.1,
-            "max_tokens": 1024,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_data}",
-                            },
+    payload = {
+        "model": "qwen/qwen3.6-27b",
+        "temperature": 0.1,
+        "max_tokens": 1500,
+        "reasoning_effort": "none",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_data}",
                         },
-                        {
-                            "type": "text",
-                            "text": EXTRACTION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        },
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=30,
-    )
-    response.raise_for_status()
+                    },
+                    {
+                        "type": "text",
+                        "text": EXTRACTION_PROMPT,
+                    },
+                ],
+            }
+        ],
+    }
+    headers = {"Authorization": f"Bearer {api_key}"}
 
-    result = response.json()
+    last_error = None
+    for attempt in range(1, GROQ_MAX_ATTEMPTS + 1):
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=45,
+        )
+        response.raise_for_status()
 
-    try:
-        raw_text = result["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError) as e:
-        logger.error("Unexpected Groq response structure: %s", result)
-        raise ValueError("Could not parse Groq response.") from e
+        result = response.json()
 
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("```")[1]
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
-        raw_text = raw_text.strip()
+        try:
+            choice = result["choices"][0]
+            raw_text = choice["message"]["content"].strip()
+        except (KeyError, IndexError) as e:
+            logger.error("Unexpected Groq response structure: %s", result)
+            raise ValueError("Could not parse Groq response.") from e
 
-    try:
-        return json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        logger.error("Groq returned non-JSON: %s", raw_text)
-        raise ValueError(f"Groq returned invalid JSON: {raw_text[:200]}") from e
+        if choice.get("finish_reason") == "length":
+            last_error = ValueError("Groq response was truncated before it finished.")
+            logger.warning(
+                "Groq response truncated on attempt %d/%d, retrying", attempt, GROQ_MAX_ATTEMPTS
+            )
+            continue
+
+        # Belt-and-suspenders: reasoning_effort="none" should mean no <think>
+        # block, but strip one anyway in case the model ignores that setting.
+        raw_text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL).strip()
+
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("```")[1]
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+            raw_text = raw_text.strip()
+
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError:
+            last_error = ValueError(f"Groq returned invalid JSON: {raw_text[:200]}")
+            logger.warning(
+                "Groq returned non-JSON on attempt %d/%d: %s", attempt, GROQ_MAX_ATTEMPTS, raw_text[:200]
+            )
+            continue
+
+    raise last_error
 
 
 def _sanitize_result(data: dict) -> dict:
     cleaned = {}
     for key, value in data.items():
+        if key == "guardians":
+            continue  # list of dicts, not a scalar -- handled separately below
         if value is None:
             continue
         if isinstance(value, str):
@@ -163,6 +212,27 @@ def _sanitize_result(data: dict) -> dict:
             cleaned["lrn"] = lrn
         else:
             del cleaned["lrn"]
+
+    guardians = []
+    for g in data.get("guardians") or []:
+        if not isinstance(g, dict):
+            continue
+        full_name = str(g.get("full_name") or "").strip()
+        if not full_name:
+            continue
+        relationship = str(g.get("relationship") or "").strip().lower()
+        if relationship not in ("mother", "father", "guardian"):
+            relationship = "guardian"
+        guardian = {"full_name": full_name, "relationship": relationship}
+        mobile_number = str(g.get("mobile_number") or "").strip()
+        if mobile_number:
+            guardian["mobile_number"] = mobile_number
+        email = str(g.get("email") or "").strip()
+        if email:
+            guardian["email"] = email
+        guardians.append(guardian)
+    if guardians:
+        cleaned["guardians"] = guardians
 
     return cleaned
 
@@ -221,7 +291,11 @@ class OCRScanView(APIView):
             )
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response else 0
-            if status_code == 429:
+            if status_code in (429, 413):
+                # Groq's free "on_demand" tier caps requests at 8000 tokens/min;
+                # 413 "Request too large" is that same limit rejecting the call
+                # up front rather than mid-generation, so it gets the same
+                # user-facing message as 429.
                 return Response(
                     {"success": False, "error": "Too many requests. Please wait a moment and try again."},
                     status=status.HTTP_429_TOO_MANY_REQUESTS,

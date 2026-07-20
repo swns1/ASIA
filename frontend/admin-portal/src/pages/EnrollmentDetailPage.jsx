@@ -12,6 +12,7 @@ import {
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 import { getRequirementTypes, getStudentRequirementSubmissions } from "../api/enrollmentApi";
 import { updateStudentStatus } from "../api/studentApi";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
@@ -96,6 +97,12 @@ export default function EnrollmentDetailPage() {
   const [transferReason, setTransferReason] = useState("");
   const [transferDestSchool, setTransferDestSchool] = useState("");
 
+  // Invoice data is billing-service-gated (BILLING_ROLES only) even though
+  // this route allows every staff role — skip the doomed fetch for roles
+  // that would just get a 403, and show an accurate message instead of a
+  // misleading "No invoice generated yet." for enrollments that do have one.
+  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -110,7 +117,9 @@ export default function EnrollmentDetailPage() {
           sid
             ? getStudentRequirementSubmissions({ student_id: sid, page_size: 200 }).catch(() => null)
             : Promise.resolve(null),
-          getInvoices({ enrollment_id: id, page_size: 5 }),
+          canViewBilling
+            ? getInvoices({ enrollment_id: id, page_size: 5 }).catch(() => null)
+            : Promise.resolve(null),
         ]);
       })
       .then(([gradesData, scholData, rtypesData, reqData, invData]) => {
@@ -118,7 +127,7 @@ export default function EnrollmentDetailPage() {
         setScholarships(Array.isArray(scholData) ? scholData : scholData.results ?? []);
         setReqTypes(Array.isArray(rtypesData) ? rtypesData : rtypesData.results ?? []);
         setRequirements(Array.isArray(reqData) ? reqData : reqData?.results ?? []);
-        const invList = Array.isArray(invData) ? invData : invData.results ?? [];
+        const invList = Array.isArray(invData) ? invData : invData?.results ?? [];
         setInvoice(invList[0] ?? null);
       })
       .catch(() => setError("Failed to load enrollment details."))
@@ -317,15 +326,23 @@ export default function EnrollmentDetailPage() {
           {/* ── Three-column card row: Invoice | Requirements | Scholarships ── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
 
-            {/* Invoice */}
+            {/* Invoice — billing-gated; the "View"/"Generate" actions below
+                point at /invoices, itself BILLING_ROLES-only, so they're
+                dead ends for teacher/registrar and are hidden for them. */}
             <Card title="Invoice" icon="ti-file-invoice"
               action={
-                <button onClick={() => navigate(`/invoices?enrollment_id=${id}`)}
-                  style={{ fontSize: 11, color: C.red, background: "none", border: "none", cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
-                  View →
-                </button>
+                canViewBilling && (
+                  <button onClick={() => navigate(`/invoices?enrollment_id=${id}`)}
+                    style={{ fontSize: 11, color: C.red, background: "none", border: "none", cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    View →
+                  </button>
+                )
               }>
-              {invoice ? (
+              {!canViewBilling ? (
+                <p style={{ margin: 0, fontSize: 12, color: C.muted, fontStyle: "italic" }}>
+                  Invoice details are only visible to billing staff.
+                </p>
+              ) : invoice ? (
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                     <Badge

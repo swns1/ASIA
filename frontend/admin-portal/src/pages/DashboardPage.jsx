@@ -15,6 +15,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES, GRADE_ROLES, ACADEMIC_STAFF } from "../utils/auth";
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,19 @@ export default function DashboardPage() {
   const navigate    = useNavigate();
   const now         = useClock();
 
+  // Revenue figures come from billing-service, which already 403s
+  // non-billing roles (see StudentInvoiceViewSet.financial_summary) — this
+  // just keeps the UI from showing a misleading ₱0.00 strip (from the
+  // silently-caught 403) to roles that were never going to get real numbers,
+  // and skips the doomed fetch entirely.
+  const canViewFinancials = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+  // /scholarships is ACADEMIC_STAFF-only (App.jsx) — teacher/accounting can
+  // reach the Dashboard (STAFF_ALL) but clicking through to Scholarships
+  // silently bounces them back here via PrivateRoute's redirect, so the
+  // scholarship count stays visible (its own data is fine for any staff
+  // role) but the links to /scholarships are hidden for roles that can't use them.
+  const canViewScholarships = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+
   // ── per-card filter state ──
   // Total Students and Scholarships Awarded have no level/grade/year filter here:
   // the backend doesn't support filtering those endpoints by that data (it lives on
@@ -265,7 +279,7 @@ export default function DashboardPage() {
         fetchScholarships(),
         fetchSubjectCount(),
         fetchAlerts(),
-        fetchFinancialSummary(),
+        ...(canViewFinancials ? [fetchFinancialSummary()] : []),
         fetchCompletedCount(),
       ]);
     } catch (e) {
@@ -362,7 +376,10 @@ export default function DashboardPage() {
     const newAlerts = [];
     try {
       const [unpaidData, pendingEnrData] = await Promise.all([
-        _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null),
+        // Billing-service-gated — skip entirely for non-billing roles rather
+        // than making a call that's always going to 403 (same reasoning as
+        // canViewFinancials above for fetchFinancialSummary).
+        canViewFinancials ? _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null) : Promise.resolve(null),
         _getEnrollments({ enrollment_status: "pending", school_year: schoolYear, page_size: 1 }).catch(() => null),
       ]);
       if (unpaidData?.count > 0) {
@@ -526,11 +543,14 @@ export default function DashboardPage() {
                 chipText={`S.Y. ${schoolYear}`}
                 chipType="info"
                 loading={loading}
-                onClick={() => navigate("/scholarships")}
+                onClick={canViewScholarships ? () => navigate("/scholarships") : undefined}
               />
             </motion.div>
 
-            {/* ── Revenue strip ── */}
+            {/* ── Revenue strip — billing roles only (super_admin/admin/accounting);
+                 backend already 403s everyone else, this just keeps the UI
+                 from showing them a misleading ₱0.00 strip instead of hiding it ── */}
+            {canViewFinancials && (
             <div style={s.revenueStrip}>
               {[
                 { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd", link: "/invoices" },
@@ -600,6 +620,7 @@ export default function DashboardPage() {
                 );
               })()}
             </div>
+            )}
 
             {/* ── Recent enrollments + Funnel + Level breakdown ── */}
             <motion.div
@@ -775,16 +796,22 @@ export default function DashboardPage() {
               <Panel title="Quick Actions">
                 <div style={s.qaGrid}>
                   {[
+                    // roles mirror each path's actual App.jsx route guard —
+                    // omit for STAFF_ALL-level actions (every Dashboard
+                    // visitor already qualifies, since /dashboard itself
+                    // requires STAFF_ALL). Without this, clicking a button
+                    // your role can't use just bounces you back here via
+                    // PrivateRoute's redirect, with no explanation why.
                     { label: "New Student",    icon: "ti-user-plus",      path: "/students/new"    },
                     { label: "New Enrollment", icon: "ti-clipboard-list", path: "/enrollments/new" },
-                    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry"    },
-                    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships"    },
-                    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices"        },
-                    { label: "Payments",       icon: "ti-cash",           path: "/payments"        },
-                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements"    },
-                    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics"       },
+                    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry",    roles: GRADE_ROLES    },
+                    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships",    roles: ACADEMIC_STAFF },
+                    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices",        roles: BILLING_ROLES  },
+                    { label: "Payments",       icon: "ti-cash",           path: "/payments",        roles: BILLING_ROLES  },
+                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements",    roles: ACADEMIC_STAFF },
+                    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics",       roles: ACADEMIC_STAFF },
                     { label: "Subjects",       icon: "ti-book",           path: "/subjects"        },
-                  ].map((qa) => (
+                  ].filter((qa) => hasAnyRole(getCurrentUser(), qa.roles)).map((qa) => (
                     <motion.button
                       key={qa.label}
                       className="qa-btn"
@@ -853,7 +880,7 @@ export default function DashboardPage() {
                 </div>
               </Panel>
 
-              <Panel title="Scholarships Awarded" action="View all →" onAction={() => navigate("/scholarships")}>
+              <Panel title="Scholarships Awarded" action={canViewScholarships ? "View all →" : undefined} onAction={() => navigate("/scholarships")}>
                 <div>
                   {loading
                     ? Array.from({ length: 4 }).map((_, i) => (
@@ -868,10 +895,12 @@ export default function DashboardPage() {
                         <div style={{ padding:"24px 18px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
                           <i className="ti ti-award-off" style={{ fontSize:22, color:"#e08080" }} />
                           <div style={{ fontSize:13, color:"#b09090", fontStyle:"italic" }}>No scholarships awarded yet</div>
-                          <button onClick={() => navigate("/scholarships")}
-                            style={{ fontSize:12, color:"#e03131", background:"#fff0f0", border:"none", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
-                            Award now
-                          </button>
+                          {canViewScholarships && (
+                            <button onClick={() => navigate("/scholarships")}
+                              style={{ fontSize:12, color:"#e03131", background:"#fff0f0", border:"none", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
+                              Award now
+                            </button>
+                          )}
                         </div>
                       )
                       : (
