@@ -67,6 +67,14 @@ export function createApiClient({ baseURL, timeout = 10000, withCredentials = fa
         const msg = extractValidationMessage(error.response?.data);
         if (msg) error.message = msg;
       }
+      if (error.response && error.response.status >= 500) {
+        // Backend errors sometimes come back as an HTML debug page rather
+        // than JSON (e.g. an unhandled DB exception), which has no `.detail`
+        // to extract. Without this, call sites that do
+        // `err.response?.data?.detail || "Network error..."` mislabel a real
+        // server error as a connectivity problem.
+        error.message = "Something went wrong on the server. Please try again or contact support.";
+      }
       return Promise.reject(error);
     }
   );

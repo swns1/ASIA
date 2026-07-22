@@ -924,6 +924,41 @@ function DocViewModal({ url, name, onClose }) {
   );
 }
 
+function EnrollmentPromptModal({ studentName, onSkip, onProceed }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+        onClick={onSkip}
+        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.5)", backdropFilter: "blur(4px)" }}
+      />
+      <motion.div
+        variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
+        style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#e03131" }} />
+          </div>
+          <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Enrollment?</h3>
+          <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
+            <strong>{studentName || "The student"}</strong> has been added. Would you like to proceed to enrollment now?
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+            onClick={onSkip} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            Skip for Now
+          </motion.button>
+          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
+            onClick={onProceed} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            Proceed to Enrollment
+          </motion.button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrConfidence, ocrFieldCount, onApplyOcr, onDiscardOcr }) {
   const CONF_DOT = { high: DC.green, medium: "#b7791f", low: "#b91c1c" };
   const icon = reqIcon(req.requirement_code);
@@ -1497,6 +1532,9 @@ export default function StudentFormPage() {
   // Track the original household id (if any) so we know whether to PUT or POST
   const [householdId, setHouseholdId] = useState(null);
 
+  // Shown after successfully creating a new student, offering to jump straight into enrollment
+  const [enrollPrompt, setEnrollPrompt] = useState(null); // { studentId, studentName }
+
   const DRAFT_KEY = "student_form_draft";
   const isNewStudent = !id;
 
@@ -1792,6 +1830,7 @@ export default function StudentFormPage() {
     submittingRef.current = true;
     setLoading(true);
     setError("");
+    let newStudentId = null;
     try {
       const nullableStudentFields = ["middle_name", "suffix", "religion", "email", "mobile_number"];
       const nullableGuardianFields = ["occupation", "email_address", "mobile_number"];
@@ -1883,7 +1922,7 @@ export default function StudentFormPage() {
         };
 
         const result = await bulkCreateStudent(bulkPayload);
-        const newStudentId = result.student.student_id;
+        newStudentId = result.student.student_id;
 
         // siblings
         for (const s of siblings) {
@@ -1923,8 +1962,16 @@ export default function StudentFormPage() {
       }
 
       clearDraft();
-      toast.success(id ? "Student updated." : "Student created.");
-      navigate("/students");
+      if (id) {
+        toast.success("Student updated.");
+        navigate("/students");
+      } else {
+        toast.success("Student created.");
+        setEnrollPrompt({
+          studentId: newStudentId,
+          studentName: [student.first_name, student.last_name].filter(Boolean).join(" ").trim(),
+        });
+      }
     } catch (err) {
       const data = err?.response?.data;
       let msg;
@@ -1933,8 +1980,17 @@ export default function StudentFormPage() {
       } else if (typeof data === "string") {
         msg = data;
       } else {
+        const stringifyError = (val) => {
+          if (val == null) return "";
+          if (typeof val === "string") return val;
+          if (Array.isArray(val)) return val.map(stringifyError).join(", ");
+          if (typeof val === "object") {
+            return Object.entries(val).map(([k, v]) => `${k}: ${stringifyError(v)}`).join(", ");
+          }
+          return String(val);
+        };
         const entries = Object.entries(data);
-        msg = entries.map(([field, errs]) => `${field}: ${[].concat(errs).join(", ")}`).join(" | ");
+        msg = entries.map(([field, errs]) => `${field}: ${stringifyError(errs)}`).join(" | ");
       }
       setError(msg || "Something went wrong. Please check your inputs.");
       toast.error(msg || "Something went wrong. Please check your inputs.");
@@ -2190,6 +2246,17 @@ export default function StudentFormPage() {
             url={docViewModal.url}
             name={docViewModal.name}
             onClose={() => setDocViewModal(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {enrollPrompt && (
+          <EnrollmentPromptModal
+            key="enroll-prompt"
+            studentName={enrollPrompt.studentName}
+            onSkip={() => { setEnrollPrompt(null); navigate("/students"); }}
+            onProceed={() => navigate(`/enrollments/new?student=${enrollPrompt.studentId}`)}
           />
         )}
       </AnimatePresence>

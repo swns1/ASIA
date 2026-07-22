@@ -713,4 +713,156 @@ SELECT setval(pg_get_serial_sequence('enrollments',   'enrollment_id'),   (SELEC
 SELECT setval(pg_get_serial_sequence('grades',        'grade_id'),        (SELECT MAX(grade_id)        FROM grades));
 SELECT setval(pg_get_serial_sequence('score_entries', 'score_entry_id'),  (SELECT MAX(score_entry_id)  FROM score_entries));
 
+-- =====================================================
+-- ATTENDANCE RECORDS
+-- attendance_records(attendance_id serial, enrollment_id, date, status, remarks, recorded_by, ...)
+-- One row per (enrollment_id, date) — unique_together constraint.
+-- Status: P=present, A=absent, L=late, E=excused.
+-- Covers the same 2025-2026 "current" enrollments already used for
+-- grades/score_entries above, 10 school days (Aug 4-15, 2025, two
+-- school weeks) per student, with a mix of statuses per student
+-- profile (e.g. enrollment 249 = struggling student gets more
+-- absences/lates, matching their weaker score_entries above).
+-- =====================================================
+INSERT INTO attendance_records (enrollment_id, date, status, remarks, recorded_by, created_at, updated_at)
+SELECT enrollment_id, att_date::date, status, remarks, recorded_by::int, NOW(), NOW() FROM (VALUES
+  -- Enrollment 215 (Elementary G4 Bianca, current year)
+  (215, '2025-08-04', 'P', NULL, NULL),
+  (215, '2025-08-05', 'P', NULL, NULL),
+  (215, '2025-08-06', 'P', NULL, NULL),
+  (215, '2025-08-07', 'L', 'Arrived 15 minutes late', NULL),
+  (215, '2025-08-08', 'P', NULL, NULL),
+  (215, '2025-08-11', 'P', NULL, NULL),
+  (215, '2025-08-12', 'P', NULL, NULL),
+  (215, '2025-08-13', 'P', NULL, NULL),
+  (215, '2025-08-14', 'P', NULL, NULL),
+  (215, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 219 (Elementary G4 struggling profile)
+  (219, '2025-08-04', 'P', NULL, NULL),
+  (219, '2025-08-05', 'A', 'No excuse letter submitted', NULL),
+  (219, '2025-08-06', 'P', NULL, NULL),
+  (219, '2025-08-07', 'L', 'Arrived 20 minutes late', NULL),
+  (219, '2025-08-08', 'P', NULL, NULL),
+  (219, '2025-08-11', 'A', 'No excuse letter submitted', NULL),
+  (219, '2025-08-12', 'P', NULL, NULL),
+  (219, '2025-08-13', 'L', 'Arrived 10 minutes late', NULL),
+  (219, '2025-08-14', 'P', NULL, NULL),
+  (219, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 227 (Elementary G6, top student profile)
+  (227, '2025-08-04', 'P', NULL, NULL),
+  (227, '2025-08-05', 'P', NULL, NULL),
+  (227, '2025-08-06', 'P', NULL, NULL),
+  (227, '2025-08-07', 'P', NULL, NULL),
+  (227, '2025-08-08', 'P', NULL, NULL),
+  (227, '2025-08-11', 'P', NULL, NULL),
+  (227, '2025-08-12', 'P', NULL, NULL),
+  (227, '2025-08-13', 'P', NULL, NULL),
+  (227, '2025-08-14', 'P', NULL, NULL),
+  (227, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 236 (JHS Grade 7)
+  (236, '2025-08-04', 'P', NULL, NULL),
+  (236, '2025-08-05', 'P', NULL, NULL),
+  (236, '2025-08-06', 'E', 'Medical appointment, excused', NULL),
+  (236, '2025-08-07', 'P', NULL, NULL),
+  (236, '2025-08-08', 'P', NULL, NULL),
+  (236, '2025-08-11', 'P', NULL, NULL),
+  (236, '2025-08-12', 'L', 'Arrived 5 minutes late', NULL),
+  (236, '2025-08-13', 'P', NULL, NULL),
+  (236, '2025-08-14', 'P', NULL, NULL),
+  (236, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 245 (JHS Grade 10, top student Natasha)
+  (245, '2025-08-04', 'P', NULL, NULL),
+  (245, '2025-08-05', 'P', NULL, NULL),
+  (245, '2025-08-06', 'P', NULL, NULL),
+  (245, '2025-08-07', 'P', NULL, NULL),
+  (245, '2025-08-08', 'P', NULL, NULL),
+  (245, '2025-08-11', 'P', NULL, NULL),
+  (245, '2025-08-12', 'P', NULL, NULL),
+  (245, '2025-08-13', 'P', NULL, NULL),
+  (245, '2025-08-14', 'P', NULL, NULL),
+  (245, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 249 (JHS Grade 10, struggling student Brandon — matches weaker score_entries above)
+  (249, '2025-08-04', 'A', 'No excuse letter submitted', NULL),
+  (249, '2025-08-05', 'P', NULL, NULL),
+  (249, '2025-08-06', 'L', 'Arrived 25 minutes late', NULL),
+  (249, '2025-08-07', 'A', 'No excuse letter submitted', NULL),
+  (249, '2025-08-08', 'P', NULL, NULL),
+  (249, '2025-08-11', 'L', 'Arrived 15 minutes late', NULL),
+  (249, '2025-08-12', 'P', NULL, NULL),
+  (249, '2025-08-13', 'A', 'No excuse letter submitted', NULL),
+  (249, '2025-08-14', 'P', NULL, NULL),
+  (249, '2025-08-15', 'L', 'Arrived 10 minutes late', NULL),
+  -- Enrollment 257 (SHS Grade 11)
+  (257, '2025-08-04', 'P', NULL, NULL),
+  (257, '2025-08-05', 'P', NULL, NULL),
+  (257, '2025-08-06', 'P', NULL, NULL),
+  (257, '2025-08-07', 'L', 'Arrived 10 minutes late', NULL),
+  (257, '2025-08-08', 'P', NULL, NULL),
+  (257, '2025-08-11', 'P', NULL, NULL),
+  (257, '2025-08-12', 'P', NULL, NULL),
+  (257, '2025-08-13', 'P', NULL, NULL),
+  (257, '2025-08-14', 'E', 'Family emergency, excused', NULL),
+  (257, '2025-08-15', 'P', NULL, NULL),
+  -- Enrollment 262 (SHS Grade 12)
+  (262, '2025-08-04', 'P', NULL, NULL),
+  (262, '2025-08-05', 'P', NULL, NULL),
+  (262, '2025-08-06', 'P', NULL, NULL),
+  (262, '2025-08-07', 'P', NULL, NULL),
+  (262, '2025-08-08', 'P', NULL, NULL),
+  (262, '2025-08-11', 'P', NULL, NULL),
+  (262, '2025-08-12', 'P', NULL, NULL),
+  (262, '2025-08-13', 'P', NULL, NULL),
+  (262, '2025-08-14', 'P', NULL, NULL),
+  (262, '2025-08-15', 'P', NULL, NULL)
+) AS v(enrollment_id, att_date, status, remarks, recorded_by)
+ON CONFLICT (enrollment_id, date) DO NOTHING;
+
+SELECT setval(pg_get_serial_sequence('attendance_records', 'attendance_id'), (SELECT MAX(attendance_id) FROM attendance_records));
+
+-- =====================================================
+-- NARRATIVE REPORTS
+-- narrative_categories is a blank admin-managed lookup table with no
+-- existing rows, so we seed a minimal starter set first (IDs 900+ to
+-- avoid colliding with anything created via the admin portal), then
+-- narrative_reports referencing them (IDs 900+) for the same
+-- current-year enrollments used above. grading_period follows each
+-- enrollment's own school_level convention (quarters for
+-- elementary/JHS, semesters for SHS) since the schema does not
+-- enforce this itself.
+-- =====================================================
+INSERT INTO narrative_categories (category_id, name, description, sort_order, is_active)
+OVERRIDING SYSTEM VALUE VALUES
+  (900, 'Social Skills',       'Peer interaction, cooperation, and classroom conduct.', 1, TRUE),
+  (901, 'Work Habits',         'Independence, task completion, and organization.',      2, TRUE),
+  (902, 'Areas for Growth',    'Skills or behaviors the student is still developing.',  3, TRUE)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO narrative_reports (report_id, enrollment_id, category_id, grading_period, rating, recorded_at)
+OVERRIDING SYSTEM VALUE VALUES
+  -- Enrollment 215 (Elementary G4)
+  (900, 215, 900, '1st_quarter', 'outstanding',        NOW()),
+  (901, 215, 901, '1st_quarter', 'satisfactory',        NOW()),
+  -- Enrollment 219 (Elementary G4, struggling profile)
+  (902, 219, 901, '1st_quarter', 'needs_improvement',   NOW()),
+  (903, 219, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  -- Enrollment 227 (Elementary G6, top student)
+  (904, 227, 900, '1st_quarter', 'outstanding',        NOW()),
+  (905, 227, 901, '1st_quarter', 'outstanding',        NOW()),
+  -- Enrollment 236 (JHS Grade 7)
+  (906, 236, 900, '1st_quarter', 'satisfactory',        NOW()),
+  (907, 236, 901, '1st_quarter', 'satisfactory',        NOW()),
+  -- Enrollment 245 (JHS Grade 10, top student Natasha)
+  (908, 245, 900, '1st_quarter', 'outstanding',        NOW()),
+  (909, 245, 901, '1st_quarter', 'outstanding',        NOW()),
+  -- Enrollment 249 (JHS Grade 10, struggling student Brandon)
+  (910, 249, 901, '1st_quarter', 'needs_improvement',   NOW()),
+  (911, 249, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  -- Enrollment 257 (SHS Grade 11 — semester period, not quarter)
+  (912, 257, 900, '1st_semester', 'satisfactory',       NOW()),
+  (913, 257, 901, '1st_semester', 'satisfactory',       NOW()),
+  -- Enrollment 262 (SHS Grade 12 — semester period, not quarter)
+  (914, 262, 900, '1st_semester', 'outstanding',        NOW()),
+  (915, 262, 901, '1st_semester', 'outstanding',        NOW())
+ON CONFLICT (enrollment_id, category_id, grading_period) DO NOTHING;
+
 COMMIT;

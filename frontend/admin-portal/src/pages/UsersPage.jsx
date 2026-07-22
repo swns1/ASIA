@@ -414,7 +414,7 @@ function CreateUserModal({ onClose, onCreated }) {
       onCreated(data);
       onClose();
     } catch (err) {
-      const msg = err?.response?.data?.detail || "Network error. Please try again.";
+      const msg = err?.response?.data?.detail || err?.message || "Network error. Please try again.";
       setError(msg);
       toast.error(msg);
     } finally {

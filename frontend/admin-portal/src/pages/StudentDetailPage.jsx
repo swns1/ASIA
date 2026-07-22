@@ -95,7 +95,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
     try {
       created = await createUser({ name: newName.trim(), email: newEmail.trim(), role: "guardian", password: newPassword });
     } catch (err) {
-      setCreateError(err?.response?.data?.detail || "Network error. Please try again.");
+      setCreateError(err?.response?.data?.detail || err?.message || "Network error. Please try again.");
       setCreating(false);
       return;
     }

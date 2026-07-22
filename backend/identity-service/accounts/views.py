@@ -2,6 +2,7 @@ import base64
 import re
 import uuid
 
+from django.db import IntegrityError
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework.views import APIView
@@ -182,13 +183,19 @@ class UserListView(APIView):
         if User.objects.filter(email__iexact=email).exists():
             return Response({"detail": "A user with this email already exists."}, status=400)
 
-        user = User.objects.create(
-            name=name,
-            email=email,
-            role=role,
-            password=make_password(password),
-            profile_picture=None,
-        )
+        try:
+            user = User.objects.create(
+                name=name,
+                email=email,
+                role=role,
+                password=make_password(password),
+                profile_picture=None,
+            )
+        except IntegrityError:
+            return Response(
+                {"detail": f"Role '{role}' is not permitted by the database schema."},
+                status=400,
+            )
 
         record_audit_event(
             request,
