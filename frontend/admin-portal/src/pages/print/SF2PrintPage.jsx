@@ -5,7 +5,11 @@ import { getEnrollments } from "../../api/enrollmentApi";
 import { getAttendance } from "../../api/attendanceApi";
 import { downloadAsPDF } from "../../utils/pdfExport";
 import { isPresentStatus } from "../../utils/attendance";
-import logo from "../../assets/logo.png";
+import { PRINT_COLORS as C, PRINT_FONT } from "../../components/print/theme";
+import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
+import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
+import { PrintLetterhead } from "../../components/print/PrintLetterhead";
+import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
 
 function getDaysInMonth(ym) {
   const [y, m] = ym.split("-").map(Number);
@@ -34,12 +38,14 @@ export default function SF2PrintPage() {
   const adviser     = sp.get("adviser")     || "";
   const division    = sp.get("division")    || "";
   const region      = sp.get("region")      || "";
+  const district    = sp.get("district")    || "";
 
-  const [settings,    setSettings]    = useState(null);
-  const [enrollments, setEnrollments] = useState([]);
-  const [attMap,      setAttMap]      = useState({});
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState("");
+  const [settings,      setSettings]      = useState(null);
+  const [enrollments,   setEnrollments]   = useState([]);
+  const [attMap,        setAttMap]        = useState({});
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState("");
+  const [downloading,   setDownloading]   = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -76,73 +82,64 @@ export default function SF2PrintPage() {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const days       = getDaysInMonth(month);
   const schoolDays = days.filter(d => !d.isWeekend);
 
-  if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "Arial, sans-serif", fontSize: 14, color: "#7a5050" }}>
-      Loading SF2…
-    </div>
-  );
-  if (error) return <div style={{ padding: 32, color: "#e03131", fontFamily: "Arial" }}>{error}</div>;
+  const handleDownload = async () => {
+    setDownloading(true);
+    await downloadAsPDF("sf2-doc", `SF2-${grade_level}-${section}-${month}.pdf`, { landscape: true });
+    setDownloading(false);
+  };
 
-  const schoolName = settings?.school_name || "South Lakes Integrated School";
+  if (loading) return <PrintLoading label="Loading SF2…" />;
+  if (error) return <PrintError message={error} />;
+
+  const schoolName    = settings?.school_name || "South Lakes Integrated School";
+  const schoolAddress = settings?.school_address || "";
   const males   = enrollments.filter(e => (e.student_detail?.sex || "").toLowerCase() === "male").length;
   const females = enrollments.filter(e => (e.student_detail?.sex || "").toLowerCase() === "female").length;
 
-  const TH = (s = {}) => ({ border: "1px solid #444", fontSize: 7, fontWeight: 700, textAlign: "center", verticalAlign: "middle", padding: "1px 0", background: "#f0f0f0", lineHeight: 1.2, ...s });
-  const TD = (s = {}) => ({ border: "1px solid #444", fontSize: 7, textAlign: "center", verticalAlign: "middle", padding: 0, height: 15, ...s });
-  const WK = TD({ background: "#aaa" });
+  const TH = (s = {}) => ({ border: `1px solid ${C.border}`, fontSize: 7, fontWeight: 700, textAlign: "center", verticalAlign: "middle", padding: "1px 0", background: C.bg, color: C.dark, lineHeight: 1.2, fontFamily: PRINT_FONT, ...s });
+  const TD = (s = {}) => ({ border: `1px solid ${C.border}`, fontSize: 7, textAlign: "center", verticalAlign: "middle", padding: 0, height: 15, color: C.dark, ...s });
+  const WK = TD({ background: "#eee" });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#d0d0d0", padding: "20px 0", fontFamily: "Arial, sans-serif" }}>
+    <>
+      <PrintToolbar
+        onBack={() => window.close()}
+        title={`SF2 Daily Attendance Register — ${grade_level} · ${section} · ${monthLabel(month)}`}
+        actions={
+          <>
+            <ToolbarButton onClick={handleDownload} disabled={downloading} icon="download">
+              {downloading ? "Generating…" : "Download PDF (Landscape)"}
+            </ToolbarButton>
+            <ToolbarButton onClick={() => window.print()} primary icon="printer">Print</ToolbarButton>
+          </>
+        }
+      />
 
-      {/* Toolbar */}
-      <div style={{ maxWidth: 1240, margin: "0 auto 12px", padding: "0 16px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <button onClick={() => window.print()}
-          style={{ height: 34, padding: "0 16px", background: "white", border: "1.5px solid #ccc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-          <i className="ti ti-printer" style={{ fontSize: 14 }} /> Print
-        </button>
-        <button onClick={() => downloadAsPDF("sf2-doc", `SF2_${grade_level}_${section}_${month}.pdf`, { landscape: true })}
-          style={{ height: 34, padding: "0 16px", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 14px rgba(224,49,49,0.26)" }}>
-          <i className="ti ti-download" style={{ fontSize: 14 }} /> Save PDF
-        </button>
-      </div>
+      <PrintShell id="sf2-doc" maxWidth={1240} orientation="landscape" pageMargin="5mm" padding="8mm 10mm" backdrop>
+        <PrintLetterhead
+          variant="deped"
+          schoolName={schoolName}
+          schoolAddress={schoolAddress}
+          region={region}
+          division={division}
+          district={district}
+          formCode="SF 2"
+          title="Daily Attendance Register"
+        />
 
-      {/* Document */}
-      <div id="sf2-doc" style={{ background: "white", maxWidth: 1240, margin: "0 auto", padding: "8mm 10mm", boxSizing: "border-box", boxShadow: "0 4px 24px rgba(0,0,0,0.15)" }}>
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", marginBottom: 5 }}>
-          <img src={logo} alt="Logo" style={{ width: 40, height: 56, objectFit: "contain", marginRight: 10, flexShrink: 0 }} />
-          <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 8 }}>Republic of the Philippines</div>
-            <div style={{ fontSize: 8, fontWeight: 700 }}>Department of Education</div>
-            {(region || division) && (
-              <div style={{ fontSize: 7 }}>
-                {region && `Region ${region}`}{region && division && " | "}{division && `Division of ${division}`}
-              </div>
-            )}
-            <div style={{ fontSize: 8.5, fontWeight: 700, marginTop: 1 }}>{schoolName}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginTop: 4 }}>
-              School Form 2 (SF2)
-            </div>
-            <div style={{ fontSize: 9, fontWeight: 700 }}>Daily Attendance Register</div>
-          </div>
-          <div style={{ width: 50, flexShrink: 0 }} />
-        </div>
-
-        {/* Info bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4, fontSize: 8, borderTop: "1px solid #aaa", borderBottom: "1px solid #aaa", padding: "3px 2px", marginBottom: 5 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4, fontSize: 8, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "3px 2px", marginBottom: 5 }}>
           <span><b>School Year:</b> {school_year}</span>
           <span><b>Grade Level &amp; Section:</b> {grade_level} — {section}</span>
           <span><b>Month:</b> {monthLabel(month)}</span>
           {adviser && <span><b>Adviser:</b> {adviser}</span>}
         </div>
 
-        {/* Attendance table */}
         <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed" }}>
           <colgroup>
             <col style={{ width: 110 }} />
@@ -156,7 +153,6 @@ export default function SF2PrintPage() {
           </colgroup>
 
           <thead>
-            {/* Row 1: day numbers */}
             <tr>
               <th rowSpan={2} style={TH({ textAlign: "left", paddingLeft: 3, fontSize: 7.5 })}>
                 LEARNER'S NAME
@@ -164,18 +160,17 @@ export default function SF2PrintPage() {
               </th>
               <th rowSpan={2} style={TH({ fontSize: 7 })}>LRN</th>
               {days.flatMap(d => d.isWeekend
-                ? [<th key={d.date} rowSpan={2} style={TH({ background: "#aaa", fontSize: 6 })}>{d.day}</th>]
+                ? [<th key={d.date} rowSpan={2} style={TH({ background: "#eee", fontSize: 6 })}>{d.day}</th>]
                 : [<th key={d.date} colSpan={2} style={TH({ fontSize: 7 })}>{d.day}</th>]
               )}
               <th rowSpan={2} style={TH({ fontSize: 6.5 })}>Days<br />Present</th>
               <th rowSpan={2} style={TH({ fontSize: 6.5 })}>Days<br />Absent</th>
             </tr>
 
-            {/* Row 2: AM/PM for weekdays only */}
             <tr>
               {days.filter(d => !d.isWeekend).flatMap(d => [
-                <th key={`${d.date}-am`} style={TH({ fontSize: 5.5, background: "#e0e0e0" })}>AM</th>,
-                <th key={`${d.date}-pm`} style={TH({ fontSize: 5.5, background: "#e0e0e0" })}>PM</th>,
+                <th key={`${d.date}-am`} style={TH({ fontSize: 5.5, background: C.bg })}>AM</th>,
+                <th key={`${d.date}-pm`} style={TH({ fontSize: 5.5, background: C.bg })}>PM</th>,
               ])}
             </tr>
           </thead>
@@ -213,52 +208,33 @@ export default function SF2PrintPage() {
               );
             })}
 
-            {/* Total row */}
             <tr>
-              <td colSpan={2} style={TD({ textAlign: "right", fontWeight: 700, fontSize: 7, paddingRight: 4, background: "#f0f0f0" })}>
+              <td colSpan={2} style={TD({ textAlign: "right", fontWeight: 700, fontSize: 7, paddingRight: 4, background: C.bg })}>
                 TOTAL ENROLLED
               </td>
               {days.flatMap(d => d.isWeekend
                 ? [<td key={d.date} style={WK} />]
-                : [<td key={`${d.date}-a`} style={TD({ background: "#f0f0f0" })} />, <td key={`${d.date}-p`} style={TD({ background: "#f0f0f0" })} />]
+                : [<td key={`${d.date}-a`} style={TD({ background: C.bg })} />, <td key={`${d.date}-p`} style={TD({ background: C.bg })} />]
               )}
-              <td style={TD({ fontWeight: 700, fontSize: 8, background: "#f0f0f0" })} />
-              <td style={TD({ fontWeight: 700, fontSize: 8, background: "#f0f0f0" })}>{enrollments.length}</td>
+              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })} />
+              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{enrollments.length}</td>
             </tr>
           </tbody>
         </table>
 
-        {/* Summary */}
-        <div style={{ marginTop: 6, fontSize: 7.5, display: "flex", gap: 24 }}>
+        <div style={{ marginTop: 6, fontSize: 7.5, display: "flex", gap: 24, color: C.dark }}>
           <span><b>Total School Days:</b> {schoolDays.length}</span>
           <span><b>Total Enrolled:</b> {enrollments.length}</span>
           <span><b>Male:</b> {males}</span>
           <span><b>Female:</b> {females}</span>
         </div>
 
-        {/* Signature block */}
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between" }}>
-          {[["Adviser / Class Teacher", "Prepared by"], ["School Principal", "Noted by"]].map(([role, label]) => (
-            <div key={role} style={{ width: 220, textAlign: "center", fontSize: 8 }}>
-              <div style={{ marginBottom: 26 }}>&nbsp;</div>
-              <div style={{ borderTop: "1px solid #333", paddingTop: 4 }}>{label}: {role}</div>
-              <div style={{ fontSize: 6.5, color: "#777", marginTop: 2 }}>Signature over Printed Name / Date</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 8, fontSize: 6, color: "#aaa", textAlign: "right" }}>
-          Generated: {new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
-        </div>
-      </div>
-
-      <style>{`
-        @media print {
-          body { margin: 0; background: white; }
-          #sf2-doc { max-width: 100% !important; box-shadow: none !important; padding: 4mm 5mm !important; }
-        }
-        @page { size: A4 landscape; margin: 5mm; }
-      `}</style>
-    </div>
+        <SignatureRow>
+          <SignatureBlock heading="Prepared by:" role="Adviser / Class Teacher" caption="Signature over Printed Name / Date" width={180} />
+          <SignatureBlock heading="Noted by:" role="School Principal" caption="Signature over Printed Name / Date" width={180} />
+          <GeneratedStamp />
+        </SignatureRow>
+      </PrintShell>
+    </>
   );
 }

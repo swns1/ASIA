@@ -1,64 +1,59 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getReportCard } from "../api/enrollmentApi";
-import logo from "../assets/logo.png";
-
-const C = {
-  dark: "#1a0a0a", muted: "#7a5050", border: "#e8d8d8",
-  red: "#e03131", bg: "#fff8f6",
-};
+import { getSchoolSettings } from "../api/billingApi";
+import { downloadAsPDF } from "../utils/pdfExport";
+import { gradeColor } from "../utils/grading";
+import { PRINT_COLORS as C } from "../components/print/theme";
+import { PrintToolbar, ToolbarButton } from "../components/print/PrintToolbar";
+import { PrintShell, PrintLoading } from "../components/print/PrintShell";
+import { PrintLetterhead } from "../components/print/PrintLetterhead";
+import { InfoGrid, InfoItem } from "../components/print/InfoGrid";
+import { SignatureRow, SignatureBlock, GeneratedStamp } from "../components/print/SignatureBlock";
 
 const LEVEL_LABELS = {
   nursery: "Nursery", kindergarten: "Kindergarten", elementary: "Elementary",
   junior_highschool: "Junior High School", senior_highschool: "Senior High School",
 };
 
-const STATUS_META = {
-  enrolled:  { label: "Enrolled",  color: "#2e6b0d", bg: "#e8f5e0" },
-  pending:   { label: "Pending",   color: "#854f0b", bg: "#faeeda" },
-  completed: { label: "Completed", color: "#1455a0", bg: "#e3f0fd" },
-  cancelled: { label: "Cancelled", color: "#5c5752", bg: "#f0ede8" },
-};
-
-function gradeColor(avg) {
-  if (avg == null) return "#7a5050";
-  if (avg >= 90) return "#1a6b0d";
-  if (avg >= 75) return "#1455a0";
-  return "#c92a2a";
-}
-
 export default function ReportCardPage() {
   usePageTitle("Report Card");
   const { enrollmentId } = useParams();
   const navigate = useNavigate();
-  const printRef = useRef();
   const [searchParams] = useSearchParams();
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [period, setPeriod] = useState(searchParams.get("period") || "");
+  const [data,           setData]           = useState(null);
+  const [schoolName,     setSchoolName]     = useState("South Lakes Integrated School");
+  const [schoolAddress,  setSchoolAddress]  = useState("");
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [period,         setPeriod]         = useState(searchParams.get("period") || "");
+  const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => {
     if (!data) setLoading(true);
-    getReportCard(enrollmentId, period ? { grading_period: period } : {})
-      .then(setData)
+    Promise.all([
+      getReportCard(enrollmentId, period ? { grading_period: period } : {}),
+      getSchoolSettings().catch(() => null),
+    ])
+      .then(([rc, settings]) => {
+        setData(rc);
+        if (settings?.school_name) setSchoolName(settings.school_name);
+        if (settings?.school_address) setSchoolAddress(settings.school_address);
+      })
       .catch((e) => setError(e.response?.data?.detail || e.message || "Failed to load report card."))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollmentId, period]);
 
-  function handlePrint() {
-    window.print();
-  }
+  const handleDownload = async () => {
+    setDownloading(true);
+    await downloadAsPDF("report-card-print", `Report-Card-${enrollmentId}.pdf`);
+    setDownloading(false);
+  };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg }}>
-        <div style={{ color: C.muted, fontSize: 15 }}>Loading report card…</div>
-      </div>
-    );
-  }
+  if (loading) return <PrintLoading label="Loading report card…" />;
 
   if (error) {
     return (
@@ -76,104 +71,77 @@ export default function ReportCardPage() {
   const { enrollment, student, grading_periods, subjects, overall_gpa, available_periods } = data;
   const fullName = [student.last_name, student.first_name, student.middle_name]
     .filter(Boolean).join(", ");
-  const statusMeta = STATUS_META[enrollment.enrollment_status] || STATUS_META.enrolled;
 
   return (
     <>
-      {/* Print controls — hidden when printing */}
-      <div className="no-print" style={{ background: "#1a0a0a", padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, background: "transparent", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13 }}
-        >
-          <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Back
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>Grading Period:</span>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}
-            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, color: "white", padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
-            <option value="" style={{ background: C.dark }}>All Periods</option>
-            {available_periods.map((p) => (
-              <option key={p.key} value={p.key} style={{ background: C.dark }}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-        <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
-          Report Card — {fullName} · SY {enrollment.school_year}
-        </div>
-        <button
-          onClick={handlePrint}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
-        >
-          <i className="ti ti-printer" style={{ fontSize: 15 }} /> Print / Save PDF
-        </button>
-      </div>
-
-      {/* Print-ready card */}
-      <div
-        ref={printRef}
-        style={{
-          maxWidth: 900, margin: "32px auto", background: "white",
-          border: `1px solid ${C.border}`, borderRadius: 12,
-          padding: "32px 40px", fontFamily: "'DM Sans', Arial, sans-serif",
-        }}
-        id="report-card-print"
-      >
-        {/* School header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, borderBottom: `2px solid ${C.border}`, paddingBottom: 16 }}>
-          <img src={logo} alt="Logo" style={{ width: 52, height: 76, objectFit: "contain" }} />
-          <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>
-              Republic of the Philippines — Department of Education
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: C.dark, lineHeight: 1.2 }}>
-              South Lakes Integrated School
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-              Student Report Card — School Year {enrollment.school_year}
-            </div>
+      <PrintToolbar
+        onBack={() => navigate(-1)}
+        backLabel="Back"
+        middle={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>Grading Period:</span>
+            <select value={period} onChange={(e) => setPeriod(e.target.value)}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, color: "white", padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
+              <option value="" style={{ background: C.dark }}>All Periods</option>
+              {available_periods.map((p) => (
+                <option key={p.key} value={p.key} style={{ background: C.dark }}>{p.label}</option>
+              ))}
+            </select>
           </div>
-        </div>
+        }
+        title={`Report Card — ${fullName} · SY ${enrollment.school_year}`}
+        actions={
+          <>
+            <ToolbarButton onClick={handleDownload} disabled={downloading} icon="download">
+              {downloading ? "Generating…" : "Download PDF"}
+            </ToolbarButton>
+            <ToolbarButton onClick={() => window.print()} primary icon="printer">Print</ToolbarButton>
+          </>
+        }
+      />
 
-        {/* Student info strip */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 24px", marginBottom: 20, padding: "14px 18px", background: "#fff8f6", borderRadius: 8, border: `1px solid ${C.border}` }}>
-          <InfoRow label="Name" value={fullName} span />
-          <InfoRow label="LRN" value={student.lrn} />
-          <InfoRow label="Student No." value={student.student_number} />
-          <InfoRow label="Sex" value={student.sex} />
-          <InfoRow label="Birth Date" value={student.birth_date ? new Date(student.birth_date).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }) : "—"} />
-          <InfoRow label="Grade Level" value={enrollment.grade_level} />
-          <InfoRow label="Section" value={enrollment.section} />
-          <InfoRow label="School Level" value={LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} />
-          {enrollment.strand && <InfoRow label="Strand" value={enrollment.strand} />}
-          {enrollment.semester && <InfoRow label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
-          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: statusMeta.color, background: statusMeta.bg, padding: "2px 10px", borderRadius: 50 }}>{statusMeta.label}</span>
-          </div>
-        </div>
+      <PrintShell id="report-card-print" maxWidth={960} orientation="portrait" padding="40px 48px" accent>
+        <PrintLetterhead
+          variant="standard"
+          size="lg"
+          schoolName={schoolName}
+          schoolAddress={schoolAddress}
+          subtitle={`Student Report Card — School Year ${enrollment.school_year}`}
+        />
 
-        {/* Grades table */}
+        <InfoGrid columns={3}>
+          <InfoItem label="Name" value={fullName} span />
+          <InfoItem label="LRN" value={student.lrn} />
+          <InfoItem label="Student No." value={student.student_number} />
+          <InfoItem label="Sex" value={student.sex} />
+          <InfoItem label="Birth Date" value={student.birth_date ? new Date(student.birth_date).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }) : "—"} />
+          <InfoItem label="Grade Level" value={enrollment.grade_level} />
+          <InfoItem label="Section" value={enrollment.section} />
+          <InfoItem label="School Level" value={LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} />
+          {enrollment.strand && <InfoItem label="Strand" value={enrollment.strand} />}
+          {enrollment.semester && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
+        </InfoGrid>
+
         {subjects.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
             No grade records found for this enrollment.
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ background: C.dark }}>
-                <th style={{ textAlign: "left", padding: "10px 12px", color: "white", fontWeight: 700, borderRadius: "6px 0 0 0", width: "30%" }}>
+                <th style={{ textAlign: "left", padding: "13px 16px", color: "white", fontWeight: 700, borderRadius: "8px 0 0 0", width: "30%" }}>
                   Subject
                 </th>
                 {grading_periods.map((p) => (
-                  <th key={p.key} style={{ textAlign: "center", padding: "10px 8px", color: "white", fontWeight: 700, fontSize: 12 }}>
+                  <th key={p.key} style={{ textAlign: "center", padding: "13px 10px", color: "white", fontWeight: 700, fontSize: 13 }}>
                     {p.label}
                   </th>
                 ))}
-                <th style={{ textAlign: "center", padding: "10px 8px", color: "white", fontWeight: 700 }}>
+                <th style={{ textAlign: "center", padding: "13px 10px", color: "white", fontWeight: 700 }}>
                   Average
                 </th>
-                <th style={{ textAlign: "center", padding: "10px 12px", color: "white", fontWeight: 700, borderRadius: "0 6px 0 0" }}>
+                <th style={{ textAlign: "center", padding: "13px 16px", color: "white", fontWeight: 700, borderRadius: "0 8px 0 0" }}>
                   Remarks
                 </th>
               </tr>
@@ -182,29 +150,29 @@ export default function ReportCardPage() {
               {subjects.map((subj, idx) => (
                 <tr
                   key={subj.subject_id}
-                  style={{ background: idx % 2 === 0 ? "white" : "#fff8f6", borderBottom: `1px solid ${C.border}` }}
+                  style={{ background: idx % 2 === 0 ? "white" : C.bg, borderBottom: `1px solid ${C.border}` }}
                 >
-                  <td style={{ padding: "9px 12px", color: C.dark, fontWeight: 500 }}>
-                    <div style={{ fontWeight: 600 }}>{subj.subject_name}</div>
+                  <td style={{ padding: "13px 16px", color: C.dark, fontWeight: 500 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{subj.subject_name}</div>
                     <div style={{ fontSize: 11, color: C.muted }}>{subj.subject_code}</div>
                   </td>
                   {grading_periods.map((p) => {
                     const g = subj.grades[p.key];
                     return (
-                      <td key={p.key} style={{ textAlign: "center", padding: "9px 8px", color: g ? gradeColor(g.numeric_grade) : "#ccc", fontWeight: g ? 600 : 400 }}>
+                      <td key={p.key} style={{ textAlign: "center", padding: "13px 10px", color: g ? gradeColor(g.numeric_grade) : "#ccc", fontWeight: g ? 600 : 400 }}>
                         {g ? g.numeric_grade?.toFixed(2) ?? "—" : "—"}
                       </td>
                     );
                   })}
-                  <td style={{ textAlign: "center", padding: "9px 8px", fontWeight: 700, color: gradeColor(subj.average) }}>
+                  <td style={{ textAlign: "center", padding: "13px 10px", fontWeight: 700, color: gradeColor(subj.average) }}>
                     {subj.average != null ? subj.average.toFixed(2) : "—"}
                   </td>
-                  <td style={{ textAlign: "center", padding: "9px 12px" }}>
+                  <td style={{ textAlign: "center", padding: "13px 16px" }}>
                     {subj.overall_remarks ? (
                       <span style={{
-                        fontSize: 11, fontWeight: 700, borderRadius: 50, padding: "2px 10px",
-                        color: subj.overall_remarks === "passed" ? "#2e6b0d" : subj.overall_remarks === "failed" ? "#c92a2a" : "#854f0b",
-                        background: subj.overall_remarks === "passed" ? "#e8f5e0" : subj.overall_remarks === "failed" ? "#fde8e8" : "#faeeda",
+                        fontSize: 11, fontWeight: 700, borderRadius: 50, padding: "3px 11px",
+                        color: subj.overall_remarks === "passed" ? C.green : subj.overall_remarks === "failed" ? C.red : C.amber,
+                        background: subj.overall_remarks === "passed" ? C.greenBg : subj.overall_remarks === "failed" ? C.redBg : C.amberBg,
                       }}>
                         {subj.overall_remarks.charAt(0).toUpperCase() + subj.overall_remarks.slice(1)}
                       </span>
@@ -214,19 +182,19 @@ export default function ReportCardPage() {
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ background: "#fff0f0", borderTop: `2px solid ${C.border}` }}>
-                <td colSpan={grading_periods.length + 1} style={{ padding: "10px 12px", fontWeight: 700, color: C.dark, textAlign: "right" }}>
+              <tr style={{ background: C.redBg, borderTop: `2px solid ${C.border}` }}>
+                <td colSpan={grading_periods.length + 1} style={{ padding: "13px 16px", fontWeight: 700, color: C.dark, textAlign: "right" }}>
                   General Average
                 </td>
-                <td style={{ textAlign: "center", padding: "10px 8px", fontWeight: 800, fontSize: 16, color: gradeColor(overall_gpa) }}>
+                <td style={{ textAlign: "center", padding: "13px 10px", fontWeight: 800, fontSize: 18, color: gradeColor(overall_gpa) }}>
                   {overall_gpa != null ? overall_gpa.toFixed(2) : "—"}
                 </td>
-                <td style={{ textAlign: "center", padding: "10px 12px" }}>
+                <td style={{ textAlign: "center", padding: "13px 16px" }}>
                   {overall_gpa != null ? (
                     <span style={{
-                      fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "3px 12px",
-                      color: overall_gpa >= 75 ? "#2e6b0d" : "#c92a2a",
-                      background: overall_gpa >= 75 ? "#e8f5e0" : "#fde8e8",
+                      fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "4px 14px",
+                      color: overall_gpa >= 75 ? C.green : C.red,
+                      background: overall_gpa >= 75 ? C.greenBg : C.redBg,
                     }}>
                       {overall_gpa >= 75 ? "Passed" : "Failed"}
                     </span>
@@ -237,45 +205,12 @@ export default function ReportCardPage() {
           </table>
         )}
 
-        {/* Footer */}
-        <div style={{ marginTop: 32, borderTop: `1px solid ${C.border}`, paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 11, color: C.muted }}>
-            Generated: {new Date().toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ borderTop: `1px solid ${C.dark}`, width: 200, marginBottom: 4 }} />
-            <div style={{ fontSize: 11, color: C.muted }}>Registrar's Signature over Printed Name</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ borderTop: `1px solid ${C.dark}`, width: 200, marginBottom: 4 }} />
-            <div style={{ fontSize: 11, color: C.muted }}>School Principal's Signature</div>
-          </div>
-        </div>
-      </div>
-
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { margin: 0; background: white; }
-          #report-card-print {
-            max-width: 100% !important;
-            margin: 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-            padding: 24px 32px !important;
-            box-shadow: none !important;
-          }
-        }
-      `}</style>
+        <SignatureRow>
+          <GeneratedStamp />
+          <SignatureBlock role="Registrar's Signature over Printed Name" />
+          <SignatureBlock role="School Principal's Signature" />
+        </SignatureRow>
+      </PrintShell>
     </>
-  );
-}
-
-function InfoRow({ label, value, span }) {
-  return (
-    <div style={span ? { gridColumn: "1 / -1" } : {}}>
-      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 13, color: C.dark, fontWeight: 600, marginTop: 1 }}>{value || "—"}</div>
-    </div>
   );
 }

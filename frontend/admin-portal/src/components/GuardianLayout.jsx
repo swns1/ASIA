@@ -21,7 +21,6 @@ export default function GuardianLayout({ children }) {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes spin { to{transform:rotate(360deg)} }
         * { box-sizing:border-box; margin:0; padding:0; }

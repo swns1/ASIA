@@ -1165,7 +1165,6 @@ export default function RequirementsPage() {
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 const baseCss = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
   @keyframes spin    { to{transform:rotate(360deg)} }

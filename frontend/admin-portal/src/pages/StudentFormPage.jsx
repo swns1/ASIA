@@ -1960,7 +1960,6 @@ export default function StudentFormPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         .req-doc-card:hover { box-shadow: 0 4px 20px rgba(224,49,49,0.10) !important; transform: translateY(-1px); }
       `}</style>

@@ -52,7 +52,6 @@ export default function LoginPage() {
       style={{ height: "100vh", fontFamily: "'DM Sans', sans-serif" }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
       `}</style>
 
       {/* Left: Brand panel */}

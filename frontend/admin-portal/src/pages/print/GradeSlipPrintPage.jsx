@@ -2,65 +2,30 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { getEnrollment, getSubjects, getGrades } from "../../api/enrollmentApi";
 import { getSchoolSettings } from "../../api/billingApi";
-import logo from "../../assets/logo.png";
-
-const C = {
-  dark: "#1a0a0a", muted: "#7a5050", border: "#e8d8d8",
-  red: "#e03131", bg: "#fff8f6",
-};
-
-const PERIODS = {
-  Nursery:      ["annual"],
-  Kindergarten: ["annual"],
-  Elementary:   ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  JHS:          ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  SHS:          ["1st_semester", "2nd_semester"],
-};
-
-const PERIOD_LABEL = {
-  "1st_quarter":  "1st Quarter",
-  "2nd_quarter":  "2nd Quarter",
-  "3rd_quarter":  "3rd Quarter",
-  "4th_quarter":  "4th Quarter",
-  "1st_semester": "1st Semester",
-  "2nd_semester": "2nd Semester",
-  "annual":       "Annual",
-};
-
-const STATUS_META = {
-  enrolled:  { label: "Enrolled",  color: "#2e6b0d", bg: "#e8f5e0" },
-  pending:   { label: "Pending",   color: "#854f0b", bg: "#faeeda" },
-  completed: { label: "Completed", color: "#1455a0", bg: "#e3f0fd" },
-  cancelled: { label: "Cancelled", color: "#5c5752", bg: "#f0ede8" },
-};
-
-function gradeColor(g) {
-  if (g == null) return C.muted;
-  if (g >= 90) return "#1a6b0d";
-  if (g >= 75) return "#1455a0";
-  return "#c92a2a";
-}
-
-function InfoRow({ label, value, span }) {
-  return (
-    <div style={span ? { gridColumn: "1 / -1" } : {}}>
-      <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 13, color: C.dark, fontWeight: 600, marginTop: 1 }}>{value || "—"}</div>
-    </div>
-  );
-}
+import { downloadAsPDF } from "../../utils/pdfExport";
+import { levelConfig, PERIOD_LABEL, gradeColor } from "../../utils/grading";
+import { PRINT_COLORS as C } from "../../components/print/theme";
+import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
+import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
+import { PrintLetterhead } from "../../components/print/PrintLetterhead";
+import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
+import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
+import { StatusBadge } from "../../components/print/StatusBadge";
+import { ENROLLMENT_STATUS_META } from "../../components/print/statusMeta";
 
 export default function GradeSlipPrintPage() {
   const { enrollmentId } = useParams();
   const [searchParams]   = useSearchParams();
 
-  const [enrollment,  setEnrollment]  = useState(null);
-  const [subjects,    setSubjects]    = useState([]);
-  const [grades,      setGrades]      = useState([]);
-  const [schoolName,  setSchoolName]  = useState("South Lakes Integrated School");
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [period,      setPeriod]      = useState(searchParams.get("period") || "");
+  const [enrollment,     setEnrollment]     = useState(null);
+  const [subjects,       setSubjects]       = useState([]);
+  const [grades,         setGrades]         = useState([]);
+  const [schoolName,     setSchoolName]     = useState("South Lakes Integrated School");
+  const [schoolAddress,  setSchoolAddress]  = useState("");
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [period,         setPeriod]         = useState(searchParams.get("period") || "");
+  const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -68,7 +33,7 @@ export default function GradeSlipPrintPage() {
         const enr = await getEnrollment(enrollmentId);
         setEnrollment(enr);
 
-        const available = PERIODS[enr.school_level] ?? PERIODS.Elementary;
+        const available = levelConfig(enr.school_level).periods;
         if (!period) setPeriod(available[0]);
 
         const [subs, settings] = await Promise.all([
@@ -82,6 +47,7 @@ export default function GradeSlipPrintPage() {
 
         setSubjects(Array.isArray(subs) ? subs : subs.results ?? []);
         if (settings?.school_name) setSchoolName(settings.school_name);
+        if (settings?.school_address) setSchoolAddress(settings.school_address);
       } catch (e) {
         setError(e.message || "Failed to load data.");
       } finally {
@@ -97,17 +63,14 @@ export default function GradeSlipPrintPage() {
       .catch(console.error);
   }, [enrollmentId, period]);
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', Arial, sans-serif", color: C.muted, fontSize: 15 }}>
-      Loading…
-    </div>
-  );
+  const handleDownload = async () => {
+    setDownloading(true);
+    await downloadAsPDF("grade-slip-doc", `Grade-Slip-${enrollmentId}-${period}.pdf`);
+    setDownloading(false);
+  };
 
-  if (error || !enrollment) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', Arial, sans-serif" }}>
-      <div style={{ textAlign: "center", color: C.red }}>{error || "Enrollment not found."}</div>
-    </div>
-  );
+  if (loading) return <PrintLoading label="Loading…" />;
+  if (error || !enrollment) return <PrintError message={error || "Enrollment not found."} />;
 
   const fullName = [
     enrollment.student_detail?.last_name,
@@ -115,8 +78,7 @@ export default function GradeSlipPrintPage() {
     enrollment.student_detail?.middle_name,
   ].filter(Boolean).join(", ") || enrollment.student_name || "—";
 
-  const statusMeta    = STATUS_META[enrollment.enrollment_status] ?? STATUS_META.enrolled;
-  const available     = PERIODS[enrollment.school_level] ?? PERIODS.Elementary;
+  const available     = levelConfig(enrollment.school_level).periods;
   const gradeMap      = {};
   grades.forEach((g) => { gradeMap[g.subject ?? g.subject_id] = g; });
 
@@ -127,67 +89,53 @@ export default function GradeSlipPrintPage() {
 
   return (
     <>
-      {/* Toolbar */}
-      <div className="no-print" style={{ background: C.dark, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
-        <button onClick={() => window.close()}
-          style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, background: "transparent", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}>
-          <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Close
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>Grading Period:</span>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}
-            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, color: "white", padding: "6px 10px", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {available.map((p) => (
-              <option key={p} value={p} style={{ background: C.dark }}>{PERIOD_LABEL[p]}</option>
-            ))}
-          </select>
-        </div>
-        <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>
-          Grade Slip — {fullName} · SY {enrollment.school_year}
-        </div>
-        <button onClick={() => window.print()}
-          style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", border: "none", borderRadius: 8, background: C.red, color: "white", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>
-          <i className="ti ti-printer" style={{ fontSize: 15 }} />
-          Print
-        </button>
-      </div>
-
-      {/* Document */}
-      <div id="grade-slip-doc" style={{ maxWidth: 900, margin: "32px auto", background: "white", border: `1px solid ${C.border}`, borderRadius: 12, padding: "32px 40px", fontFamily: "'DM Sans', Arial, sans-serif" }}>
-
-        {/* School header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, borderBottom: `2px solid ${C.border}`, paddingBottom: 16 }}>
-          <img src={logo} alt="Logo" style={{ width: 52, height: 76, objectFit: "contain" }} />
-          <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>
-              Republic of the Philippines — Department of Education
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: C.dark, lineHeight: 1.2 }}>{schoolName}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-              Grade Slip — {PERIOD_LABEL[period]} · School Year {enrollment.school_year}
-            </div>
+      <PrintToolbar
+        onBack={() => window.close()}
+        middle={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>Grading Period:</span>
+            <select value={period} onChange={(e) => setPeriod(e.target.value)}
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, color: "white", padding: "6px 10px", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              {available.map((p) => (
+                <option key={p} value={p} style={{ background: C.dark }}>{PERIOD_LABEL[p]}</option>
+              ))}
+            </select>
           </div>
-        </div>
+        }
+        title={`Grade Slip — ${fullName} · SY ${enrollment.school_year}`}
+        actions={
+          <>
+            <ToolbarButton onClick={handleDownload} disabled={downloading} icon="download">
+              {downloading ? "Generating…" : "Download PDF"}
+            </ToolbarButton>
+            <ToolbarButton onClick={() => window.print()} primary icon="printer">Print</ToolbarButton>
+          </>
+        }
+      />
 
-        {/* Student info strip */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px 24px", marginBottom: 20, padding: "14px 18px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
-          <InfoRow label="Name"        value={fullName} span />
-          <InfoRow label="LRN"         value={enrollment.student_detail?.lrn} />
-          <InfoRow label="Student No." value={enrollment.student_detail?.student_number} />
-          <InfoRow label="Grade Level" value={enrollment.grade_level} />
-          <InfoRow label="Section"     value={enrollment.section} />
-          {enrollment.strand   && <InfoRow label="Strand"   value={enrollment.strand} />}
-          {enrollment.semester && <InfoRow label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
-          <InfoRow label="School Year" value={enrollment.school_year} />
+      <PrintShell id="grade-slip-doc" maxWidth={900} orientation="portrait">
+        <PrintLetterhead
+          variant="standard"
+          schoolName={schoolName}
+          schoolAddress={schoolAddress}
+          subtitle={`Grade Slip — ${PERIOD_LABEL[period]} · School Year ${enrollment.school_year}`}
+        />
+
+        <InfoGrid columns={3}>
+          <InfoItem label="Name"        value={fullName} span />
+          <InfoItem label="LRN"         value={enrollment.student_detail?.lrn} />
+          <InfoItem label="Student No." value={enrollment.student_detail?.student_number} />
+          <InfoItem label="Grade Level" value={enrollment.grade_level} />
+          <InfoItem label="Section"     value={enrollment.section} />
+          {enrollment.strand   && <InfoItem label="Strand"   value={enrollment.strand} />}
+          {enrollment.semester && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
+          <InfoItem label="School Year" value={enrollment.school_year} />
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: statusMeta.color, background: statusMeta.bg, padding: "2px 10px", borderRadius: 50 }}>
-              {statusMeta.label}
-            </span>
+            <StatusBadge status={enrollment.enrollment_status} meta={ENROLLMENT_STATUS_META} defaultKey="enrolled" />
           </div>
-        </div>
+        </InfoGrid>
 
-        {/* Grades table */}
         {subjects.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
             No grade records found for this enrollment.
@@ -207,10 +155,10 @@ export default function GradeSlipPrintPage() {
                 const g       = gradeMap[sub.subject_id];
                 const gv      = g?.grade != null ? parseFloat(g.grade) : null;
                 const remarks = g?.remarks;
-                const remarkColor = remarks?.toLowerCase() === "passed" ? "#2e6b0d"
-                  : remarks?.toLowerCase() === "failed" ? "#c92a2a" : C.muted;
-                const remarkBg = remarks?.toLowerCase() === "passed" ? "#e8f5e0"
-                  : remarks?.toLowerCase() === "failed" ? "#fde8e8" : "#f0ede8";
+                const remarkColor = remarks?.toLowerCase() === "passed" ? C.green
+                  : remarks?.toLowerCase() === "failed" ? C.red : C.muted;
+                const remarkBg = remarks?.toLowerCase() === "passed" ? C.greenBg
+                  : remarks?.toLowerCase() === "failed" ? C.redBg : C.grayBg;
                 return (
                   <tr key={sub.subject_id ?? i} style={{ background: i % 2 === 0 ? "white" : C.bg, borderBottom: `1px solid ${C.border}` }}>
                     <td style={{ padding: "9px 12px", color: C.dark }}>
@@ -236,7 +184,7 @@ export default function GradeSlipPrintPage() {
             </tbody>
             {gwa != null && (
               <tfoot>
-                <tr style={{ background: "#fff0f0", borderTop: `2px solid ${C.border}` }}>
+                <tr style={{ background: C.redBg, borderTop: `2px solid ${C.border}` }}>
                   <td colSpan={2} style={{ padding: "10px 12px", fontWeight: 700, color: C.dark, textAlign: "right", fontSize: 13 }}>
                     General Weighted Average
                   </td>
@@ -245,9 +193,9 @@ export default function GradeSlipPrintPage() {
                   </td>
                   <td style={{ textAlign: "center", padding: "10px 12px" }}>
                     {parseFloat(gwa) >= 75 ? (
-                      <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "3px 12px", color: "#2e6b0d", background: "#e8f5e0" }}>Passed</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "3px 12px", color: C.green, background: C.greenBg }}>Passed</span>
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "3px 12px", color: "#c92a2a", background: "#fde8e8" }}>Failed</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "3px 12px", color: C.red, background: C.redBg }}>Failed</span>
                     )}
                   </td>
                 </tr>
@@ -256,13 +204,12 @@ export default function GradeSlipPrintPage() {
           </table>
         )}
 
-        {/* Summary chips */}
         <div style={{ display: "flex", gap: 12, marginBottom: 28 }}>
           {[
-            { label: "Subjects", value: subjects.length, color: C.dark,    bg: C.bg },
-            { label: "Passed",   value: passed,          color: "#2e6b0d", bg: "#e8f5e0" },
-            { label: "Failed",   value: failed,          color: "#c92a2a", bg: "#fde8e8" },
-            { label: "GWA",      value: gwa ?? "—",      color: gwa != null ? gradeColor(parseFloat(gwa)) : C.muted, bg: "#fff0f0", bold: true },
+            { label: "Subjects", value: subjects.length, color: C.dark,  bg: C.bg },
+            { label: "Passed",   value: passed,          color: C.green, bg: C.greenBg },
+            { label: "Failed",   value: failed,          color: C.red,   bg: C.redBg },
+            { label: "GWA",      value: gwa ?? "—",       color: gwa != null ? gradeColor(parseFloat(gwa)) : C.muted, bg: C.redBg, bold: true },
           ].map(({ label, value, color, bg, bold }) => (
             <div key={label} style={{ flex: 1, background: bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 2 }}>{label}</div>
@@ -271,33 +218,13 @@ export default function GradeSlipPrintPage() {
           ))}
         </div>
 
-        {/* Footer */}
-        <div style={{ marginTop: 32, borderTop: `1px solid ${C.border}`, paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 11, color: C.muted }}>
-            Generated: {new Date().toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
-          </div>
-          <SigBlock label="Class Adviser" />
-          <SigBlock label="Registrar's Signature over Printed Name" />
-          <SigBlock label="School Principal's Signature" />
-        </div>
-      </div>
-
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { margin: 0; background: white; }
-          #grade-slip-doc { max-width: 100% !important; margin: 0 !important; border: none !important; border-radius: 0 !important; padding: 24px 32px !important; }
-        }
-      `}</style>
+        <SignatureRow>
+          <GeneratedStamp />
+          <SignatureBlock role="Class Adviser" width={160} />
+          <SignatureBlock role="Registrar's Signature over Printed Name" width={160} />
+          <SignatureBlock role="School Principal's Signature" width={160} />
+        </SignatureRow>
+      </PrintShell>
     </>
-  );
-}
-
-function SigBlock({ label }) {
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ borderTop: `1px solid ${C.dark}`, width: 160, marginBottom: 4 }} />
-      <div style={{ fontSize: 11, color: C.muted }}>{label}</div>
-    </div>
   );
 }
