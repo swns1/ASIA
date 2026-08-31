@@ -1103,8 +1103,7 @@ function DocumentsStep({
 
     async function runOcr() {
       try {
-        const token = sessionStorage.getItem("access_token");
-        const data = await scanDocument(file, token);
+        const data = await scanDocument(file);
         if (data.success) {
           setOcrStates((prev) => ({
             ...prev,
