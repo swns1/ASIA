@@ -40,7 +40,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r backend/requirments.txt
+        run: pip install -r backend/${{ matrix.service }}/requirements.txt
 
       - name: Django system check
         working-directory: backend/${{ matrix.service }}

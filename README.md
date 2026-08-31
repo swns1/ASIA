@@ -40,12 +40,12 @@ CREATE INDEX IF NOT EXISTS guardians_user_id_idx ON guardians (user_id);
 
 ### 2. Backend
 
-All four services share **one** virtualenv at the repo root and **one** requirements file — set it up once:
+Each service has its own pinned `requirements.txt` (`backend/<service-name>/requirements.txt`) — that's the source of truth for what it needs. For local development it's still convenient to share one virtualenv at the repo root:
 
 ```sh
 python -m venv .venv
 .venv\Scripts\activate        # or `source .venv/bin/activate` on macOS/Linux
-pip install -r backend/requirments.txt
+pip install -r backend/identity-service/requirements.txt -r backend/enrollment-service/requirements.txt -r backend/billing-service/requirements.txt -r backend/student-service/requirements.txt
 ```
 
 Then, for each of the 4 services:
