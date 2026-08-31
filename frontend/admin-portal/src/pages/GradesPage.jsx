@@ -8,6 +8,7 @@ import AppLayout from "../components/AppLayout";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
+import Pagination from "../components/Pagination";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -567,45 +568,14 @@ function OverviewTab({ onNavigate }) {
 
       {/* ── Pagination ── */}
       {!loading && pageMeta.count > 0 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 12, color: "#b09090" }}>
-            Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
-            <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
-            &nbsp;·&nbsp; {pageMeta.count.toLocaleString()} total records
-          </span>
-          <div style={{ display: "flex", gap: 4 }}>
-            <motion.button
-              whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-              style={{ ...ovPgBtn, opacity: !pageMeta.previous ? 0.4 : 1, cursor: !pageMeta.previous ? "default" : "pointer" }}
-              disabled={!pageMeta.previous}
-              onClick={() => fetchPage(page - 1)}
-            >
-              <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-            </motion.button>
-            {(() => {
-              const windowSize = Math.min(totalPages, 5);
-              const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
-              return Array.from({ length: windowSize }, (_, i) => start + i);
-            })().map((p) => (
-              <motion.button
-                key={p}
-                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                style={{ ...ovPgBtn, ...(p === page ? ovPgBtnActive : {}) }}
-                onClick={() => fetchPage(p)}
-              >
-                {p}
-              </motion.button>
-            ))}
-            <motion.button
-              whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-              style={{ ...ovPgBtn, opacity: !pageMeta.next ? 0.4 : 1, cursor: !pageMeta.next ? "default" : "pointer" }}
-              disabled={!pageMeta.next}
-              onClick={() => fetchPage(page + 1)}
-            >
-              <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-            </motion.button>
-          </div>
-        </div>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          count={pageMeta.count}
+          hasPrevious={!!pageMeta.previous}
+          hasNext={!!pageMeta.next}
+          onPageChange={fetchPage}
+        />
       )}
     </div>
   );
@@ -666,17 +636,6 @@ const PALETTES = [
   { bg:"#e8fdfd", color:"#0891b2" },
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
-
-// ── Overview pagination button styles ─────────────────────────────────────────
-const ovPgBtn = {
-  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
-  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
-  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
-};
-const ovPgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
-};
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const thStyle = {

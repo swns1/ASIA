@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
+import { Field, Input, Select, Textarea } from "../components/FormField";
 import { modalVariants, springTransition } from "../utils/motion";
 import { getStudent, updateStudent } from "../api/studentApi";
 import {
@@ -96,18 +97,6 @@ const C = {
   bg: "#fff8f6", white: "#ffffff", shadow: "0 4px 24px rgba(224,49,49,0.10)",
 };
 
-const inputStyle = {
-  width: "100%", border: `1.5px solid ${C.redMid}`, borderRadius: 10,
-  padding: "10px 14px", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
-  color: C.dark, background: "#fffbfb", outline: "none",
-  boxSizing: "border-box", transition: "border-color .15s, box-shadow .15s",
-};
-
-const labelStyle = {
-  display: "block", fontSize: 11, fontWeight: 700, color: C.muted,
-  letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5,
-};
-
 const cardStyle = {
   background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`,
   padding: "24px 28px", boxShadow: C.shadow, marginBottom: 18,
@@ -124,56 +113,6 @@ const btnDanger = {
   borderRadius: 8, padding: "5px 12px", fontSize: 12,
   fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
 };
-
-// ─── reusable field ──────────────────────────────────────────────────────────
-function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Input({ style, onFocus, onBlur, ...props }) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <input
-      {...props}
-      style={{
-        ...inputStyle,
-        ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}),
-        ...style,
-      }}
-      onFocus={(e) => { setFocused(true); onFocus?.(e); }}
-      onBlur={(e) => { setFocused(false); onBlur?.(e); }}
-    />
-  );
-}
-
-function Select({ children, style, ...props }) {
-  return (
-    <select {...props} style={{ ...inputStyle, ...style }}>
-      {children}
-    </select>
-  );
-}
-
-function Textarea({ style, ...props }) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <textarea
-      {...props}
-      style={{
-        ...inputStyle, minHeight: 72, resize: "vertical",
-        ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}),
-        ...style,
-      }}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-    />
-  );
-}
 
 // ─── step indicator ──────────────────────────────────────────────────────────
 function StepBar({ current, onStepClick }) {
