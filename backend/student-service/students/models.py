@@ -42,7 +42,7 @@ class Household(models.Model):
 
 class Student(models.Model):
     student_id = models.BigAutoField(primary_key=True)
-    student_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    student_number = models.CharField(max_length=30, unique=True, blank=True)
     lrn = models.CharField(max_length=20, unique=True)
     first_name = models.CharField(max_length=50)
     middle_name = models.CharField(max_length=50, null=True, blank=True)
@@ -161,7 +161,7 @@ class StudentSibling(models.Model):
     student_sibling_id = models.BigAutoField(primary_key=True)
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="siblings")
     sibling_student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="sibling_of")
-    relationship_note = models.CharField(max_length=20, default="sibling")
+    relationship_note = models.CharField(max_length=20, default="sibling", null=True)
 
     class Meta:
         db_table = "student_siblings"
