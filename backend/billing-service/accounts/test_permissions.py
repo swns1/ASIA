@@ -96,10 +96,13 @@ class TestIsBillingStaffOrOwnerGuardianReadOnly:
         post_request.user = _user("accounting")
         assert self.perm.has_permission(post_request, None) is True
 
-    def test_registrar_denied(self):
-        request = factory.get("/")
-        request.user = _user("registrar")
-        assert self.perm.has_permission(request, None) is False
+    def test_registrar_full_access(self):
+        get_request = factory.get("/")
+        get_request.user = _user("registrar")
+        assert self.perm.has_permission(get_request, None) is True
+        post_request = factory.post("/")
+        post_request.user = _user("registrar")
+        assert self.perm.has_permission(post_request, None) is True
 
     def test_guardian_read_allowed_write_denied(self):
         get_request = factory.get("/")
