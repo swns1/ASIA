@@ -10,7 +10,7 @@ import { PRINT_COLORS } from "./theme";
 
 export function SignatureRow({ children }) {
   return (
-    <div style={{ marginTop: 32, borderTop: `1px solid ${PRINT_COLORS.border}`, paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
+    <div style={{ marginTop: 20, borderTop: `1px solid ${PRINT_COLORS.border}`, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 20, flexWrap: "wrap", breakInside: "avoid", pageBreakInside: "avoid" }}>
       {children}
     </div>
   );

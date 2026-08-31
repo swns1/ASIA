@@ -48,9 +48,24 @@ export function PrintShell({
 
       <style>{`
         @page { size: A4 ${orientation}; margin: ${margin}; }
+        #${id} table { word-break: break-word; overflow-wrap: break-word; }
+        #${id} thead { display: table-header-group; }
+        /* Browsers default <tfoot> to display:table-footer-group, which repeats it at
+           the bottom of every page a table spans — correct for a running subtotal, but
+           every tfoot in this app holds a one-time grand total (GWA, invoice subtotal),
+           so left at the default it shows the final total prematurely mid-table too. */
+        #${id} tfoot { display: table-row-group; }
+        #${id} tr { break-inside: avoid; page-break-inside: avoid; }
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; background: white; }
+        }
+        /* This lean-layout ruleset is duplicated under both selectors below rather than
+           shared, because html2canvas (the html2pdf.js export path, see utils/pdfExport.js)
+           captures the DOM's live on-screen state and never triggers @media print itself —
+           without the body.force-print-layout selector, an exported PDF would include the
+           on-screen card's padding/border/rounded corners instead of this edge-to-edge layout. */
+        @media print {
           .print-shell-backdrop { background: white !important; padding: 0 !important; min-height: 0 !important; }
           #${id} {
             max-width: 100% !important;
@@ -60,6 +75,15 @@ export function PrintShell({
             border-radius: 0 !important;
             padding: 0 !important;
           }
+        }
+        body.force-print-layout .print-shell-backdrop { background: white !important; padding: 0 !important; min-height: 0 !important; }
+        body.force-print-layout #${id} {
+          max-width: 100% !important;
+          margin: 0 !important;
+          border: none !important;
+          ${accent ? `border-top: 4px solid ${PRINT_COLORS.red} !important;` : ""}
+          border-radius: 0 !important;
+          padding: 0 !important;
         }
       `}</style>
     </>

@@ -113,30 +113,30 @@ export default function CORPrintPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 24 }}>
             <thead>
               <tr style={{ background: C.dark }}>
-                <th style={{ textAlign: "center", padding: "10px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 40, borderRadius: "6px 0 0 0" }}>#</th>
-                <th style={{ textAlign: "center", padding: "10px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 110 }}>Code</th>
-                <th style={{ textAlign: "left",   padding: "10px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Subject Name</th>
-                {isSHS && <th style={{ textAlign: "center", padding: "10px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Strand</th>}
+                <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 40, borderRadius: "6px 0 0 0" }}>#</th>
+                <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 110 }}>Code</th>
+                <th style={{ textAlign: "left",   padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Subject Name</th>
+                {isSHS && <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Strand</th>}
                 {isSHS
-                  ? <th style={{ textAlign: "center", padding: "10px 12px", color: "white", fontWeight: 700, fontSize: 12, borderRadius: "0 6px 0 0" }}>Semester</th>
+                  ? <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, borderRadius: "0 6px 0 0" }}>Semester</th>
                   : <th style={{ borderRadius: "0 6px 0 0", padding: 0, width: 0 }} />}
               </tr>
             </thead>
             <tbody>
               {subjects.map((s, i) => (
                 <tr key={s.subject_id ?? i} style={{ background: i % 2 === 0 ? "white" : C.bg, borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ textAlign: "center", padding: "9px 12px", color: C.muted, fontSize: 12 }}>{i + 1}</td>
-                  <td style={{ textAlign: "center", padding: "9px 12px", color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{s.subject_code}</td>
-                  <td style={{ textAlign: "left",   padding: "9px 12px", color: C.dark, fontWeight: 500 }}>{s.subject_name}</td>
-                  {isSHS && <td style={{ textAlign: "center", padding: "9px 12px", color: C.muted, fontSize: 12 }}>{s.strand || "—"}</td>}
-                  {isSHS && <td style={{ textAlign: "center", padding: "9px 12px", color: C.muted, fontSize: 12 }}>{s.semester || "—"}</td>}
+                  <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{i + 1}</td>
+                  <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{s.subject_code}</td>
+                  <td style={{ textAlign: "left",   padding: "6px 12px", color: C.dark, fontWeight: 500 }}>{s.subject_name}</td>
+                  {isSHS && <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{s.strand || "—"}</td>}
+                  {isSHS && <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{s.semester || "—"}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <div style={{ padding: "12px 16px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`, marginBottom: 28, fontSize: 12, color: C.muted, lineHeight: 1.8, fontStyle: "italic" }}>
+        <div style={{ padding: "12px 16px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`, marginBottom: 18, fontSize: 12, color: C.muted, lineHeight: 1.8, fontStyle: "italic" }}>
           This certifies that{" "}
           <strong style={{ color: C.dark }}>
             {student.first_name} {student.middle_name ? student.middle_name[0] + ". " : ""}{student.last_name}

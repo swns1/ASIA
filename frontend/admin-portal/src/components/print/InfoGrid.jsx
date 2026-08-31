@@ -14,7 +14,7 @@ export function InfoGrid({ columns = 3, tinted = true, bordered = false, childre
     <div style={{
       display: "grid", gridTemplateColumns: `repeat(${columns}, 1fr)`,
       gap: bordered ? "5px 16px" : "10px 24px",
-      marginBottom: 20,
+      marginBottom: 16,
       padding: bordered ? "9px 12px" : "14px 18px",
       background: tinted ? PRINT_COLORS.bg : "white",
       border: `1px solid ${bordered ? "#aaa" : PRINT_COLORS.border}`,

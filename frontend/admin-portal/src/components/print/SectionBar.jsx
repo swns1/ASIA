@@ -7,7 +7,11 @@ import { PRINT_COLORS } from "./theme";
 
 export function SectionBar({ children, color = PRINT_COLORS.dark }) {
   return (
-    <div style={{ background: color, color: "white", fontSize: 10, fontWeight: 800, padding: "5px 10px", marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+    <div style={{
+      background: color, color: "white", fontSize: 10, fontWeight: 800, padding: "5px 10px",
+      marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase",
+      breakAfter: "avoid", pageBreakAfter: "avoid",
+    }}>
       {children}
     </div>
   );

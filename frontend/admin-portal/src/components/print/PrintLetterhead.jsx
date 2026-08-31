@@ -27,7 +27,7 @@ export function PrintLetterhead({
 
   if (variant === "deped") {
     return (
-      <div style={{ borderBottom: `2px solid ${PRINT_COLORS.border}`, paddingBottom: 12, marginBottom: 10 }}>
+      <div style={{ borderBottom: `2px solid ${PRINT_COLORS.border}`, paddingBottom: 10, marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ fontSize: 10, color: PRINT_COLORS.muted, minWidth: 180 }}>
             <FieldLine label="Region" value={region} width={120} />
@@ -62,7 +62,7 @@ export function PrintLetterhead({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, borderBottom: `2px solid ${PRINT_COLORS.border}`, paddingBottom: 16 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16, borderBottom: `2px solid ${PRINT_COLORS.border}`, paddingBottom: 14 }}>
       <img src={logo} alt="Logo" style={{ width: logoSize.width, height: logoSize.height, objectFit: "contain" }} />
       <div style={{ flex: 1, textAlign: "center" }}>
         <div style={{ fontSize: 11, color: PRINT_COLORS.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>

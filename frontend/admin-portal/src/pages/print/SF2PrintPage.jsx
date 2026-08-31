@@ -142,7 +142,7 @@ export default function SF2PrintPage() {
 
         <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed" }}>
           <colgroup>
-            <col style={{ width: 110 }} />
+            <col style={{ width: 150 }} />
             <col style={{ width: 60 }} />
             {days.flatMap(d => d.isWeekend
               ? [<col key={d.date} style={{ width: 8 }} />]
@@ -190,7 +190,7 @@ export default function SF2PrintPage() {
 
               return (
                 <tr key={en.enrollment_id}>
-                  <td style={TD({ textAlign: "left", paddingLeft: 3, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap" })}>
+                  <td title={name} style={TD({ textAlign: "left", paddingLeft: 3, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" })}>
                     {idx + 1}. {name}
                   </td>
                   <td style={TD({ fontSize: 6 })}>{st.lrn || ""}</td>

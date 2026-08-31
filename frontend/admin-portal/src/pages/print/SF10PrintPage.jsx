@@ -214,7 +214,7 @@ export default function SF10PrintPage() {
             return (
               <div key={enr.enrollment_id} style={{ marginBottom: idx < records.length - 1 ? 14 : 0 }}>
 
-                <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "5px 5px 0 0", padding: "5px 10px", display: "flex", gap: 18, flexWrap: "wrap", fontSize: 9.5, fontWeight: 700, color: C.dark }}>
+                <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "5px 5px 0 0", padding: "5px 10px", display: "flex", gap: 18, flexWrap: "wrap", fontSize: 9.5, fontWeight: 700, color: C.dark, breakAfter: "avoid", pageBreakAfter: "avoid" }}>
                   <span>Grade Level: <strong>{enr.grade_level}</strong></span>
                   <span>School Year: <strong>{enr.school_year}</strong></span>
                   {enr.section  && <span>Section: <strong>{enr.section}</strong></span>}
