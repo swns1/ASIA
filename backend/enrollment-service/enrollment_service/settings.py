@@ -138,7 +138,7 @@ REST_FRAMEWORK = {
         "accounts.authentication.SingleSessionJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
+        "accounts.permissions.HasRole",
     ),
     "DEFAULT_FILTER_BACKENDS": (
         "django_filters.rest_framework.DjangoFilterBackend",
