@@ -3,23 +3,12 @@ Stub User model that points at the existing `users` table managed by
 identity-service. It is `managed = False` so Django will never alter it.
 Mirrors the identical file in enrollment-service and billing-service.
 """
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
 
+from shared.roles import ROLE_CHOICES
+from shared.user_stub import UserManager
 
-ROLE_CHOICES = [
-    ("super_admin", "Super Admin"),
-    ("admin",       "Admin"),
-    ("registrar",   "Registrar"),
-    ("teacher",     "Teacher"),
-    ("accounting",  "Accounting"),
-    ("guardian",    "Guardian"),
-]
-
-
-class UserManager(BaseUserManager):
-    def get_by_natural_key(self, email):
-        return self.get(email=email)
+__all__ = ["ROLE_CHOICES", "UserManager", "User"]
 
 
 class User(models.Model):

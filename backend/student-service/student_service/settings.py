@@ -1,8 +1,13 @@
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Makes backend/shared/ importable as `shared.*` — see backend/shared/.
+sys.path.insert(0, str(BASE_DIR.parent))
+
 load_dotenv(BASE_DIR / ".env")
 
 

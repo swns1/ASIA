@@ -1,7 +1,18 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+from shared.permissions import HasRole, IsAdminRegistrarOrReadOnly, WRITE_ROLES_DEFAULT
 
-WRITE_ROLES_DEFAULT = {"super_admin", "admin", "registrar"}
+__all__ = [
+    "HasRole",
+    "IsAdminRegistrarOrReadOnly",
+    "WRITE_ROLES_DEFAULT",
+    "STAFF_FULL_WRITE_ROLES",
+    "GRADE_READ_ROLES",
+    "teacher_student_ids",
+    "guardian_student_ids",
+    "IsAdvisoryTeacherOrStaff",
+    "IsStaffOrOwnerGuardianReadOnly",
+]
 
 
 def _resolve_student_id(view, obj, default_field="enrollment__student_id"):
@@ -15,52 +26,6 @@ def _resolve_student_id(view, obj, default_field="enrollment__student_id"):
         if value is None:
             break
     return value
-
-
-class IsAdminRegistrarOrReadOnly(BasePermission):
-    """
-    Anyone authenticated can read. Only super_admin, admin, or registrar
-    can write (create/update/delete).
-
-    Used by: subjects (per the spec — "only admin/registrar/super_admin").
-
-    Guardians are denied entirely — they are not staff and must never reach a
-    generic staff endpoint. The guardian portal only uses the explicitly
-    guardian-scoped endpoints (enrollments / grades / attendance / narrative
-    reports / report-card), so denying here keeps everything else fail-closed.
-    """
-
-    message = "Only admins or registrars can perform this action."
-
-    def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
-            return False
-        if getattr(request.user, "role", None) == "guardian":
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        role = getattr(request.user, "role", None)
-        return role in WRITE_ROLES_DEFAULT
-
-
-class HasRole(BasePermission):
-    """
-    Reusable: configure `required_roles` on the view.
-
-        class MyView(APIView):
-            permission_classes = [HasRole]
-            required_roles = {"super_admin", "accounting"}
-    """
-
-    message = "Your role does not have access to this action."
-
-    def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
-            return False
-        required = getattr(view, "required_roles", None)
-        if not required:
-            return True
-        return getattr(request.user, "role", None) in required
 
 
 STAFF_FULL_WRITE_ROLES = {"super_admin", "admin"}

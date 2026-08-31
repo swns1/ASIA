@@ -8,12 +8,16 @@ Critical compat with identity-service:
 - Database connection points at the same Postgres instance.
 """
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Makes backend/shared/ importable as `shared.*` — see backend/shared/.
+sys.path.insert(0, str(BASE_DIR.parent))
 
 
 # ─── tiny .env loader (no external dep) ─────────────────────────────────────
