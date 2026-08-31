@@ -55,22 +55,20 @@ const NAV = [
   {
     section: "Finance",
     items: [
-      { label: "Invoices",     icon: "ti-receipt",  path: "/invoices",     allowedRoles: BILLING_ROLES },
-      { label: "Payments",     icon: "ti-cash",     path: "/payments",     allowedRoles: BILLING_ROLES },
-      { label: "Scholarships", icon: "ti-discount", path: "/scholarships", allowedRoles: ACADEMIC_STAFF },
+      { label: "Invoices",          icon: "ti-receipt",  path: "/invoices",          allowedRoles: BILLING_ROLES },
+      { label: "Payments",          icon: "ti-cash",     path: "/payments",          allowedRoles: BILLING_ROLES },
+      { label: "Scholarships",      icon: "ti-discount", path: "/scholarships",      allowedRoles: ACADEMIC_STAFF },
+      { label: "Scholarship Types", icon: "ti-discount", path: "/scholarship-types", allowedRoles: ACADEMIC_STAFF },
     ],
   },
   {
     section: "Settings",
     items: [
-      { label: "Users",             icon: "ti-user-cog",         path: "/users",              allowedRoles: STAFF_ADMIN },
-      { label: "Audit Trail",       icon: "ti-shield-check",     path: "/audit-trail",         allowedRoles: STAFF_ADMIN },
-      { label: "School Settings",   icon: "ti-settings",         path: "/settings",            allowedRoles: BILLING_ROLES },
-      { label: "Grading Templates", icon: "ti-report-analytics", path: "/grading-templates",   allowedRoles: GRADE_ROLES },
-      { label: "Narrative Categories", icon: "ti-clipboard-text", path: "/narrative-categories", allowedRoles: GRADE_ROLES },
-      { label: "Teacher Advisories", icon: "ti-user-check",     path: "/teacher-advisories",  allowedRoles: ACADEMIC_STAFF },
-      { label: "Scholarship Types", icon: "ti-discount",         path: "/scholarship-types",   allowedRoles: ACADEMIC_STAFF },
-      { label: "Fee Schedules",     icon: "ti-cash",             path: "/fee-schedules",       allowedRoles: BILLING_ROLES },
+      { label: "Users",              icon: "ti-user-cog",         path: "/users",             allowedRoles: STAFF_ADMIN },
+      { label: "Audit Trail",        icon: "ti-shield-check",     path: "/audit-trail",        allowedRoles: STAFF_ADMIN },
+      { label: "Billing Settings",   icon: "ti-settings",         path: "/settings",           allowedRoles: BILLING_ROLES },
+      { label: "Grading Settings",   icon: "ti-report-analytics", path: "/grading-templates",  allowedRoles: GRADE_ROLES },
+      { label: "Teacher Advisories", icon: "ti-user-check",       path: "/teacher-advisories", allowedRoles: ACADEMIC_STAFF },
     ],
   },
 ];
@@ -119,7 +117,7 @@ export default function Sidebar({ user: userProp }) {
   const navGroups = NAV.map((group) => ({
     ...group,
     items: group.items.filter((item) => hasAnyRole(currentUser, item.allowedRoles)),
-  }));
+  })).filter((group) => group.items.length > 0);
 
   function handleLogout() {
     clearAuthSession();

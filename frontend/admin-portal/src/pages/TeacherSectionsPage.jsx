@@ -579,7 +579,7 @@ function NarrativeTab({ advisory }) {
     return (
       <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
         No narrative categories configured yet.{" "}
-        <a href="/narrative-categories" style={{ color: "#e03131", fontWeight: 600 }}>Ask an admin to add some</a>.
+        <a href="/grading-templates?tab=narrative" style={{ color: "#e03131", fontWeight: 600 }}>Ask an admin to add some</a>.
       </div>
     );
   }

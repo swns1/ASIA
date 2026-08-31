@@ -1123,7 +1123,7 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
         <div style={{ padding: "32px 22px", textAlign: "center" }}>
           <div style={{ fontSize: 13, color: "#b09090" }}>
             No narrative categories configured.{" "}
-            <a href="/narrative-categories" style={{ color: "#7c3aed", fontWeight: 600 }}>Go to Settings → Narrative Categories</a>{" "}to add some.
+            <a href="/grading-templates?tab=narrative" style={{ color: "#e03131", fontWeight: 600 }}>Go to Settings → Narrative Categories</a>{" "}to add some.
           </div>
         </div>
       ) : (

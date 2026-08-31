@@ -2,9 +2,9 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
-import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
@@ -16,6 +16,10 @@ import {
   createGradingComponent as _createComponent,
   updateGradingComponent as _updateComponent,
   deleteGradingComponent as _deleteComponent,
+  getNarrativeCategories as _getCategories,
+  createNarrativeCategory as _createCategory,
+  updateNarrativeCategory as _updateCategory,
+  deleteNarrativeCategory as _deleteCategory,
 } from "../api/enrollmentApi";
 
 const getTemplates    = (p = {}) => _getTemplates(p);
@@ -26,7 +30,80 @@ const createComponent = (p)      => _createComponent(p);
 const updateComponent = (id, p)  => _updateComponent(id, p);
 const deleteComponent = (id)     => _deleteComponent(id);
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+const getCategories  = (p = {}) => _getCategories(p);
+const createCategory = (p)      => _createCategory(p);
+const updateCategory = (id, p)  => _updateCategory(id, p);
+const deleteCategory = (id)     => _deleteCategory(id);
+
+// ── Shared constants ─────────────────────────────────────────────────────────
+const C = { red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", border: "#f5eaea", muted: "#7a5050", pale: "#b09090" };
+
+const baseCss = `
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @keyframes spin    { to{transform:rotate(360deg)} }
+`;
+
+const TABS = [
+  { id: "templates", label: "Grading Templates",   icon: "ti-report-analytics" },
+  { id: "narrative", label: "Narrative Categories", icon: "ti-clipboard-text"  },
+];
+
+const Sk = ({ w = "100%", h = 14, r = 6 }) => (
+  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE — shared AppLayout + tab switcher; each tab below is otherwise a
+// self-contained port of the former standalone GradingTemplatesPage.jsx and
+// NarrativeCategoriesPage.jsx (own state/effects/handlers). The Narrative tab
+// is reskinned from its former purple theme to the app's standard red/DM Sans
+// system, and its duplicated title (topbar + body heading) is collapsed to one.
+// ════════════════════════════════════════════════════════════════════════════
+export default function GradingSettingsPage() {
+  usePageTitle("Grading Settings");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get("tab") === "narrative" ? "narrative" : "templates");
+
+  return (
+    <AppLayout>
+      <style>{baseCss}</style>
+
+      <motion.div
+        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{ background: "white", borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Grading Settings</div>
+        <div style={{ display: "flex", gap: 2, background: "#fdfafa", border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, position: "relative" }}>
+          {TABS.map((t) => {
+            const isActive = tab === t.id;
+            return (
+              <motion.button key={t.id} onClick={() => setTab(t.id)}
+                style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: isActive ? 700 : 500, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", color: isActive ? "white" : C.muted, zIndex: 1 }}>
+                {isActive && (
+                  <motion.div layoutId="grading-tab-pill" transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                    style={{ position: "absolute", inset: 0, borderRadius: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, zIndex: -1 }} />
+                )}
+                <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />{t.label}
+              </motion.button>
+            );
+          })}
+        </div>
+      </motion.div>
+
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <AnimatePresence mode="wait">
+          {tab === "templates" ? <GradingTemplatesTab key="templates" /> : <NarrativeCategoriesTab key="narrative" />}
+        </AnimatePresence>
+      </div>
+    </AppLayout>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// GRADING TEMPLATES TAB — ported from the former GradingTemplatesPage.jsx
+// ════════════════════════════════════════════════════════════════════════════
+
 const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", color: "#be185d", bg: "#fde8f8" },
   { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#d97706", bg: "#fdf5e8" },
@@ -37,25 +114,12 @@ const SCHOOL_LEVELS = [
 
 const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? SCHOOL_LEVELS[2];
 
-const COMPONENT_COLORS = [
-  "#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2",
-];
+const COMPONENT_COLORS = ["#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2"];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function calcTotal(components) {
   return components?.reduce((s, c) => s + parseFloat(c.weight || 0), 0) ?? 0;
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{
-    width: w, height: h, borderRadius: r,
-    background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)",
-    backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite",
-  }} />
-);
-
-// ── Weight Bar ────────────────────────────────────────────────────────────────
 function WeightBar({ components }) {
   if (!components || components.length === 0) return null;
   const total = calcTotal(components);
@@ -74,7 +138,6 @@ function WeightBar({ components }) {
   );
 }
 
-// ── Template Card ─────────────────────────────────────────────────────────────
 function TemplateCard({ template, onEdit, onDelete, canManage }) {
   const lvl    = getLevelMeta(template.school_level);
   const total  = calcTotal(template.components);
@@ -85,12 +148,8 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
       variants={listVariants.item}
       whileHover={{ y: -3, boxShadow: "0 10px 36px rgba(224,49,49,0.13)" }}
       transition={{ duration: 0.18 }}
-      style={{
-        background: "white", borderRadius: 16, border: "1px solid #f5eaea",
-        boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden",
-      }}
+      style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden" }}
     >
-      {/* Card header */}
       <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f9f0f0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -105,9 +164,7 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
                 <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#faeeda", color: "#854f0b" }}>Incomplete</span>
               )}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>
-              {template.template_name}
-            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>{template.template_name}</div>
             {template.description && (
               <div style={{ fontSize: 12, color: "#b09090", marginTop: 4, lineHeight: 1.5 }}>{template.description}</div>
             )}
@@ -130,7 +187,6 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
           </div>
         </div>
 
-        {/* Weight bar */}
         <div style={{ marginTop: 12 }}>
           <WeightBar components={template.components} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
@@ -142,12 +198,9 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
         </div>
       </div>
 
-      {/* Components list */}
       <div style={{ padding: "10px 20px 14px" }}>
         {(!template.components || template.components.length === 0) ? (
-          <div style={{ fontSize: 12, color: "#d0b8b8", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>
-            No components defined yet
-          </div>
+          <div style={{ fontSize: 12, color: "#d0b8b8", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No components defined yet</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {template.components.map((comp, i) => (
@@ -164,7 +217,6 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
   );
 }
 
-// ── Template Modal ────────────────────────────────────────────────────────────
 function TemplateModal({ template, onClose, onRefresh }) {
   const isEdit = Boolean(template?.grading_template_id);
 
@@ -283,16 +335,13 @@ function TemplateModal({ template, onClose, onRefresh }) {
         transition={springTransition}
         style={{ background: "white", borderRadius: 20, width: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
       >
-        {/* Header */}
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right, #fdfafa, white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <i className="ti ti-report-analytics" style={{ fontSize: 20, color: "#e03131" }} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
-                {isEdit ? "Edit Template" : "New Grading Template"}
-              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>{isEdit ? "Edit Template" : "New Grading Template"}</div>
               <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Define components and their weights</div>
             </div>
           </div>
@@ -302,7 +351,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
           </motion.button>
         </div>
 
-        {/* Body */}
         <div style={{ padding: "22px 28px" }}>
           <AnimatePresence>
             {error && (
@@ -358,7 +406,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
             </label>
           </div>
 
-          {/* Components */}
           <div style={{ borderTop: "1px solid #f5eaea", paddingTop: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div>
@@ -377,7 +424,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
               </div>
             </div>
 
-            {/* Progress bar */}
             <div style={{ height: 6, borderRadius: 99, background: "#f0e8e8", overflow: "hidden", marginBottom: 16 }}>
               <motion.div
                 animate={{ width: `${Math.min(totalWeight, 100)}%`, background: weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131" }}
@@ -429,7 +475,6 @@ function TemplateModal({ template, onClose, onRefresh }) {
           </div>
         </div>
 
-        {/* Footer */}
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
             whileHover={{ borderColor: "#e03131", color: "#e03131" }}
@@ -451,8 +496,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
   );
 }
 
-// ── Delete Modal ──────────────────────────────────────────────────────────────
-function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
+function DeleteTemplateModal({ template, onConfirm, onCancel, deleting, deleteError }) {
   return (
     <ConfirmModal
       icon="ti-trash"
@@ -466,26 +510,18 @@ function DeleteModal({ template, onConfirm, onCancel, deleting, deleteError }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ════════════════════════════════════════════════════════════════════════════
-export default function GradingTemplatesPage() {
-  usePageTitle("Grading Templates");
-  const navigate = useNavigate();
+function GradingTemplatesTab() {
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [templates,   setTemplates]   = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [levelFilter, setLevelFilter] = useState("all");
-  const [statusFilter,setStatusFilter]= useState("all"); // all | active | inactive
+  const [statusFilter,setStatusFilter]= useState("all");
   const [search,      setSearch]      = useState("");
   const [modal,       setModal]       = useState(null);
   const [toDelete,    setToDelete]    = useState(null);
   const [deleting,    setDeleting]    = useState(false);
   const [deleteError, setDeleteError] = useState("");
-
-  const [animated] = useState(false);
-  const isFirstRender = !animated;
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -497,17 +533,13 @@ export default function GradingTemplatesPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchTemplates(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
-  const totalCount      = templates.length;
-  const activeCount     = templates.filter((t) => t.is_active).length;
-  const completeCount   = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) < 0.01).length;
+  const totalCount    = templates.length;
+  const activeCount   = templates.filter((t) => t.is_active).length;
+  const completeCount = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) < 0.01).length;
 
-  // ── Client-side filtered list ──────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = templates;
     if (levelFilter !== "all") list = list.filter((t) => t.school_level === levelFilter);
@@ -548,43 +580,30 @@ export default function GradingTemplatesPage() {
   };
 
   return (
-    <AppLayout>
-      {/* ── Topbar ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
-      >
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Grading Templates</div>
-          <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
-            {loading ? "Loading…" : `${totalCount} templates · ${activeCount} active · ${completeCount} complete`}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <motion.button
-            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-            whileTap={{ scale: 0.96 }}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-            onClick={() => setModal({ mode: "create" })}>
-            <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
-          </motion.button>
-        </div>
-      </motion.div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+      style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 
-      {/* ── Content ── */}
+      <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ fontSize: 12, color: C.pale }}>
+          {loading ? "Loading…" : `${totalCount} templates · ${activeCount} active · ${completeCount} complete`}
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+          whileTap={{ scale: 0.96 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+          onClick={() => setModal({ mode: "create" })}>
+          <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
+        </motion.button>
+      </div>
+
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* Filter panel */}
         <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.18, ease: "easeOut" }}
+          initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.28, delay: 0.06, ease: "easeOut" }}
           style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
         >
-          {/* Search — full width row */}
-          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box" }}>
             <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
             <input
               value={search}
@@ -604,84 +623,71 @@ export default function GradingTemplatesPage() {
             </AnimatePresence>
           </div>
 
-          {/* Chips row */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
+              {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
+                const active = levelFilter === lvl.value;
+                return (
+                  <motion.button key={lvl.value} onClick={() => setLevelFilter(lvl.value)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      height: 32, padding: "0 14px", borderRadius: 99,
+                      border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
+                      background: active ? lvl.bg : "white",
+                      color: active ? lvl.color : "#9a7070",
+                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
+                      fontFamily: "'DM Sans',sans-serif",
+                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                    }}
+                  >
+                    {lvl.icon && <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />}
+                    {lvl.label}
+                  </motion.button>
+                );
+              })}
+            </div>
 
-          {/* Level chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
-            {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl, idx) => {
-              const active = levelFilter === lvl.value;
-              return (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
+              {[
+                { value: "all",      label: "All",      color: "#e03131", bg: "#fff0f0" },
+                { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
+                { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
+              ].map((s) => {
+                const active = statusFilter === s.value;
+                return (
+                  <motion.button key={s.value} onClick={() => setStatusFilter(s.value)}
+                    style={{
+                      height: 32, padding: "0 14px", borderRadius: 99,
+                      border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
+                      background: active ? s.bg : "white",
+                      color: active ? s.color : "#9a7070",
+                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
+                      fontFamily: "'DM Sans',sans-serif",
+                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                    }}
+                  >
+                    {s.label}
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            <AnimatePresence>
+              {hasFilters && (
                 <motion.button
-                  key={lvl.value}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, delay: idx * 0.03 }}
-                  onClick={() => setLevelFilter(lvl.value)}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 5,
-                    height: 32, padding: "0 14px", borderRadius: 99,
-                    border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
-                    background: active ? lvl.bg : "white",
-                    color: active ? lvl.color : "#9a7070",
-                    fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                    fontFamily: "'DM Sans',sans-serif",
-                    transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                  }}
-                >
-                  {lvl.icon && <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />}
-                  {lvl.label}
+                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                  onClick={() => { setLevelFilter("all"); setStatusFilter("all"); setSearch(""); }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                  <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
                 </motion.button>
-              );
-            })}
+              )}
+            </AnimatePresence>
           </div>
-
-          {/* Status chips */}
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
-            {[
-              { value: "all",      label: "All",      color: "#e03131", bg: "#fff0f0" },
-              { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
-              { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
-            ].map((s) => {
-              const active = statusFilter === s.value;
-              return (
-                <motion.button
-                  key={s.value}
-                  onClick={() => setStatusFilter(s.value)}
-                  style={{
-                    height: 32, padding: "0 14px", borderRadius: 99,
-                    border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
-                    background: active ? s.bg : "white",
-                    color: active ? s.color : "#9a7070",
-                    fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                    fontFamily: "'DM Sans',sans-serif",
-                    transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                  }}
-                >
-                  {s.label}
-                </motion.button>
-              );
-            })}
-          </div>
-
-          {/* Clear all */}
-          <AnimatePresence>
-            {hasFilters && (
-              <motion.button
-                initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
-                transition={{ duration: 0.16 }}
-                onClick={() => { setLevelFilter("all"); setStatusFilter("all"); setSearch(""); }}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
-              </motion.button>
-            )}
-          </AnimatePresence>
-          </div>{/* end chips row */}
         </motion.div>
 
-        {/* Cards grid */}
         {loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
             {Array.from({ length: 4 }).map((_, i) => (
@@ -704,9 +710,7 @@ export default function GradingTemplatesPage() {
               {hasFilters ? "No templates match your filters" : "No templates found"}
             </div>
             <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>
-              {hasFilters
-                ? "Try adjusting your search or filters"
-                : "Create your first grading template to get started"}
+              {hasFilters ? "Try adjusting your search or filters" : "Create your first grading template to get started"}
             </div>
             {!hasFilters && (
               <motion.button
@@ -721,8 +725,7 @@ export default function GradingTemplatesPage() {
         ) : (
           <motion.div
             variants={listVariants.container}
-            initial={isFirstRender ? "hidden" : false}
-            animate="visible"
+            initial="hidden" animate="visible"
             style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}
           >
             {filtered.map((tpl) => (
@@ -735,7 +738,6 @@ export default function GradingTemplatesPage() {
         )}
       </div>
 
-      {/* ── Modals ── */}
       <AnimatePresence>
         {modal && (
           <TemplateModal
@@ -749,7 +751,7 @@ export default function GradingTemplatesPage() {
 
       <AnimatePresence>
         {toDelete && (
-          <DeleteModal
+          <DeleteTemplateModal
             key="delete-modal"
             template={toDelete}
             onConfirm={handleDelete}
@@ -759,6 +761,259 @@ export default function GradingTemplatesPage() {
           />
         )}
       </AnimatePresence>
-    </AppLayout>
+    </motion.div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// NARRATIVE CATEGORIES TAB — ported from the former NarrativeCategoriesPage.jsx,
+// reskinned from its former purple (#7c3aed) theme to the app's standard red.
+// ════════════════════════════════════════════════════════════════════════════
+
+function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
+  const [editing,  setEditing]  = useState(false);
+  const [name,     setName]     = useState(cat.name);
+  const [desc,     setDesc]     = useState(cat.description ?? "");
+  const [order,    setOrder]    = useState(String(cat.sort_order));
+  const [active,   setActive]   = useState(cat.is_active);
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirm,  setConfirm]  = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await updateCategory(cat.category_id, {
+        name: name.trim(), description: desc.trim() || null,
+        sort_order: parseInt(order) || 0, is_active: active,
+      });
+      toast.success("Category updated.");
+      onUpdated(updated); setEditing(false);
+    } catch (e) { toast.error(e?.message || "Failed to save category."); }
+    finally { setSaving(false); }
+  };
+
+  const handleToggleActive = async () => {
+    setSaving(true);
+    try {
+      const updated = await updateCategory(cat.category_id, { is_active: !active });
+      setActive(updated.is_active); onUpdated(updated);
+    } catch (e) { toast.error(e?.message || "Failed to update category."); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteCategory(cat.category_id);
+      toast.success("Category deleted.");
+      onDeleted(cat.category_id);
+    }
+    catch (e) { toast.error(e?.message || "Failed to delete category."); }
+    finally { setDeleting(false); setConfirm(false); }
+  };
+
+  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}
+      style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 1px 6px rgba(224,49,49,0.05)" }}>
+      {editing ? (
+        <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" style={{ ...inp, flex: 1 }} />
+            <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} placeholder="Sort order" style={{ ...inp, width: 90, textAlign: "right" }} />
+          </div>
+          <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description (optional)" style={{ ...inp, width: "100%" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7a5050", cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} style={{ accentColor: "#e03131" }} />Active
+            </label>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => { setEditing(false); setName(cat.name); setDesc(cat.description ?? ""); setOrder(String(cat.sort_order)); setActive(cat.is_active); }}
+              style={{ height: 32, padding: "0 12px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving || !name.trim()}
+              style={{ height: 32, padding: "0 14px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
+              {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? "#fff0f0" : "#f5f0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#e03131" : "#c0a0a0" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: active ? "#1a0a0a" : "#9a8080" }}>{cat.name}</div>
+            {cat.description && <div style={{ fontSize: 11, color: "#b09090", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: active ? "#fff0f0" : "#f5f0f0", color: active ? "#e03131" : "#9a8080" }}>{active ? "Active" : "Inactive"}</span>
+            <span style={{ fontSize: 11, color: "#c0a0a0", background: "#fdfafa", border: "1px solid #f5eaea", padding: "2px 8px", borderRadius: 6 }}>#{cat.sort_order}</span>
+            <button onClick={handleToggleActive} disabled={saving}
+              style={{ height: 28, padding: "0 10px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
+              {active ? "Deactivate" : "Activate"}
+            </button>
+            <button onClick={() => setEditing(true)}
+              style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; }}>
+              <i className="ti ti-pencil" style={{ fontSize: 12 }} />
+            </button>
+            {canManage && (confirm ? (
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={handleDelete} disabled={deleting}
+                  style={{ height: 28, padding: "0 10px", border: "none", borderRadius: 7, background: "#e03131", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+                  {deleting && <i className="ti ti-loader-2" style={{ fontSize: 11, animation: "spin 1s linear infinite" }} />}Confirm
+                </button>
+                <button onClick={() => setConfirm(false)}
+                  style={{ height: 28, padding: "0 8px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirm(true)}
+                style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}>
+                <i className="ti ti-trash" style={{ fontSize: 12 }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function NarrativeCategoriesTab() {
+  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  const [categories, setCategories] = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [adding,     setAdding]     = useState(false);
+  const [newName,    setNewName]    = useState("");
+  const [newDesc,    setNewDesc]    = useState("");
+  const [newOrder,   setNewOrder]   = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    getCategories({ page_size: 200 })
+      .then((d) => setCategories(Array.isArray(d) ? d : d?.results ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleAdd = async () => {
+    if (!newName.trim()) { setError("Name is required."); return; }
+    setSaving(true); setError("");
+    try {
+      const created = await createCategory({ name: newName.trim(), description: newDesc.trim() || null, sort_order: parseInt(newOrder) || 0, is_active: true });
+      toast.success("Category created.");
+      setCategories((prev) => [...prev, created]);
+      setNewName(""); setNewDesc(""); setNewOrder(""); setAdding(false);
+    } catch (e) {
+      const msg = e?.message || "Failed to create category.";
+      setError(msg);
+      toast.error(msg);
+    }
+    finally { setSaving(false); }
+  };
+
+  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+  const activeCount   = categories.filter((c) => c.is_active).length;
+  const inactiveCount = categories.filter((c) => !c.is_active).length;
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+      style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+
+      <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ fontSize: 12, color: C.pale }}>Behavioral and learning categories used in student narrative reports</div>
+        <motion.button onClick={() => { setAdding(true); setNewName(""); setNewDesc(""); setNewOrder(""); setError(""); }}
+          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.96 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
+          <i className="ti ti-plus" style={{ fontSize: 15 }} />Add Category
+        </motion.button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+        {!loading && categories.length > 0 && (
+          <div style={{ display: "flex", gap: 10 }}>
+            {[
+              { label: "Total",    value: categories.length, color: "#e03131", bg: "#fff0f0", icon: "ti-list" },
+              { label: "Active",   value: activeCount,       color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-circle-check" },
+              { label: "Inactive", value: inactiveCount,     color: "#854f0b", bg: "#faeeda", icon: "ti-circle-x" },
+            ].map((s) => (
+              <div key={s.label} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(224,49,49,0.04)" }}>
+                <div style={{ width: 36, height: 36, borderRadius: 9, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <i className={`ti ${s.icon}`} style={{ fontSize: 16, color: s.color }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: "#a07878", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>{s.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <AnimatePresence>
+          {adding && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}
+              style={{ background: "white", borderRadius: 14, border: "2px solid #fca5a5", padding: "18px 20px", boxShadow: "0 4px 20px rgba(224,49,49,0.12)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#e03131", display: "flex", alignItems: "center", gap: 6 }}>
+                <i className="ti ti-plus" style={{ fontSize: 13 }} />New Category
+              </div>
+              {error && <div style={{ fontSize: 11, color: "#b91c1c" }}>{error}</div>}
+              <div style={{ display: "flex", gap: 10 }}>
+                <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Category name (e.g., Attentive in Class)"
+                  style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && handleAdd()} autoFocus />
+                <input type="number" value={newOrder} onChange={(e) => setNewOrder(e.target.value)} placeholder="Sort order"
+                  style={{ ...inp, width: 100, textAlign: "right" }} />
+              </div>
+              <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Description (optional)"
+                style={{ ...inp, width: "100%" }} onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => { setAdding(false); setError(""); }}
+                  style={{ height: 34, padding: "0 14px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
+                <button onClick={handleAdd} disabled={saving || !newName.trim()}
+                  style={{ height: 34, padding: "0 16px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
+                  {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Add Category
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.div layout style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {loading ? (
+            [1,2,3,4].map((i) => (
+              <div key={i} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "14px 18px", display: "flex", gap: 12, alignItems: "center" }}>
+                <Sk w={36} h={36} r={10} /><div style={{ flex: 1 }}><Sk w="40%" h={14} /><div style={{ marginTop: 6 }}><Sk w="25%" h={11} /></div></div>
+              </div>
+            ))
+          ) : categories.length === 0 ? (
+            <div style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "60px 24px", textAlign: "center" }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                <i className="ti ti-clipboard-text" style={{ fontSize: 24, color: "#e03131" }} />
+              </div>
+              <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No categories yet</div>
+              <div style={{ fontSize: 13, color: "#b09090", marginTop: 6 }}>Click "Add Category" to get started.</div>
+            </div>
+          ) : (
+            <AnimatePresence>
+              {categories.map((cat) => (
+                <CategoryRow key={cat.category_id} cat={cat}
+                  onUpdated={(updated) => setCategories((prev) => prev.map((c) => c.category_id === updated.category_id ? updated : c))}
+                  onDeleted={(id) => setCategories((prev) => prev.filter((c) => c.category_id !== id))}
+                  canManage={canManage}
+                />
+              ))}
+            </AnimatePresence>
+          )}
+        </motion.div>
+      </div>
+    </motion.div>
   );
 }
