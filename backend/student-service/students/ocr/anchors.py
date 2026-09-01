@@ -77,16 +77,30 @@ ANCHOR_SETS: dict[str, tuple[Anchor, ...]] = {
                max_gap=3.0, max_blocks=3),
         Anchor("religion", ("RELIGION",), RIGHT, max_blocks=2),
     ),
+    # Form 137 is NOT one layout. Real samples turned up at least three:
+    # "DepEd Form 137-E" (elementary), a modern JHS sheet, and the older
+    # "Form 137-A Secondary Student's Permanent Record" — which uses different
+    # captions again and predates LRN entirely, so that field simply does not
+    # exist on it. Label variants are listed per anchor rather than split into
+    # separate families: the captions differ but the geometry does not, and an
+    # anchor that finds no label costs nothing and falls through to the
+    # fallback. Recogniser misreads ("Cate of Birm") are included for the same
+    # reason they are on the birth certificate — they are what actually comes
+    # back off a scanned form.
     FAMILY_FORM_137: (
         Anchor("lrn", ("LRN",), RIGHT, max_blocks=2, pattern=r"^\d[\d\s-]{9,}$"),
-        Anchor("last_name", ("LAST NAME", "SURNAME"), RIGHT),
+        Anchor("last_name", ("LAST NAME", "SURNAME", "NAME OF LEARNER"), RIGHT),
         Anchor("first_name", ("FIRST NAME",), RIGHT),
         Anchor("middle_name", ("MIDDLE NAME",), RIGHT),
         Anchor("sex", ("SEX",), RIGHT, max_blocks=1, pattern=r"^(male|female|m|f)$"),
-        Anchor("birth_date", ("DATE OF BIRTH", "BIRTHDATE"), RIGHT, max_blocks=2),
-        Anchor("previous_school_name", ("NAME OF SCHOOL", "SCHOOL"), RIGHT, max_blocks=4),
-        Anchor("previous_school_address", ("SCHOOL ADDRESS", "ADDRESS"), RIGHT, max_blocks=4),
-        Anchor("_guardian_name", ("PARENT", "GUARDIAN"), RIGHT),
+        Anchor("birth_date", ("DATE OF BIRTH", "BIRTHDATE", "DATE OF BIRM",
+                              "CATE OF BIRM"), RIGHT, max_blocks=3),
+        Anchor("previous_school_name", ("NAME OF SCHOOL", "SCHOOL ATTENDED"),
+               RIGHT, max_blocks=4),
+        Anchor("previous_school_address", ("SCHOOL ADDRESS", "PLACE OF BIRTH"),
+               RIGHT, max_blocks=4),
+        Anchor("_guardian_name", ("PARENT OR GUARDIAN", "PARENT OF GU",
+                                  "PARENT", "GUARDIAN"), RIGHT),
     ),
 }
 
@@ -161,6 +175,7 @@ _NOISE = re.compile(
     r"type of|type|no\.?|nos\.?|day|month|year|manth|ysar)\)?"
     r"|[|:;_.\-–—]+"
     r"|\d{1,3}"                                      # box numbers printed on the form
+    r"|\d{1,2}\s*[.)]\s*.{0,40}"                     # numbered captions: "21. PREPARED BY"
     r")$",
     re.IGNORECASE,
 )

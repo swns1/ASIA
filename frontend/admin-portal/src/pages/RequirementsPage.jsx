@@ -18,7 +18,7 @@ import {
 
 
 // ── Debug flag — set to false to hide dev-only UI ─────────────────────────────
-const DEV_MODE = true;
+const DEV_MODE = false;
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {

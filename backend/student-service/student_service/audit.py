@@ -9,6 +9,7 @@ STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 MODULE_LABELS = {
     "students": "Students",
+    "ocr": "Document Scan",
     "households": "Households",
     "guardians": "Guardians",
     "student_siblings": "Student Siblings",
@@ -36,6 +37,7 @@ MODULE_LABELS = {
 
 RECORD_LABELS = {
     "students": "student record",
+    "ocr": "document scan",
     "households": "household record",
     "guardians": "guardian record",
     "student_siblings": "student sibling record",

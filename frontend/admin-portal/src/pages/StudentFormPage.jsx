@@ -41,6 +41,7 @@ import {
   resolveMediaUrl,
 } from "../api/requirementApi";
 import { scanDocument } from "../api/ocrApi";
+import OcrReviewModal from "./ocr/OcrReviewModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const nullify = (obj, fields) => {
@@ -49,13 +50,6 @@ const nullify = (obj, fields) => {
     if (out[f] === "" || out[f] === undefined) out[f] = null;
   });
   return out;
-};
-
-// `guardians` is a single key holding a list — count each guardian found as
-// its own field rather than letting Object.keys collapse mother+father into 1.
-const countOcrFields = (extracted) => {
-  const { guardians, ...rest } = extracted;
-  return Object.keys(rest).length + (Array.isArray(guardians) ? guardians.length : 0);
 };
 
 // ─── initial shapes ─────────────────────────────────────────────────────────
@@ -898,8 +892,7 @@ function EnrollmentPromptModal({ studentName, onSkip, onProceed }) {
   );
 }
 
-function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrConfidence, ocrFieldCount, onApplyOcr, onDiscardOcr }) {
-  const CONF_DOT = { high: DC.green, medium: "#b7791f", low: "#b91c1c" };
+function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrResult, ocrError, ocrAppliedCount, onRetryOcr, onApplyOcr, onDiscardOcr }) {
   const icon = reqIcon(req.requirement_code);
 
   const resolvedUrl = isEdit
@@ -958,22 +951,52 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
           <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, lineHeight: 1.35 }}>{req.requirement_name}</div>
           <DocStatusBadge submitted={isSubmitted} />
         </div>
-        {ocrState === "done" && ocrConfidence && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: CONF_DOT[ocrConfidence] }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: CONF_DOT[ocrConfidence] }} />
-            OCR: {ocrConfidence} confidence — applied to form
+        {ocrState === "done" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: DC.green }}>
+            <i className="ti ti-check" style={{ fontSize: 12 }} />
+            {ocrAppliedCount
+              ? `${ocrAppliedCount} field${ocrAppliedCount !== 1 ? "s" : ""} added to the form`
+              : "Reviewed — nothing added"}
+          </div>
+        )}
+        {/* An attestation document has no fields to add. The only question it
+            answers is whether it is the right paper for the right student, so
+            that answer IS the result -- there is nothing to review or apply. */}
+        {ocrState === "checked" && ocrResult?.check && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, color: ocrResult.check.names_student === false || !ocrResult.is_expected_document ? "#b45309" : DC.green }}>
+              <i className={`ti ${ocrResult.check.names_student === false || !ocrResult.is_expected_document ? "ti-alert-triangle" : "ti-shield-check"}`} style={{ fontSize: 12 }} />
+              {ocrResult.check.names_student === false || !ocrResult.is_expected_document
+                ? "Needs a second look"
+                : "Checked — looks right"}
+            </div>
+            {(ocrResult.warnings || []).map((w) => (
+              <div key={w} style={{ color: "#b45309", paddingLeft: 17, lineHeight: 1.4 }}>{w}</div>
+            ))}
           </div>
         )}
         {ocrState === "error" && (
-          <div style={{ fontSize: 11, color: "#b91c1c", display: "flex", alignItems: "center", gap: 4 }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 12 }} />OCR failed — form not auto-filled
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ fontSize: 11, color: "#b91c1c", display: "flex", alignItems: "flex-start", gap: 4, lineHeight: 1.4 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 12, marginTop: 1, flexShrink: 0 }} />
+              {/* The server says whether this was a rate limit, an oversized
+                  image or a missing key; showing it beats one generic line. */}
+              <span>{ocrError || "Could not read this document."}</span>
+            </div>
+            {onRetryOcr && (
+              <button type="button" onClick={onRetryOcr}
+                style={{ alignSelf: "flex-start", height: 26, padding: "0 10px", border: `1px solid ${DC.border}`, borderRadius: 7, background: C.white, color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                <i className="ti ti-refresh" style={{ fontSize: 11, marginRight: 4 }} />Try again
+              </button>
+            )}
           </div>
         )}
         {ocrState === "review" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: CONF_DOT[ocrConfidence] || C.muted }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: CONF_DOT[ocrConfidence] || DC.pale }} />
-              OCR found {ocrFieldCount} field{ocrFieldCount !== 1 ? "s" : ""} ({ocrConfidence} confidence) — review before applying
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.muted }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: DC.green }} />
+              Read {Object.keys(ocrResult?.extracted || {}).length} field
+              {Object.keys(ocrResult?.extracted || {}).length !== 1 ? "s" : ""} — nothing added yet
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button type="button" onClick={onDiscardOcr}
@@ -982,7 +1005,7 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
               </button>
               <button type="button" onClick={onApplyOcr}
                 style={{ flex: 1, height: 30, border: "none", borderRadius: 8, background: C.red, color: C.white, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Apply to form
+                Review
               </button>
             </div>
           </div>
@@ -1030,9 +1053,14 @@ function DocumentsStep({
   existingDocs, setExistingDocs,
   ocrStates, setOcrStates,
   studentId, onOcrExtracted, onViewDoc,
+  // The review modal shows each incoming value against what the form already
+  // holds, and the server needs the current name to answer "does this document
+  // actually name this student?" for the attestation documents.
+  student, guardians,
 }) {
   const [uploadModal, setUploadModal] = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
+  const [reviewing, setReviewing] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
   const [docError, setDocError] = useState("");
 
@@ -1042,17 +1070,45 @@ function DocumentsStep({
 
     async function runOcr() {
       try {
-        const data = await scanDocument(file);
-        if (data.success) {
+        const data = await scanDocument(file, {
+          requirementCode: reqCode,
+          studentId: isEdit ? studentId : undefined,
+          firstName: student.first_name,
+          lastName: student.last_name,
+        });
+        if (!data.success) {
           setOcrStates((prev) => ({
             ...prev,
-            [reqTypeId]: { state: "review", confidence: data.confidence, extracted: data.extracted },
+            [reqTypeId]: { state: "error", error: data.error || "", result: null },
           }));
-        } else {
-          setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null, extracted: null } }));
+          return;
         }
-      } catch {
-        setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: "error", confidence: null, extracted: null } }));
+        // An attestation document has nothing to fill in -- it either names
+        // this student or it does not, and that answer is the whole result.
+        const isCheckOnly =
+          data.policy === "verify" || !Object.keys(data.extracted || {}).length;
+        setOcrStates((prev) => ({
+          ...prev,
+          [reqTypeId]: {
+            state: isCheckOnly ? "checked" : "review",
+            result: data,
+            documentName: reqName,
+            error: "",
+          },
+        }));
+      } catch (err) {
+        // The server's own message says whether this was a rate limit, an
+        // oversized image or a missing key; the old bare catch threw it away
+        // and showed one generic line with no way to retry.
+        setOcrStates((prev) => ({
+          ...prev,
+          [reqTypeId]: {
+            state: "error",
+            error: err?.response?.data?.error || err?.message || "",
+            result: null,
+            retry: () => runOcr(),
+          },
+        }));
       }
     }
 
@@ -1092,14 +1148,22 @@ function DocumentsStep({
     }
   }
 
-  // Apply/discard gate: a successful scan lands in "review" state with the
-  // extracted fields stashed, not applied yet -- the user must explicitly
-  // confirm before form fields are overwritten.
+  // Review gate: a successful scan lands in "review" with its result stashed,
+  // never applied. Opening the modal is the only path to the form, and inside
+  // it every field is ticked individually -- see pages/ocr/OcrReviewModal.
   function handleApplyOcr(reqTypeId) {
     const entry = ocrStates[reqTypeId];
-    if (!entry?.extracted) return;
-    onOcrExtracted(entry.extracted);
-    setOcrStates((prev) => ({ ...prev, [reqTypeId]: { ...entry, state: "done" } }));
+    if (!entry?.result?.extracted) return;
+    setReviewing({ reqTypeId, ...entry.result, documentName: entry.documentName });
+  }
+
+  function handleReviewApplied(reqTypeId, fields, acceptedKeys) {
+    onOcrExtracted(fields, acceptedKeys);
+    setOcrStates((prev) => ({
+      ...prev,
+      [reqTypeId]: { ...prev[reqTypeId], state: "done", appliedCount: acceptedKeys.length },
+    }));
+    setReviewing(null);
   }
 
   function handleDiscardOcr(reqTypeId) {
@@ -1207,8 +1271,10 @@ function DocumentsStep({
                 onView={(url, name) => onViewDoc(url, name)}
                 onRemove={(r) => setRemoveModal(r)}
                 ocrState={ocr.state}
-                ocrConfidence={ocr.confidence}
-                ocrFieldCount={ocr.extracted ? countOcrFields(ocr.extracted) : 0}
+                ocrResult={ocr.result}
+                ocrError={ocr.error}
+                ocrAppliedCount={ocr.appliedCount}
+                onRetryOcr={ocr.retry}
                 onApplyOcr={() => handleApplyOcr(req.requirement_type_id)}
                 onDiscardOcr={() => handleDiscardOcr(req.requirement_type_id)}
               />
@@ -1234,7 +1300,18 @@ function DocumentsStep({
       </AnimatePresence>
 
       <AnimatePresence>
-        {removeModal && (
+        {reviewing && (
+        <OcrReviewModal
+          documentName={reviewing.documentName || "this document"}
+          result={reviewing}
+          student={student}
+          guardians={guardians}
+          onApply={(fields, keys) => handleReviewApplied(reviewing.reqTypeId, fields, keys)}
+          onClose={() => setReviewing(null)}
+        />
+      )}
+
+      {removeModal && (
           <DocRemoveModal
             key="remove-modal"
             name={removeModal.requirement_name}
@@ -1506,36 +1583,48 @@ export default function StudentFormPage() {
     sessionStorage.removeItem(DRAFT_KEY);
   }
 
-  function handleOcrExtracted(fields) {
-    const studentFields = {
-      lrn:               fields.lrn,
-      first_name:        fields.first_name,
-      middle_name:       fields.middle_name,
-      last_name:         fields.last_name,
-      suffix:            fields.suffix,
-      birth_date:        fields.birth_date,
-      sex:               fields.sex,
-      religion:          fields.religion,
-      email:             fields.email,
-      mobile_number:     fields.mobile_number,
-      current_address:   fields.current_address,
-      permanent_address: fields.permanent_address,
-    };
-    Object.keys(studentFields).forEach(
-      (k) => studentFields[k] === undefined && delete studentFields[k]
-    );
-    setStudent((prev) => ({ ...prev, ...studentFields }));
+  // Applies ONLY the fields the reviewer ticked. It used to take the whole
+  // scan result and spread it over form state, so a second document silently
+  // overwrote the first -- and in edit mode, where the form is pre-filled from
+  // the database, one click could replace a saved LRN, name and birth date
+  // with no way back.
+  function handleOcrExtracted(fields, acceptedKeys) {
+    const accepted = new Set(acceptedKeys ?? Object.keys(fields ?? {}));
+    const take = (key) => (accepted.has(key) ? fields[key] : undefined);
 
-    if (Array.isArray(fields.guardians) && fields.guardians.length > 0) {
+    const studentFields = {};
+    [
+      "lrn", "first_name", "middle_name", "last_name", "suffix", "birth_date",
+      "sex", "religion", "email", "mobile_number", "current_address",
+      "permanent_address",
+    ].forEach((key) => {
+      const value = take(key);
+      if (value !== undefined && value !== null && value !== "") {
+        studentFields[key] = value;
+      }
+    });
+    if (Object.keys(studentFields).length) {
+      setStudent((prev) => ({ ...prev, ...studentFields }));
+    }
+
+    const incomingGuardians = accepted.has("guardians") ? fields.guardians : null;
+    if (Array.isArray(incomingGuardians) && incomingGuardians.length > 0) {
       setGuardians((prev) => {
         const updated = [...prev];
-        // Birth certificates list both a mother and a father — match each
-        // incoming entry to an existing guardian by relationship (mother
-        // updates the mother card, father updates the father card) so both
-        // land as separate guardians instead of one overwriting the other.
-        fields.guardians.forEach((incoming) => {
+        // Match each incoming parent to an existing card by relationship, so a
+        // birth certificate's mother and father land as two guardians rather
+        // than one overwriting the other.
+        //
+        // `consumed` is what fixes the collapse bug: findIndex used to run
+        // against the array being mutated, so two incoming entries that both
+        // normalised to "guardian" merged into one -- the second matched the
+        // row the first had just pushed. Each slot can now be claimed once.
+        const consumed = new Set();
+        incomingGuardians.forEach((incoming) => {
           if (!incoming?.full_name) return;
-          const idx = updated.findIndex((g) => g.relationship === incoming.relationship);
+          const idx = updated.findIndex(
+            (g, i) => !consumed.has(i) && g.relationship === incoming.relationship
+          );
           const base = idx >= 0 ? updated[idx] : { ...emptyGuardian };
           const merged = {
             ...base,
@@ -1544,21 +1633,28 @@ export default function StudentFormPage() {
             mobile_number: incoming.mobile_number || base.mobile_number,
             email_address: incoming.email         || base.email_address,
           };
-          if (idx >= 0) updated[idx] = merged;
-          else updated.push(merged);
+          if (idx >= 0) {
+            updated[idx] = merged;
+            consumed.add(idx);
+          } else {
+            updated.push(merged);
+            consumed.add(updated.length - 1);
+          }
         });
         return updated;
       });
     }
 
-    if (fields.previous_school_name) {
+    const schoolName = take("previous_school_name");
+    const schoolAddress = take("previous_school_address");
+    if (schoolName || schoolAddress) {
       setSchools((prev) => {
         const updated = [...prev];
         if (updated.length === 0) updated.push({ ...emptySchool });
         updated[0] = {
           ...updated[0],
-          school_name:    fields.previous_school_name,
-          school_address: fields.previous_school_address || updated[0].school_address,
+          school_name:    schoolName || updated[0].school_name,
+          school_address: schoolAddress || updated[0].school_address,
         };
         return updated;
       });
@@ -2153,6 +2249,8 @@ export default function StudentFormPage() {
                   studentId={id}
                   onOcrExtracted={handleOcrExtracted}
                   onViewDoc={(url, name) => setDocViewModal({ url, name })}
+                  student={student}
+                  guardians={guardians}
                 />
               )}
               {step === 1 && <StudentStep data={student} onChange={setStudent} />}

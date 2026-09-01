@@ -10,7 +10,7 @@ from .views import (
     RequirementTypeViewSet,
     StudentRequirementSubmissionViewSet,
 )
-from .ocr_views import OCRScanView
+from .ocr.views import OCRScanView, ReconciledLedgerView
 
 router = DefaultRouter()
 router.register(r"students", StudentViewSet)
@@ -24,4 +24,5 @@ router.register(r"student_requirement_submissions", StudentRequirementSubmission
 
 urlpatterns = router.urls + [
     path("ocr/scan/", OCRScanView.as_view(), name="ocr-scan"),
+    path("ocr/reconciled/", ReconciledLedgerView.as_view(), name="ocr-reconciled"),
 ]
