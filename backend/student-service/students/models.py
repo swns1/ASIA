@@ -232,3 +232,67 @@ class StudentRequirementSubmission(models.Model):
         db_table = "student_requirement_submissions"
         managed = False
         unique_together = ("student", "requirement_type")
+
+
+# ── Document scanning ─────────────────────────────────────────────────────────
+# Genuinely new data owned by student-service, so — unlike the mirrors above —
+# this one is Django-managed with a real migration.
+
+class DocumentExtraction(models.Model):
+    """
+    One row per document scan: what the reader saw, and what it claimed.
+
+    Scans were previously fire-and-forget — the result went straight to the
+    browser and was applied over form state, so a second document silently
+    overwrote the first and no record survived that they had ever disagreed.
+    Persisting each scan is what makes the conflict ledger possible: with two
+    documents on file, "these two papers give different birth dates" becomes a
+    question the registrar can be asked instead of a coin flip nobody sees.
+
+    `student` is nullable because a scan during student *creation* happens
+    before the student row exists. Those rows are adopted once the student is
+    saved; any left unadopted are harmless scratch.
+    """
+
+    ENGINE_CHOICES = [
+        ("paddle", "PaddleOCR (local)"),
+        ("groq", "Groq vision (fallback)"),
+    ]
+
+    document_extraction_id = models.BigAutoField(primary_key=True)
+
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="document_extractions",
+    )
+    # Kept as a plain code rather than an FK: requirement_types is owned by
+    # enrollment-service, and a scan should survive that table being re-seeded.
+    requirement_code = models.CharField(max_length=50, db_index=True)
+    family = models.CharField(max_length=50, null=True, blank=True)
+    source_label = models.CharField(max_length=150, default="")
+
+    extracted_json = models.JSONField(default=dict, blank=True)
+    field_confidence_json = models.JSONField(default=dict, blank=True)
+    # Text + boxes, so the review UI can show *where on the page* a value came
+    # from. Nullable and skippable — it is the largest column here by far.
+    blocks_json = models.JSONField(default=list, blank=True)
+
+    document_type_seen = models.CharField(max_length=100, null=True, blank=True)
+    is_expected_document = models.BooleanField(default=True)
+
+    source_engine = models.CharField(max_length=20, choices=ENGINE_CHOICES, default="paddle")
+    mean_confidence = models.FloatField(null=True, blank=True)
+
+    scanned_by = models.BigIntegerField(null=True, blank=True)  # user_id from the JWT
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "document_extractions"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["student", "requirement_code"]),
+        ]
+
+    def __str__(self):  # pragma: no cover
+        who = f"student {self.student_id}" if self.student_id else "unsaved student"
+        return f"{self.requirement_code} for {who} ({self.source_engine})"
