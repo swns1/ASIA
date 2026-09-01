@@ -119,7 +119,15 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 ## Known in-progress work
 
 - **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. Remaining hardening work: the 3 non-identity services still fall back to plain `IsAuthenticated` (not role-aware) if a future endpoint omits explicit `permission_classes`, and `backend/shared/` is an empty placeholder — the permission/authentication classes are hand-copied across services rather than truly shared.
-- **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`), but results aren't persisted and hyperparameters are hardcoded.
+- **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
+
+- **Sensitive documents in git history** — *needs a decision, not more code.* `ff09988 "final fixes before demo"` committed a real scanned PSA birth certificate of a named minor (`OCR_IMAGES/4a4e4ed6-….jpg`) plus `students/fixtures/_test_doc.jpg`, and both are reachable from `origin/main`. Under RA 10173 that is sensitive personal information. Nothing new is being added — `OCR_IMAGES/` and `students/fixtures/*.jpg` are gitignored and later commits removed the files from the tree — but **removal from the tree is not removal from history**. Purging them requires:
+
+  ```sh
+  git filter-repo --path OCR_IMAGES                   --path backend/student-service/students/fixtures/_test_doc.jpg                   --invert-paths
+  ```
+
+  followed by a force-push to `main`, after which **every holder of `matres` / `niru` / `niel` must re-clone** — merging an old clone silently reintroduces the blobs. That coordination cost is why this has not been done unilaterally.
 
 ## Testing
 
