@@ -241,6 +241,226 @@ def test_mother_and_father_become_two_guardians():
     assert relationships == {"mother", "father"}
 
 
+
+# ─────────────────────────────────────────────────────────────────────────
+# Anchors against the real certificate layout
+#
+# Every box below is measured off an actual scanned PSA certificate, and the
+# label text is verbatim what the recogniser returned from it — "(Firat)",
+# "(Mddla)", "XX1Male", "6. MAIDEN" split from its own "NAME". The *values*
+# are stand-ins: the real ones belong to a named child and must not live in
+# this repo. Surnames are kept internally consistent, because that
+# consistency is itself the assertion — on a correctly read certificate the
+# child's middle name is the mother's maiden surname and the child's last
+# name is the father's, so getting all three right by accident is unlikely.
+#
+# This is the regression net for the anchor tuning. Each field below was, at
+# some point, silently unresolvable or wrong.
+# ─────────────────────────────────────────────────────────────────────────
+
+def real_certificate():
+    return doc(
+        block('1. NAME', 152, 226, 217, 243, 1.00),
+        block('(Firat)', 291, 227, 327, 245, 0.92),
+        block('(Mddla)', 425, 229, 470, 244, 0.93),
+        block('(Last)', 568, 230, 600, 245, 0.91),
+        block('For OCRG USE ONLY:', 694, 231, 814, 244, 0.95),
+        block('REYES', 568, 240, 631, 261, 1.00),
+        block('SANTOS', 415, 243, 488, 262, 0.99),
+        block('Fopulation Referenoe No.', 695, 243, 832, 257, 0.95),
+        block('JOSE MARIO', 231, 245, 344, 262, 0.99),
+        block('2. SEX', 150, 264, 207, 283, 1.00),
+        block('3. DATE OF BIRTH', 386, 267, 513, 284, 0.95),
+        block('(day)', 534, 270, 566, 285, 0.97),
+        block('(manth) (ysar)', 579, 271, 661, 285, 0.89),
+        block('XX1Male', 166, 281, 254, 300, 0.74),
+        block('JUNE 2011', 569, 285, 672, 302, 0.98),
+        block('2 Famale', 297, 286, 354, 300, 0.84),
+        block('05', 531, 286, 560, 302, 1.00),
+        block('TO BE FILLED UP AT THE', 693, 290, 832, 305, 0.98),
+        block('CェーLロ', 117, 301, 137, 392, 0.50),
+        block('OFFICE OF THE CIVIL', 694, 302, 813, 316, 0.98),
+        block('4. PLACE OF', 149, 305, 242, 322, 1.00),
+        block('(Namaol Hoapital/Canic/inatitution/', 250, 306, 439, 324, 0.91),
+        block('(City/Miuniclpallty)', 452, 307, 547, 326, 0.93),
+        block('(Province)', 583, 309, 639, 326, 0.94),
+        block('6. MAIDEN', 145, 458, 222, 475, 0.98),
+        block('(Firet)', 274, 458, 308, 477, 0.82),
+        block('40', 694, 458, 711, 470, 0.84),
+        block('sO', 739, 458, 756, 471, 0.53),
+        block('(Last)', 547, 459, 582, 477, 0.93),
+        block('(Middle)', 407, 460, 451, 475, 0.93),
+        block('NAME', 169, 473, 216, 491, 1.00),
+        block('SANTOS', 555, 478, 625, 496, 0.91),
+        block('DELA', 401, 479, 465, 500, 1.00),
+        block('ANA', 275, 481, 311, 501, 1.00),
+        block('7. CITIZENSHIP', 150, 504, 258, 521, 0.99),
+        block('8. RELIGION', 458, 506, 546, 523, 0.99),
+        block('CATHOLIC', 557, 518, 637, 536, 0.99),
+        block('M', 121, 522, 138, 541, 1.00),
+        block('FILIPINO', 268, 523, 350, 540, 0.98),
+        block('58', 693, 528, 713, 544, 0.95),
+        block('OTHER', 120, 537, 138, 624, 1.00),
+        block('61', 694, 593, 710, 606, 1.00),
+        block('10. OCCUPATION', 144, 594, 264, 611, 1.00),
+        block('11.', 498, 596, 520, 612, 1.00),
+        block('Age at the time', 531, 598, 614, 612, 0.98),
+        block('HOUSEWIFE', 270, 616, 361, 633, 0.92),
+        block('yeara', 641, 622, 669, 633, 0.95),
+        block('12. RESIDENCE (House No., Street, Barangay)', 143, 635, 424, 655, 0.99),
+        block('(City/Municipalty)', 462, 640, 550, 654, 0.92),
+        block('(Pravince)', 592, 640, 646, 654, 0.99),
+        block('2', 694, 647, 711, 661, 1.00),
+        block('4', 751, 647, 767, 661, 0.63),
+        block('12 MABINI ST, SAMPLE TOWN', 203, 653, 640, 680, 0.91),
+        block('13. NAME', 143, 677, 214, 694, 0.98),
+        block('(Firat)', 279, 680, 312, 695, 0.89),
+        block('(Middie)', 412, 680, 456, 695, 0.95),
+        block('(Laat)', 551, 680, 585, 695, 0.98),
+        block('F', 120, 685, 133, 703, 1.00),
+        block('REYES', 538, 690, 601, 711, 0.97),
+        block('PEDRO', 238, 694, 307, 717, 0.72),
+        block('LIM', 416, 694, 459, 712, 0.72),
+        block('ATHER', 118, 696, 137, 789, 1.00),
+        block('69', 743, 704, 759, 716, 1.00),
+        block('14. CITIZENSHIP', 143, 717, 260, 734, 0.99),
+        block('15. RELIGION', 459, 717, 553, 734, 0.99),
+        block('CATHOLIC', 558, 722, 640, 745, 0.99),
+        block('FILIPINO', 279, 725, 361, 744, 1.00),
+        block('17.', 496, 747, 521, 767, 1.00),
+        block('JUNE 20,9011', 475, 1086, 606, 1109, 0.92),
+        block('FATHER', 267, 1087, 331, 1105, 0.99),
+    )
+
+
+def test_the_real_certificate_layout_resolves_every_field():
+    fields, confidence = extract_fields(real_certificate(), FAMILY_BIRTH_CERTIFICATE)
+
+    assert fields["first_name"] == "JOSE MARIO"
+    assert fields["middle_name"] == "SANTOS"
+    assert fields["last_name"] == "REYES"
+    assert fields["sex"] == "male"
+    assert fields["birth_date"] == "05 JUNE 2011"
+    assert fields["religion"] == "CATHOLIC"
+
+    by_relationship = {g["relationship"]: g["full_name"] for g in fields["guardians"]}
+    assert by_relationship == {"mother": "ANA DELA SANTOS", "father": "PEDRO LIM REYES"}
+
+    # The recogniser read the ticked sex box at 0.74; saying "high" there
+    # would be the pipeline lying about its own evidence.
+    assert confidence["sex"] == "low"
+    assert confidence["first_name"] == "high"
+
+
+def test_the_child_and_parent_name_rows_do_not_collide():
+    """
+    "(First) (Middle) (Last)" is printed three times on this form — for the
+    child, the mother and the father — and a single global best-match label
+    can only ever resolve one of them. The parents anchor on their numbered
+    section headers instead.
+    """
+    fields, _ = extract_fields(real_certificate(), FAMILY_BIRTH_CERTIFICATE)
+    names = {fields["first_name"], fields["middle_name"], fields["last_name"]}
+    parents = {g["full_name"] for g in fields["guardians"]}
+    assert names == {"JOSE MARIO", "SANTOS", "REYES"}
+    assert not any(n in parents for n in names)
+
+
+def test_the_father_anchor_ignores_the_signature_block():
+    """
+    The word "FATHER" appears twice: once as the vertical tab beside field 13,
+    and once in the certification block at the foot of the page, where the
+    neighbouring value is the parents' marriage date. Anchoring on the bare
+    word picked the footer and returned "21. PREPARED BY".
+    """
+    fields, _ = extract_fields(real_certificate(), FAMILY_BIRTH_CERTIFICATE)
+    father = next(g for g in fields["guardians"] if g["relationship"] == "father")
+    assert father["full_name"] == "PEDRO LIM REYES"
+
+
+def test_a_value_overlapping_its_own_caption_is_still_read():
+    """
+    Captions and handwritten values are not on tidy separate lines. The
+    surname starts five pixels ABOVE the bottom of its own "(Last)" caption,
+    and at the old tolerance it was excluded — so the anchor reached past it
+    into the next row of the form and came back with a caption instead.
+    """
+    page = doc(block("(Last)", 568, 230, 600, 245),
+               block("REYES", 568, 240, 631, 261),
+               block("(manth) (ysar)", 579, 271, 661, 285))
+    value, _ = resolve_anchor(page, Anchor("last_name", ("(Last)",), BELOW, max_gap=3.0))
+    assert value == "REYES"
+
+
+def test_the_day_of_birth_is_not_mistaken_for_a_box_number():
+    """
+    A lone 1-3 digit block is normally a box number printed on the form, but
+    the day of birth is exactly that shape. Without the waiver the date came
+    back as "JUNE 2011" — a birth date a month wide.
+    """
+    labelled = (block("3. DATE OF BIRTH", 386, 267, 513, 284),
+                block("05", 531, 286, 560, 302),
+                block("JUNE 2011", 569, 285, 672, 302))
+    numeric = Anchor("birth_date", ("3. DATE OF BIRTH",), BELOW,
+                     max_gap=3.5, keep_numeric=True)
+    assert resolve_anchor(doc(*labelled), numeric)[0] == "05 JUNE 2011"
+
+    # and the waiver is opt-in: without it the box number is still furniture
+    plain = Anchor("birth_date", ("3. DATE OF BIRTH",), BELOW, max_gap=3.5)
+    assert resolve_anchor(doc(*labelled), plain)[0] == "JUNE 2011"
+
+
+def test_form_furniture_does_not_consume_the_value_budget():
+    """
+    "6. MAIDEN NAME" comes back as two blocks, and the stray "NAME" sits in
+    the value row. Spending a max_blocks slot on it before dropping it cost
+    the mother her surname.
+    """
+    page = doc(block("6. MAIDEN", 145, 458, 222, 475),
+               block("NAME", 169, 473, 216, 491),
+               block("ANA", 275, 481, 311, 501),
+               block("DELA", 401, 479, 465, 500),
+               block("SANTOS", 555, 478, 625, 496))
+    anchor = Anchor("_mother_name", ("6. MAIDEN",), BELOW,
+                    max_gap=3.0, max_blocks=3, x_window=30.0)
+    assert resolve_anchor(page, anchor)[0] == "ANA DELA SANTOS"
+
+
+SEX = Anchor("sex", ("2. SEX",), BELOW, max_gap=3.0, max_blocks=4, x_window=10.0,
+             choices=(("female", r"f[ae]m[ae]l[ae]"), ("male", r"m[ae]l[ae]")))
+
+
+def test_the_ticked_option_is_the_one_that_is_read():
+    """Sex is not written on this form, it is ticked. The X is the value."""
+    label = block("2. SEX", 150, 264, 207, 283)
+    male = doc(label, block("XX1Male", 166, 281, 254, 300, conf=0.74),
+               block("2 Famale", 297, 286, 354, 300))
+    assert resolve_anchor(male, SEX)[0] == "male"
+
+    # The same page with the mark on the other option. "Famale" is what the
+    # recogniser actually returns, and it contains "male" — so option order
+    # matters, and the female pattern has to win the block.
+    female = doc(label, block("1 Male", 166, 281, 254, 300),
+                 block("X2 Famale", 297, 286, 354, 300))
+    assert resolve_anchor(female, SEX)[0] == "female"
+
+
+@pytest.mark.parametrize("first,second", [
+    ("1 Male", "2 Famale"),        # nothing ticked — the mark did not scan
+    ("XX1Male", "X2 Famale"),      # both ticked — a smudge, or a bad scan
+])
+def test_an_unreadable_tick_yields_nothing_rather_than_a_guess(first, second):
+    """
+    Guessing a sex off an unticked box would be a silent, plausible-looking
+    error in a permanent record. Nothing here means the document escalates to
+    the fallback, which is the whole point of the fallback.
+    """
+    page = doc(block("2. SEX", 150, 264, 207, 283),
+               block(first, 166, 281, 254, 300),
+               block(second, 297, 286, 354, 300))
+    assert resolve_anchor(page, SEX)[0] is None
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Reconciliation — the defect this package exists to fix
 # ─────────────────────────────────────────────────────────────────────────

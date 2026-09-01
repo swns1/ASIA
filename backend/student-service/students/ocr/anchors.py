@@ -27,6 +27,14 @@ from .types import ParsedDocument, TextBlock
 RIGHT = "right"
 BELOW = "below"
 
+# How far a value may sit ABOVE the bottom of its own label and still count as
+# being below it, in label heights. Captions and handwritten values are not
+# printed on tidy separate lines: on the certificate the child's surname
+# ("CAPILI", y 240-261) starts *five pixels above* the bottom of its own
+# "(Last)" caption (y 230-245). At the old 0.2 the surname was excluded and the
+# anchor reached down to the next row of the form instead.
+_VALUE_OVERLAP = 0.5
+
 # How close a block's text must be to a label to count as that label. Loose
 # enough to survive the recogniser dropping a character, tight enough that
 # "FATHER" does not match "MOTHER".
@@ -49,6 +57,18 @@ class Anchor:
     # How many blocks to join (a name split across "JUAN" "DELA" "CRUZ").
     max_blocks: int = 3
     pattern: str | None = None  # value must match, else the anchor yields nothing
+    # How far right of the label a value may sit when reading downward, again
+    # in label heights. The default suits a caption sitting directly over its
+    # own value; a full-width row -- "6. MAIDEN NAME" spanning first, middle
+    # and last across the page -- needs a much wider reach.
+    x_window: float = 4.0
+    # Bare 1-3 digit blocks are normally printed box numbers, not values. A
+    # birth date's day is the exception: "18" is the answer, not furniture.
+    keep_numeric: bool = False
+    # A "tick one of N printed options" field: the form prints every choice and
+    # the registrar marks one. Ordered specific-first, because "Female" misread
+    # as "Famale" still contains "male".
+    choices: tuple[tuple[str, str], ...] = ()
 
 
 ANCHOR_SETS: dict[str, tuple[Anchor, ...]] = {
@@ -67,14 +87,28 @@ ANCHOR_SETS: dict[str, tuple[Anchor, ...]] = {
                max_gap=3.0, max_blocks=2),
         Anchor("last_name", ("(Last)", "(Laat)"), BELOW,
                max_gap=3.0, max_blocks=2),
-        Anchor("sex", ("2. SEX", "SEX"), BELOW, max_gap=3.0, max_blocks=1,
-               pattern=r"^(male|female|m|f)$"),
+        # Sex is not written, it is ticked: the form prints "1 Male" and
+        # "2 Female" side by side and one carries an X. Both options have to
+        # be in view for the mark to mean anything, hence the wider window.
+        Anchor("sex", ("2. SEX", "SEX"), BELOW, max_gap=3.0, max_blocks=4,
+               x_window=10.0,
+               choices=(("female", r"f[ae]m[ae]l[ae]"), ("male", r"m[ae]l[ae]"))),
+        # `keep_numeric` so the day survives: the value row reads "18" then
+        # "MARCH 2002", and the bare-number furniture rule was eating the 18 —
+        # producing a birth date a month wide.
         Anchor("birth_date", ("3. DATE OF BIRTH", "DATE OF BIRTH"), BELOW,
-               max_gap=3.5, max_blocks=3),
-        Anchor("_mother_name", ("MAIDEN NAME", "NAME OF MOTHER"), BELOW,
-               max_gap=3.0, max_blocks=3),
-        Anchor("_father_name", ("NAME OF FATHER", "FATHER"), BELOW,
-               max_gap=3.0, max_blocks=3),
+               max_gap=3.5, max_blocks=3, keep_numeric=True),
+        # Both parents are printed the same way the child is — one caption row
+        # spanning (First) (Middle) (Last) across the page — so the anchor is
+        # the numbered section header and the window has to reach the whole
+        # row. "6. MAIDEN" and "13. NAME" each occur exactly once on the form;
+        # a bare "FATHER" does not, which is why it is absent here: it also
+        # appears in the certification block at the foot of the page, and that
+        # is the label the old anchor was locking onto.
+        Anchor("_mother_name", ("6. MAIDEN", "MAIDEN", "NAME OF MOTHER"), BELOW,
+               max_gap=3.0, max_blocks=3, x_window=30.0),
+        Anchor("_father_name", ("13. NAME", "NAME OF FATHER"), BELOW,
+               max_gap=3.0, max_blocks=3, x_window=30.0),
         Anchor("religion", ("RELIGION",), RIGHT, max_blocks=2),
     ),
     # Form 137 is NOT one layout. Real samples turned up at least three:
@@ -134,7 +168,12 @@ def find_label(parsed: ParsedDocument, labels) -> TextBlock | None:
 
 
 def _candidates(parsed: ParsedDocument, label: TextBlock, anchor: Anchor) -> list[TextBlock]:
-    """Blocks lying in the value region for this label, in reading order."""
+    """
+    Blocks lying in the value region for this label, in reading order.
+
+    Untruncated: the `max_blocks` budget is spent by `resolve_anchor`, after
+    the form's own furniture has been dropped.
+    """
     height = label.height or 12.0
     out = []
     for block in parsed.blocks:
@@ -147,14 +186,15 @@ def _candidates(parsed: ParsedDocument, label: TextBlock, anchor: Anchor) -> lis
             if same_row and to_right and within:
                 out.append(block)
         else:  # BELOW
-            below = block.y0 >= label.y1 - height * 0.2
+            below = block.y0 >= label.y1 - height * _VALUE_OVERLAP
             within = block.y0 - label.y1 <= height * anchor.max_gap
-            overlaps = block.x1 >= label.x0 and block.x0 <= label.x1 + height * 4
+            overlaps = (block.x1 >= label.x0
+                        and block.x0 <= label.x1 + height * anchor.x_window)
             if below and within and overlaps:
                 out.append(block)
 
     if anchor.direction == RIGHT:
-        return sorted(out, key=lambda b: b.x0)[: anchor.max_blocks]
+        return sorted(out, key=lambda b: b.x0)
 
     # Reading downward, keep only the FIRST line of text under the label.
     # Without this the search window spills into the next row of the form and
@@ -164,7 +204,7 @@ def _candidates(parsed: ParsedDocument, label: TextBlock, anchor: Anchor) -> lis
     first = out[0]
     line_height = first.height or height
     same_line = [b for b in out if abs(b.center_y - first.center_y) <= line_height * 0.7]
-    return sorted(same_line, key=lambda b: b.x0)[: anchor.max_blocks]
+    return sorted(same_line, key=lambda b: b.x0)
 
 
 # Printed form furniture that sits in a value region but is not a value.
@@ -174,11 +214,55 @@ _NOISE = re.compile(
     r"|\(?(first|firat|firet|middle|mddla|mddle|last|laat|name|sex|"
     r"type of|type|no\.?|nos\.?|day|month|year|manth|ysar)\)?"
     r"|[|:;_.\-–—]+"
-    r"|\d{1,3}"                                      # box numbers printed on the form
     r"|\d{1,2}\s*[.)]\s*.{0,40}"                     # numbered captions: "21. PREPARED BY"
     r")$",
     re.IGNORECASE,
 )
+
+# Split out of `_NOISE` because it is the one furniture rule with a real
+# exception. The form prints a box number beside most fields, so a lone "58"
+# in a value region is furniture -- but "18" under "3. DATE OF BIRTH" is the
+# day of birth. Anchors that expect a number waive this rule alone.
+_BARE_NUMBER = re.compile(r"^\d{1,3}$")
+
+# An X, a tick, or a cross placed beside a printed option.
+_MARK = re.compile(r"[x✓✔√]", re.IGNORECASE)
+
+
+def _is_furniture(text: str, anchor: "Anchor") -> bool:
+    if _NOISE.match(text):
+        return True
+    return not anchor.keep_numeric and bool(_BARE_NUMBER.match(text))
+
+
+def _resolve_choice(blocks, choices) -> tuple[str | None, float]:
+    """
+    Which printed option was ticked.
+
+    Returns a value only when *exactly one* option carries a mark. A form where
+    the mark did not survive scanning, or where two options both look marked,
+    yields nothing and escalates to the fallback — guessing a sex off an
+    unticked box would be a silent, plausible-looking error in a permanent
+    record, which is the one failure mode this pipeline exists to avoid.
+    """
+    marked = []
+    for block in blocks:
+        text = block.text
+        for value, pattern in choices:
+            found = re.search(pattern, text, re.IGNORECASE)
+            if not found:
+                continue
+            # The mark sits beside the printed word, never inside it, so strip
+            # the matched option out before looking for it.
+            beside = text[: found.start()] + text[found.end():]
+            if _MARK.search(beside):
+                marked.append((value, block))
+            break  # options are ordered specific-first; first hit owns the block
+
+    if len(marked) != 1:
+        return None, 0.0
+    value, block = marked[0]
+    return value, block.confidence
 
 
 def resolve_anchor(parsed: ParsedDocument, anchor: Anchor) -> tuple[str | None, float]:
@@ -187,9 +271,16 @@ def resolve_anchor(parsed: ParsedDocument, anchor: Anchor) -> tuple[str | None, 
     if label is None:
         return None, 0.0
 
-    blocks = [b for b in _candidates(parsed, label, anchor) if not _NOISE.match(b.text.strip())]
+    # Furniture is dropped BEFORE the max_blocks budget is applied, so the
+    # form's own printed words cannot crowd out the value: "6. MAIDEN NAME"
+    # arrives as two blocks and the stray "NAME" sits in the value row.
+    blocks = [b for b in _candidates(parsed, label, anchor)
+              if not _is_furniture(b.text.strip(), anchor)][: anchor.max_blocks]
     if not blocks:
         return None, 0.0
+
+    if anchor.choices:
+        return _resolve_choice(blocks, anchor.choices)
 
     value = " ".join(b.text.strip() for b in blocks).strip(" :|-_")
     if not value:

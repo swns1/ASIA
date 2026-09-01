@@ -1,0 +1,25 @@
+# ── Local OCR engine (optional) ───────────────────────────────────────────────
+#
+# Installing this file switches document scanning from the cloud fallback to the
+# local reader: PaddleOCR does the recognition on this machine, and the Groq
+# vision call is only reached when the anchor resolver cannot fill enough
+# fields. Without it the service still runs — `students/ocr/reader.py` imports
+# paddle lazily, and every layer above it consumes a `ParsedDocument`, so the
+# policy, anchor, verify and reconcile logic is exercised either way.
+#
+# Deliberately NOT in requirements.txt: this pulls ~1 GB, and the engine tests
+# in students/test_ocr.py are guarded with `pytest.importorskip("paddleocr")`,
+# so CI gets nothing from installing it but a much slower job.
+#
+# Only these two are pinned — paddle resolves a large transitive set of its own,
+# and pinning that here would go stale against paddle's own requirements.
+#
+#     pip install -r requirements.txt -r requirements-ocr.txt
+#
+# NOTE: paddlepaddle constrains numpy to the 2.3.x line. The repo-root shared
+# virtualenv described in README.md will downgrade numpy when this is installed;
+# if something else in the venv has pinned numpy >= 2.4, the paddle import fails
+# at runtime rather than at install time.
+
+paddleocr==3.7.0
+paddlepaddle==3.3.1
