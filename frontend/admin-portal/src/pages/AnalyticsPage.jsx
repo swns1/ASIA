@@ -20,6 +20,7 @@ import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
 import {
   CHART_OPTIONS,
+  DEFAULT_CHART_VIEW,
   chartBlurb,
   formatAttendance,
   formatGrade,
@@ -349,7 +350,7 @@ export default function AnalyticsPage() {
   const [groupCount, setGroupCount] = useState("auto");
   const [subjects, setSubjects] = useState([]);
 
-  const [chartView, setChartView] = useState("mix");
+  const [chartView, setChartView] = useState(DEFAULT_CHART_VIEW);
 
   const [risk, setRisk] = useState(null);
   const [riskLoading, setRiskLoading] = useState(false);

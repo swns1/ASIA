@@ -147,9 +147,9 @@ function RiskMixChart({ summary, total }) {
   if (!total) return <NoData />;
 
   const W = 760;
-  const H = 92;
-  const BAR_Y = 18;
-  const BAR_H = 40;
+  const H = 150;
+  const BAR_Y = 26;
+  const BAR_H = 56;
 
   const segments = RISK_LEVELS.filter((level) => (counts[level] ?? 0) > 0).reduce((acc, level) => {
     const count = counts[level];
@@ -192,25 +192,48 @@ function RiskMixChart({ summary, total }) {
             />
             {/* Direct-label only where the segment is genuinely wide enough
                 to hold the text — otherwise the legend and tooltip carry it. */}
-            {drawWidth > 46 && (
+            {drawWidth > 34 && (
               <text
                 x={seg.x + drawWidth / 2}
-                y={BAR_Y + BAR_H / 2 + 4}
+                y={BAR_Y + BAR_H / 2 + 6}
                 textAnchor="middle"
-                fontSize="13"
+                fontSize="17"
                 fontWeight="700"
                 fill="#1a0a0a"
               >
                 {seg.count}
               </text>
             )}
+            {drawWidth > 96 && (
+              <text
+                x={seg.x + drawWidth / 2}
+                y={BAR_Y + BAR_H + 20}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="600"
+                fill="#5a4040"
+              >
+                {meta.label}
+              </text>
+            )}
+            {drawWidth > 96 && (
+              <text
+                x={seg.x + drawWidth / 2}
+                y={BAR_Y + BAR_H + 34}
+                textAnchor="middle"
+                fontSize="10"
+                fill={AXIS_INK}
+              >
+                {Math.round(seg.share * 100)}% of the group
+              </text>
+            )}
           </g>
         );
       })}
-      <text x={0} y={BAR_Y + BAR_H + 22} fontSize="11" fill={AXIS_INK}>
+      <text x={0} y={16} fontSize="11" fontWeight="600" fill={AXIS_INK}>
         Most urgent
       </text>
-      <text x={W} y={BAR_Y + BAR_H + 22} textAnchor="end" fontSize="11" fill={AXIS_INK}>
+      <text x={W} y={16} textAnchor="end" fontSize="11" fontWeight="600" fill={AXIS_INK}>
         Doing fine
       </text>
     </ChartFrame>
@@ -366,8 +389,14 @@ function GradeDistributionChart({ scores }) {
   if (!graded.length) return <NoData message="No grades recorded for this selection yet." />;
 
   const BIN_SIZE = 5;
-  const MIN = 60;
   const MAX = 100;
+  // The axis has to reach the lowest grade actually present. A fixed floor of
+  // 60 silently folded a 47.7 average into the 60-65 bin — the chart then
+  // showed that student as borderline rather than as the worst case in the
+  // cohort. Floor at 40 so the axis stays readable if a grade is a data-entry
+  // error rather than a real mark.
+  const lowest = Math.min(...graded.map((s) => Number(s.average_grade)));
+  const MIN = Math.max(40, Math.min(60, Math.floor(lowest / BIN_SIZE) * BIN_SIZE));
   const binCount = (MAX - MIN) / BIN_SIZE;
   const bins = Array.from({ length: binCount }, (_, i) => ({
     from: MIN + i * BIN_SIZE,
@@ -380,11 +409,11 @@ function GradeDistributionChart({ scores }) {
   });
 
   const W = 760;
-  const H = 260;
-  const PAD_L = 34;
+  const H = 320;
+  const PAD_L = 46;
   const PAD_R = 16;
-  const PAD_T = 14;
-  const PAD_B = 42;
+  const PAD_T = 18;
+  const PAD_B = 52;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
   const max = Math.max(...bins.map((b) => b.count), 1);
@@ -442,9 +471,22 @@ function GradeDistributionChart({ scores }) {
                 onMouseLeave={() => setTip(null)}
               />
             )}
+            {bin.count > 0 && (
+              <text
+                x={x + colW / 2}
+                y={PAD_T + plotH - h - 6}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="700"
+                fill="#1a0a0a"
+                className="tabular-nums"
+              >
+                {bin.count}
+              </text>
+            )}
             <text
               x={x + colW / 2}
-              y={H - PAD_B + 16}
+              y={H - PAD_B + 18}
               textAnchor="middle"
               fontSize="10"
               fill={AXIS_INK}
@@ -461,8 +503,18 @@ function GradeDistributionChart({ scores }) {
       <text x={passX + 6} y={PAD_T + 11} fontSize="11" fontWeight="700" fill="#1a0a0a">
         Passing mark ({PASSING_GRADE})
       </text>
-      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize="11" fill={AXIS_INK}>
+      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill={AXIS_INK}>
         Average grade
+      </text>
+      <text
+        x={14}
+        y={PAD_T + plotH / 2}
+        textAnchor="middle"
+        fontSize="11"
+        fill={AXIS_INK}
+        transform={`rotate(-90 14 ${PAD_T + plotH / 2})`}
+      >
+        Students
       </text>
     </ChartFrame>
   );

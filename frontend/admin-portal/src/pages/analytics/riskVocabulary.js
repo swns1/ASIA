@@ -237,14 +237,23 @@ export function downloadRiskCSV(rows, { schoolYear, gradingPeriod }) {
 // rather than beside the chart components so RiskCharts.jsx can export only
 // components (react-refresh/only-export-components).
 
+// Ordered as a reader works through the question: how is everyone doing, how
+// many are in trouble, what is driving it, then where it is concentrated.
 export const CHART_OPTIONS = [
-  { value: "mix", label: "How many need help", icon: "ti-chart-bar" },
+  { value: "grades", label: "How everyone is doing", icon: "ti-chart-histogram" },
+  { value: "mix", label: "How many need help", icon: "ti-chart-pie-4" },
+  { value: "reasons", label: "Why they're flagged", icon: "ti-list-check" },
   { value: "grade_level", label: "By grade level", icon: "ti-school" },
   { value: "section", label: "By section", icon: "ti-users-group" },
-  { value: "reasons", label: "Why they're flagged", icon: "ti-list-check" },
-  { value: "grades", label: "Grade spread", icon: "ti-chart-histogram" },
   { value: "map", label: "Grades vs attendance", icon: "ti-map-pin" },
 ];
+
+// The Overview opens on the grade spread rather than the band split: the four
+// stat tiles directly above already carry the band counts, so leading with
+// them again says nothing new. The spread is the one view that shows
+// something the tiles cannot — where the cohort actually sits, and how much
+// of it falls left of the passing mark.
+export const DEFAULT_CHART_VIEW = "grades";
 
 const CHART_BLURBS = {
   mix: "How the whole group splits across the four levels.",
