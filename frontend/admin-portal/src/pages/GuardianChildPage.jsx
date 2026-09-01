@@ -2,7 +2,6 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import GuardianLayout from "../components/GuardianLayout";
 import { getReportCard } from "../api/enrollmentApi";
 import { getAttendanceSummary } from "../api/attendanceApi";
 import { getStudentLedger } from "../api/billingApi";
@@ -225,7 +224,7 @@ export default function GuardianChildPage() {
   ];
 
   return (
-    <GuardianLayout>
+    <>
       {error && (
         <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
           <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
@@ -278,6 +277,6 @@ export default function GuardianChildPage() {
           {tab === "billing" && <BillingTab ledger={ledger} loading={ledgerLoading} />}
         </motion.div>
       </AnimatePresence>
-    </GuardianLayout>
+    </>
   );
 }

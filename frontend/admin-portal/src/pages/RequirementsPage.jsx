@@ -1,8 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getStudents } from "../api/studentApi";
@@ -471,20 +472,20 @@ export default function RequirementsPage() {
   const pending   = requirements.length - submitted;
 
   return (
-    <AppLayout>
+    <>
       <style>{baseCss}</style>
-          {/* Topbar */}
-          <div style={s.topbar}>
-            <div>
-              <div style={s.topbarTitle}>Student Requirements</div>
-              <div style={s.topbarSub}>Enrollment Documents / Submission Tracker</div>
-            </div>
-            {selectedStudent && (
-              <button onClick={reloadRequirements} style={s.primaryBtn}>
-                <i className="ti ti-refresh" style={{ fontSize: 14 }} />Refresh
-              </button>
-            )}
-          </div>
+          <PageHeader
+            title="Student Requirements"
+            icon="ti-file-check"
+            subtitle="Enrollment documents and submission tracker"
+            actions={
+              selectedStudent && (
+                <Button variant="secondary" icon="ti-refresh" onClick={reloadRequirements}>
+                  Refresh
+                </Button>
+              )
+            }
+          />
 
           <div style={s.content}>
 
@@ -1159,25 +1160,18 @@ export default function RequirementsPage() {
           removing={removing}
         />
       )}
-    </AppLayout>
+    </>
   );
 }
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
+// Page-specific rules only. The keyframes, the `*`/body resets, the scrollbar
+// styling and `.search-wrap:focus-within` all live in index.css now, and the
+// `.nav-item`/`.nav-active` overrides were dead weight — the sidebar no longer
+// uses those class names, so the rules matched nothing.
 const baseCss = `
-  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-  @keyframes spin    { to{transform:rotate(360deg)} }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'DM Sans',sans-serif; }
-  ::-webkit-scrollbar { width:5px; height:5px; }
-  ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-  .nav-item { transition:background 0.12s,color 0.12s; }
-  .nav-item:hover { background:#fff4f4 !important; color:#e03131 !important; }
-  .nav-active { background:#fff0f0 !important; color:#e03131 !important; font-weight:600 !important; }
-.dropdown-item:hover { background:#fff8f6; }
+  .dropdown-item:hover { background:#fff8f6; }
   .dropdown-item:last-child { border-bottom:none !important; }
-  .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
   .student-row:last-child td { border-bottom:none !important; }
   tbody tr:last-child td { border-bottom:none !important; }
 `;

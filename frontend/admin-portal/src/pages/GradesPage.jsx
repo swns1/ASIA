@@ -3,8 +3,9 @@ import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Tabs from "../components/ui/Tabs";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
@@ -1992,7 +1993,7 @@ export default function GradesPage() {
   );
 
   return (
-    <AppLayout>
+    <>
       <style>{`
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -2000,30 +2001,22 @@ export default function GradesPage() {
         @keyframes spin    { to{transform:rotate(360deg)} }
       `}</style>
 
-      {/* Topbar */}
-      <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <i className="ti ti-chart-bar" style={{ fontSize:16, color:"#e03131" }} />
-          <span style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>Grades</span>
-        </div>
-        {/* Tab switcher */}
-        <div style={{ display:"flex", background:"#fdfafa", border:"1px solid #f5eaea", borderRadius:10, padding:3, gap:2 }}>
-          {[
-            { key:"overview", icon:"ti-layout-list",  label:"Overview" },
-            { key:"summary",  icon:"ti-table",         label:"Summary"  },
-            { key:"entry",    icon:"ti-pencil",        label:"Entry"    },
-          ].map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 16px", borderRadius:8, border:"none", fontSize:13, fontWeight:tab===t.key?700:500, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", transition:"all 0.14s",
-                background: tab===t.key?"white":"transparent",
-                color:      tab===t.key?"#e03131":"#9a7070",
-                boxShadow:  tab===t.key?"0 1px 6px rgba(224,49,49,0.12)":"none",
-              }}>
-              <i className={`ti ${t.icon}`} style={{ fontSize:13 }} />{t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Grades"
+        icon="ti-chart-bar"
+        actions={
+          <Tabs
+            variant="pill"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: "overview", icon: "ti-layout-list", label: "Overview" },
+              { id: "summary",  icon: "ti-table",       label: "Summary" },
+              { id: "entry",    icon: "ti-pencil",      label: "Entry" },
+            ]}
+          />
+        }
+      />
 
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
@@ -2044,6 +2037,6 @@ export default function GradesPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }

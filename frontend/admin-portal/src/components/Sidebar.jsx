@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 
 import {
   hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import useMediaQuery from "../hooks/useMediaQuery";
+import { ConfirmDialog } from "./ui/Modal";
+import { Select } from "./FormField";
 import logo from "../assets/logo.png";
-import logoutIcon from "../assets/logout.svg";
 
 // ── Global school-year filter: sets the default year every year-scoped
 // module (Dashboard, Enrollments, Grades, Attendance, Analytics,
@@ -18,20 +21,24 @@ function SchoolYearPicker() {
   if (!schoolYear) return null; // still resolving the default on first load
 
   return (
-    <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #f5eaea" }}>
-      <label style={{ display: "block", fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 5 }}>
+    <div className="border-b border-neutral-200 px-3.5 pb-2.5 pt-3">
+      <label
+        htmlFor="sidebar-school-year"
+        className="mb-1 block text-xs font-bold uppercase tracking-[0.1em] text-neutral-500"
+      >
         School Year
       </label>
-      <select
+      <Select
+        id="sidebar-school-year"
         value={schoolYear}
         onChange={(e) => setSchoolYear(e.target.value)}
         title="Applies to Dashboard, Enrollments, Grades, Attendance, Analytics, Scholarships, Academic Calendar, and Teacher Advisories"
-        style={{ width: "100%", border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", cursor: "pointer", fontWeight: 600 }}
+        className="px-2.5 py-1.5 text-sm font-semibold"
       >
         {options.map((y) => (
           <option key={y} value={y}>{y}</option>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }
@@ -49,7 +56,7 @@ const NAV = [
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
       { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
-      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: ACADEMIC_STAFF },
+      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: GRADE_ROLES },
     ],
   },
   {
@@ -73,51 +80,34 @@ const NAV = [
   },
 ];
 
-// ── Logout modal ──────────────────────────────────────────────────────────────
-function LogoutModal({ onConfirm, onCancel }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      {/* Backdrop */}
-      <div
-        onClick={onCancel}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.4)", backdropFilter: "blur(4px)" }}
-      />
-      {/* Dialog */}
-      <div
-        style={{ position: "relative", background: "white", borderRadius: 20, padding: "32px 36px", width: 380, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}
-      >
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <i className="ti ti-logout" style={{ fontSize: 24, color: "#e03131" }} />
-        </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>Log out?</div>
-        <div style={{ fontSize: 13, color: "#7a5050", textAlign: "center", lineHeight: 1.7 }}>
-          You'll be returned to the login page. Any unsaved changes will be lost.
-        </div>
-        <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-          <button onClick={onCancel} style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
-            Stay
-          </button>
-          <button onClick={onConfirm} style={{ flex: 1, height: 42, border: "none", borderRadius: 10, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 13, color: "white", cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.3)" }}>
-            Yes, logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Sidebar ───────────────────────────────────────────────────────────────────
-export default function Sidebar({ user: userProp }) {
-  const navigate     = useNavigate();
-  const location     = useLocation();
+export default function Sidebar({
+  collapsed = false,
+  onToggleCollapsed,
+  mobileOpen = false,
+  onCloseMobile,
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [showLogout, setShowLogout] = useState(false);
 
-  const currentUser = userProp ?? getCurrentUser();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  // Inside the mobile drawer there's room for labels, so collapse only applies
+  // to the persistent desktop rail.
+  const showLabels = !collapsed || !isDesktop;
+
+  const currentUser = getCurrentUser();
 
   const navGroups = NAV.map((group) => ({
     ...group,
     items: group.items.filter((item) => hasAnyRole(currentUser, item.allowedRoles)),
   })).filter((group) => group.items.length > 0);
+
+  // Navigating from the drawer should close it, otherwise it covers the page
+  // the user just asked for.
+  useEffect(() => {
+    if (mobileOpen) onCloseMobile?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   function handleLogout() {
     clearAuthSession();
@@ -126,41 +116,75 @@ export default function Sidebar({ user: userProp }) {
 
   return (
     <>
+      {/* Drawer backdrop (below lg only) */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-brand-900/40 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
+
       <aside
-        style={{ width: 224, flexShrink: 0, background: "white", borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" }}
+        className={[
+          "z-50 flex shrink-0 flex-col border-r border-neutral-200 bg-white shadow-xs transition-[width,transform] duration-200",
+          "fixed inset-y-0 left-0 lg:static",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          showLabels ? "w-56" : "w-16",
+        ].join(" ")}
       >
         {/* Logo */}
-        <div style={{ height: 58, padding: "0 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={logo} alt="Logo" style={{ width: 20, height: 30 }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>South Lakes IS</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>{portalLabelFor(currentUser?.role)}</div>
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-4">
+          <img src={logo} alt="" className="h-[30px] w-5 shrink-0" aria-hidden="true" />
+          {showLabels && (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-neutral-900">South Lakes IS</div>
+              <div className="truncate text-xs text-neutral-500">
+                {portalLabelFor(currentUser?.role)}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <SchoolYearPicker />
+        {showLabels && <SchoolYearPicker />}
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+        {/* The landmark name belongs on <nav>, not the <aside> wrapper —
+            <aside> exposes a "complementary" role, so labelling it there left
+            the navigation landmark unnamed. */}
+        <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">
           {navGroups.map((group) => (
-            <div key={group.section} style={{ marginBottom: 6 }}>
-              <div style={{ fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 }}>
-                {group.section}
-              </div>
+            <div key={group.section} className="mb-1.5">
+              {showLabels && (
+                <div className="px-2.5 pb-1 pt-2.5 text-xs font-bold uppercase tracking-[0.1em] text-neutral-500">
+                  {group.section}
+                </div>
+              )}
               {group.items.map((item) => {
-                const active = location.pathname === item.path || location.pathname.startsWith(item.path + "/");
+                const active =
+                  location.pathname === item.path ||
+                  location.pathname.startsWith(item.path + "/");
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className="nav-item"
                     aria-current={active ? "page" : undefined}
-                    style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, color: active ? "#e03131" : "#7a5a5a", cursor: "pointer", fontWeight: active ? 600 : 400, textDecoration: "none", background: active ? "#fff0f0" : "transparent" }}
+                    title={showLabels ? undefined : item.label}
+                    className={[
+                      "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                      showLabels ? "" : "justify-center",
+                      active
+                        ? "bg-brand-100 font-semibold text-brand-500 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-brand-500"
+                        : "text-neutral-700 hover:bg-brand-50 hover:text-brand-500",
+                    ].join(" ")}
                   >
-                    <i className={`ti ${item.icon}`} style={{ fontSize: 16, width: 20, textAlign: "center", position: "relative" }} />
-                    <span style={{ position: "relative" }}>{item.label}</span>
+                    <i
+                      className={`ti ${item.icon} w-5 shrink-0 text-center text-[16px]`}
+                      aria-hidden="true"
+                    />
+                    {showLabels ? <span className="truncate">{item.label}</span> : (
+                      <span className="sr-only">{item.label}</span>
+                    )}
                   </Link>
                 );
               })}
@@ -168,34 +192,90 @@ export default function Sidebar({ user: userProp }) {
           ))}
         </nav>
 
+        {/* Collapse toggle — desktop only; the drawer closes instead. */}
+        <div className="hidden border-t border-neutral-200 px-2.5 py-2 lg:block">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={[
+              "focus-ring flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-semibold text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-500",
+              showLabels ? "" : "justify-center",
+            ].join(" ")}
+          >
+            <i
+              className={`ti ${collapsed ? "ti-chevron-right" : "ti-chevron-left"} text-[15px]`}
+              aria-hidden="true"
+            />
+            {showLabels && <span>Collapse</span>}
+          </button>
+        </div>
+
         {/* User card */}
-        <div style={{ padding: "14px 10px", borderTop: "1px solid #f5eaea" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#e03131", flexShrink: 0 }}>
+        <div className="border-t border-neutral-200 p-2.5">
+          <div
+            className={[
+              "flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5",
+              showLabels ? "" : "justify-center",
+            ].join(" ")}
+          >
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
+              aria-hidden="true"
+            >
               {(currentUser?.name || "SA").slice(0, 2).toUpperCase()}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.name || "Super Admin"}</div>
-              <div style={{ fontSize: 11, color: "#b09090" }}>{currentUser?.role || "super_admin"}</div>
-            </div>
-            <button
-              title="Logout"
-              onClick={() => setShowLogout(true)}
-              className="sidebar-logout-btn"
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}
-            >
-              <img src={logoutIcon} alt="Logout" style={{ width: 20, height: 20 }} />
-            </button>
+            {showLabels && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-neutral-900">
+                    {currentUser?.name || "Super Admin"}
+                  </div>
+                  <div className="truncate text-xs text-neutral-500">
+                    {portalLabelFor(currentUser?.role)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  title="Log out"
+                  aria-label="Log out"
+                  onClick={() => setShowLogout(true)}
+                  className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-500"
+                >
+                  <i className="ti ti-logout text-[15px]" aria-hidden="true" />
+                </button>
+              </>
+            )}
           </div>
+          {!showLabels && (
+            <button
+              type="button"
+              title="Log out"
+              aria-label="Log out"
+              onClick={() => setShowLogout(true)}
+              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-500"
+            >
+              <i className="ti ti-logout text-[15px]" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </aside>
 
-      {showLogout && (
-        <LogoutModal
-          onConfirm={handleLogout}
-          onCancel={() => setShowLogout(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showLogout && (
+          <ConfirmDialog
+            icon="ti-logout"
+            danger={false}
+            title="Log out?"
+            message="You'll be returned to the login page. Any unsaved changes will be lost."
+            confirmLabel="Yes, log out"
+            cancelLabel="Stay"
+            onConfirm={handleLogout}
+            onCancel={() => setShowLogout(false)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

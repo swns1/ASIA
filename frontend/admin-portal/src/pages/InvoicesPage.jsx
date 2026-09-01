@@ -2,13 +2,22 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { pageVariants, listVariants, modalVariants, springTransition } from "../utils/motion";
+import { pageVariants, modalVariants, springTransition } from "../utils/motion";
+
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Card, { StatCard } from "../components/ui/Card";
+import ChipGroup from "../components/ui/ChipGroup";
+import ErrorState from "../components/ui/ErrorState";
+import Pagination from "../components/Pagination";
+import { StatusBadge } from "../components/ui/Badge";
+import { Select } from "../components/FormField";
+import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -670,6 +679,7 @@ export default function InvoicesPage() {
 
   const [invoices,     setInvoices]     = useState([]);
   const [loading,      setLoading]      = useState(true);
+  const [loadError,    setLoadError]    = useState(null);
   const [selectedId,   setSelectedId]   = useState(() => {
     const p = searchParams.get("selected");
     return p ? parseInt(p) : null;
@@ -711,7 +721,14 @@ export default function InvoicesPage() {
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
       setSummary(summaryData);
-    } catch (e) { console.error(e); }
+      setLoadError(null);
+    } catch (e) {
+      console.error(e);
+      // Was swallowed — a failed load rendered as "No invoices found".
+      setLoadError(e);
+      setInvoices([]);
+      setPageMeta({ count: 0, next: null, previous: null });
+    }
     finally { setLoading(false); }
   }, [statusFilter, planFilter, search, ordering]);
 
@@ -748,248 +765,191 @@ export default function InvoicesPage() {
   const isFirstRender = useIsFirstRender();
 
   const STAT_CARDS = [
-    { label:"Unpaid",  statusKey:"unpaid",         value:summary.unpaid,         icon:"ti-clock",        ...STATUS_META.unpaid         },
-    { label:"Partial", statusKey:"partially_paid", value:summary.partially_paid, icon:"ti-clock-half-2", ...STATUS_META.partially_paid },
-    { label:"Paid",    statusKey:"paid",            value:summary.paid,           icon:"ti-circle-check", ...STATUS_META.paid           },
-    { label:"Void",    statusKey:"void",            value:summary.void,           icon:"ti-ban",          ...STATUS_META.void           },
+    { label: "Unpaid",  statusKey: "unpaid",         value: summary.unpaid,         icon: "ti-alert-circle", tone: "error" },
+    { label: "Partial", statusKey: "partially_paid", value: summary.partially_paid, icon: "ti-progress",     tone: "warning" },
+    { label: "Paid",    statusKey: "paid",           value: summary.paid,           icon: "ti-circle-check", tone: "success" },
+    { label: "Void",    statusKey: "void",           value: summary.void,           icon: "ti-ban",          tone: "muted" },
+  ];
+
+  const statusChipOptions = [
+    { value: "all", label: "All" },
+    ...["unpaid", "partially_paid", "paid", "void"].map((v) => ({
+      value: v,
+      label: INVOICE_STATUS_MAP[v]?.label ?? v,
+    })),
+  ];
+
+  const planChipOptions = [
+    { value: "all", label: "All" },
+    ...Object.entries(PLAN_META).map(([value, m]) => ({ value, label: m.label })),
   ];
 
   return (
-    <AppLayout>
-      {/* Topbar */}
-      <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-        <motion.div
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1] }}
-        >
-          <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Invoices</div>
-          <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
-            {loading ? "Loading…" : `${summary.total} total · ${summary.unpaid} unpaid · ${summary.partially_paid} partial`}
-          </div>
-        </motion.div>
-        <motion.button
-          onClick={() => setShowGenModal(true)}
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1], delay:0.05 }}
-          whileHover={{ scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }}
-          whileTap={{ scale:0.96 }}
-          style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
-        >
-          <i className="ti ti-receipt" style={{ fontSize:15 }} />Generate Invoice
-        </motion.button>
-      </div>
+    <>
+      <PageHeader
+        title="Invoices"
+        icon="ti-receipt"
+        subtitle={
+          loading
+            ? "Loading…"
+            : `${summary.total} total · ${summary.unpaid} unpaid · ${summary.partially_paid} partial`
+        }
+        actions={
+          <Button icon="ti-receipt" onClick={() => setShowGenModal(true)}>
+            Generate Invoice
+          </Button>
+        }
+      />
 
       {/* Content */}
       <motion.div
-        style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}
+        className="flex-1 space-y-4 overflow-y-auto p-6"
         variants={pageVariants.container}
         initial={isFirstRender ? "hidden" : false}
         animate="visible"
       >
-        {/* Stat cards */}
-        <motion.div
-          variants={listVariants.container}
-          initial={isFirstRender ? "hidden" : false}
-          animate="visible"
-          style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 }}
-        >
-          {STAT_CARDS.map((s) => {
-            const isActive = statusFilter === s.statusKey;
-            return (
-              <motion.div
-                key={s.label}
-                variants={listVariants.item}
-                onClick={() => { const next = isActive ? "all" : s.statusKey; setStatusFilter(next); fetchInvoices(1, next, planFilter, search, ordering); }}
-                whileHover={{ y:-2, boxShadow: isActive ? `0 8px 24px ${s.color}28` : "0 6px 20px rgba(224,49,49,0.10)", borderColor: s.color }}
-                whileTap={{ scale:0.97 }}
-                animate={{ borderColor: isActive ? s.color : "#f5eaea", backgroundColor: isActive ? s.bg : "#ffffff" }}
-                transition={{ duration:0.15, ease:"easeOut" }}
-                style={{ borderRadius:14, padding:"16px 20px", border:"1.5px solid", display:"flex", alignItems:"center", gap:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)", cursor:"pointer" }}
-              >
-                <div style={{ width:42, height:42, borderRadius:12, background:isActive ? "white" : s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background 0.15s" }}>
-                  <i className={`ti ${s.icon}`} style={{ fontSize:18, color:s.color }} />
-                </div>
-                <div>
-                  {loading ? <Sk w={40} h={20} r={4} /> : <div style={{ fontSize:22, fontWeight:700, color: isActive ? s.color : "#1a0a0a", lineHeight:1 }}>{s.value}</div>}
-                  <div style={{ fontSize:11, color: isActive ? s.color : "#a07878", marginTop:4, fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+        {/* Stat tiles double as status filters */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {STAT_CARDS.map((s) => (
+            <StatCard
+              key={s.statusKey}
+              label={s.label}
+              value={s.value}
+              icon={s.icon}
+              iconTone={s.tone}
+              loading={loading}
+              active={statusFilter === s.statusKey}
+              onClick={() => {
+                const next = statusFilter === s.statusKey ? "all" : s.statusKey;
+                setStatusFilter(next);
+                fetchInvoices(1, next, planFilter, search, ordering);
+              }}
+            />
+          ))}
+        </div>
 
-        {/* Filter panel */}
-        <motion.div
-          variants={pageVariants.item}
-          style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:12 }}
-        >
-          {/* Search row */}
-          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            {/* Search box */}
-            <div
-              className="search-wrap"
-              style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border 0.15s, box-shadow 0.15s" }}
-            >
-              <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0", flexShrink:0 }} />
+        {/* Filters */}
+        <Card>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[220px] flex-1">
+              <label htmlFor="invoice-search" className="sr-only">Search by invoice number</label>
+              <i
+                className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
+                aria-hidden="true"
+              />
               <input
-                className="search-input"
+                id="invoice-search"
+                type="search"
                 placeholder="Search by invoice number…"
                 value={inputVal}
                 onChange={(e) => setInputVal(e.target.value)}
                 onKeyDown={handleKeyDown}
-                style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans', sans-serif", outline:"none" }}
+                className="focus-ring h-10 w-full rounded-lg border-[1.5px] border-neutral-300 bg-white pl-10 pr-9 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-500 hover:border-brand-300"
               />
               {inputVal && (
                 <button
-                  style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
+                  type="button"
+                  aria-label="Clear search"
                   onClick={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
+                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
                 >
-                  <i className="ti ti-x" style={{ fontSize:13 }} />
+                  <i className="ti ti-x text-[13px]" aria-hidden="true" />
                 </button>
               )}
             </div>
 
-            {/* Sort dropdown */}
-            <div style={{ position:"relative", flexShrink:0 }}>
-              <i className="ti ti-arrows-sort" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:"#c0a0a0", pointerEvents:"none" }} />
-              <select
+            <div className="shrink-0">
+              <label htmlFor="invoice-sort" className="sr-only">Sort invoices</label>
+              <Select
+                id="invoice-sort"
                 value={ordering}
                 onChange={(e) => handleOrdering(e.target.value)}
-                style={{
-                  height:42, paddingLeft:34, paddingRight:14,
-                  border:`1.5px solid ${ordering !== "-invoice_id" ? "#e03131" : "#f0e4e4"}`,
-                  borderRadius:12, background:ordering !== "-invoice_id" ? "#fff0f0" : "white",
-                  fontSize:13, fontWeight:600,
-                  color:ordering !== "-invoice_id" ? "#e03131" : "#7a5050",
-                  cursor:"pointer", fontFamily:"'DM Sans', sans-serif",
-                  outline:"none", appearance:"none", minWidth:158,
-                }}
+                className="h-10 w-[170px] py-0 text-sm font-semibold"
               >
                 {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
 
-            {/* Search button */}
-            <button
-              style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans', sans-serif", transition:"all 0.14s", flexShrink:0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
-              onClick={handleSearch}
-            >Search</button>
+            <Button variant="secondary" icon="ti-search" onClick={handleSearch}>Search</Button>
 
-            {/* Clear all */}
-            <AnimatePresence>
-              {hasActiveFilters && (
-                <motion.button
-                  initial={{ opacity:0, scale:0.88 }}
-                  animate={{ opacity:1, scale:1 }}
-                  exit={{ opacity:0, scale:0.88 }}
-                  transition={{ duration:0.14 }}
-                  whileTap={{ scale:0.93 }}
-                  onClick={handleClearAll}
-                  title="Clear all filters"
-                  style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans', sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}
-                >
-                  <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
-                </motion.button>
-              )}
-            </AnimatePresence>
+            {hasActiveFilters && (
+              <Button variant="ghost" icon="ti-filter-off" onClick={handleClearAll}>
+                Clear filters
+              </Button>
+            )}
           </div>
 
-          {/* Divider */}
-          <div style={{ height:1, background:"#f5eaea" }} />
+          <hr className="my-4 border-neutral-200" />
 
-          {/* Status chips */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
-            <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-              {[
-                { value:"all",          label:"All",     bg:"#fff0f0", color:"#e03131" },
-                { value:"unpaid",       ...STATUS_META.unpaid },
-                { value:"partially_paid", ...STATUS_META.partially_paid },
-                { value:"paid",         ...STATUS_META.paid  },
-                { value:"void",         ...STATUS_META.void  },
-              ].map((s) => {
-                const active = statusFilter === s.value;
-                return (
-                  <motion.button key={s.value}
-                    layout
-                    initial={false}
-                    animate={{
-                      backgroundColor: active ? s.bg    : "#ffffff",
-                      color:           active ? s.color : "#9a7070",
-                      borderColor:     active ? s.color : "#f0e4e4",
-                    }}
-                    transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => { setStatusFilter(s.value); fetchInvoices(1, s.value, planFilter, search, ordering); }}
-                    style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                  >
-                    {s.label}
-                  </motion.button>
-                );
-              })}
-            </motion.div>
+          <div className="space-y-3">
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
+                Status
+              </div>
+              <ChipGroup
+                label="Filter by status"
+                options={statusChipOptions}
+                value={statusFilter}
+                onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering); }}
+              />
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
+                Payment Plan
+              </div>
+              <ChipGroup
+                label="Filter by payment plan"
+                options={planChipOptions}
+                value={planFilter}
+                onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering); }}
+              />
+            </div>
           </div>
+        </Card>
 
-          {/* Plan chips */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Payment Plan</div>
-            <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-              {[
-                { value:"all",         label:"All",         bg:"#fff0f0", color:"#e03131" },
-                { value:"monthly",     ...PLAN_META.monthly     },
-                { value:"quarterly",   ...PLAN_META.quarterly   },
-                { value:"semi_annual", ...PLAN_META.semi_annual },
-                { value:"annual",      ...PLAN_META.annual      },
-              ].map((p) => {
-                const active = planFilter === p.value;
-                return (
-                  <motion.button key={p.value}
-                    layout
-                    initial={false}
-                    animate={{
-                      backgroundColor: active ? p.bg    : "#ffffff",
-                      color:           active ? p.color : "#9a7070",
-                      borderColor:     active ? p.color : "#f0e4e4",
-                    }}
-                    transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => { setPlanFilter(p.value); fetchInvoices(1, statusFilter, p.value, search, ordering); }}
-                    style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                  >
-                    {p.label}
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </div>
-        </motion.div>
-
-        {/* Master / detail */}
+        {/* Master / detail — stacks below lg, where a 360px + detail split has
+            no room to breathe. */}
         <motion.div
           variants={pageVariants.item}
-          style={{ display:"grid", gridTemplateColumns:"360px 1fr", gap:16, alignItems:"flex-start" }}
+          className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]"
         >
           {/* Left: Invoice list */}
-          <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
-            <div style={{ overflowY:"auto", maxHeight:"calc(100vh - 340px)" }}>
+          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+            <div className="max-h-[calc(100vh-340px)] overflow-y-auto">
               {loading ? (
                 Array.from({ length:8 }).map((_, i) => (
                   <div key={i} style={{ padding:"14px 16px", borderBottom:"1px solid #f9f0f0", display:"flex", flexDirection:"column", gap:8 }}>
                     <Sk w={140} h={14} /><Sk w={100} h={11} /><Sk w={80} h={11} />
                   </div>
                 ))
+              ) : loadError ? (
+                <ErrorState
+                  error={loadError}
+                  subject="invoices"
+                  onRetry={() => fetchInvoices(page, statusFilter, planFilter, search, ordering)}
+                />
               ) : invoices.length === 0 ? (
-                <EmptyState icon="ti-receipt-off" title="No invoices found" subtitle="Try adjusting your filters" />
+                <EmptyState
+                  icon="ti-receipt-off"
+                  title={hasActiveFilters ? "No invoices match these filters" : "No invoices yet"}
+                  subtitle={hasActiveFilters ? "Try a different search or clear the filters." : "Generate the first invoice to get started."}
+                  action={
+                    hasActiveFilters ? (
+                      <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
+                        Clear filters
+                      </Button>
+                    ) : (
+                      <Button size="sm" icon="ti-receipt" onClick={() => setShowGenModal(true)}>
+                        Generate Invoice
+                      </Button>
+                    )
+                  }
+                />
               ) : (
                 <AnimatePresence mode="popLayout" initial={false}>
                   {invoices.map((inv) => {
-                    const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
                     const pm = PLAN_META[inv.payment_plan] ?? PLAN_META.monthly;
                     const isSelected = selectedId === inv.invoice_id;
                     const en = inv.enrollment_detail;
@@ -1009,8 +969,13 @@ export default function InvoicesPage() {
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
                           <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
                           <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                            {isOverdue && <span style={{ fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:99, background:"#f0e8fd", color:"#7c3aed" }}>Overdue</span>}
-                            <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 7px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
+                            {/* Overdue now reads as urgent (error-toned + clock
+                                icon) rather than the old purple, which looked
+                                like an unrelated category. */}
+                            {isOverdue && (
+                              <StatusBadge status="overdue" map={INVOICE_STATUS_MAP} size="sm" />
+                            )}
+                            <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
                           </div>
                         </div>
                         <div style={{ fontSize:12, color:"#5a4a4a", fontWeight:600, marginBottom:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`}</div>
@@ -1028,32 +993,18 @@ export default function InvoicesPage() {
               )}
             </div>
 
-            {/* Pagination */}
-            {!loading && pageMeta.count > 20 && (
-              <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
-                <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
-                <div style={{ display:"flex", gap:4 }}>
-                  <motion.button
-                    disabled={!pageMeta.previous}
-                    onClick={() => fetchInvoices(page - 1, statusFilter, planFilter, search, ordering)}
-                    whileHover={pageMeta.previous ? { borderColor:"#e03131", color:"#e03131" } : {}}
-                    whileTap={pageMeta.previous ? { scale:0.93 } : {}}
-                    transition={{ duration:0.12 }}
-                    style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:pageMeta.previous ? "pointer" : "not-allowed", color:"#9a7070", opacity:pageMeta.previous ? 1 : 0.4 }}
-                  >
-                    <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
-                  </motion.button>
-                  <motion.button
-                    disabled={!pageMeta.next}
-                    onClick={() => fetchInvoices(page + 1, statusFilter, planFilter, search, ordering)}
-                    whileHover={pageMeta.next ? { borderColor:"#e03131", color:"#e03131" } : {}}
-                    whileTap={pageMeta.next ? { scale:0.93 } : {}}
-                    transition={{ duration:0.12 }}
-                    style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:pageMeta.next ? "pointer" : "not-allowed", color:"#9a7070", opacity:pageMeta.next ? 1 : 0.4 }}
-                  >
-                    <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
-                  </motion.button>
-                </div>
+            {/* Pagination — now the shared control, so it behaves and reads
+                the same as every other list in the app. */}
+            {!loading && !loadError && pageMeta.count > 20 && (
+              <div className="border-t border-neutral-200 bg-white px-4 py-2.5">
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  count={pageMeta.count}
+                  hasPrevious={Boolean(pageMeta.previous)}
+                  hasNext={Boolean(pageMeta.next)}
+                  onPageChange={(p) => fetchInvoices(p, statusFilter, planFilter, search, ordering)}
+                />
               </div>
             )}
 
@@ -1132,6 +1083,6 @@ export default function InvoicesPage() {
           onSaved={() => { setPayModalInvoiceId(null); setRefreshKey((k) => k + 1); }}
         />
       )}
-    </AppLayout>
+    </>
   );
 }

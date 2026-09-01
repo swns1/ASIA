@@ -1,10 +1,18 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
-import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
-import { listVariants } from "../utils/motion";
 
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Card, { Panel } from "../components/ui/Card";
+import Alert from "../components/ui/Alert";
+import Skeleton from "../components/ui/Skeleton";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import { StatusBadge } from "../components/ui/Badge";
+import { ENROLLMENT_STATUS_MAP, STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { describeApiError } from "../utils/apiError";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import { getStudents as _getStudents } from "../api/studentApi";
@@ -17,14 +25,11 @@ import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummar
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES, GRADE_ROLES, ACADEMIC_STAFF } from "../utils/auth";
 
-// ── NAV ───────────────────────────────────────────────────────────────────────
-
-// ── Animated count display ────────────────────────────────────────────────────
 function AnimatedCount({ target, loading }) {
   const motionVal = useMotionValue(0);
-  const spring    = useSpring(motionVal, { stiffness: 90, damping: 18 });
-  const display   = useTransform(spring, (v) => Math.round(v).toLocaleString());
-  useEffect(() => { if (!loading) motionVal.set(target ?? 0); }, [loading, target]);
+  const spring = useSpring(motionVal, { stiffness: 90, damping: 18 });
+  const display = useTransform(spring, (v) => Math.round(v).toLocaleString());
+  useEffect(() => { if (!loading) motionVal.set(target ?? 0); }, [loading, target, motionVal]);
   if (loading) return null;
   return <motion.span style={{ fontVariantNumeric: "tabular-nums" }}>{display}</motion.span>;
 }
@@ -38,40 +43,33 @@ const LEVEL_GRADES = {
   senior_highschool: ["Grade 11","Grade 12"],
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const LEVEL_LABELS = {
-  nursery:           "Nursery",
-  kindergarten:      "Kindergarten",
-  elementary:        "Elementary",
-  junior_highschool: "Junior HS",
-  senior_highschool: "Senior HS",
+  nursery: "Nursery", kindergarten: "Kindergarten", elementary: "Elementary",
+  junior_highschool: "Junior HS", senior_highschool: "Senior HS",
 };
 const LEVEL_ICONS = {
-  nursery:           "ti-baby-carriage",
-  kindergarten:      "ti-star",
-  elementary:        "ti-book",
-  junior_highschool: "ti-school",
-  senior_highschool: "ti-certificate",
+  nursery: "ti-baby-carriage", kindergarten: "ti-star", elementary: "ti-book",
+  junior_highschool: "ti-school", senior_highschool: "ti-certificate",
 };
-const LEVEL_COLORS = {
-  nursery:           { color: "#be185d", bg: "#fde8f8" },
-  kindergarten:      { color: "#d97706", bg: "#fdf5e8" },
-  elementary:        { color: "#2e6b0d", bg: "#e8f5e0" },
-  junior_highschool: { color: "#1455a0", bg: "#e3f0fd" },
-  senior_highschool: { color: "#7c3aed", bg: "#f0e8fd" },
+const LEVEL_TONES = {
+  nursery:           "bg-accent-50 text-accent-500",
+  kindergarten:      "bg-warning-50 text-warning-500",
+  elementary:        "bg-success-50 text-success-500",
+  junior_highschool: "bg-info-50 text-info-500",
+  senior_highschool: "bg-accent-50 text-accent-500",
+};
+const LEVEL_BARS = {
+  nursery: "bg-accent-500", kindergarten: "bg-warning-500", elementary: "bg-success-500",
+  junior_highschool: "bg-info-500", senior_highschool: "bg-accent-500",
 };
 
-function pillStyle(status) {
-  const map = {
-    enrolled:  { bg: "#eaf3de", color: "#3b6d11" },
-    pending:   { bg: "#faeeda", color: "#854f0b" },
-    cancelled: { bg: "#fcebeb", color: "#a32d2d" },
-    completed: { bg: "#e6f1fb", color: "#185fa5" },
-  };
-  return map[status] ?? { bg: "#f1efe8", color: "#5f5e5a" };
-}
+const CHIP_TONES = {
+  up:      "bg-success-50 text-success-500",
+  down:    "bg-error-50 text-error-500",
+  neutral: "bg-muted-50 text-muted-500",
+  info:    "bg-info-50 text-info-500",
+};
 
-// ── Live clock ────────────────────────────────────────────────────────────────
 function useClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -81,79 +79,84 @@ function useClock() {
   return now;
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 18, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "#e8e6e0", animation: "pulse 1.4s ease-in-out infinite" }} />
-);
+const peso = (n) =>
+  `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters, filterValues, onFilterChange, onClick }) {
+/**
+ * Dashboard stat tile.
+ *
+ * The card itself is a plain container and the metric is a button, rather than
+ * the whole card being clickable — the previous version nested filter buttons
+ * and selects inside a clickable div, which is invalid and unreachable by
+ * keyboard.
+ */
+function DashboardStat({
+  label, icon, value, loading, chipText, chipTone = "neutral",
+  onOpen, openLabel, filters, filterValues, onFilterChange,
+}) {
   const [showFilters, setShowFilters] = useState(false);
-  const chips = {
-    up:      { bg: "#eaf3de", color: "#3b6d11" },
-    down:    { bg: "#fcebeb", color: "#a32d2d" },
-    neutral: { bg: "#f1efe8", color: "#5f5e5a" },
-    info:    { bg: "#e3f0fd", color: "#1455a0" },
-  };
-  const chip            = chips[chipType] ?? chips.neutral;
   const hasActiveFilter = filters?.some((f) => filterValues?.[f.key]);
-  const selStyle = {
-    flex: 1, padding: "4px 6px", borderRadius: 6, border: "1px solid #f0e0e0",
-    fontSize: 11, color: "#5a3a3a", background: "white", cursor: "pointer",
-    fontFamily: "'DM Sans',sans-serif", outline: "none", minWidth: 0,
-  };
+
   return (
-    <div style={{ ...s.statCard, cursor: onClick ? "pointer" : undefined }} onClick={onClick}>
-      <div style={s.statTop}>
-        <span style={s.statLabel}>{label}</span>
-        <div style={s.statIcon}>
-          <i className={`ti ${icon}`} style={{ fontSize: 15, color: "#e03131" }} />
+    <Card className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold uppercase tracking-[0.07em] text-neutral-500">
+          {label}
+        </span>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-100">
+          <i className={`ti ${icon} text-[15px] text-brand-500`} aria-hidden="true" />
         </div>
       </div>
-      <div style={s.statValue}>
-        {loading ? <Sk h={30} w="60%" /> : <AnimatedCount target={rawValue ?? 0} loading={loading} />}
+
+      <div className="text-2xl font-bold leading-none text-neutral-900">
+        {loading ? (
+          <Skeleton height={28} width="60%" variant="pulse" />
+        ) : onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={openLabel}
+            className="focus-ring rounded-sm transition-colors hover:text-brand-500"
+          >
+            <AnimatedCount target={value ?? 0} loading={loading} />
+          </button>
+        ) : (
+          <AnimatedCount target={value ?? 0} loading={loading} />
+        )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        {loading
-          ? <Sk h={16} w="70%" />
-          : <span style={{ ...s.chip, background: chip.bg, color: chip.color }}>{chipText}</span>
-        }
+
+      <div className="flex items-center justify-between gap-2">
+        {loading ? (
+          <Skeleton height={16} width="60%" variant="pulse" />
+        ) : (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP_TONES[chipTone]}`}>
+            {chipText}
+          </span>
+        )}
+
         {filters?.length > 0 && (
-          <div style={{ display: "flex", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 gap-1">
             {hasActiveFilter && (
-              <button
+              <Button
+                variant="ghost" size="sm" icon="ti-x"
                 onClick={() => filters.forEach((f) => onFilterChange(f.key, null))}
-                style={{
-                  display: "flex", alignItems: "center", gap: 3,
-                  fontSize: 10.5, padding: "2px 7px", borderRadius: 99,
-                  border: "1px solid #f0e0e0", background: "white",
-                  color: "#b09090", cursor: "pointer",
-                  fontFamily: "'DM Sans',sans-serif", fontWeight: 500,
-                  transition: "all 0.12s",
-                }}
               >
-                <i className="ti ti-x" style={{ fontSize: 10 }} />
                 Clear
-              </button>
+              </Button>
             )}
-            <button
+            <Button
+              variant={hasActiveFilter ? "secondary" : "ghost"}
+              size="sm"
+              icon="ti-adjustments-horizontal"
+              aria-expanded={showFilters}
               onClick={() => setShowFilters((v) => !v)}
-              style={{
-                display: "flex", alignItems: "center", gap: 3,
-                fontSize: 10.5, padding: "2px 7px", borderRadius: 99,
-                border: `1px solid ${hasActiveFilter ? "#e03131" : "#f0e0e0"}`,
-                background: hasActiveFilter ? "#fff0f0" : "white",
-                color: hasActiveFilter ? "#e03131" : "#b09090",
-                cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500,
-                transition: "all 0.12s",
-              }}
             >
-              <i className="ti ti-adjustments-horizontal" style={{ fontSize: 10 }} />
               {hasActiveFilter ? "Filtered" : "Filter"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
+
       <AnimatePresence initial={false}>
         {showFilters && filters?.length > 0 && (
           <motion.div
@@ -161,51 +164,46 @@ function StatCard({ label, rawValue, icon, chipText, chipType, loading, filters,
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            style={{ overflow: "hidden" }}
-            onClick={(e) => e.stopPropagation()}
+            className="overflow-hidden"
           >
-            <div style={{ display: "flex", gap: 4, paddingTop: 6, borderTop: "1px solid #f9f0f0", marginTop: 2 }}>
+            <div className="flex gap-1.5 border-t border-neutral-200 pt-2.5">
               {filters.map((f) => (
-                <select
-                  key={f.key}
-                  value={filterValues?.[f.key] ?? ""}
-                  onChange={(e) => onFilterChange(f.key, e.target.value || null)}
-                  style={selStyle}
-                >
-                  <option value="">{f.placeholder ?? "All"}</option>
-                  {f.options.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                <div key={f.key} className="min-w-0 flex-1">
+                  <label className="sr-only" htmlFor={`${label}-${f.key}`}>
+                    {f.placeholder ?? f.key}
+                  </label>
+                  <select
+                    id={`${label}-${f.key}`}
+                    value={filterValues?.[f.key] ?? ""}
+                    onChange={(e) => onFilterChange(f.key, e.target.value || null)}
+                    className="focus-ring w-full min-w-0 cursor-pointer rounded-sm border border-neutral-300 bg-white px-1.5 py-1 text-xs text-neutral-700 outline-none"
+                  >
+                    <option value="">{f.placeholder ?? "All"}</option>
+                    {f.options.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
               ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-// ── Panel ─────────────────────────────────────────────────────────────────────
-function Panel({ title, action, onAction, children }) {
-  return (
-    <div style={s.panel}>
-      <div style={s.panelHeader}>
-        <span style={s.panelTitle}>{title}</span>
-        {action && <button style={s.panelAction} onClick={onAction}>{action}</button>}
-      </div>
-      {children}
-    </div>
+    </Card>
   );
 }
 
+const RECENT_ENROLLMENT_COLUMNS = [
+  { key: "student", label: "Student" },
+  { key: "level",   label: "Level / Grade" },
+  { key: "section", label: "Section" },
+  { key: "status",  label: "Status" },
+];
 
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ════════════════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
   usePageTitle("Dashboard");
-  const navigate    = useNavigate();
-  const now         = useClock();
+  const navigate = useNavigate();
+  const now = useClock();
 
   // Revenue figures come from billing-service, which already 403s
   // non-billing roles (see StudentInvoiceViewSet.financial_summary) — this
@@ -220,15 +218,11 @@ export default function DashboardPage() {
   // role) but the links to /scholarships are hidden for roles that can't use them.
   const canViewScholarships = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
-  // ── per-card filter state ──
-  // Total Students and Scholarships Awarded have no level/grade/year filter here:
-  // the backend doesn't support filtering those endpoints by that data (it lives on
-  // Enrollment records, not Student/Scholarship ones), so the dropdown was a no-op.
-  const [enrolledFilters,    setEnrolledFilters]    = useState({ year: null, level: null, grade: null });
-  const [pendingFilters,     setPendingFilters]     = useState({ year: null, level: null, grade: null });
-  const [financialYear,        setFinancialYear]        = useState(null);
+  const [enrolledFilters, setEnrolledFilters] = useState({ year: null, level: null, grade: null });
+  const [pendingFilters, setPendingFilters]   = useState({ year: null, level: null, grade: null });
+  const [financialYear, setFinancialYear]     = useState(null);
   const [showFinancialFilters, setShowFinancialFilters] = useState(false);
-  const [showAmounts,          setShowAmounts]          = useState(true);
+  const [showAmounts, setShowAmounts] = useState(true);
 
   function updateFilter(setter) {
     return (key, val) => setter((prev) => {
@@ -238,33 +232,30 @@ export default function DashboardPage() {
     });
   }
 
-  // ── data state ──
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [totalStudents,    setTotalStudents]    = useState(0);
-  const [activeStudents,   setActiveStudents]   = useState(0);
-  const [enrolledCount,    setEnrolledCount]    = useState(0);
-  const [pendingCount,     setPendingCount]     = useState(0);
+  const [totalStudents, setTotalStudents]       = useState(0);
+  const [activeStudents, setActiveStudents]     = useState(0);
+  const [enrolledCount, setEnrolledCount]       = useState(0);
+  const [pendingCount, setPendingCount]         = useState(0);
   const [scholarshipCount, setScholarshipCount] = useState(0);
   const [, setSubjectCount] = useState(0);
 
   const [recentEnrollments, setRecentEnrollments] = useState([]);
-  const [levelBreakdown,    setLevelBreakdown]    = useState([]);
-  const [recentStudents,    setRecentStudents]    = useState([]);
-  const [scholarships,      setScholarships]      = useState([]);
+  const [levelBreakdown, setLevelBreakdown]       = useState([]);
+  const [recentStudents, setRecentStudents]       = useState([]);
+  const [scholarships, setScholarships]           = useState([]);
 
-  const [financialSummary,  setFinancialSummary]  = useState(null);
-  const [completedCount,    setCompletedCount]    = useState(0);
-
-  // ── Alert state ──
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [completedCount, setCompletedCount]     = useState(0);
   const [alerts, setAlerts] = useState([]);
 
   const { schoolYear, options: schoolYearOptions } = useSchoolYear();
 
-  const isFirstEnrolledFetch    = useRef(true);
-  const isFirstPendingFetch     = useRef(true);
-  const isFirstFinancialFetch   = useRef(true);
+  const isFirstEnrolledFetch = useRef(true);
+  const isFirstPendingFetch = useRef(true);
+  const isFirstFinancialFetch = useRef(true);
 
   async function fetchAll() {
     setLoading(true);
@@ -282,9 +273,10 @@ export default function DashboardPage() {
         ...(canViewFinancials ? [fetchFinancialSummary()] : []),
         fetchCompletedCount(),
       ]);
+      setError("");
     } catch (e) {
       console.error("Dashboard fetch error:", e);
-      setError(e.message || "Some data failed to load. Please refresh the page.");
+      setError(describeApiError(e, { subject: "your dashboard" }).message);
     } finally {
       setLoading(false);
     }
@@ -360,8 +352,7 @@ export default function DashboardPage() {
 
   async function fetchFinancialSummary() {
     try {
-      const data = await _getFinancialSummary(financialYear ?? schoolYear);
-      setFinancialSummary(data);
+      setFinancialSummary(await _getFinancialSummary(financialYear ?? schoolYear));
     } catch { /* non-critical */ }
   }
 
@@ -377,16 +368,23 @@ export default function DashboardPage() {
     try {
       const [unpaidData, pendingEnrData] = await Promise.all([
         // Billing-service-gated — skip entirely for non-billing roles rather
-        // than making a call that's always going to 403 (same reasoning as
-        // canViewFinancials above for fetchFinancialSummary).
+        // than making a call that's always going to 403.
         canViewFinancials ? _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null) : Promise.resolve(null),
         _getEnrollments({ enrollment_status: "pending", school_year: schoolYear, page_size: 1 }).catch(() => null),
       ]);
       if (unpaidData?.count > 0) {
-        newAlerts.push({ id: "unpaid", icon: "ti-receipt-off", color: "#a32d2d", bg: "#fde8e8", message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`, link: "/invoices?status=unpaid" });
+        newAlerts.push({
+          id: "unpaid", icon: "ti-receipt-off", tone: "error",
+          message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`,
+          link: "/invoices?status=unpaid",
+        });
       }
       if (pendingEnrData?.count > 0) {
-        newAlerts.push({ id: "pending_enr", icon: "ti-clock", color: "#854f0b", bg: "#faeeda", message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`, link: `/enrollments?enrollment_status=pending&school_year=${schoolYear}` });
+        newAlerts.push({
+          id: "pending_enr", icon: "ti-clock", tone: "warning",
+          message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`,
+          link: `/enrollments?enrollment_status=pending&school_year=${schoolYear}`,
+        });
       }
     } catch { /* alerts are non-critical */ }
     setAlerts(newAlerts);
@@ -397,581 +395,558 @@ export default function DashboardPage() {
     if (!token) { navigate("/"); return; }
     if (!schoolYear) return; // global school year still resolving
     fetchAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolYear]);
 
   useEffect(() => {
     if (isFirstEnrolledFetch.current) { isFirstEnrolledFetch.current = false; return; }
     fetchEnrollmentStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrolledFilters]);
   useEffect(() => {
     if (isFirstPendingFetch.current) { isFirstPendingFetch.current = false; return; }
     fetchPendingStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFilters]);
   useEffect(() => {
     if (isFirstFinancialFetch.current) { isFirstFinancialFetch.current = false; return; }
     fetchFinancialSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [financialYear]);
 
-  // ── derived ──
   const maxLevel = Math.max(...levelBreakdown.map((l) => l.count), 1);
   const enrollmentRate = totalStudents > 0 ? Math.round((enrolledCount / totalStudents) * 100) : 0;
 
-  const scholarshipsByType = scholarships.reduce((acc, s) => {
-    const name = s.scholarship_type_detail?.scholarship_name ?? "Unknown";
+  const scholarshipsByType = scholarships.reduce((acc, sc) => {
+    const name = sc.scholarship_type_detail?.scholarship_name ?? "Unknown";
     acc[name] = (acc[name] || 0) + 1;
     return acc;
   }, {});
-  const topScholarships = Object.entries(scholarshipsByType)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
+  const topScholarships = Object.entries(scholarshipsByType).sort((a, b) => b[1] - a[1]).slice(0, 4);
 
-  // ── filter option lists ──
-  const yearOpts  = schoolYearOptions.map((y) => ({ value: y, label: y }));
+  const yearOpts = schoolYearOptions.map((y) => ({ value: y, label: y }));
   const levelOpts = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }));
-  function gradeOpts(f) {
-    return (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
-  }
+  const gradeOpts = (f) => (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
+
+  const quickActions = [
+    // roles mirror each path's actual App.jsx route guard — omit for
+    // STAFF_ALL-level actions. Without this, clicking a button your role can't
+    // use just bounces you back here with no explanation why.
+    { label: "New Student",    icon: "ti-user-plus",      path: "/students/new" },
+    { label: "New Enrollment", icon: "ti-clipboard-list", path: "/enrollments/new" },
+    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry",  roles: GRADE_ROLES },
+    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships",  roles: ACADEMIC_STAFF },
+    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices",      roles: BILLING_ROLES },
+    { label: "Payments",       icon: "ti-cash",           path: "/payments",      roles: BILLING_ROLES },
+    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements",  roles: ACADEMIC_STAFF },
+    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics",     roles: ACADEMIC_STAFF },
+    { label: "Subjects",       icon: "ti-book",           path: "/subjects" },
+  ].filter((qa) => hasAnyRole(getCurrentUser(), qa.roles));
+
+  const revenueCells = [
+    { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",      tone: "bg-info-50 text-info-500",       link: "/invoices" },
+    { label: "Collected",   key: "total_collected", icon: "ti-cash",         tone: "bg-success-50 text-success-500", link: "/invoices?status=paid" },
+    { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", tone: "bg-error-50 text-error-500",     link: "/invoices?status=unpaid" },
+  ];
+
+  const net = parseFloat(financialSummary?.net_billed ?? 0);
+  const collected = parseFloat(financialSummary?.total_collected ?? 0);
+  const collectionPct = net > 0 ? Math.min(100, Math.round((collected / net) * 100)) : 0;
 
   return (
-    <AppLayout>
-
-          {/* Topbar */}
-          <div style={s.topbar}>
-            <div>
-              <h1 style={{ ...s.topbarTitle, margin: 0 }}>Dashboard</h1>
-              <div style={s.topbarSub}>S.Y. {schoolYear} · {now.toLocaleDateString("en-PH", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</div>
+    <>
+      <PageHeader
+        title="Dashboard"
+        icon="ti-layout-dashboard"
+        subtitle={`S.Y. ${schoolYear} · ${now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`}
+        actions={
+          <div className="text-right">
+            <div className="text-xl font-bold tabular-nums tracking-[-0.02em] text-neutral-900">
+              {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", fontFamily: "'DM Sans', sans-serif", fontVariantNumeric: "tabular-nums", fontFeatureSettings: "'tnum'", letterSpacing: "-0.02em", display: "inline-block", minWidth: "9ch", textAlign: "right" }}>
-                {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-              </div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
-                {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
-              </div>
+            <div className="text-xs text-neutral-500">
+              {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
             </div>
           </div>
+        }
+      />
 
-          {/* Content */}
-          <div style={s.content}>
+      <div className="flex-1 space-y-4 overflow-y-auto p-6">
+        <AnimatePresence>
+          {error && (
+            <Alert variant="error" dismissible onDismiss={() => setError("")}>
+              {error}
+            </Alert>
+          )}
+        </AnimatePresence>
 
-            {/* Error banner */}
-            {error && (
-              <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"10px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
-                <i className="ti ti-alert-circle" style={{ fontSize:14 }} />
-                <span style={{ flex:1 }}>{error}</span>
-                <button onClick={() => setError("")} style={{ background:"none", border:"none", cursor:"pointer", color:"#b91c1c", display:"flex", alignItems:"center", padding:2 }}>
-                  <i className="ti ti-x" style={{ fontSize:14 }} />
-                </button>
+        {/* Things needing attention, surfaced before the metrics. */}
+        {alerts.length > 0 && (
+          <div className="flex flex-wrap gap-2.5">
+            {alerts.map((al) => (
+              <button
+                key={al.id}
+                type="button"
+                onClick={() => navigate(al.link)}
+                className={[
+                  "focus-ring flex min-w-[200px] flex-1 items-center gap-2.5 rounded-md border px-4 py-2.5 text-sm font-semibold transition-colors",
+                  al.tone === "error"
+                    ? "border-error-500/25 bg-error-50 text-error-500 hover:bg-error-50/70"
+                    : "border-warning-500/25 bg-warning-50 text-warning-500 hover:bg-warning-50/70",
+                ].join(" ")}
+              >
+                <i className={`ti ${al.icon} text-[16px]`} aria-hidden="true" />
+                {al.message}
+                <i className="ti ti-arrow-right ml-auto text-[13px]" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Headline metrics */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <DashboardStat
+            label="Total Students" icon="ti-users" value={totalStudents} loading={loading}
+            chipText={`${activeStudents.toLocaleString()} active`} chipTone="up"
+            onOpen={() => navigate("/students")} openLabel="View all students"
+          />
+          <DashboardStat
+            label="Enrolled this S.Y." icon="ti-calendar-event" value={enrolledCount} loading={loading}
+            chipText={`S.Y. ${enrolledFilters.year ?? schoolYear}`} chipTone="neutral"
+            filters={[
+              { key: "year",  options: yearOpts,  placeholder: "S.Y." },
+              { key: "level", options: levelOpts, placeholder: "All Levels" },
+              ...(enrolledFilters.level ? [{ key: "grade", options: gradeOpts(enrolledFilters), placeholder: "All Grades" }] : []),
+            ]}
+            filterValues={enrolledFilters}
+            onFilterChange={updateFilter(setEnrolledFilters)}
+            openLabel="View enrolled students"
+            onOpen={() => navigate(cardLink("/enrollments", {
+              enrollment_status: "enrolled",
+              school_year: enrolledFilters.year ?? schoolYear,
+              ...parseGp(enrolledFilters),
+            }))}
+          />
+          <DashboardStat
+            label="Pending Enrollment" icon="ti-clipboard-list" value={pendingCount} loading={loading}
+            chipText={pendingCount > 0 ? "needs action" : "all clear"}
+            chipTone={pendingCount > 0 ? "down" : "up"}
+            filters={[
+              { key: "year",  options: yearOpts,  placeholder: "S.Y." },
+              { key: "level", options: levelOpts, placeholder: "All Levels" },
+              ...(pendingFilters.level ? [{ key: "grade", options: gradeOpts(pendingFilters), placeholder: "All Grades" }] : []),
+            ]}
+            filterValues={pendingFilters}
+            onFilterChange={updateFilter(setPendingFilters)}
+            openLabel="View pending enrollments"
+            onOpen={() => navigate(cardLink("/enrollments", {
+              enrollment_status: "pending",
+              school_year: pendingFilters.year ?? schoolYear,
+              ...parseGp(pendingFilters),
+            }))}
+          />
+          <DashboardStat
+            label="Scholarships Awarded" icon="ti-award" value={scholarshipCount} loading={loading}
+            chipText={`S.Y. ${schoolYear}`} chipTone="info"
+            onOpen={canViewScholarships ? () => navigate("/scholarships") : undefined}
+            openLabel="View scholarships"
+          />
+        </div>
+
+        {/* Revenue — billing roles only; the backend 403s everyone else, so
+            showing a ₱0.00 strip to other roles would just mislead. */}
+        {canViewFinancials && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {revenueCells.map((item) => (
+              <Card key={item.key} padding="md" className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${item.tone}`}>
+                    <i className={`ti ${item.icon} text-[14px]`} aria-hidden="true" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
+                    {item.label}
+                  </span>
+                </div>
+                {loading ? (
+                  <Skeleton height={22} width="70%" variant="pulse" />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate(item.link)}
+                    className="focus-ring rounded-sm text-left text-xl font-bold tracking-[-0.02em] text-neutral-900 transition-colors hover:text-brand-500"
+                    style={{
+                      filter: showAmounts ? "none" : "blur(8px)",
+                      userSelect: showAmounts ? "auto" : "none",
+                    }}
+                  >
+                    {peso(financialSummary?.[item.key])}
+                  </button>
+                )}
+                <div className="text-xs text-neutral-500">S.Y. {financialYear ?? schoolYear}</div>
+              </Card>
+            ))}
+
+            <Card padding="md" className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-accent-50">
+                  <i className="ti ti-chart-pie text-[14px] text-accent-500" aria-hidden="true" />
+                </div>
+                <span className="flex-1 text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
+                  Collection Rate
+                </span>
+                <div className="flex gap-1">
+                  {financialYear && (
+                    <Button variant="ghost" size="sm" iconOnly icon="ti-x"
+                      title="Reset to current school year" aria-label="Reset to current school year"
+                      onClick={() => setFinancialYear(null)} />
+                  )}
+                  <Button
+                    variant={showAmounts ? "secondary" : "ghost"} size="sm" iconOnly
+                    icon={showAmounts ? "ti-eye" : "ti-eye-off"}
+                    title={showAmounts ? "Hide amounts" : "Show amounts"}
+                    aria-label={showAmounts ? "Hide financial amounts" : "Show financial amounts"}
+                    aria-pressed={!showAmounts}
+                    onClick={() => setShowAmounts((v) => !v)}
+                  />
+                  <Button
+                    variant={financialYear ? "secondary" : "ghost"} size="sm" iconOnly
+                    icon="ti-adjustments-horizontal"
+                    title="Filter by school year" aria-label="Filter by school year"
+                    aria-expanded={showFinancialFilters}
+                    onClick={() => setShowFinancialFilters((v) => !v)}
+                  />
+                </div>
               </div>
-            )}
 
-            {/* ── Alert cards ── */}
-            {alerts.length > 0 && (
-              <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
-                {alerts.map((al) => (
-                  <div key={al.id}
-                    onClick={() => navigate(al.link)}
-                    style={{ display:"flex", alignItems:"center", gap:10, background:al.bg, border:`1px solid ${al.color}33`, borderRadius:10, padding:"9px 16px", cursor:"pointer", fontSize:13, fontWeight:600, color:al.color, flex:"1 1 220px", minWidth:200 }}>
-                    <i className={`ti ${al.icon}`} style={{ fontSize:16 }} />
-                    {al.message}
-                    <i className="ti ti-arrow-right" style={{ fontSize:12, marginLeft:"auto" }} />
-                  </div>
-                ))}
+              <AnimatePresence initial={false}>
+                {showFinancialFilters && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <label className="sr-only" htmlFor="financial-year">School year</label>
+                    <select
+                      id="financial-year"
+                      value={financialYear ?? ""}
+                      onChange={(e) => setFinancialYear(e.target.value || null)}
+                      className="focus-ring w-full cursor-pointer rounded-sm border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-700 outline-none"
+                    >
+                      <option value="">Current ({schoolYear})</option>
+                      {schoolYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {loading ? (
+                <Skeleton height={22} width="50%" variant="pulse" />
+              ) : (
+                <div
+                  className={`text-xl font-bold ${
+                    collectionPct >= 80 ? "text-success-500"
+                      : collectionPct >= 50 ? "text-warning-500" : "text-error-500"
+                  }`}
+                  style={{ filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none" }}
+                >
+                  {collectionPct}%
+                </div>
+              )}
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-neutral-200"
+                role="progressbar"
+                aria-valuenow={collectionPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Collection rate"
+              >
+                {!loading && (
+                  <div
+                    className={`h-full rounded-full transition-[width] duration-500 ${
+                      !showAmounts ? "bg-neutral-400"
+                        : collectionPct >= 80 ? "bg-success-dot"
+                        : collectionPct >= 50 ? "bg-warning-dot" : "bg-brand-500"
+                    }`}
+                    style={{ width: showAmounts ? `${collectionPct}%` : "50%" }}
+                  />
+                )}
               </div>
-            )}
+            </Card>
+          </div>
+        )}
 
-            {/* ── Stat cards ── */}
-            <motion.div
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.28, delay: 0.08, ease: "easeOut" }}
-              style={s.statGrid}
+        {/* Recent enrollments · funnel · level breakdown */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <Panel
+            title="Recent Enrollments"
+            padding="none"
+            className="lg:col-span-2 xl:col-span-1"
+            action={
+              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
+                View all
+              </Button>
+            }
+          >
+            <Table
+              columns={RECENT_ENROLLMENT_COLUMNS}
+              loading={loading}
+              skeletonRows={5}
+              stickyHeader={false}
+              isEmpty={recentEnrollments.length === 0}
+              empty={{
+                icon: "ti-clipboard-off",
+                title: "No enrollments yet",
+                subtitle: `Nothing recorded for S.Y. ${schoolYear}.`,
+                withAvatar: false,
+              }}
             >
-              <StatCard
-                label="Total Students"
-                icon="ti-users"
-                rawValue={totalStudents}
-                chipText={`${activeStudents.toLocaleString()} active`}
-                chipType="up"
-                loading={loading}
-                onClick={() => navigate("/students")}
-              />
-              <StatCard
-                label="Enrolled this S.Y."
-                icon="ti-calendar-event"
-                rawValue={enrolledCount}
-                chipText={`S.Y. ${enrolledFilters.year ?? schoolYear}`}
-                chipType="neutral"
-                loading={loading}
-                filters={[
-                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
-                  { key: "level", options: levelOpts, placeholder: "All Levels" },
-                  ...(enrolledFilters.level ? [{ key: "grade", options: gradeOpts(enrolledFilters), placeholder: "All Grades" }] : []),
-                ]}
-                filterValues={enrolledFilters}
-                onFilterChange={updateFilter(setEnrolledFilters)}
-                onClick={() => navigate(cardLink("/enrollments", {
-                  enrollment_status: "enrolled",
-                  school_year: enrolledFilters.year ?? schoolYear,
-                  ...parseGp(enrolledFilters),
-                }))}
-              />
-              <StatCard
-                label="Pending Enrollment"
-                icon="ti-clipboard-list"
-                rawValue={pendingCount}
-                chipText={pendingCount > 0 ? "needs action" : "all clear"}
-                chipType={pendingCount > 0 ? "down" : "up"}
-                loading={loading}
-                filters={[
-                  { key: "year",  options: yearOpts,  placeholder: "S.Y." },
-                  { key: "level", options: levelOpts, placeholder: "All Levels" },
-                  ...(pendingFilters.level ? [{ key: "grade", options: gradeOpts(pendingFilters), placeholder: "All Grades" }] : []),
-                ]}
-                filterValues={pendingFilters}
-                onFilterChange={updateFilter(setPendingFilters)}
-                onClick={() => navigate(cardLink("/enrollments", {
-                  enrollment_status: "pending",
-                  school_year: pendingFilters.year ?? schoolYear,
-                  ...parseGp(pendingFilters),
-                }))}
-              />
-              <StatCard
-                label="Scholarships Awarded"
-                icon="ti-award"
-                rawValue={scholarshipCount}
-                chipText={`S.Y. ${schoolYear}`}
-                chipType="info"
-                loading={loading}
-                onClick={canViewScholarships ? () => navigate("/scholarships") : undefined}
-              />
-            </motion.div>
+              {recentEnrollments.map((en) => (
+                <TableRow key={en.enrollment_id} onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}>
+                  <TableCell className="font-semibold text-neutral-900">
+                    {en.student_name ?? `Student #${en.student}`}
+                  </TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1.5">
+                      <i
+                        className={`ti ${LEVEL_ICONS[en.school_level] ?? "ti-school"} text-[13px] text-neutral-600`}
+                        aria-hidden="true"
+                      />
+                      {LEVEL_LABELS[en.school_level] ?? en.school_level} · {en.grade_level}
+                    </span>
+                  </TableCell>
+                  <TableCell>{en.section}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={en.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </Table>
+          </Panel>
 
-            {/* ── Revenue strip — billing roles only (super_admin/admin/accounting);
-                 backend already 403s everyone else, this just keeps the UI
-                 from showing them a misleading ₱0.00 strip instead of hiding it ── */}
-            {canViewFinancials && (
-            <div style={s.revenueStrip}>
-              {[
-                { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",     color: "#1455a0", bg: "#e3f0fd", link: "/invoices" },
-                { label: "Collected",   key: "total_collected", icon: "ti-cash",         color: "#2e6b0d", bg: "#e8f5e0", link: "/invoices?status=paid" },
-                { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", color: "#a32d2d", bg: "#fde8e8", link: "/invoices?status=unpaid" },
-              ].map((item) => {
-                const raw = financialSummary ? parseFloat(financialSummary[item.key] ?? 0) : 0;
-                return (
-                  <div key={item.key} onClick={() => navigate(item.link)} style={{ ...s.revenueCell, cursor: "pointer" }} onMouseEnter={(e) => e.currentTarget.style.background = "#fff8f6"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
-                      </div>
-                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</span>
-                    </div>
-                    {loading ? <Sk h={22} w="70%" /> : (
-                      <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.02em", filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none", transition: "filter 0.3s ease" }}>
-                        ₱{raw.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, color: "#b09090" }}>S.Y. {financialYear ?? schoolYear}</div>
-                  </div>
-                );
-              })}
-
-              {/* Collection rate + filter */}
-              {(() => {
-                const net = parseFloat(financialSummary?.net_billed ?? 0);
-                const col = parseFloat(financialSummary?.total_collected ?? 0);
-                const pct = net > 0 ? Math.min(100, Math.round((col / net) * 100)) : 0;
-                return (
-                  <div style={{ ...s.revenueCell, justifyContent: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f0e8fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <i className="ti ti-chart-pie" style={{ fontSize: 14, color: "#7c3aed" }} />
-                      </div>
-                      <span style={{ fontSize: 11.5, color: "#a07878", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", flex: 1 }}>Collection Rate</span>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        {financialYear && (
-                          <button onClick={(e) => { e.stopPropagation(); setFinancialYear(null); }} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: "1px solid #f0e0e0", background: "white", color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }}>
-                            <i className="ti ti-x" style={{ fontSize: 10 }} /> Clear
-                          </button>
-                        )}
-                        <button onClick={(e) => { e.stopPropagation(); setShowAmounts((v) => !v); }} style={{ display: "flex", alignItems: "center", fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: `1px solid ${showAmounts ? "#e03131" : "#f0e0e0"}`, background: showAmounts ? "#fff0f0" : "white", color: showAmounts ? "#e03131" : "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                          <i className={`ti ${showAmounts ? "ti-eye" : "ti-eye-off"}`} style={{ fontSize: 10 }} />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setShowFinancialFilters((v) => !v); }} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, padding: "2px 7px", borderRadius: 99, border: `1px solid ${financialYear ? "#e03131" : "#f0e0e0"}`, background: financialYear ? "#fff0f0" : "white", color: financialYear ? "#e03131" : "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }}>
-                          <i className="ti ti-adjustments-horizontal" style={{ fontSize: 10 }} />
-                        </button>
-                      </div>
-                    </div>
-                    <AnimatePresence initial={false}>
-                      {showFinancialFilters && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
-                          <select value={financialYear ?? ""} onChange={(e) => setFinancialYear(e.target.value || null)} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #f0e0e0", fontSize: 11, color: "#5a3a3a", background: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", outline: "none", marginTop: 4 }}>
-                            <option value="">Current ({schoolYear})</option>
-                            {schoolYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                          </select>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {loading ? <Sk h={22} w="50%" /> : <div style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? "#2e6b0d" : pct >= 50 ? "#854f0b" : "#a32d2d", filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none", transition: "filter 0.3s ease" }}>{pct}%</div>}
-                    <div style={{ height: 5, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
-                      {!loading && <div style={{ height: "100%", width: showAmounts ? `${pct}%` : "50%", background: showAmounts ? (pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#e03131") : "#d0c0c0", borderRadius: 99, transition: "width 0.4s ease, background 0.3s ease" }} />}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            )}
-
-            {/* ── Recent enrollments + Funnel + Level breakdown ── */}
-            <motion.div
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.28, delay: 0.16, ease: "easeOut" }}
-              style={{ ...s.twoCol, gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr)" }}
-            >
-
-              <Panel title="Recent Enrollments" action="View all →" onAction={() => navigate("/enrollments")}>
-                <table style={s.table}>
-                  <thead>
-                    <tr>
-                      {["Student","Level / Grade","Section","Status"].map((h) => (
-                        <th key={h} style={s.th}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading
-                      ? Array.from({ length: 10 }).map((_, i) => (
-                          <tr key={i}>
-                            {[130,90,70,60].map((w, j) => (
-                              <td key={j} style={s.td}><Sk w={w} h={13} /></td>
-                            ))}
-                          </tr>
-                        ))
-                      : recentEnrollments.length === 0
-                        ? <tr><td colSpan={4} style={{ ...s.td, textAlign:"center", color:"#b09090", fontStyle:"italic" }}>No enrollments for this school year yet</td></tr>
-                        : recentEnrollments.map((en, idx) => {
-                            const pill = pillStyle(en.enrollment_status);
-                            const name = en.student_name ?? `Student #${en.student}`;
-                            return (
-                              <motion.tr
-                                key={en.enrollment_id}
-                                className="enroll-row"
-                                variants={listVariants.item}
-                                initial="hidden"
-                                animate="visible"
-                                transition={{ delay: idx * 0.04 }}
-                                onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
-                              >
-                                <td style={{ ...s.td, fontWeight:600 }}>{name}</td>
-                                <td style={s.td}>
-                                  <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-                                    <i className={`ti ${LEVEL_ICONS[en.school_level] ?? "ti-school"}`}
-                                      style={{ fontSize:12, color: LEVEL_COLORS[en.school_level]?.color ?? "#9a7070" }} />
-                                    {LEVEL_LABELS[en.school_level] ?? en.school_level} · {en.grade_level}
-                                  </span>
-                                </td>
-                                <td style={s.td}>{en.section}</td>
-                                <td style={s.td}>
-                                  <span style={{ ...s.pill, background:pill.bg, color:pill.color }}>
-                                    {en.enrollment_status.charAt(0).toUpperCase() + en.enrollment_status.slice(1)}
-                                  </span>
-                                </td>
-                              </motion.tr>
-                            );
-                          })
-                    }
-                  </tbody>
-                </table>
-              </Panel>
-
-              <Panel title="Enrollment Funnel" action="View →" onAction={() => navigate("/enrollments")}>
-                {(() => {
-                  const total = pendingCount + enrolledCount + completedCount;
-                  const steps = [
-                    { label: "Pending",   count: pendingCount,   color: "#854f0b", bg: "#faeeda", icon: "ti-clock" },
-                    { label: "Enrolled",  count: enrolledCount,  color: "#1455a0", bg: "#e3f0fd", icon: "ti-calendar-event" },
-                    { label: "Completed", count: completedCount, color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-circle-check" },
-                  ];
-                  return (
-                    <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div style={{ fontSize: 11, color: "#b09090", marginBottom: 2 }}>S.Y. {schoolYear} · {total.toLocaleString()} total</div>
-                      {steps.map((step, i) => {
-                        const pct = total > 0 ? Math.round((step.count / total) * 100) : 0;
-                        return (
-                          <div key={step.label}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                              <div style={{ width: 26, height: 26, borderRadius: 7, background: step.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <i className={`ti ${step.icon}`} style={{ fontSize: 13, color: step.color }} />
-                              </div>
-                              <span style={{ fontSize: 12.5, color: "#1a0a0a", flex: 1, fontWeight: 500 }}>{step.label}</span>
-                              {loading
-                                ? <Sk w={40} h={13} />
-                                : <span style={{ fontSize: 13, fontWeight: 700, color: step.color }}>{step.count.toLocaleString()}</span>
-                              }
-                            </div>
-                            <div style={{ height: 6, background: "#f5eaea", borderRadius: 99, overflow: "hidden" }}>
-                              {!loading && (
-                                <div style={{ height: "100%", width: `${pct}%`, background: step.color, borderRadius: 99, transition: "width 0.45s ease", opacity: 0.85 }} />
-                              )}
-                            </div>
-                            {i < steps.length - 1 && (
-                              <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-                                <i className="ti ti-chevron-down" style={{ fontSize: 12, color: "#d0b0b0" }} />
-                              </div>
-                            )}
+          <Panel
+            title="Enrollment Funnel"
+            subtitle={`S.Y. ${schoolYear}`}
+            action={
+              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
+                View
+              </Button>
+            }
+          >
+            {(() => {
+              const total = pendingCount + enrolledCount + completedCount;
+              const steps = [
+                { label: "Pending",   count: pendingCount,   bar: "bg-warning-dot", text: "text-warning-500", tone: "bg-warning-50 text-warning-500", icon: "ti-clock" },
+                { label: "Enrolled",  count: enrolledCount,  bar: "bg-info-dot",    text: "text-info-500",    tone: "bg-info-50 text-info-500",       icon: "ti-calendar-event" },
+                { label: "Completed", count: completedCount, bar: "bg-success-dot", text: "text-success-500", tone: "bg-success-50 text-success-500", icon: "ti-circle-check" },
+              ];
+              return (
+                <div className="space-y-2.5">
+                  <div className="text-xs text-neutral-500">{total.toLocaleString()} total</div>
+                  {steps.map((step, i) => {
+                    const pct = total > 0 ? Math.round((step.count / total) * 100) : 0;
+                    return (
+                      <div key={step.label}>
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-sm ${step.tone}`}>
+                            <i className={`ti ${step.icon} text-[13px]`} aria-hidden="true" />
                           </div>
-                        );
-                      })}
-                      {!loading && total > 0 && (
-                        <div style={{ marginTop: 4, padding: "8px 0", borderTop: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 11.5, color: "#b09090" }}>Enrollment rate</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: enrollmentRate >= 70 ? "#2e6b0d" : "#854f0b" }}>{enrollmentRate}%</span>
+                          <span className="flex-1 text-sm text-neutral-900">{step.label}</span>
+                          {loading
+                            ? <Skeleton width={40} height={13} variant="pulse" />
+                            : <span className={`text-sm font-bold ${step.text}`}>{step.count.toLocaleString()}</span>}
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </Panel>
-
-              <Panel title="Students by Level" action="View →" onAction={() => navigate("/enrollments")}>
-                <div>
-                  {loading
-                    ? Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} style={s.levelRow}>
-                          <Sk w={28} h={28} r={8} />
-                          <Sk w={90} h={13} />
-                          <div style={{ flex:1 }} />
-                          <Sk w={30} h={13} />
+                        <div
+                          className="h-1.5 overflow-hidden rounded-full bg-neutral-200"
+                          role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
+                          aria-label={`${step.label}: ${pct}%`}
+                        >
+                          {!loading && (
+                            <div className={`h-full rounded-full opacity-90 transition-[width] duration-500 ${step.bar}`} style={{ width: `${pct}%` }} />
+                          )}
                         </div>
-                      ))
-                    : levelBreakdown.length === 0
-                      ? <div style={{ padding:"24px 18px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No enrollment data yet</div>
-                      : levelBreakdown.map((lv, idx) => {
-                          const lc = LEVEL_COLORS[lv.school_level] ?? { color:"#9a7070", bg:"#f0ede8" };
-                          const pct = Math.round((lv.count / maxLevel) * 100);
-                          return (
-                            <motion.div
-                              key={lv.school_level}
-                              style={s.levelRow}
-                              initial={{ x: -10, opacity: 0 }}
-                              animate={{ x: 0, opacity: 1 }}
-                              transition={{ delay: idx * 0.06, duration: 0.28, ease: "easeOut" }}
-                            >
-                              <div style={{ ...s.levelIcon, background:lc.bg }}>
-                                <i className={`ti ${LEVEL_ICONS[lv.school_level] ?? "ti-school"}`} style={{ fontSize:14, color:lc.color }} />
-                              </div>
-                              <span style={s.levelName}>{LEVEL_LABELS[lv.school_level] ?? lv.school_level}</span>
-                              <div style={s.barWrap}>
-                                <motion.div
-                                  style={{ ...s.bar, background:lc.color }}
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${pct}%` }}
-                                  transition={{ delay: idx * 0.06 + 0.1, duration: 0.4, ease: "easeOut" }}
-                                />
-                              </div>
-                              <span style={{ ...s.levelCount, color:lc.color }}>{lv.count.toLocaleString()}</span>
-                            </motion.div>
-                          );
-                        })
-                  }
-                  {!loading && levelBreakdown.length > 0 && (
-                    <div style={{ padding:"12px 18px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <span style={{ fontSize:12, color:"#b09090" }}>Total enrolled</span>
-                      <span style={{ fontSize:14, fontWeight:700, color:"#e03131" }}>{enrolledCount.toLocaleString()}</span>
+                        {i < steps.length - 1 && (
+                          <div className="mt-1.5 flex justify-center">
+                            <i className="ti ti-chevron-down text-[12px] text-neutral-400" aria-hidden="true" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!loading && total > 0 && (
+                    <div className="flex items-center justify-between border-t border-neutral-200 pt-2.5">
+                      <span className="text-xs text-neutral-500">Enrollment rate</span>
+                      <span className={`text-sm font-bold ${enrollmentRate >= 70 ? "text-success-500" : "text-warning-500"}`}>
+                        {enrollmentRate}%
+                      </span>
                     </div>
                   )}
                 </div>
-              </Panel>
-            </motion.div>
+              );
+            })()}
+          </Panel>
 
-            {/* ── Quick actions + Recent students + Scholarships ── */}
-            <motion.div
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
-              style={s.threeCol}
-            >
+          <Panel
+            title="Students by Level"
+            padding="none"
+            action={
+              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
+                View
+              </Button>
+            }
+          >
+            {loading ? (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} height={28} variant="pulse" />
+                ))}
+              </div>
+            ) : levelBreakdown.length === 0 ? (
+              <p className="p-6 text-center text-sm italic text-neutral-500">No enrollment data yet</p>
+            ) : (
+              <>
+                {levelBreakdown.map((lv) => (
+                  <div
+                    key={lv.school_level}
+                    className="flex items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5 last:border-0"
+                  >
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${LEVEL_TONES[lv.school_level] ?? "bg-muted-50 text-muted-500"}`}>
+                      <i className={`ti ${LEVEL_ICONS[lv.school_level] ?? "ti-school"} text-[14px]`} aria-hidden="true" />
+                    </div>
+                    <span className="flex-1 truncate text-sm text-neutral-900">
+                      {LEVEL_LABELS[lv.school_level] ?? lv.school_level}
+                    </span>
+                    <div className="h-1 w-14 overflow-hidden rounded-full bg-neutral-200">
+                      <div
+                        className={`h-full rounded-full ${LEVEL_BARS[lv.school_level] ?? "bg-brand-500"}`}
+                        style={{ width: `${Math.round((lv.count / maxLevel) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right text-sm font-bold text-neutral-900">
+                      {lv.count.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-neutral-500">Total enrolled</span>
+                  <span className="text-sm font-bold text-brand-500">{enrolledCount.toLocaleString()}</span>
+                </div>
+              </>
+            )}
+          </Panel>
+        </div>
 
-              <Panel title="Quick Actions">
-                <div style={s.qaGrid}>
-                  {[
-                    // roles mirror each path's actual App.jsx route guard —
-                    // omit for STAFF_ALL-level actions (every Dashboard
-                    // visitor already qualifies, since /dashboard itself
-                    // requires STAFF_ALL). Without this, clicking a button
-                    // your role can't use just bounces you back here via
-                    // PrivateRoute's redirect, with no explanation why.
-                    { label: "New Student",    icon: "ti-user-plus",      path: "/students/new"    },
-                    { label: "New Enrollment", icon: "ti-clipboard-list", path: "/enrollments/new" },
-                    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry",    roles: GRADE_ROLES    },
-                    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships",    roles: ACADEMIC_STAFF },
-                    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices",        roles: BILLING_ROLES  },
-                    { label: "Payments",       icon: "ti-cash",           path: "/payments",        roles: BILLING_ROLES  },
-                    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements",    roles: ACADEMIC_STAFF },
-                    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics",       roles: ACADEMIC_STAFF },
-                    { label: "Subjects",       icon: "ti-book",           path: "/subjects"        },
-                  ].filter((qa) => hasAnyRole(getCurrentUser(), qa.roles)).map((qa) => (
-                    <motion.button
-                      key={qa.label}
-                      className="qa-btn"
-                      style={s.qaBtn}
-                      whileHover={{ y: -2, boxShadow: "0 6px 20px rgba(224,49,49,0.12)" }}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ duration: 0.14 }}
-                      onClick={() => navigate(qa.path)}
+        {/* Quick actions · recent students · scholarships */}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <Panel title="Quick Actions">
+            <div className="grid grid-cols-2 gap-2">
+              {quickActions.map((qa) => (
+                <button
+                  key={qa.label}
+                  type="button"
+                  onClick={() => navigate(qa.path)}
+                  className="focus-ring flex items-center gap-2 rounded-sm border border-neutral-200 bg-brand-50 px-3 py-2.5 text-sm text-neutral-900 transition-all hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"
+                >
+                  <i className={`ti ${qa.icon} text-[16px] text-brand-500`} aria-hidden="true" />
+                  <span className="truncate">{qa.label}</span>
+                </button>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel
+            title="Recently Added Students"
+            padding="none"
+            action={
+              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/students")}>
+                View all
+              </Button>
+            }
+          >
+            {loading ? (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={32} variant="pulse" />)}
+              </div>
+            ) : recentStudents.length === 0 ? (
+              <p className="p-6 text-center text-sm italic text-neutral-500">No students yet</p>
+            ) : (
+              recentStudents.map((st) => {
+                const pal = getAvatarPalette(`${st.last_name}${st.first_name}`);
+                return (
+                  <button
+                    key={st.student_id}
+                    type="button"
+                    onClick={() => navigate(`/students/${st.student_id}`)}
+                    className="focus-ring flex w-full items-center gap-2.5 border-b border-neutral-200/70 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-brand-50"
+                  >
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      style={{ background: pal.bg, color: pal.color }}
+                      aria-hidden="true"
                     >
-                      <i className={`ti ${qa.icon}`} style={{ fontSize:16, color:"#e03131" }} />
-                      {qa.label}
-                    </motion.button>
-                  ))}
-                </div>
-              </Panel>
+                      {initialsFrom(st.first_name, st.last_name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-neutral-900">
+                        {st.last_name}, {st.first_name}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                        <span className="truncate">LRN {st.lrn || "—"}</span>
+                        <StatusBadge status={st.status} map={STUDENT_STATUS_MAP} size="sm" showIcon={false} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </Panel>
 
-              <Panel title="Recently Added Students" action="View all →" onAction={() => navigate("/students")}>
-                <div>
-                  {loading
-                    ? Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", borderBottom:"1px solid #f9f0f0" }}>
-                          <Sk w={32} h={32} r={99} />
-                          <div style={{ flex:1 }}>
-                            <Sk w={110} h={13} />
-                            <div style={{ marginTop:5 }}><Sk w={70} h={11} /></div>
-                          </div>
-                        </div>
-                      ))
-                    : recentStudents.length === 0
-                      ? <div style={{ padding:"24px 18px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>No students yet</div>
-                      : recentStudents.map((st, idx) => {
-                          const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
-                          const pal = [
-                            { bg:"#fde8e8", color:"#c0392b" },{ bg:"#e8f0fd", color:"#2563eb" },
-                            { bg:"#e8fdf0", color:"#16a34a" },{ bg:"#fdf5e8", color:"#d97706" },
-                            { bg:"#f0e8fd", color:"#7c3aed" },
-                          ][st.student_id % 5];
-                          return (
-                            <motion.div
-                              key={st.student_id}
-                              variants={listVariants.item}
-                              initial="hidden"
-                              animate="visible"
-                              transition={{ delay: idx * 0.04 }}
-                              whileHover={{ backgroundColor: "#fff8f6" }}
-                              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", borderBottom:"1px solid #f9f0f0", cursor:"pointer" }}
-                              onClick={() => navigate(`/students/${st.student_id}`)}>
-                              <div style={{ width:32, height:32, borderRadius:"50%", background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
-                                {initials}
-                              </div>
-                              <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                                  {st.last_name}, {st.first_name}
-                                </div>
-                                <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>
-                                  LRN {st.lrn} ·
-                                  <span style={{ marginLeft:4, fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background: st.status==="active" ? "#e8f5e0" : "#f0ede8", color: st.status==="active" ? "#2e6b0d" : "#5c5752" }}>
-                                    {st.status}
-                                  </span>
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })
-                  }
+          <Panel
+            title="Scholarships Awarded"
+            padding="none"
+            action={
+              canViewScholarships ? (
+                <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/scholarships")}>
+                  View all
+                </Button>
+              ) : undefined
+            }
+          >
+            {loading ? (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={28} variant="pulse" />)}
+              </div>
+            ) : scholarships.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 p-6 text-center">
+                <i className="ti ti-award-off text-2xl text-brand-400" aria-hidden="true" />
+                <p className="text-sm italic text-neutral-500">No scholarships awarded yet</p>
+                {canViewScholarships && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate("/scholarships")}>
+                    Award now
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                {topScholarships.map(([name, count]) => (
+                  <div key={name} className="flex items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-info-50">
+                      <i className="ti ti-award text-[13px] text-info-500" aria-hidden="true" />
+                    </div>
+                    <span className="flex-1 truncate text-sm text-neutral-900">{name}</span>
+                    <span className="rounded-sm bg-info-50 px-2 py-0.5 text-sm font-bold text-info-500">
+                      {count}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-neutral-500">Total awarded</span>
+                  <span className="text-sm font-bold text-info-500">{scholarshipCount}</span>
                 </div>
-              </Panel>
-
-              <Panel title="Scholarships Awarded" action={canViewScholarships ? "View all →" : undefined} onAction={() => navigate("/scholarships")}>
-                <div>
-                  {loading
-                    ? Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} style={s.levelRow}>
-                          <Sk w={28} h={28} r={8} />
-                          <Sk w={110} h={13} />
-                          <Sk w={30} h={13} />
-                        </div>
-                      ))
-                    : scholarships.length === 0
-                      ? (
-                        <div style={{ padding:"24px 18px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                          <i className="ti ti-award-off" style={{ fontSize:22, color:"#e08080" }} />
-                          <div style={{ fontSize:13, color:"#b09090", fontStyle:"italic" }}>No scholarships awarded yet</div>
-                          {canViewScholarships && (
-                            <button onClick={() => navigate("/scholarships")}
-                              style={{ fontSize:12, color:"#e03131", background:"#fff0f0", border:"none", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
-                              Award now
-                            </button>
-                          )}
-                        </div>
-                      )
-                      : (
-                        <>
-                          {topScholarships.map(([name, count]) => (
-                            <div key={name} style={s.levelRow}>
-                              <div style={{ ...s.levelIcon, background:"#e3f0fd" }}>
-                                <i className="ti ti-award" style={{ fontSize:13, color:"#1455a0" }} />
-                              </div>
-                              <span style={{ ...s.levelName, fontSize:12 }}>{name}</span>
-                              <span style={{ fontSize:13, fontWeight:700, color:"#1455a0", background:"#e3f0fd", padding:"2px 8px", borderRadius:6 }}>{count}</span>
-                            </div>
-                          ))}
-                          <div style={{ padding:"12px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", borderTop:"1px solid #f5eaea" }}>
-                            <span style={{ fontSize:12, color:"#b09090" }}>Total awarded</span>
-                            <span style={{ fontSize:14, fontWeight:700, color:"#1455a0" }}>{scholarshipCount}</span>
-                          </div>
-                        </>
-                      )
-                  }
-                </div>
-              </Panel>
-            </motion.div>
-
-          </div>
-    </AppLayout>
+              </>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-const s = {
-  shell:       { display:"flex", height:"100vh", background:"#fdf8f6", fontFamily:"'DM Sans',sans-serif", overflow:"hidden" },
-  main:        { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
-  topbar:      { background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize:15, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" },
-  topbarSub:   { fontSize:11.5, color:"#b09090", marginTop:1 },
-  iconBtn:     { width:36, height:36, border:"1px solid #f5eaea", borderRadius:10, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", position:"relative" },
-  badgeDot:    { width:8, height:8, background:"#e03131", borderRadius:"50%", position:"absolute", top:6, right:6, border:"2px solid white" },
-  content:     { flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:18 },
-
-  statGrid:    { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 },
-  statCard:    { background:"white", border:"1px solid #f5eaea", borderRadius:14, padding:16, display:"flex", flexDirection:"column", gap:10, boxShadow:"0 2px 12px rgba(224,49,49,0.06)" },
-  statTop:     { display:"flex", alignItems:"center", justifyContent:"space-between" },
-  statLabel:   { fontSize:12, color:"#a07878", fontWeight:500, textTransform:"uppercase", letterSpacing:"0.06em" },
-  statIcon:    { width:30, height:30, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" },
-  statValue:   { fontSize:26, fontWeight:700, color:"#1a0a0a", lineHeight:1 },
-  statFooter:  { display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#a07070" },
-  chip:        { fontSize:11, padding:"2px 7px", borderRadius:99, fontWeight:500 },
-
-  twoCol:      { display:"grid", gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)", gap:12 },
-  revenueStrip: { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 },
-  revenueCell:  { display:"flex", flexDirection:"column", gap:6, padding:"14px 18px", background:"white", border:"1px solid #f5eaea", borderRadius:14, boxShadow:"0 2px 12px rgba(224,49,49,0.06)", transition:"background 0.12s" },
-  threeCol:    { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 },
-
-  panel:       { background:"white", border:"1px solid #f5eaea", borderRadius:16, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" },
-  panelHeader: { padding:"14px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between" },
-  panelTitle:  { fontSize:13, fontWeight:700, color:"#1a0a0a" },
-  panelAction: { fontSize:12, color:"#e03131", cursor:"pointer", border:"none", background:"none", fontFamily:"'DM Sans',sans-serif", fontWeight:600 },
-
-  table:       { width:"100%", borderCollapse:"collapse", fontSize:13 },
-  th:          { textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" },
-  td:          { padding:"10px 18px", borderBottom:"1px solid #f9f0f0", color:"#1a0a0a", verticalAlign:"middle" },
-  pill:        { display:"inline-block", fontSize:11, padding:"4px 10px", borderRadius:99, fontWeight:600 },
-
-  levelRow:    { display:"flex", alignItems:"center", gap:12, padding:"11px 18px", borderBottom:"1px solid #f9f0f0" },
-  levelIcon:   { width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
-  levelName:   { fontSize:13, color:"#1a0a0a", flex:1 },
-  levelCount:  { fontSize:13, fontWeight:600, color:"#1a0a0a" },
-  barWrap:     { width:60, height:4, background:"#f0e8e8", borderRadius:99, overflow:"hidden" },
-  bar:         { height:"100%", borderRadius:99, background:"#e03131" },
-
-  qaGrid:      { display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8, padding:14 },
-  qaBtn:       { display:"flex", alignItems:"center", gap:8, padding:"10px 12px", border:"1px solid #f5eaea", borderRadius:8, background:"#fff8f6", cursor:"pointer", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", transition:"background 0.1s" },
-};

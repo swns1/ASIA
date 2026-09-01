@@ -136,9 +136,11 @@ export default function LoginPage() {
             </div>
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: 600,
-                color: "rgba(255,255,255,0.42)",
+                // Opacities on this dark panel were raised to meet WCAG AA:
+                // 0.42 measured 3.6:1 against #180c0c.
+                color: "rgba(255,255,255,0.72)",
                 letterSpacing: "0.1em",
                 textTransform: "uppercase",
               }}
@@ -168,7 +170,8 @@ export default function LoginPage() {
           <p
             style={{
               fontSize: 14,
-              color: "rgba(255,255,255,0.36)",
+              // was 0.36 — measured 3.30:1, below the 4.5:1 minimum
+              color: "rgba(255,255,255,0.62)",
               lineHeight: 1.85,
               maxWidth: 280,
             }}
@@ -204,7 +207,7 @@ export default function LoginPage() {
               style={{
                 fontSize: 12,
                 fontWeight: 500,
-                color: "rgba(255,255,255,0.48)",
+                color: "rgba(255,255,255,0.72)",
               }}
             >
               S.Y. 2025–2026 · Active
@@ -213,8 +216,9 @@ export default function LoginPage() {
           <p
             style={{
               marginTop: 12,
-              fontSize: 10.5,
-              color: "rgba(255,255,255,0.18)",
+              // 10.5px was below the 11px readability floor; 0.18 was ~1.6:1
+              fontSize: 11,
+              color: "rgba(255,255,255,0.55)",
             }}
           >
             v2.0 · South Lakes Integrated School
@@ -252,7 +256,7 @@ export default function LoginPage() {
             >
               Welcome back
             </h2>
-            <p style={{ fontSize: 14, color: "#a07878" }}>
+            <p style={{ fontSize: 14, color: "#855c5c" }}>
               Sign in to your account to continue.
             </p>
           </div>
@@ -308,7 +312,7 @@ export default function LoginPage() {
                   style={{
                     position: "absolute",
                     left: 14,
-                    color: "#cca9a4",
+                    color: "#8a6a6a",
                     pointerEvents: "none",
                     display: "flex",
                     zIndex: 1,
@@ -408,7 +412,7 @@ export default function LoginPage() {
                   style={{
                     position: "absolute",
                     left: 14,
-                    color: "#cca9a4",
+                    color: "#8a6a6a",
                     pointerEvents: "none",
                     display: "flex",
                     zIndex: 1,
@@ -472,7 +476,7 @@ export default function LoginPage() {
                     padding: 0,
                     display: "flex",
                     alignItems: "center",
-                    color: "#cca9a4",
+                    color: "#8a6a6a",
                     cursor: "pointer",
                     zIndex: 1,
                     fontSize: 15,
@@ -554,7 +558,7 @@ export default function LoginPage() {
             style={{
               textAlign: "center",
               fontSize: 12,
-              color: "#b49190",
+              color: "#8a6a6a",
               marginTop: 24,
             }}
           >

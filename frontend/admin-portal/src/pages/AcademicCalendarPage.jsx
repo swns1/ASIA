@@ -1,9 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import ChipGroup from "../components/ui/ChipGroup";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
@@ -1507,7 +1509,7 @@ export default function AcademicCalendarPage() {
 
   return (
     <>
-    <AppLayout>
+    <>
       <style>{`
         .cal-day:hover { background: #fff4f4; }
         .cal-day:hover > div:first-child > span { background: #fde8e8; }
@@ -1524,62 +1526,34 @@ export default function AcademicCalendarPage() {
         }
       `}</style>
 
-      {/* ── Topbar ── */}
-      <motion.div
-        initial={ifr ? { opacity: 0, y: -8 } : false}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <i className="ti ti-calendar-event" style={{ fontSize: 18, color: "#e03131" }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Academic Calendar</div>
-            <div style={{ fontSize: 11, color: "#b09090" }}>S.Y. {schoolYear} · {events.length} events</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {SCHOOL_YEARS.map((sy) => {
-            const active = sy === schoolYear;
-            return (
-              <motion.button key={sy}
-                onClick={() => { setSchoolYear(sy); setSelectedDay(null); }}
-                whileTap={{ scale: 0.95 }}
-                style={{
-                  height: 30, padding: "0 12px", borderRadius: 99, cursor: "pointer",
-                  border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                  background: active ? "#fff0f0" : "white",
-                  color: active ? "#e03131" : "#9a7070",
-                  fontSize: 12, fontWeight: active ? 700 : 500,
-                  fontFamily: "'DM Sans',sans-serif",
-                  transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                }}
-              >{sy}</motion.button>
-            );
-          })}
-          <div style={{ width: 1, height: 22, background: "#f0e4e4", margin: "0 4px" }} />
-          <motion.button onClick={() => setShowImport(true)}
-            whileHover={{ background: "#fff0f0", borderColor: "#e03131" }}
-            whileTap={{ scale: 0.96 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "white", color: "#e03131", border: "1.5px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-            <i className="ti ti-flag" style={{ fontSize: 14 }} />PH Holidays
-          </motion.button>
-          <motion.button onClick={() => setShowColors(true)} title="Customize event colors"
-            whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
-            whileTap={{ scale: 0.96 }}
-            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, background: "white", color: "#9a7070", border: "1.5px solid #f0e4e4", borderRadius: 10, cursor: "pointer" }}>
-            <i className="ti ti-palette" style={{ fontSize: 16 }} />
-          </motion.button>
-          <motion.button onClick={() => setModal({ mode: "create" })}
-            whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-            whileTap={{ scale: 0.96 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-            <i className="ti ti-plus" style={{ fontSize: 15 }} />Add Event
-          </motion.button>
-        </div>
-      </motion.div>
+      <PageHeader
+        title="Academic Calendar"
+        icon="ti-calendar-event"
+        subtitle={`S.Y. ${schoolYear} · ${events.length} events`}
+        actions={
+          <>
+            <ChipGroup
+              label="School year"
+              size="sm"
+              options={SCHOOL_YEARS.map((sy) => ({ value: sy, label: sy }))}
+              value={schoolYear}
+              onChange={(sy) => { setSchoolYear(sy); setSelectedDay(null); }}
+            />
+            <span className="h-5 w-px bg-neutral-300" aria-hidden="true" />
+            <Button variant="secondary" icon="ti-flag" onClick={() => setShowImport(true)}>
+              PH Holidays
+            </Button>
+            <Button
+              variant="secondary" iconOnly icon="ti-palette"
+              title="Customize event colors" aria-label="Customize event colors"
+              onClick={() => setShowColors(true)}
+            />
+            <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+              Add Event
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Error ── */}
       <AnimatePresence>
@@ -1812,7 +1786,7 @@ export default function AcademicCalendarPage() {
         {showColors && <ColorSettingsModal key="colors-modal" onClose={() => setShowColors(false)} onSaved={() => setColorVersion((v) => v + 1)} />}
       </AnimatePresence>
 
-    </AppLayout>
+    </>
     {createPortal(
       <div id="cal-print-portal">
         {printView === "list"

@@ -1,10 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Tabs from "../components/ui/Tabs";
 import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -1071,71 +1072,25 @@ export default function ScholarshipsPage() {
     { id:"eligibility", label:"Grade-Based Eligibility", icon:"ti-chart-bar" },
   ];
 
-  const isFirstRender = useIsFirstRender();
 
   return (
-    <AppLayout>
-      {/* Topbar */}
-      <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-        <motion.div
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1] }}
-        >
-          <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Scholarships</div>
-          <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>Manage scholarship awards and check grade-based eligibility</div>
-        </motion.div>
-        <motion.div
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1], delay:0.05 }}
-          style={{ display:"flex", alignItems:"center", gap:6 }}
-        >
-          {/* Tab pill in topbar */}
-          <div style={{ display:"flex", gap:2, background:"#fdfafa", borderRadius:10, border:"1px solid #f0e4e4", padding:4, position:"relative" }}>
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <motion.button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  whileHover={isActive ? {} : { color:"#e03131" }}
-                  whileTap={{ scale:0.97 }}
-                  transition={{ duration:0.12 }}
-                  style={{ display:"flex", alignItems:"center", gap:7, height:32, padding:"0 16px", borderRadius:8, border:"none", background:"transparent", color:isActive?"white":"#9a7070", fontSize:12.5, fontWeight:isActive?700:500, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", position:"relative", zIndex:1, whiteSpace:"nowrap" }}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="sch-tab-pill"
-                      transition={{ type:"spring", stiffness:380, damping:34 }}
-                      style={{ position:"absolute", inset:0, borderRadius:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", zIndex:-1, boxShadow:"0 4px 14px rgba(224,49,49,0.24)" }}
-                    />
-                  )}
-                  <i className={`ti ${tab.icon}`} style={{ fontSize:13, position:"relative" }} />
-                  <span style={{ position:"relative" }}>{tab.label}</span>
-                </motion.button>
-              );
-            })}
-          </div>
-
-          <motion.button
-            onClick={() => navigate("/scholarship-types")}
-            whileHover={{ borderColor:"#fca5a5", color:"#e03131" }}
-            whileTap={{ scale:0.96 }}
-            transition={{ duration:0.12 }}
-            style={{ display:"flex", alignItems:"center", gap:8, background:"white", color:"#7a5050", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-            <i className="ti ti-settings" style={{ fontSize:14 }} />Manage Types
-          </motion.button>
-          <motion.button
-            onClick={() => setAwardModal(true)}
-            whileHover={{ scale:1.03, boxShadow:"0 8px 28px rgba(224,49,49,0.32)" }}
-            whileTap={{ scale:0.97 }}
-            transition={{ duration:0.12 }}
-            style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
-            <i className="ti ti-award" style={{ fontSize:15 }} />Award Scholarship
-          </motion.button>
-        </motion.div>
-      </div>
+    <>
+      <PageHeader
+        title="Scholarships"
+        icon="ti-discount"
+        subtitle="Manage scholarship awards and check grade-based eligibility"
+        actions={
+          <>
+            <Tabs variant="pill" tabs={TABS} value={activeTab} onChange={setActiveTab} />
+            <Button variant="secondary" icon="ti-settings" onClick={() => navigate("/scholarship-types")}>
+              Manage Types
+            </Button>
+            <Button icon="ti-award" onClick={() => setAwardModal(true)}>
+              Award Scholarship
+            </Button>
+          </>
+        }
+      />
 
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
@@ -1176,6 +1131,6 @@ export default function ScholarshipsPage() {
           />
         )}
       </AnimatePresence>
-    </AppLayout>
+    </>
   );
 }

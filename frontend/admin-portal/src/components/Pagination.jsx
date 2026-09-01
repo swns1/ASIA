@@ -3,58 +3,72 @@
 // Shared "page X of Y · N total records" + prev/windowed-numbers/next control,
 // extracted from the near-identical inline block repeated across GradesPage,
 // StudentsPage, EnrollmentsPage, and several other list pages.
-import { motion } from "framer-motion";
+//
+// Same props as before. Restyled onto design tokens, and the page buttons are
+// now a real <nav> with accessible names — previously they were unlabelled
+// icon buttons that a screen reader announced as just "button".
 
-const btnStyle = {
-  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
-  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
-  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
-};
-const btnActiveStyle = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
-};
+const BTN =
+  "focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-sm border px-2 text-xs " +
+  "transition-colors disabled:cursor-not-allowed disabled:opacity-40";
+const BTN_IDLE =
+  "border-neutral-300 bg-white text-neutral-600 hover:enabled:border-brand-500 hover:enabled:bg-brand-100 hover:enabled:text-brand-500";
+const BTN_ACTIVE = "border-brand-500 bg-brand-100 font-bold text-brand-500";
 
-export default function Pagination({ page, totalPages, count, hasPrevious, hasNext, onPageChange }) {
+export default function Pagination({
+  page,
+  totalPages,
+  count,
+  hasPrevious,
+  hasNext,
+  onPageChange,
+}) {
   const windowSize = Math.min(totalPages, 5);
   const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
   const pages = Array.from({ length: windowSize }, (_, i) => start + i);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <span style={{ fontSize: 12, color: "#b09090" }}>
-        Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
-        <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span className="text-xs text-neutral-500">
+        Page <strong className="text-neutral-700">{page}</strong> of{" "}
+        <strong className="text-neutral-700">{totalPages || 1}</strong>
         &nbsp;·&nbsp; {count.toLocaleString()} total records
       </span>
-      <div style={{ display: "flex", gap: 4 }}>
-        <motion.button
-          whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-          style={{ ...btnStyle, opacity: !hasPrevious ? 0.4 : 1, cursor: !hasPrevious ? "default" : "pointer" }}
+
+      <nav aria-label="Pagination" className="flex items-center gap-1">
+        <button
+          type="button"
+          className={`${BTN} ${BTN_IDLE}`}
           disabled={!hasPrevious}
+          aria-label="Previous page"
           onClick={() => onPageChange(page - 1)}
         >
-          <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-        </motion.button>
+          <i className="ti ti-chevron-left text-[13px]" aria-hidden="true" />
+        </button>
+
         {pages.map((p) => (
-          <motion.button
+          <button
             key={p}
-            whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-            style={{ ...btnStyle, ...(p === page ? btnActiveStyle : {}) }}
+            type="button"
+            className={`${BTN} ${p === page ? BTN_ACTIVE : BTN_IDLE}`}
+            aria-label={`Page ${p}`}
+            aria-current={p === page ? "page" : undefined}
             onClick={() => onPageChange(p)}
           >
             {p}
-          </motion.button>
+          </button>
         ))}
-        <motion.button
-          whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-          style={{ ...btnStyle, opacity: !hasNext ? 0.4 : 1, cursor: !hasNext ? "default" : "pointer" }}
+
+        <button
+          type="button"
+          className={`${BTN} ${BTN_IDLE}`}
           disabled={!hasNext}
+          aria-label="Next page"
           onClick={() => onPageChange(page + 1)}
         >
-          <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-        </motion.button>
-      </div>
+          <i className="ti ti-chevron-right text-[13px]" aria-hidden="true" />
+        </button>
+      </nav>
     </div>
   );
 }

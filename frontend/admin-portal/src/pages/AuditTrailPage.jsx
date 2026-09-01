@@ -1,8 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
-import AppLayout from "../components/AppLayout";
+import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs } from "../api/auditTrailApi";
@@ -198,18 +199,6 @@ function Sk({ w = "100%", h = 14, r = 6 }) {
   );
 }
 
-// ── AnimatedCount ─────────────────────────────────────────────────────────────
-
-function AnimatedCount({ value }) {
-  const mv = useMotionValue(value);
-  const spring = useSpring(mv, { stiffness: 90, damping: 18 });
-  const display = useTransform(spring, v => Math.round(v));
-  const [shown, setShown] = useState(value);
-  useEffect(() => { mv.set(value); }, [value]);
-  useEffect(() => display.on("change", v => setShown(v)), [display]);
-  return <>{shown}</>;
-}
-
 // ── Chip ──────────────────────────────────────────────────────────────────────
 
 function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, delay = 0 }) {
@@ -297,7 +286,7 @@ function LogRow({ log }) {
 
 function AccessDenied({ navigate }) {
   return (
-    <AppLayout>
+    <>
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <motion.div
           variants={modalVariants} initial="hidden" animate="visible" transition={springTransition}
@@ -317,7 +306,7 @@ function AccessDenied({ navigate }) {
           </motion.button>
         </motion.div>
       </div>
-    </AppLayout>
+    </>
   );
 }
 
@@ -411,29 +400,19 @@ export default function AuditTrailPage() {
   if (!allowed && !loading) return <AccessDenied navigate={navigate} />;
 
   return (
-    <AppLayout>
+    <>
       <style>{baseCss}</style>
 
-      {/* Topbar */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        style={{ background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
-      >
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.01em" }}>Audit Trail</div>
-          <div style={{ fontSize: 11.5, color: C.pale, marginTop: 1 }}>
-            {loading ? "Loading…" : <><AnimatedCount value={logs.length} /> log record{logs.length !== 1 ? "s" : ""}</>}
-          </div>
-        </div>
-        <motion.button
-          onClick={loadLogs}
-          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.96 }}
-          style={{ display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-        >
-          <i className="ti ti-refresh" style={{ fontSize: 14 }} /> Refresh
-        </motion.button>
-      </motion.div>
+      <PageHeader
+        title="Audit Trail"
+        icon="ti-shield-check"
+        subtitle={loading ? "Loading…" : `${logs.length} log record${logs.length !== 1 ? "s" : ""}`}
+        actions={
+          <Button variant="secondary" icon="ti-refresh" onClick={loadLogs}>
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -654,7 +633,7 @@ export default function AuditTrailPage() {
         )}
 
       </div>
-    </AppLayout>
+    </>
   );
 }
 

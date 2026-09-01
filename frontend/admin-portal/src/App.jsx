@@ -1,6 +1,11 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import PrivateRoute from "./components/PrivateRoute";
 import { SchoolYearProvider } from "./context/SchoolYearContext";
+import AppLayout from "./components/AppLayout";
+import GuardianLayout from "./components/GuardianLayout";
+import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
+import { toasterProps } from "./utils/toastConfig";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import StudentsPage from "./pages/StudentsPage";
@@ -44,6 +49,24 @@ const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}
 
 const GUARDIAN = ["guardian"];
 
+// Layout-only routes. These carry NO role check of their own — every leaf route
+// below keeps its original <P roles={...}> guard untouched, so the permission
+// matrix is exactly what it was; only the shell moved up a level. Previously
+// each page imported and rendered AppLayout itself (25 wrap sites across 21
+// files), which meant the sidebar, toast host and session timer all unmounted
+// and remounted on every navigation.
+const StaffShell = () => (
+  <AppLayout>
+    <Outlet />
+  </AppLayout>
+);
+
+const GuardianShell = () => (
+  <GuardianLayout>
+    <Outlet />
+  </GuardianLayout>
+);
+
 export default function App() {
   return (
     <SchoolYearProvider>
@@ -51,54 +74,78 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/dashboard"              element={<P roles={STAFF_ALL}><DashboardPage /></P>} />
-        <Route path="/students"               element={<P roles={STAFF_ALL}><StudentsPage /></P>} />
+
+        {/* ── Staff portal (sidebar shell) ── */}
+        <Route element={<StaffShell />}>
+          <Route path="/dashboard"              element={<P roles={STAFF_ALL}><DashboardPage /></P>} />
+          <Route path="/students"               element={<P roles={STAFF_ALL}><StudentsPage /></P>} />
+          <Route path="/students/:id"           element={<P roles={STAFF_ALL}><StudentDetailPage /></P>} />
+          <Route path="/enrollments"            element={<P roles={STAFF_ALL}><EnrollmentsPage /></P>} />
+          <Route path="/enrollments/:id"        element={<P roles={STAFF_ALL}><EnrollmentDetailPage /></P>} />
+          <Route path="/subjects"               element={<P roles={STAFF_ALL}><SubjectsPage /></P>} />
+          <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingSettingsPage /></P>} />
+          <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
+          <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
+          <Route path="/grades/summary"         element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
+          <Route path="/scholarship-types"      element={<P roles={ACADEMIC_STAFF}><ScholarshipTypesPage /></P>} />
+          <Route path="/scholarships"           element={<P roles={ACADEMIC_STAFF}><ScholarshipsPage /></P>} />
+          <Route path="/settings"               element={<P roles={BILLING_ROLES}><BillingSettingsPage /></P>} />
+          <Route path="/invoices"               element={<P roles={BILLING_ROLES}><InvoicesPage /></P>} />
+          <Route path="/payments"               element={<P roles={BILLING_ROLES}><PaymentsPage /></P>} />
+          <Route path="/audit-trail"            element={<P roles={STAFF_ADMIN}><AuditTrailPage /></P>} />
+          <Route path="/requirements"           element={<P roles={ACADEMIC_STAFF}><RequirementsPage /></P>} />
+          <Route path="/users"                  element={<P roles={STAFF_ADMIN}><UsersPage /></P>} />
+          <Route path="/analytics"              element={<P roles={GRADE_ROLES}><AnalyticsPage /></P>} />
+          <Route path="/academic-calendar"      element={<P roles={STAFF_ALL}><AcademicCalendarPage /></P>} />
+          <Route path="/school-forms"           element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
+          <Route path="/teacher-advisories"     element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
+          <Route path="/my-sections"            element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
+        </Route>
+
+        {/* ── Focused full-page forms ──
+            Deliberately outside the shell: these are single-task flows that
+            have never shown the sidebar, so the user isn't invited to navigate
+            away mid-entry and lose their work. */}
         <Route path="/students/new"           element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
-        <Route path="/students/:id"           element={<P roles={STAFF_ALL}><StudentDetailPage /></P>} />
         <Route path="/students/:id/edit"      element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
-        <Route path="/enrollments"            element={<P roles={STAFF_ALL}><EnrollmentsPage /></P>} />
         <Route path="/enrollments/new"        element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
-        <Route path="/enrollments/:id"        element={<P roles={STAFF_ALL}><EnrollmentDetailPage /></P>} />
         <Route path="/enrollments/:id/edit"   element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
-        <Route path="/subjects"               element={<P roles={STAFF_ALL}><SubjectsPage /></P>} />
-        <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingSettingsPage /></P>} />
-        <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
-        <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
-        <Route path="/grades/summary"         element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
-        <Route path="/scholarship-types"      element={<P roles={ACADEMIC_STAFF}><ScholarshipTypesPage /></P>} />
-        <Route path="/scholarships"           element={<P roles={ACADEMIC_STAFF}><ScholarshipsPage /></P>} />
-        <Route path="/settings"              element={<P roles={BILLING_ROLES}><BillingSettingsPage /></P>} />
-        <Route path="/invoices"              element={<P roles={BILLING_ROLES}><InvoicesPage /></P>} />
-        <Route path="/payments"              element={<P roles={BILLING_ROLES}><PaymentsPage /></P>} />
-        <Route path="/audit-trail"           element={<P roles={STAFF_ADMIN}><AuditTrailPage /></P>} />
-        <Route path="/requirements"          element={<P roles={ACADEMIC_STAFF}><RequirementsPage /></P>} />
-        <Route path="/users"                 element={<P roles={STAFF_ADMIN}><UsersPage /></P>} />
-        <Route path="/analytics"             element={<P roles={ACADEMIC_STAFF}><AnalyticsPage /></P>} />
-        <Route path="/academic-calendar"     element={<P roles={STAFF_ALL}><AcademicCalendarPage /></P>} />
+
         {/* Report card is backend-scoped: guardians may open only their own
-            child's (403 otherwise), so it stays reachable to any authenticated user. */}
+            child's (403 otherwise), so it stays reachable to any authenticated
+            user — and chrome-less, since it's a printable document. */}
         <Route path="/report-card/:enrollmentId" element={<P><ReportCardPage /></P>} />
+
+        {/* ── Print / PDF documents (no shell by design) ── */}
         <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
         <Route path="/print/grade-slip/:enrollmentId" element={<P roles={STAFF_ALL}><GradeSlipPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
-        <Route path="/school-forms"          element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
         <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />
         <Route path="/print/sf2"     element={<P roles={STAFF_ALL}><SF2PrintPage /></P>} />
         <Route path="/print/sf9/:enrollmentId" element={<P roles={STAFF_ALL}><SF9PrintPage /></P>} />
         <Route path="/print/sf10/:studentId" element={<P roles={STAFF_ALL}><SF10PrintPage /></P>} />
 
         {/* ── Guardian (parent) portal ── */}
-        <Route path="/guardian"                    element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
-        <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
-        <Route path="/teacher-advisories"   element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
-        <Route path="/my-sections"          element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
+        <Route element={<GuardianShell />}>
+          <Route path="/guardian"                     element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
+          <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
+        </Route>
 
         {/* Catch-all: must stay outside PrivateRoute so a bad URL always
             shows 404 regardless of auth state. */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+
+      {/* Mounted once for every authenticated portal. It renders nothing
+          without a valid token, and guardians now get the same expiry warning
+          staff do — previously it lived inside the staff shell only. */}
+      <SessionTimeoutWarning />
     </BrowserRouter>
+
+    {/* One toast host for the whole app, so toasts survive navigation and
+        work on the login page (which never had a Toaster of its own). */}
+    <Toaster {...toasterProps} />
     </SchoolYearProvider>
   );
 }

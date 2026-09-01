@@ -1,11 +1,15 @@
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { Toaster } from "react-hot-toast";
 import { clearAuthSession, getCurrentUser } from "../utils/auth";
+import Button from "./ui/Button";
 import logo from "../assets/logo.png";
 
 // A slim, staff-sidebar-free shell for the guardian (parent) portal. Guardians
 // see only their own child(ren)'s records, so they get a minimal top bar rather
-// than the full admin Sidebar.
+// than the full admin Sidebar — that stays true; only the styling is unified
+// with the staff portal, so both feel like one product.
+//
+// Its duplicated <Toaster> and @keyframes now live at the app root and in
+// index.css respectively.
 export default function GuardianLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,60 +23,55 @@ export default function GuardianLayout({ children }) {
   const onHome = location.pathname === "/guardian";
 
   return (
-    <>
-      <style>{`
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'DM Sans',sans-serif; }
-        ::-webkit-scrollbar { width:5px; }
-        ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-      `}</style>
-      <div style={{ minHeight: "100vh", background: "#fdf8f6", fontFamily: "'DM Sans',sans-serif", display: "flex", flexDirection: "column" }}>
-        {/* Top bar */}
-        <header style={{ background: "white", borderBottom: "1px solid #f5eaea", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", boxShadow: "0 1px 8px rgba(224,49,49,0.04)", position: "sticky", top: 0, zIndex: 50 }}>
-          <Link to="/guardian" style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none" }}>
-            <img src={logo} alt="SLIS" style={{ width: 26, height: 38 }} />
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a0a0a" }}>South Lakes IS</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Parent Portal</div>
-            </div>
-          </Link>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {!onHome && (
-              <Link to="/guardian" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#7a5050", textDecoration: "none", fontWeight: 600 }}>
-                <i className="ti ti-arrow-left" style={{ fontSize: 15 }} />My Children
-              </Link>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#e03131" }}>
-                {(user?.name || "P").slice(0, 2).toUpperCase()}
-              </div>
-              <div style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{user?.name || "Parent"}</div>
-                <div style={{ fontSize: 11, color: "#b09090" }}>Guardian</div>
-              </div>
-            </div>
-            <button onClick={handleLogout} title="Log out"
-              style={{ width: 34, height: 34, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
-              <i className="ti ti-logout" style={{ fontSize: 17 }} />
-            </button>
+    <div className="flex min-h-screen flex-col bg-neutral-50">
+      <header className="sticky top-0 z-50 flex h-15 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 shadow-xs sm:px-6">
+        <Link
+          to="/guardian"
+          className="focus-ring flex items-center gap-2.5 rounded-md"
+          aria-label="Parent portal home"
+        >
+          <img src={logo} alt="" className="h-[38px] w-[26px]" aria-hidden="true" />
+          <div className="min-w-0">
+            <div className="truncate text-base font-bold text-neutral-900">South Lakes IS</div>
+            <div className="truncate text-xs text-neutral-500">Parent Portal</div>
           </div>
-        </header>
+        </Link>
 
-        <main style={{ flex: 1, width: "100%", maxWidth: 1000, margin: "0 auto", padding: "28px 24px 60px" }}>
-          {children}
-        </main>
-      </div>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          style: { fontFamily: "'DM Sans', sans-serif", fontSize: 13, borderRadius: 10 },
-          success: { style: { border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#15803d" } },
-          error:   { style: { border: "1px solid #fca5a5", background: "#fff0f0", color: "#b91c1c" } },
-        }}
-      />
-    </>
+        <div className="flex items-center gap-3">
+          {!onHome && (
+            <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian">
+              <span className="hidden sm:inline">My Children</span>
+            </Button>
+          )}
+
+          <div className="flex items-center gap-2.5">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
+              aria-hidden="true"
+            >
+              {(user?.name || "P").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="hidden min-w-0 leading-tight sm:block">
+              <div className="truncate text-sm font-semibold text-neutral-900">
+                {user?.name || "Parent"}
+              </div>
+              <div className="truncate text-xs text-neutral-500">Guardian</div>
+            </div>
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            iconOnly
+            icon="ti-logout"
+            onClick={handleLogout}
+            title="Log out"
+            aria-label="Log out"
+          />
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16 pt-7 sm:px-6">{children}</main>
+    </div>
   );
 }

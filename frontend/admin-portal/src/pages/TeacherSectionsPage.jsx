@@ -3,7 +3,8 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import AppLayout from "../components/AppLayout";
+import PageHeader from "../components/ui/PageHeader";
+import { Select } from "../components/FormField";
 import {
   getMySections,
   getSectionGrades,
@@ -1454,21 +1455,28 @@ export default function TeacherSectionsPage() {
 
   if (!isTeacher && !selectedTeacherId) {
     return (
-      <AppLayout>
+      <>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>My Sections</div>
-            <select
-              value={selectedTeacherId}
-              onChange={(e) => setSelectedTeacherId(e.target.value)}
-              style={{ border: "1.5px solid #fde2de", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", minWidth: 240 }}
-            >
-              <option value="">Select a teacher…</option>
-              {teachers.map((t) => (
-                <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
-              ))}
-            </select>
-          </div>
+          <PageHeader
+            title="My Sections"
+            icon="ti-users-group"
+            actions={
+              <>
+                <label htmlFor="teacher-picker" className="sr-only">Select a teacher</label>
+                <Select
+                  id="teacher-picker"
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  className="h-10 min-w-[240px] py-0 text-sm"
+                >
+                  <option value="">Select a teacher…</option>
+                  {teachers.map((t) => (
+                    <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+                  ))}
+                </Select>
+              </>
+            }
+          />
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", padding: "80px 16px" }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
@@ -1483,12 +1491,37 @@ export default function TeacherSectionsPage() {
             </div>
           </div>
         </div>
-      </AppLayout>
+      </>
     );
   }
 
   return (
-    <AppLayout>
+    <>
+      {/* This view previously had no page header at all, so it read as a
+          different app from every other page. */}
+      <PageHeader
+        title="My Sections"
+        icon="ti-users-group"
+        subtitle={loading ? "Loading…" : `${sections.length} section${sections.length === 1 ? "" : "s"}`}
+        actions={
+          !isTeacher && teachers.length > 0 ? (
+            <>
+              <label htmlFor="teacher-picker-main" className="sr-only">Select a teacher</label>
+              <Select
+                id="teacher-picker-main"
+                value={selectedTeacherId}
+                onChange={(e) => setSelectedTeacherId(e.target.value)}
+                className="h-10 min-w-[240px] py-0 text-sm"
+              >
+                <option value="">Select a teacher…</option>
+                {teachers.map((t) => (
+                  <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+                ))}
+              </Select>
+            </>
+          ) : undefined
+        }
+      />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {loading ? (
           <div style={{ flex: 1, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1521,6 +1554,6 @@ export default function TeacherSectionsPage() {
           </>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }

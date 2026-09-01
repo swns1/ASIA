@@ -1,11 +1,11 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
-import AppLayout from "../components/AppLayout";
 import { getSchoolSettings } from "../api/billingApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudents } from "../api/studentApi";
 import { motion } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
 import { pageVariants } from "../utils/motion";
 
 const C = {
@@ -213,32 +213,24 @@ export default function SchoolFormsPage() {
   }
 
   return (
-    <AppLayout>
-      {/* Topbar */}
-      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
-        <motion.div
-          initial={isFirstRender ? { opacity: 0, y: -8 } : false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22 }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>School Forms</div>
-          <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>DepEd Official School Forms (SF Documents)</div>
-        </motion.div>
-        <motion.div
-          initial={isFirstRender ? { opacity: 0, y: -8 } : false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, delay: 0.05 }}
-          style={{ display: "flex", alignItems: "center", gap: 10 }}
-        >
-          <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: "nowrap" }}>School Year (all forms)</label>
+    <>
+      <PageHeader
+        title="School Forms"
+        icon="ti-forms"
+        subtitle="DepEd official school forms (SF documents)"
+        actions={
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label htmlFor="sf-school-year" style={{ ...labelStyle, marginBottom: 0, whiteSpace: "nowrap" }}>School Year (all forms)</label>
           <input
+            id="sf-school-year"
             value={schoolYear}
             onChange={(e) => setSchoolYear(e.target.value)}
             placeholder="e.g. 2025-2026"
             style={{ ...inputStyle, width: 140, height: 34 }}
           />
-        </motion.div>
-      </div>
+        </div>
+        }
+      />
 
       {/* Content */}
       <motion.div
@@ -473,6 +465,6 @@ export default function SchoolFormsPage() {
           ))}
         </motion.div>
       </motion.div>
-    </AppLayout>
+    </>
   );
 }

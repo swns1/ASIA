@@ -1,7 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import AppLayout from "../components/AppLayout";
 import {
   getEnrollment,
   getGrades,
@@ -193,25 +192,25 @@ export default function EnrollmentDetailPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <>
         <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", fontFamily: "'DM Sans', sans-serif" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {[1, 2, 3].map((k) => <Sk key={k} h={72} r={14} />)}
           </div>
         </div>
-      </AppLayout>
+      </>
     );
   }
 
   if (error || !enrollment) {
     return (
-      <AppLayout>
+      <>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", fontFamily: "'DM Sans', sans-serif" }}>
           <p style={{ color: C.red }}>{error || "Enrollment not found."}</p>
           <button onClick={() => navigate("/enrollments")} style={{ color: C.muted, background: "none", border: "none", cursor: "pointer" }}>← Back</button>
         </div>
-      </AppLayout>
+      </>
     );
   }
 
@@ -250,7 +249,7 @@ export default function EnrollmentDetailPage() {
   ];
 
   return (
-    <AppLayout>
+    <>
       <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
 
       {/* Scrollable page wrapper */}
@@ -560,6 +559,6 @@ export default function EnrollmentDetailPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </>
   );
 }

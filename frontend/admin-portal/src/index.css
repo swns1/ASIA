@@ -1,8 +1,71 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
+
+/* Global base — these rules were previously injected at runtime from a <style>
+   block inside AppLayout.jsx (and duplicated again in GuardianLayout.jsx).
+   They belong in real CSS, once. */
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-neutral-900);
+    background: var(--color-neutral-50);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #f0dada;
+    border-radius: 99px;
+  }
+
+  /* Respect the OS "reduce motion" setting everywhere, including the
+     framer-motion transitions used across the app. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Loading-placeholder sweep, used by ui/Skeleton.jsx. Defined here rather than
+   in AppLayout's injected <style> block so skeletons work in every shell
+   (including the guardian portal and full-page states). */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Retained for legacy pages still using AppLayout's animation class names;
+   removed as each page migrates. */
+@keyframes rowIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes slideUp {
@@ -101,6 +164,33 @@
   border-color: #fca5a5;
   color: #e03131;
 }
+
+/* ── LEGACY: pre-design-system hover rules ─────────────────────────────────
+   Moved verbatim out of the <style> block that AppLayout.jsx injected at
+   runtime, so the shell no longer ships CSS in JS. These are consumed by pages
+   that have not been migrated to the ui/ components yet.
+
+   DELETE EACH RULE as its owning page migrates — but only after grepping for
+   the class name, since a missing rule here fails silently (no build error,
+   just a dead hover state). Owner pages are noted per rule.
+   ------------------------------------------------------------------------ */
+.enroll-row:hover td { background:#fff8f6 !important; cursor:pointer; }      /* EnrollmentsPage */
+.page-btn:hover:not(:disabled) { background:#fff0f0 !important;border-color:#e03131 !important;color:#e03131 !important; }
+.page-btn:disabled { opacity:0.3;cursor:not-allowed; }                       /* SubjectsPage */
+.search-wrap:focus-within { border-color:#e03131 !important;box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
+.row-action { width:30px;height:30px;border:1px solid #f0e4e4;border-radius:8px;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9a7070;transition:all 0.12s;font-family:'DM Sans',sans-serif; }
+.row-action:hover { background:#fff0f0 !important;color:#e03131 !important;border-color:#fca5a5 !important; }
+.row-action.danger:hover { background:#fff0f0 !important;color:#e03131 !important; }
+.student-row { transition:background 0.12s;cursor:pointer; }                 /* RequirementsPage, TeacherSectionsPage */
+.student-row:hover td { background:#fff8f6 !important; }
+.student-row:hover .row-name { color:#e03131 !important; }
+.sub-row { transition:background 0.12s;cursor:pointer; }                     /* SubjectsPage */
+.sub-row:hover td { background:#fff8f6 !important; }
+.sub-row:hover .sub-name { color:#e03131 !important; }
+
+/* Removed as their owning pages migrated (grep-confirmed zero references):
+   .nav-active .qa-btn .icon-btn .chip-btn .new-btn .inv-row .pay-row
+   .sch-row .sch-btn .audit-row */
 
 /* Full-screen reset */
 html, body, #root {

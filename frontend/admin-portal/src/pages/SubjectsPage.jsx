@@ -2,8 +2,9 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
-import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import { modalVariants, springTransition } from "../utils/motion";
@@ -365,25 +366,18 @@ export default function SubjectsPage() {
   const isFirstRender = useIsFirstRender();
 
   return (
-    <AppLayout>
+    <>
       {/* Topbar */}
-      <div style={{ background: "white", borderBottom: "1px solid #f5eaea", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Subjects</div>
-          <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
-            {loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in curriculum`}
-          </div>
-        </div>
-        <motion.button
-          whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.13 }}
-          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-          onClick={() => setModal({ mode: "create" })}
-        >
-          <i className="ti ti-plus" style={{ fontSize: 15 }} />New Subject
-        </motion.button>
-      </div>
+      <PageHeader
+        title="Subjects"
+        icon="ti-book"
+        subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in curriculum`}
+        actions={
+          <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+            New Subject
+          </Button>
+        }
+      />
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -748,7 +742,7 @@ export default function SubjectsPage() {
           />
         )}
       </AnimatePresence>
-    </AppLayout>
+    </>
   );
 }
 

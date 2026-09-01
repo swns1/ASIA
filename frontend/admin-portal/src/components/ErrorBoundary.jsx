@@ -1,11 +1,14 @@
 import { Component } from "react";
 import { isTokenValid, getCurrentUser, homeFor } from "../utils/auth";
+import FullPageMessage from "./ui/FullPageMessage";
+import Button from "./ui/Button";
 
 // Catches uncaught render-phase errors anywhere in the app and shows a
 // recoverable screen instead of a blank white page. Mounted outside
 // <BrowserRouter> in main.jsx, so navigation here uses window.location
 // rather than useNavigate() -- also more robust if router state itself
-// is what's corrupted.
+// is what's corrupted. (FullPageMessage and Button are router-independent
+// as long as no `to` prop is passed.)
 export default class ErrorBoundary extends Component {
   state = { hasError: false, error: null };
 
@@ -27,111 +30,35 @@ export default class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#fdf8f6",
-          fontFamily: "'DM Sans', sans-serif",
-          padding: 24,
-        }}
-      >
-        <style>{`
-        `}</style>
-        <div
-          style={{
-            background: "white",
-            borderRadius: 20,
-            padding: "36px 40px",
-            width: "100%",
-            maxWidth: 420,
-            boxShadow: "0 24px 64px rgba(224,49,49,0.12)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 14,
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: "#fff0f0",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <i className="ti ti-alert-triangle" style={{ fontSize: 24, color: "#e03131" }} />
-          </div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: "#1a0a0a" }}>
-            Something went wrong
-          </div>
-          <div style={{ fontSize: 13, color: "#7a5050", lineHeight: 1.7 }}>
-            This page ran into an unexpected error. You can reload the page or
-            head back to a safe place.
-          </div>
-          <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
-            <button
-              onClick={this.handleGoHome}
-              style={{
-                flex: 1,
-                height: 42,
-                border: "1.5px solid #f0e0e0",
-                borderRadius: 10,
-                background: "white",
-                fontSize: 13,
-                color: "#7a5050",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
+      <FullPageMessage
+        icon="ti-alert-triangle"
+        tone="error"
+        title="Something went wrong"
+        message="This page ran into an unexpected error. You can reload the page or head back to a safe place."
+        actions={
+          <>
+            <Button variant="secondary" icon="ti-home" onClick={this.handleGoHome}>
               Go home
-            </button>
-            <button
-              onClick={this.handleReload}
-              style={{
-                flex: 1,
-                height: 42,
-                border: "none",
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #e03131, #c92a2a)",
-                fontSize: 13,
-                color: "white",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontFamily: "'DM Sans', sans-serif",
-                boxShadow: "0 4px 16px rgba(224,49,49,0.3)",
-              }}
-            >
+            </Button>
+            <Button icon="ti-refresh" onClick={this.handleReload}>
               Reload page
-            </button>
-          </div>
-          {this.state.error?.message && (
-            <details style={{ width: "100%", marginTop: 8, textAlign: "left" }}>
-              <summary style={{ fontSize: 11, color: "#b09090", cursor: "pointer" }}>
-                Technical details
-              </summary>
-              <pre
-                style={{
-                  fontSize: 11,
-                  color: "#b09090",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  marginTop: 6,
-                }}
-              >
-                {this.state.error.message}
-              </pre>
-            </details>
-          )}
-        </div>
-      </div>
+            </Button>
+          </>
+        }
+      >
+        {this.state.error?.message && (
+          // Collapsed by default: useful when reporting a problem, but not the
+          // first thing a non-technical user should be confronted with.
+          <details className="mt-6 w-full text-left">
+            <summary className="focus-ring cursor-pointer rounded-sm text-xs text-neutral-500 hover:text-neutral-700">
+              Technical details
+            </summary>
+            <pre className="mt-2 break-words whitespace-pre-wrap rounded-sm bg-neutral-50 p-3 text-xs text-neutral-600">
+              {this.state.error.message}
+            </pre>
+          </details>
+        )}
+      </FullPageMessage>
     );
   }
 }

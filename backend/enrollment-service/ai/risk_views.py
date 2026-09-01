@@ -7,7 +7,7 @@ POST /api/ai/risk-assessment/run/
       "grading_period": "1st_quarter",   (required, or "overall")
       "school_level": "Junior High",     (optional)
       "grade_level": "7",                (optional)
-      "weights": {"grade": 0.5, "attendance": 0.3, "narrative": 0.2}  (optional)
+      "weights": {"grade": 0.4, "attendance": 0.3, "trend": 0.15, "narrative": 0.15}  (optional)
     }
 GET /api/ai/risk-assessment/latest/
     ?school_year=2024-2025&grading_period=1st_quarter&school_level=...&grade_level=...   (all optional filters)
@@ -27,15 +27,24 @@ and attendance are both low") in a way a classifier wouldn't be at this
 school's scale. StudentRiskScore.enrollment_id is kept specifically so a
 future retrospective model could be trained off this history once real
 outcome data exists — see ai/services.py.
+
+Teachers are included in RISK_ROLES but see only their own advisory roster
+(see `_visible_student_ids`) — the early-warning list is only useful to an
+adviser if they can actually see their own class in it, and the existing
+`teacher_student_ids()` scoping makes that safe.
 """
 
+import math
+from collections import Counter, defaultdict
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import HasRole
-from enrollments.models import Student
+from accounts.permissions import HasRole, teacher_student_ids
+from enrollments.models import Enrollment, Student
 
 from .models import RiskAssessmentRun, StudentRiskScore
 from .services import (
@@ -45,7 +54,27 @@ from .services import (
     score_students,
 )
 
-RISK_ROLES = {"super_admin", "admin", "registrar"}
+RISK_ROLES = {"super_admin", "admin", "registrar", "teacher"}
+
+# Roles that may trigger a new run. A teacher can read the school's latest
+# assessment scoped to their own section, but recomputing (and persisting) a
+# school-wide run stays a staff action.
+RUN_ROLES = {"super_admin", "admin", "registrar"}
+
+
+def _finite(value):
+    """
+    build_student_features() uses np.nan for "no data". NaN is not valid JSON
+    and must never reach a FloatField, so it is normalized to None on the way
+    into the database.
+    """
+    if value is None:
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(value) or math.isinf(value) else value
 
 
 def _student_name(student):
@@ -54,32 +83,117 @@ def _student_name(student):
     )
 
 
-def _serialize_run(run, scores=None):
+def _visible_student_ids(request):
+    """
+    None = no restriction (staff see every student in the run). A teacher
+    gets the set of student_ids on their own SectionAdvisory roster, reusing
+    the same helper that scopes grades and attendance — so a teacher can
+    never read a risk score for a student outside their section.
+    """
+    if getattr(request.user, "role", None) == "teacher":
+        return teacher_student_ids(request.user)
+    return None
+
+
+def _summarize(score_list):
+    """
+    School-level rollups computed once here so the dashboard charts need no
+    second round trip: counts per risk band, per grade level, per section,
+    and how often each reason code fires. Ordered most-affected first, since
+    that's the order the charts read in.
+    """
+    by_level = Counter()
+    by_grade = defaultdict(Counter)
+    by_section = defaultdict(Counter)
+    reasons = Counter()
+    flagged_levels = {"high", "critical"}
+
+    for row in score_list:
+        level = row["risk_level"]
+        by_level[level] += 1
+        by_grade[row.get("grade_level") or "Unassigned"][level] += 1
+        by_section[row.get("section") or "Unassigned"][level] += 1
+        # One student contributes at most once per reason code, so the bar
+        # chart counts students-affected rather than sentences-emitted.
+        for code in {r["code"] for r in row.get("reasons") or []}:
+            reasons[code] += 1
+
+    def _group(counter_map):
+        rows = [
+            {
+                "name": name,
+                "total": sum(levels.values()),
+                "flagged": sum(v for k, v in levels.items() if k in flagged_levels),
+                "by_level": dict(levels),
+            }
+            for name, levels in counter_map.items()
+        ]
+        rows.sort(key=lambda r: (-r["flagged"], -r["total"], r["name"]))
+        return rows
+
+    return {
+        "by_level": {level: by_level.get(level, 0)
+                     for _cutoff, level in RISK_LEVEL_THRESHOLDS},
+        "by_grade_level": _group(by_grade),
+        "by_section": _group(by_section),
+        "by_reason": [
+            {"code": code, "count": count}
+            for code, count in reasons.most_common()
+        ],
+        "flagged_count": sum(by_level.get(lv, 0) for lv in flagged_levels),
+    }
+
+
+def _serialize_run(run, scores=None, allowed_student_ids=None):
     """
     Serializes a RiskAssessmentRun with its per-student scores, enriching
-    each score with the student's current name/number via the Student
-    mirror model. Names are looked up at read time (not stored on the
-    score row) so a later name correction doesn't require rewriting history.
+    each score with the student's current name/number and their grade
+    level/section. Both are looked up at read time (not stored on the score
+    row) so a later name correction or section transfer doesn't require
+    rewriting history.
+
+    allowed_student_ids, when not None, restricts the rows to that set — how
+    a teacher sees only their own advisory roster.
     """
     if scores is None:
         scores = list(run.scores.all())  # Meta.ordering = ["-risk_score"]
 
+    if allowed_student_ids is not None:
+        scores = [s for s in scores if s.student_id in allowed_student_ids]
+
     students = Student.objects.filter(student_id__in=[s.student_id for s in scores])
     student_map = {s.student_id: s for s in students}
+
+    enrollments = Enrollment.objects.filter(
+        enrollment_id__in=[s.enrollment_id for s in scores]
+    ).only("enrollment_id", "grade_level", "section")
+    enrollment_map = {e.enrollment_id: e for e in enrollments}
 
     score_list = []
     for sc in scores:
         student = student_map.get(sc.student_id)
+        enrollment = enrollment_map.get(sc.enrollment_id)
         score_list.append({
             "student_id":           sc.student_id,
             "enrollment_id":        sc.enrollment_id,
             "student_name":         _student_name(student) if student else None,
             "student_number":       student.student_number if student else None,
+            "grade_level":          enrollment.grade_level if enrollment else None,
+            "section":              enrollment.section if enrollment else None,
             "grade_component":      sc.grade_component,
             "attendance_component": sc.attendance_component,
+            "trend_component":      sc.trend_component,
             "narrative_component":  sc.narrative_component,
             "risk_score":           sc.risk_score,
             "risk_level":           sc.risk_level,
+            "reasons":              sc.reasons_json or [],
+            "signals_present":      sc.signals_present,
+            # The raw figures a teacher reads, not the risk contributions —
+            # see StudentRiskScore for why these can't be reconstructed.
+            "average_grade":         sc.average_grade,
+            "attendance_rate":       sc.attendance_rate,
+            "grade_delta":           sc.grade_delta,
+            "failing_subject_count": sc.failing_subject_count,
         })
 
     return {
@@ -90,8 +204,10 @@ def _serialize_run(run, scores=None):
         "grade_level":    run.grade_level,
         "weights":        run.weights_json,
         "created_at":     run.created_at,
+        "updated_at":     run.updated_at,
         "student_count":  len(score_list),
         "scores":         score_list,
+        "summary":        _summarize(score_list),
     }
 
 
@@ -102,10 +218,15 @@ class RiskAssessmentRunView(APIView):
     Computes a rule-based risk score for every enrolled student with grade
     data matching the filters, and persists the result as one
     RiskAssessmentRun + one StudentRiskScore per student.
+
+    Re-running the same filters on the same day updates that day's run in
+    place instead of inserting a duplicate — otherwise clicking the button
+    three times puts three identical points on every student's trend chart,
+    which is the one thing the persisted history exists to show.
     """
 
     permission_classes = [HasRole]
-    required_roles     = RISK_ROLES
+    required_roles     = RUN_ROLES
 
     def post(self, request):
         school_year    = request.data.get("school_year")
@@ -130,7 +251,7 @@ class RiskAssessmentRunView(APIView):
             if not valid:
                 return Response(
                     {"detail": "weights must be an object with numeric, non-negative "
-                               "grade/attendance/narrative keys summing above 0."},
+                               "grade/attendance/trend/narrative keys summing above 0."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             weights = weights_input
@@ -147,19 +268,39 @@ class RiskAssessmentRunView(APIView):
 
         scored = score_students(student_data, weights=weights)
         triggered_by = getattr(request.user, "user_id", None) or getattr(request.user, "pk", None)
+        weights_json = {
+            "weights": weights,
+            "thresholds": {level: cutoff for cutoff, level in RISK_LEVEL_THRESHOLDS},
+        }
 
         with transaction.atomic():
-            run = RiskAssessmentRun.objects.create(
-                school_year=school_year,
-                grading_period=grading_period,
-                school_level=school_level,
-                grade_level=grade_level,
-                weights_json={
-                    "weights": weights,
-                    "thresholds": {level: cutoff for cutoff, level in RISK_LEVEL_THRESHOLDS},
-                },
-                triggered_by=triggered_by,
+            run = (
+                RiskAssessmentRun.objects
+                .select_for_update()
+                .filter(
+                    school_year=school_year,
+                    grading_period=grading_period,
+                    school_level=school_level,
+                    grade_level=grade_level,
+                    created_at__date=timezone.localdate(),
+                )
+                .first()
             )
+            if run:
+                run.weights_json = weights_json
+                run.triggered_by = triggered_by
+                run.save(update_fields=["weights_json", "triggered_by", "updated_at"])
+                run.scores.all().delete()
+            else:
+                run = RiskAssessmentRun.objects.create(
+                    school_year=school_year,
+                    grading_period=grading_period,
+                    school_level=school_level,
+                    grade_level=grade_level,
+                    weights_json=weights_json,
+                    triggered_by=triggered_by,
+                )
+
             StudentRiskScore.objects.bulk_create([
                 StudentRiskScore(
                     run=run,
@@ -167,14 +308,25 @@ class RiskAssessmentRunView(APIView):
                     enrollment_id=student_data[sid]["enrollment_id"],
                     grade_component=scored[sid]["grade_component"],
                     attendance_component=scored[sid]["attendance_component"],
+                    trend_component=scored[sid]["trend_component"],
                     narrative_component=scored[sid]["narrative_component"],
                     risk_score=scored[sid]["risk_score"],
                     risk_level=scored[sid]["risk_level"],
+                    reasons_json=scored[sid]["reasons"],
+                    signals_present=scored[sid]["signals_present"],
+                    average_grade=_finite(student_data[sid].get("grade")),
+                    attendance_rate=_finite(student_data[sid].get("attendance_rate")),
+                    grade_delta=_finite(student_data[sid].get("grade_delta")),
+                    failing_subject_count=len(student_data[sid].get("failing_subjects") or []),
                 )
                 for sid in scored
             ])
 
-        return Response(_serialize_run(run), status=status.HTTP_201_CREATED)
+        run.refresh_from_db()
+        return Response(
+            _serialize_run(run, allowed_student_ids=_visible_student_ids(request)),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class RiskAssessmentLatestView(APIView):
@@ -210,7 +362,7 @@ class RiskAssessmentLatestView(APIView):
         if not run:
             return Response({"detail": "No risk assessment runs found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(_serialize_run(run))
+        return Response(_serialize_run(run, allowed_student_ids=_visible_student_ids(request)))
 
 
 class RiskAssessmentTrendView(APIView):
@@ -229,6 +381,20 @@ class RiskAssessmentTrendView(APIView):
         if not student_id:
             return Response({"detail": "student_id is required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            student_id = int(student_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "student_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Same advisory scoping as the list views — a teacher must not be
+        # able to pull an arbitrary student's history by guessing an id.
+        allowed = _visible_student_ids(request)
+        if allowed is not None and student_id not in allowed:
+            return Response(
+                {"detail": "You do not have access to this student."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         scores = (
             StudentRiskScore.objects
             .filter(student_id=student_id)
@@ -246,7 +412,9 @@ class RiskAssessmentTrendView(APIView):
                 "risk_level":           sc.risk_level,
                 "grade_component":      sc.grade_component,
                 "attendance_component": sc.attendance_component,
+                "trend_component":      sc.trend_component,
                 "narrative_component":  sc.narrative_component,
+                "reasons":              sc.reasons_json or [],
             }
             for sc in scores
         ]
@@ -254,7 +422,7 @@ class RiskAssessmentTrendView(APIView):
         student = Student.objects.filter(student_id=student_id).first()
 
         return Response({
-            "student_id":     int(student_id),
+            "student_id":     student_id,
             "student_name":   _student_name(student) if student else None,
             "student_number": student.student_number if student else None,
             "points":         points,

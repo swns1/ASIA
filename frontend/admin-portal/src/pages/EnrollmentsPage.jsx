@@ -3,8 +3,10 @@ import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import AppLayout from "../components/AppLayout";
 import EmptyState from "../components/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 import { modalVariants, springTransition } from "../utils/motion";
 
 
@@ -1199,9 +1201,13 @@ export default function EnrollmentsPage() {
     }).catch(() => {}).finally(() => setCountsLoading(false));
   }, [token, schoolYear, schoolLevel, gradeLevel]);
 
+  // Distinguishes "this request failed" from "there are no enrollments".
+  const [loadError, setLoadError] = useState(null);
+
   const fetchEnrollments = useCallback(async (pg = 1) => {
     if (!token) { navigate("/"); return; }
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams({ page: pg });
       if (schoolYear)   params.set("school_year",        schoolYear);
@@ -1217,6 +1223,11 @@ export default function EnrollmentsPage() {
       setRowsAnimated(true);
     } catch (err) {
       console.error(err);
+      // Surface the failure instead of falling through to the empty state,
+      // which invited the user to "+ New Enrollment" during an outage.
+      setLoadError(err);
+      setEnrollments([]);
+      setPageMeta({ count: 0, next: null, previous: null });
     } finally {
       setLoading(false);
     }
@@ -1238,7 +1249,7 @@ export default function EnrollmentsPage() {
 
   return (
     <>
-    <AppLayout>
+    <>
       <style>{`
         ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
 
@@ -1261,51 +1272,26 @@ export default function EnrollmentsPage() {
       `}</style>
 
 
-          {/* Topbar */}
-          <motion.div
-            initial={isFirstRender ? { opacity: 0, y: -10 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-            <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a", letterSpacing:"-0.01em" }}>Enrollments</div>
-              <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
-                {loading ? "Loading…" : `${pageMeta.count.toLocaleString()} enrollment${pageMeta.count !== 1 ? "s" : ""} found`}
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              {canManage && (
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.96 }}
-                  transition={{ duration: 0.12 }}
-                  style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#2563eb", border:"1.5px solid #93c5fd", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                  onClick={() => setShowPromote(true)}
-                  onMouseEnter={(e) => { e.currentTarget.style.background="#eff6ff"; e.currentTarget.style.borderColor="#2563eb"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#93c5fd"; }}>
-                  <i className="ti ti-arrow-up-right" style={{ fontSize:15 }} />Promote Section
-                </motion.button>
-              )}
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.12 }}
-                style={{ display:"flex", alignItems:"center", gap:7, background:"white", color:"#e03131", border:"1.5px solid #fca5a5", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                onClick={() => setShowMassEnroll(true)}
-                onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.borderColor="#e03131"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.borderColor="#fca5a5"; }}>
-                <i className="ti ti-users-plus" style={{ fontSize:15 }} />Mass Enroll
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.03, y: -1 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.12 }}
-                style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)", letterSpacing:"0.01em" }}
-                onClick={() => navigate("/enrollments/new")}>
-                <i className="ti ti-clipboard-plus" style={{ fontSize:15 }} />New Enrollment
-              </motion.button>
-            </div>
-          </motion.div>
+          <PageHeader
+            title="Enrollments"
+            icon="ti-clipboard-list"
+            subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} enrollment${pageMeta.count !== 1 ? "s" : ""} found`}
+            actions={
+              <>
+                {canManage && (
+                  <Button variant="secondary" icon="ti-arrow-up-right" onClick={() => setShowPromote(true)}>
+                    Promote Section
+                  </Button>
+                )}
+                <Button variant="secondary" icon="ti-users-plus" onClick={() => setShowMassEnroll(true)}>
+                  Mass Enroll
+                </Button>
+                <Button icon="ti-clipboard-plus" onClick={() => navigate("/enrollments/new")}>
+                  New Enrollment
+                </Button>
+              </>
+            }
+          />
 
           {/* Content */}
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:18 }}>
@@ -1593,6 +1579,18 @@ export default function EnrollmentsPage() {
                           ))}
                         </tr>
                       ))
+                    : loadError
+                      ? (
+                        <tr>
+                          <td colSpan={7}>
+                            <ErrorState
+                              error={loadError}
+                              subject="enrollments"
+                              onRetry={() => fetchEnrollments(page)}
+                            />
+                          </td>
+                        </tr>
+                      )
                     : enrollments.length === 0
                       ? (
                         <tr>
@@ -1735,7 +1733,7 @@ export default function EnrollmentsPage() {
             )}
 
           </div>
-    </AppLayout>
+    </>
     <AnimatePresence>
       {showMassEnroll && (
         <MassEnrollModal

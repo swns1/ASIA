@@ -1,23 +1,21 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import AppLayout from "../components/AppLayout";
-import ConfirmModal from "../components/ConfirmModal";
-import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
+
+import ConfirmModal from "../components/ConfirmModal";
+import Pagination from "../components/Pagination";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Card, { StatCard } from "../components/ui/Card";
+import ChipGroup from "../components/ui/ChipGroup";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import { StatusBadge } from "../components/ui/Badge";
+import { Select } from "../components/FormField";
+import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { deleteStudent, getStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
-
-
-// ── Status config ─────────────────────────────────────────────────────────────
-const STATUS_META = {
-  active:      { bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50", label: "Active" },
-  inactive:    { bg: "#f0ede8", color: "#5c5752", dot: "#9e9e9e", label: "Inactive" },
-  transferred: { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Transferred" },
-  graduated:   { bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3", label: "Graduated" },
-  dropped:     { bg: "#fde8e8", color: "#9b2020", dot: "#f44336", label: "Dropped" },
-};
 
 const STATUS_FILTERS = ["all", "active", "inactive", "transferred", "graduated", "dropped"];
 
@@ -31,28 +29,33 @@ const SORT_OPTIONS = [
 ];
 
 const SEX_FILTERS = [
-  { value: "", label: "All" },
-  { value: "male",   label: "Male",   icon: "ti-mars",  color: "#2563eb" },
-  { value: "female", label: "Female", icon: "ti-venus", color: "#be185d" },
+  { value: "",       label: "All" },
+  { value: "male",   label: "Male",   icon: "ti-mars" },
+  { value: "female", label: "Female", icon: "ti-venus" },
 ];
 
-// ── Avatar color palette (deterministic from name) ────────────────────────────
-const AVATAR_PALETTES = [
-  { bg: "#fde8e8", color: "#c0392b" },
-  { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#16a34a" },
-  { bg: "#fdf5e8", color: "#d97706" },
-  { bg: "#f0e8fd", color: "#7c3aed" },
-  { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#0891b2" },
+// Stat tiles double as status filters; tones come from the shared status map's
+// semantics so the tile and the row badge agree.
+const STAT_CARDS = [
+  { status: "all",         label: "Total Students", icon: "ti-users",       tone: "brand" },
+  { status: "active",      label: "Active",         icon: "ti-user-check",  tone: "success" },
+  { status: "graduated",   label: "Graduated",      icon: "ti-certificate", tone: "info" },
+  { status: "transferred", label: "Transferred",    icon: "ti-transfer",    tone: "warning" },
+  { status: "dropped",     label: "Dropped",        icon: "ti-user-x",      tone: "error" },
 ];
 
-function getAvatarPalette(name = "") {
-  const idx = name.charCodeAt(0) % AVATAR_PALETTES.length;
-  return AVATAR_PALETTES[idx];
-}
+const TABLE_COLUMNS = [
+  { key: "student", label: "Student",   width: "30%" },
+  { key: "lrn",     label: "LRN",       width: "15%" },
+  { key: "age",     label: "Age / DOB", width: "16%" },
+  { key: "sex",     label: "Sex",       width: "9%" },
+  { key: "status",  label: "Status",    width: "11%" },
+  { key: "contact", label: "Contact",   width: "13%" },
+  { key: "actions", label: "Actions",   width: "6%", align: "right" },
+];
 
-// ── Age from birth date ───────────────────────────────────────────────────────
+const PAGE_SIZE = 20;
+
 function calcAge(birthDate) {
   if (!birthDate) return null;
   const today = new Date();
@@ -63,7 +66,6 @@ function calcAge(birthDate) {
   return age;
 }
 
-// ── Format date nicely ────────────────────────────────────────────────────────
 function fmtDate(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleDateString("en-PH", {
@@ -71,80 +73,33 @@ function fmtDate(dateStr) {
   });
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const Skeleton = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{
-    width: w, height: h, borderRadius: r,
-    background: "linear-gradient(90deg, #f0e8e8 25%, #fde8e8 50%, #f0e8e8 75%)",
-    backgroundSize: "200% 100%",
-    animation: "shimmer 1.6s ease-in-out infinite",
-  }} />
-);
-
-// ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, color, bg, loading, isActive, onClick }) {
-  return (
-    <motion.div
-      onClick={onClick}
-      whileHover={{ boxShadow: isActive ? `0 8px 24px ${color}28` : "0 8px 24px rgba(0,0,0,0.08)" }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.16 }}
-      style={{
-        background: isActive ? bg : "white", borderRadius: 14, padding: "16px 20px",
-        border: `1.5px solid ${isActive ? color : "#f5eaea"}`, width: "100%",
-        display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
-        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
-        transition: "border-color 0.15s ease, background-color 0.15s ease",
-      }}
-    >
-      <div style={{
-        width: 42, height: 42, borderRadius: 12, background: isActive ? "white" : bg,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        transition: "background 0.15s",
-      }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
-      </div>
-      <div>
-        {loading
-          ? <Skeleton w={40} h={20} r={4} />
-          : <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? color : (value > 0 ? "#1a0a0a" : "#c0a0a0"), lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
-        }
-        <div style={{ fontSize: 11, color: isActive ? color : "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ════════════════════════════════════════════════════════════════════════════
+/** Consistent treatment for "this field is empty", instead of a blank cell. */
+const Blank = () => <span className="text-sm italic text-neutral-500">—</span>;
 
 export default function StudentsPage() {
   usePageTitle("Students");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+
   const [students, setStudents]   = useState([]);
   const [search, setSearch]       = useState("");
   const [inputVal, setInputVal]   = useState("");
-  const PAGE_SIZE = 20;
   const [page, setPage]           = useState(1);
   const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [toDelete, setToDelete]   = useState(null);
   const [statusFilter, setStatus] = useState(() => searchParams.get("status") ?? "all");
   const [sexFilter, setSexFilter] = useState("");
   const [ordering, setOrdering]   = useState("-student_id");
   const [isRecents, setIsRecents] = useState(false);
-
-  // Per-status counts for stat cards
   const [statusCounts, setStatusCounts] = useState({});
+  const [deletingStudent, setDeletingStudent] = useState(false);
 
-  const searchRef   = useRef();
-  const [rowsAnimated, setRowsAnimated] = useState(false); // rows only animate on the very first load
+  const searchRef = useRef(null);
   const token = sessionStorage.getItem("access_token");
 
-  // Fetch students — all filter/sort params threaded through
   const fetchStudents = async (
     nextPage = 1,
     term = search,
@@ -153,6 +108,7 @@ export default function StudentsPage() {
     ord = ordering,
   ) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getStudents({
         page: nextPage,
@@ -165,15 +121,20 @@ export default function StudentsPage() {
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(nextPage);
-      setRowsAnimated(true);
     } catch (err) {
       console.error(err);
+      // Previously this was swallowed, so a failed request rendered as
+      // "No students found" — indistinguishable from an empty database.
+      setLoadError(err);
+      setStudents([]);
+      setPageMeta({ count: 0, next: null, previous: null });
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch counts for all statuses (for stat cards)
+  // Per-status counts for the stat tiles. Non-critical: if it fails the tiles
+  // show a dash rather than blocking the page.
   const fetchCounts = async () => {
     try {
       const counts = {};
@@ -193,7 +154,9 @@ export default function StudentsPage() {
     if (!token) { navigate("/login"); return; }
     fetchStudents(1, "", statusFilter, "", "-student_id");
     fetchCounts();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Focus the search box on arrival — searching is the dominant task here.
+    searchRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSearch = () => {
@@ -201,8 +164,6 @@ export default function StudentsPage() {
     setIsRecents(false);
     fetchStudents(1, inputVal, statusFilter, sexFilter, ordering);
   };
-
-  const handleKeyDown = (e) => { if (e.key === "Enter") handleSearch(); };
 
   const handleStatusFilter = (val) => {
     setStatus(val);
@@ -223,31 +184,28 @@ export default function StudentsPage() {
   };
 
   const handleRecents = () => {
-    const newRecents = !isRecents;
-    setIsRecents(newRecents);
-    if (newRecents) {
-      setInputVal("");
-      setSearch("");
-      setStatus("all");
-      setSexFilter("");
-      setOrdering("-student_id");
+    const next = !isRecents;
+    setIsRecents(next);
+    if (next) {
+      setInputVal(""); setSearch(""); setStatus("all");
+      setSexFilter(""); setOrdering("-student_id");
       fetchStudents(1, "", "all", "", "-student_id");
     }
   };
 
   const handleClearAll = () => {
-    setInputVal("");
-    setSearch("");
-    setStatus("all");
-    setSexFilter("");
-    setOrdering("-student_id");
-    setIsRecents(false);
+    setInputVal(""); setSearch(""); setStatus("all");
+    setSexFilter(""); setOrdering("-student_id"); setIsRecents(false);
     fetchStudents(1, "", "all", "", "-student_id");
+    searchRef.current?.focus();
   };
 
-  const hasActiveFilters = search || statusFilter !== "all" || sexFilter || ordering !== "-student_id";
-
-  const [deletingStudent, setDeletingStudent] = useState(false);
+  const handleClearSearch = () => {
+    setInputVal("");
+    setSearch("");
+    fetchStudents(1, "", statusFilter, sexFilter, ordering);
+    searchRef.current?.focus();
+  };
 
   const handleDelete = async () => {
     if (!toDelete) return;
@@ -262,587 +220,334 @@ export default function StudentsPage() {
     }
   };
 
+  const hasActiveFilters =
+    search || statusFilter !== "all" || sexFilter || ordering !== "-student_id";
   const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
 
-  const isFirstRender    = useIsFirstRender();
-  const isFirstRowRender = !rowsAnimated;
+  const statusOptions = STATUS_FILTERS.map((v) => ({
+    value: v,
+    // Counts on every chip, not just the selected one — you can compare
+    // segments without clicking through them.
+    label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
+    count: statusCounts[v],
+  }));
 
   return (
-    <AppLayout>
+    <>
+      <PageHeader
+        title="Students"
+        subtitle={
+          loading
+            ? "Loading records…"
+            : `${pageMeta.count.toLocaleString()} student${pageMeta.count === 1 ? "" : "s"} registered`
+        }
+        icon="ti-users"
+        actions={
+          canManage && (
+            <Button icon="ti-user-plus" onClick={() => navigate("/students/new")}>
+              New Student
+            </Button>
+          )
+        }
+      />
 
-          {/* Topbar */}
-          <div style={{
-            background: "white", borderBottom: "1px solid #f5eaea",
-            padding: "0 28px", height: 58,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)",
-          }}>
-            <div>
-              <h1 style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em", margin: 0 }}>
-                Student
-              </h1>
-              <div style={{ fontSize: 11.5, color: "#b09090", marginTop: 1 }}>
-                {loading ? "Loading records…" : `${pageMeta.count.toLocaleString()} students registered`}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <motion.button
-                whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(224,49,49,0.32)" }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ duration: 0.13 }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  background: "linear-gradient(135deg, #e03131, #c92a2a)",
-                  color: "white", border: "none", borderRadius: 10,
-                  padding: "9px 18px", fontSize: 13, fontWeight: 700,
-                  cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                  boxShadow: "0 4px 16px rgba(224,49,49,0.26)",
-                  letterSpacing: "0.01em",
-                }}
-                onClick={() => navigate("/students/new")}
-              >
-                <i className="ti ti-user-plus" style={{ fontSize: 15 }} />
-                New Student
-              </motion.button>
-            </div>
-          </div>
+      <div className="flex-1 space-y-4 overflow-y-auto p-6">
+        {/* Stat tiles — also the primary status filter */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {STAT_CARDS.map((card) => (
+            <StatCard
+              key={card.status}
+              label={card.label}
+              icon={card.icon}
+              iconTone={card.tone}
+              loading={loading && statusCounts[card.status] === undefined}
+              value={statusCounts[card.status]?.toLocaleString() ?? "—"}
+              active={statusFilter === card.status}
+              onClick={() =>
+                handleStatusFilter(statusFilter === card.status ? "all" : card.status)
+              }
+            />
+          ))}
+        </div>
 
-          {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
-
-            {/* ── Stat cards ── */}
-            <div style={{ display: "flex", gap: 12 }}>
-              {[
-                { label: "Total Students", icon: "ti-users",       value: statusCounts.all,         color: "#e03131", bg: "#fff0f0", status: "all" },
-                { label: "Active",         icon: "ti-user-check",  value: statusCounts.active,      color: "#2e6b0d", bg: "#e8f5e0", status: "active" },
-                { label: "Graduated",      icon: "ti-certificate", value: statusCounts.graduated,   color: "#1455a0", bg: "#e3f0fd", status: "graduated" },
-                { label: "Transferred",    icon: "ti-transfer",    value: statusCounts.transferred, color: "#7a4a08", bg: "#fef3e2", status: "transferred" },
-                { label: "Dropped",        icon: "ti-user-x",      value: statusCounts.dropped,     color: "#9b2020", bg: "#fde8e8", status: "dropped" },
-              ].map((card, i) => (
-                <motion.div
-                  key={card.label}
-                  initial={isFirstRender ? { y: 14, opacity: 0 } : false}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
-                  style={{ flex: 1, minWidth: 0 }}
-                >
-                  <StatCard
-                    {...card}
-                    loading={loading}
-                    isActive={statusFilter === card.status}
-                    onClick={() => handleStatusFilter(statusFilter === card.status ? "all" : card.status)}
-                  />
-                </motion.div>
-              ))}
-            </div>
-
-            {/* ── Search + filters ── */}
-            <motion.div
-              initial={isFirstRender ? { opacity: 0, y: 8 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
-              style={{
-                background: "white", border: "1px solid #f5eaea",
-                borderRadius: 14, padding: "18px 20px",
-                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
-                display: "flex", flexDirection: "column", gap: 0,
-              }}
-            >
-
-              {/* Row 1: search + sort + clear */}
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {/* Search box */}
-                <div
-                  className="search-wrap"
-                  style={{
-                    flex: 1, display: "flex", alignItems: "center", gap: 10,
-                    background: "white", border: "1.5px solid #f0e4e4",
-                    borderRadius: 12, padding: "0 16px", height: 42,
-                    transition: "border 0.15s, box-shadow 0.15s",
-                  }}
-                >
-                  <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
-                  <input
-                    ref={searchRef}
-                    className="search-input"
-                    placeholder="Search by name, LRN, or email…"
-                    value={inputVal}
-                    onChange={(e) => setInputVal(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    style={{
-                      flex: 1, border: "none", background: "transparent",
-                      fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans', sans-serif",
-                      outline: "none",
-                    }}
-                  />
-                  {inputVal && (
-                    <button
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
-                      onClick={() => { setInputVal(""); setSearch(""); fetchStudents(1, "", statusFilter, sexFilter, ordering); }}
-                    >
-                      <i className="ti ti-x" style={{ fontSize: 13 }} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Sort dropdown */}
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <i className="ti ti-arrows-sort" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#c0a0a0", pointerEvents: "none" }} />
-                  <select
-                    value={ordering}
-                    onChange={(e) => handleOrdering(e.target.value)}
-                    style={{
-                      height: 42, paddingLeft: 34, paddingRight: 14,
-                      border: `1.5px solid ${ordering !== "-student_id" ? "#e03131" : "#f0e4e4"}`,
-                      borderRadius: 12, background: ordering !== "-student_id" ? "#fff0f0" : "white",
-                      fontSize: 13, fontWeight: 600,
-                      color: ordering !== "-student_id" ? "#e03131" : "#7a5050",
-                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                      outline: "none", appearance: "none", minWidth: 158,
-                    }}
-                  >
-                    {SORT_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Search button */}
+        {/* Filters */}
+        <Card>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[220px] flex-1">
+              <label htmlFor="student-search" className="sr-only">
+                Search students by name, LRN, or email
+              </label>
+              <i
+                className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
+                aria-hidden="true"
+              />
+              <input
+                id="student-search"
+                ref={searchRef}
+                type="search"
+                placeholder="Search by name, LRN, or email…"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                className="focus-ring h-10 w-full rounded-lg border-[1.5px] border-neutral-300 bg-white pl-10 pr-9 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-500 hover:border-brand-300"
+              />
+              {inputVal && (
                 <button
-                  style={{
-                    height: 42, padding: "0 20px", background: "white",
-                    border: "1.5px solid #f0e4e4", borderRadius: 12,
-                    fontSize: 13, fontWeight: 600, color: "#7a5050",
-                    cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                    transition: "all 0.14s", flexShrink: 0,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
-                  onClick={handleSearch}
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
                 >
-                  Search
+                  <i className="ti ti-x text-[13px]" aria-hidden="true" />
                 </button>
+              )}
+            </div>
 
-                {/* Clear all filters */}
-                <AnimatePresence>
-                  {hasActiveFilters && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.88 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.88 }}
-                      transition={{ duration: 0.14 }}
-                      whileTap={{ scale: 0.93 }}
-                      onClick={handleClearAll}
-                      title="Clear all filters"
-                      style={{
-                        height: 42, padding: "0 14px", background: "white",
-                        border: "1.5px solid #fca5a5", borderRadius: 12,
-                        fontSize: 12, fontWeight: 600, color: "#b91c1c",
-                        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                        display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
-                      }}
-                    >
-                      <i className="ti ti-filter-off" style={{ fontSize: 13 }} />
-                      Clear
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
+            <div className="shrink-0">
+              <label htmlFor="student-sort" className="sr-only">Sort students</label>
+              <Select
+                id="student-sort"
+                value={ordering}
+                onChange={(e) => handleOrdering(e.target.value)}
+                className="h-10 w-[170px] py-0 text-sm font-semibold"
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </Select>
+            </div>
 
-              {/* Divider */}
-              <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
+            <Button variant="secondary" icon="ti-search" onClick={handleSearch}>
+              Search
+            </Button>
 
-              {/* Chip rows */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-                {/* Status */}
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
-                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {STATUS_FILTERS.map((val) => {
-                      const meta = STATUS_META[val];
-                      const isActive = statusFilter === val;
-                      return (
-                        <motion.button
-                          key={val}
-                          initial={false}
-                          animate={{
-                            backgroundColor: isActive ? "#fff0f0" : "#ffffff",
-                            color:           isActive ? "#e03131" : "#9a7070",
-                            borderColor:     isActive ? "#e03131" : "#f0e4e4",
-                          }}
-                          layout
-                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                          onClick={() => handleStatusFilter(val)}
-                          style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                        >
-                          {val !== "all" && (
-                            <motion.span
-                              animate={{ background: isActive ? "#e03131" : meta?.dot ?? "#9e9e9e" }}
-                              transition={{ duration: 0.18, ease: "easeOut" }}
-                              style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, display: "inline-block" }}
-                            />
-                          )}
-                          {val === "all" ? "All" : meta?.label}
-                          {isActive && !loading && statusCounts[val] !== undefined && (
-                            <span style={{ display: "inline-block", background: "#e03131", color: "white", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 7px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
-                              {statusCounts[val]}
-                            </span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
-
-                {/* Sex */}
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Sex</div>
-                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {SEX_FILTERS.map((sf) => {
-                      const isActive = sexFilter === sf.value;
-                      return (
-                        <motion.button
-                          key={sf.value}
-                          initial={false}
-                          animate={{
-                            backgroundColor: isActive ? "#fff0f0" : "#ffffff",
-                            color:           isActive ? "#e03131" : "#9a7070",
-                            borderColor:     isActive ? "#e03131" : "#f0e4e4",
-                          }}
-                          layout
-                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                          onClick={() => handleSexFilter(sf.value)}
-                          style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                        >
-                          {sf.icon && <i className={`ti ${sf.icon}`} style={{ fontSize: 12 }} />}
-                          {sf.label}
-                        </motion.button>
-                      );
-                    })}
-
-                    <div style={{ width: 1, height: 18, background: "#f0e4e4", margin: "0 2px", flexShrink: 0 }} />
-
-                    {/* Recents quick-filter — kept inline with Sex since it's a view shortcut */}
-                    <motion.button
-                      initial={false}
-                      animate={{
-                        backgroundColor: isRecents ? "#fff0f0" : "#ffffff",
-                        color:           isRecents ? "#e03131" : "#9a7070",
-                        borderColor:     isRecents ? "#e03131" : "#f0e4e4",
-                      }}
-                      layout
-                      transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                      onClick={handleRecents}
-                      title="Show most recently registered students"
-                      style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                    >
-                      <i className="ti ti-clock" style={{ fontSize: 12 }} />
-                      Recents
-                    </motion.button>
-                  </motion.div>
-                </div>
-
-              </div>
-            </motion.div>
-
-            {/* ── Table ── */}
-            <motion.div
-              initial={isFirstRender ? { opacity: 0, y: 10 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.34 : 0 }}
-              style={{
-                background: "white", border: "1px solid #f5eaea",
-                borderRadius: 16, overflow: "hidden",
-                boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
-                maxHeight: "calc(100vh - 340px)",
-                overflowY: "auto",
-              }}
-            >
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: "#fdfafa" }}>
-                    {[
-                      { label: "Student",     w: "30%" },
-                      { label: "LRN",         w: "15%" },
-                      { label: "Age / DOB",   w: "16%" },
-                      { label: "Sex",         w: "9%"  },
-                      { label: "Status",      w: "11%" },
-                      { label: "Contact",     w: "13%" },
-                      { label: "",            w: "6%"  },
-                    ].map(({ label, w }) => (
-                      <th key={label} style={{
-                        textAlign: "left", fontSize: 10.5, fontWeight: 600,
-                        color: "#c0a0a0", padding: "13px 18px",
-                        borderBottom: "1px solid #f5eaea",
-                        textTransform: "uppercase", letterSpacing: "0.07em",
-                        width: w,
-                        position: "sticky",   
-                        top: 0,               
-                        zIndex: 1,            
-                        background: "#fdfafa",
-                      }}>
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <AnimatePresence mode="popLayout">
-                <tbody>
-                  {loading
-                    ? Array.from({ length: 7 }).map((_, i) => (
-                        <tr key={i}>
-                          <td style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <Skeleton w={36} h={36} r={99} />
-                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                <Skeleton w={130} h={13} />
-                                <Skeleton w={90} h={11} />
-                              </div>
-                            </div>
-                          </td>
-                          {[88, 80, 44, 64, 90, 40].map((w, j) => (
-                            <td key={j} style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                              <Skeleton w={w} h={13} />
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    : students.length === 0
-                      ? (
-                        <motion.tr
-                          key="empty"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.18 }}
-                        >
-                          <td colSpan={7}>
-                            <EmptyState
-                              icon="ti-users-off"
-                              title="No students found"
-                              subtitle="Try adjusting your search or changing the status filter"
-                            />
-                          </td>
-                        </motion.tr>
-                      )
-                      : students.map((st, idx) => {
-                          const palette = getAvatarPalette(st.last_name);
-                          const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
-                          const pill = STATUS_META[st.status] ?? STATUS_META.inactive;
-                          const age = calcAge(st.birth_date);
-                          const dob = fmtDate(st.birth_date);
-                          const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
-
-                          return (
-                            <motion.tr
-                              key={st.student_id}
-                              initial={isFirstRowRender ? { opacity: 0, x: -6 } : false}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 6 }}
-                              transition={{ duration: 0.18, ease: "easeOut", delay: isFirstRowRender ? Math.min(idx * 0.025, 0.3) : 0 }}
-                              className="student-row"
-                              onClick={() => navigate(`/students/${st.student_id}`)}
-                            >
-                              {/* Student name + email */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                  <div style={{
-                                    width: 36, height: 36, borderRadius: "50%",
-                                    background: palette.bg, flexShrink: 0,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: 12, fontWeight: 700, color: palette.color,
-                                    letterSpacing: "0.02em",
-                                  }}>
-                                    {initials}
-                                  </div>
-                                  <div>
-                                    <div className="row-name" style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3, transition: "color 0.12s" }}>
-                                      {fullName}
-                                    </div>
-                                    <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>
-                                      {st.email
-                                        ? st.email
-                                        : <span style={{ fontStyle: "italic", color: "#d0b8b8" }}>no email on file</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* LRN */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                {st.lrn
-                                  ? <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{st.lrn}</span>
-                                  : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                              </td>
-
-                              {/* Age / DOB */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                {age !== null
-                                  ? (
-                                    <div>
-                                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{age} yrs</div>
-                                      <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>{dob}</div>
-                                    </div>
-                                  )
-                                  : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                              </td>
-
-                              {/* Sex */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                  <i
-                                    className={`ti ${st.sex === "male" ? "ti-mars" : "ti-venus"}`}
-                                    style={{ fontSize: 14, color: st.sex === "male" ? "#2563eb" : "#be185d" }}
-                                  />
-                                  <span style={{ fontSize: 12, color: "#7a5a5a", textTransform: "capitalize" }}>{st.sex}</span>
-                                </div>
-                              </td>
-
-                              {/* Status */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                <span style={{
-                                  display: "inline-flex", alignItems: "center", gap: 5,
-                                  fontSize: 11.5, fontWeight: 600,
-                                  padding: "4px 10px", borderRadius: 99,
-                                  background: pill.bg, color: pill.color,
-                                }}>
-                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: pill.dot, flexShrink: 0 }} />
-                                  {pill.label}
-                                </span>
-                              </td>
-
-                              {/* Contact */}
-                              <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-                                {st.mobile_number
-                                  ? (
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                      <i className="ti ti-phone" style={{ fontSize: 12, color: "#c0a0a0" }} />
-                                      <span style={{ fontSize: 12, color: "#5a4a4a" }}>{st.mobile_number}</span>
-                                    </div>
-                                  )
-                                  : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                              </td>
-
-                              {/* Actions */}
-                              <td
-                                style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div style={{ display: "flex", gap: 4 }}>
-                                  <button
-                                    className="row-action" title="View Grades" aria-label={`View grades for ${st.first_name} ${st.last_name}`}
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/grades?student=${st.student_id}`); }}
-                                  >
-                                    <i className="ti ti-chart-bar" style={{ fontSize: 14 }} />
-                                  </button>
-                                  <button
-                                    className="row-action" title="Edit" aria-label={`Edit ${st.first_name} ${st.last_name}`}
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/students/${st.student_id}/edit`); }}
-                                  >
-                                    <i className="ti ti-pencil" style={{ fontSize: 14 }} />
-                                  </button>
-                                  {canManage && (
-                                    <button
-                                      className="row-action danger" title="Delete" aria-label={`Delete ${st.first_name} ${st.last_name}`}
-                                      style={{ color: "#c09090" }}
-                                      onClick={(e) => { e.stopPropagation(); setToDelete(st); }}
-                                    >
-                                      <i className="ti ti-trash" style={{ fontSize: 14 }} />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </motion.tr>
-                          );
-                        })
-                  }
-                </tbody>
-                </AnimatePresence>
-              </table>
-            </motion.div>
-
-            {/* ── Pagination ── */}
-            {!loading && pageMeta.count > 0 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "#b09090" }}>
-                  Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
-                  <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
-                  &nbsp;·&nbsp; {pageMeta.count.toLocaleString()} total records
-                </span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <motion.button
-                    whileTap={{ scale: 0.92 }}
-                    transition={{ duration: 0.1 }}
-                    className="page-btn"
-                    style={pgBtn}
-                    disabled={!pageMeta.previous}
-                    onClick={() => fetchStudents(page - 1, search, statusFilter, sexFilter, ordering)}
-                  >
-                    <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-                  </motion.button>
-                  {(() => {
-                    const windowSize = Math.min(totalPages, 5);
-                    const start = Math.min(
-                      Math.max(1, page - 2),
-                      Math.max(1, totalPages - windowSize + 1)
-                    );
-                    return Array.from({ length: windowSize }, (_, i) => start + i);
-                  })().map((p) => {
-                    const isActive = p === page;
-                    return (
-                      <motion.button
-                        key={p}
-                        whileTap={{ scale: 0.92 }}
-                        transition={{ duration: 0.1 }}
-                        className="page-btn"
-                        style={{ ...pgBtn, ...(isActive ? pgBtnActive : {}) }}
-                        onClick={() => fetchStudents(p, search, statusFilter, sexFilter, ordering)}
-                      >
-                        {p}
-                      </motion.button>
-                    );
-                  })}
-                  <motion.button
-                    whileTap={{ scale: 0.92 }}
-                    transition={{ duration: 0.1 }}
-                    className="page-btn"
-                    style={pgBtn}
-                    disabled={!pageMeta.next}
-                    onClick={() => fetchStudents(page + 1, search, statusFilter, sexFilter, ordering)}
-                  >
-                    <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-                  </motion.button>
-                </div>
-              </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" icon="ti-filter-off" onClick={handleClearAll}>
+                Clear filters
+              </Button>
             )}
-
           </div>
 
-      {/* Delete modal */}
+          <hr className="my-4 border-neutral-200" />
+
+          <div className="space-y-3">
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
+                Status
+              </div>
+              <ChipGroup
+                label="Filter by status"
+                options={statusOptions}
+                value={statusFilter}
+                onChange={handleStatusFilter}
+              />
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
+                Sex
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ChipGroup
+                  label="Filter by sex"
+                  options={SEX_FILTERS}
+                  value={sexFilter}
+                  onChange={handleSexFilter}
+                />
+                <span className="h-4 w-px bg-neutral-300" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={handleRecents}
+                  aria-pressed={isRecents}
+                  title="Show the most recently registered students"
+                  className={[
+                    "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-xs font-semibold transition-colors",
+                    isRecents
+                      ? "border-brand-500 bg-brand-100 text-brand-500"
+                      : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-500",
+                  ].join(" ")}
+                >
+                  <i className="ti ti-clock text-[13px]" aria-hidden="true" />
+                  Recents
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Results */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.24, ease: "easeOut" }}
+        >
+          <Card padding="none" className="overflow-hidden">
+            <Table
+              columns={TABLE_COLUMNS}
+              loading={loading}
+              error={loadError}
+              onRetry={() => fetchStudents(page, search, statusFilter, sexFilter, ordering)}
+              errorSubject="students"
+              isEmpty={students.length === 0}
+              empty={{
+                icon: "ti-users-off",
+                title: hasActiveFilters ? "No students match these filters" : "No students yet",
+                subtitle: hasActiveFilters
+                  ? "Try a different search term, or clear the filters to see everyone."
+                  : "Add your first student to get started.",
+                action: hasActiveFilters ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
+                    Clear filters
+                  </Button>
+                ) : canManage ? (
+                  <Button size="sm" icon="ti-user-plus" onClick={() => navigate("/students/new")}>
+                    New Student
+                  </Button>
+                ) : null,
+              }}
+            >
+              {students.map((st) => {
+                const palette = getAvatarPalette(`${st.last_name}${st.first_name}`);
+                const age = calcAge(st.birth_date);
+                const fullName = [
+                  st.last_name, ",", st.first_name,
+                  st.middle_name ? `${st.middle_name[0]}.` : "",
+                  st.suffix ?? "",
+                ].filter(Boolean).join(" ");
+
+                return (
+                  <TableRow
+                    key={st.student_id}
+                    onClick={() => navigate(`/students/${st.student_id}`)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                          style={{ background: palette.bg, color: palette.color }}
+                          aria-hidden="true"
+                        >
+                          {initialsFrom(st.first_name, st.last_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-neutral-900 transition-colors group-hover:text-brand-500">
+                            {fullName}
+                          </div>
+                          <div className="truncate text-xs text-neutral-500">
+                            {st.email || <span className="italic">no email on file</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      {st.lrn ? (
+                        <span className="rounded-sm bg-neutral-100 px-2 py-1 font-mono text-xs text-neutral-700">
+                          {st.lrn}
+                        </span>
+                      ) : <Blank />}
+                    </TableCell>
+
+                    <TableCell>
+                      {age !== null ? (
+                        <>
+                          <div className="text-sm font-semibold text-neutral-900">{age} yrs</div>
+                          <div className="text-xs text-neutral-500">{fmtDate(st.birth_date)}</div>
+                        </>
+                      ) : <Blank />}
+                    </TableCell>
+
+                    <TableCell>
+                      {st.sex ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm capitalize text-neutral-700">
+                          <i
+                            className={`ti ${st.sex === "male" ? "ti-mars" : "ti-venus"} text-[14px] text-neutral-600`}
+                            aria-hidden="true"
+                          />
+                          {st.sex}
+                        </span>
+                      ) : <Blank />}
+                    </TableCell>
+
+                    <TableCell>
+                      <StatusBadge status={st.status} map={STUDENT_STATUS_MAP} />
+                    </TableCell>
+
+                    <TableCell>
+                      {st.mobile_number ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-neutral-700">
+                          <i className="ti ti-phone text-[13px] text-neutral-600" aria-hidden="true" />
+                          {st.mobile_number}
+                        </span>
+                      ) : <Blank />}
+                    </TableCell>
+
+                    {/* Row actions must not trigger the row's own navigation. */}
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-chart-bar"
+                          title="View grades"
+                          aria-label={`View grades for ${st.first_name} ${st.last_name}`}
+                          onClick={() => navigate(`/grades?student=${st.student_id}`)}
+                        />
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-pencil"
+                          title="Edit student"
+                          aria-label={`Edit ${st.first_name} ${st.last_name}`}
+                          onClick={() => navigate(`/students/${st.student_id}/edit`)}
+                        />
+                        {canManage && (
+                          <Button
+                            variant="ghost" size="sm" iconOnly icon="ti-trash"
+                            title="Delete student"
+                            aria-label={`Delete ${st.first_name} ${st.last_name}`}
+                            className="hover:bg-error-50 hover:text-error-500"
+                            onClick={() => setToDelete(st)}
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </Table>
+          </Card>
+        </motion.div>
+
+        {!loading && !loadError && pageMeta.count > 0 && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            count={pageMeta.count}
+            hasPrevious={Boolean(pageMeta.previous)}
+            hasNext={Boolean(pageMeta.next)}
+            onPageChange={(p) => fetchStudents(p, search, statusFilter, sexFilter, ordering)}
+          />
+        )}
+      </div>
+
       <AnimatePresence>
         {toDelete && (
           <ConfirmModal
             icon="ti-trash"
             title="Delete student?"
-            message={<>You're about to permanently remove <strong style={{ color: "#1a0a0a" }}>{toDelete.first_name} {toDelete.last_name}</strong> and all their associated records. This cannot be undone.</>}
+            message={
+              <>
+                You&apos;re about to permanently remove{" "}
+                <strong className="text-neutral-900">
+                  {toDelete.first_name} {toDelete.last_name}
+                </strong>{" "}
+                and all their associated records. This cannot be undone.
+              </>
+            }
+            confirmLabel="Delete student"
             loading={deletingStudent}
             onConfirm={handleDelete}
             onCancel={() => setToDelete(null)}
           />
         )}
       </AnimatePresence>
-    </AppLayout>
+    </>
   );
 }
-
-const pgBtn = {
-  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
-  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
-  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
-};
-
-const pgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
-};

@@ -2,7 +2,6 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import GuardianLayout from "../components/GuardianLayout";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getCurrentUser } from "../utils/auth";
 
@@ -81,7 +80,7 @@ export default function GuardianHomePage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <GuardianLayout>
+    <>
       <motion.div
         initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
         style={{ marginBottom: 24 }}
@@ -164,6 +163,6 @@ export default function GuardianHomePage() {
           })}
         </div>
       )}
-    </GuardianLayout>
+    </>
   );
 }

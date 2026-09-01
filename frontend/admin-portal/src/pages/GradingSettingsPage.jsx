@@ -1,9 +1,10 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Tabs from "../components/ui/Tabs";
 import toast from "react-hot-toast";
 import { useSearchParams } from "react-router-dom";
-import AppLayout from "../components/AppLayout";
 import ConfirmModal from "../components/ConfirmModal";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
@@ -65,38 +66,21 @@ export default function GradingSettingsPage() {
   const [tab, setTab] = useState(searchParams.get("tab") === "narrative" ? "narrative" : "templates");
 
   return (
-    <AppLayout>
+    <>
       <style>{baseCss}</style>
 
-      <motion.div
-        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-        style={{ background: "white", borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" }}
-      >
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>Grading Settings</div>
-        <div style={{ display: "flex", gap: 2, background: "#fdfafa", border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, position: "relative" }}>
-          {TABS.map((t) => {
-            const isActive = tab === t.id;
-            return (
-              <motion.button key={t.id} onClick={() => setTab(t.id)}
-                style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: isActive ? 700 : 500, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", color: isActive ? "white" : C.muted, zIndex: 1 }}>
-                {isActive && (
-                  <motion.div layoutId="grading-tab-pill" transition={{ type: "spring", stiffness: 380, damping: 34 }}
-                    style={{ position: "absolute", inset: 0, borderRadius: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, zIndex: -1 }} />
-                )}
-                <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />{t.label}
-              </motion.button>
-            );
-          })}
-        </div>
-      </motion.div>
+      <PageHeader
+        title="Grading Settings"
+        icon="ti-report-analytics"
+        actions={<Tabs variant="pill" tabs={TABS} value={tab} onChange={setTab} />}
+      />
 
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <AnimatePresence mode="wait">
           {tab === "templates" ? <GradingTemplatesTab key="templates" /> : <NarrativeCategoriesTab key="narrative" />}
         </AnimatePresence>
       </div>
-    </AppLayout>
+    </>
   );
 }
 

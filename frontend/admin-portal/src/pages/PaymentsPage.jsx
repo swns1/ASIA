@@ -1,11 +1,12 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback } from "react";
-import AppLayout from "../components/AppLayout";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import EmptyState from "../components/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 
 import { getPayments as _getPayments } from "../api/billingApi";
 const getPayments = (p = {}) => _getPayments(p);
@@ -102,14 +103,25 @@ export default function PaymentsPage() {
     return params;
   };
 
+  // A failed load must be distinguishable from an empty result — this used to
+  // swallow the error and fall through to "No payments found · Record the
+  // first payment", which during an outage reads as a fresh install.
+  const [loadError, setLoadError] = useState(null);
+
   const fetchPayments = useCallback(async (p = 1, overrides = {}) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getPayments(buildParams(p, overrides));
       setPayments(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setLoadError(e);
+      setPayments([]);
+      setPageMeta({ count: 0, next: null, previous: null });
+    }
     finally { setLoading(false); }
   }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField]);
 
@@ -139,50 +151,25 @@ export default function PaymentsPage() {
     background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box",
   };
 
-  const isFirstRender = useIsFirstRender();
 
   return (
-    <AppLayout>
+    <>
 
-      {/* ── Topbar ─────────────────────────────────────────────────────────── */}
-      <div style={{ background:"white", borderBottom:"1px solid #f5eaea", padding:"0 28px", height:58, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, boxShadow:"0 1px 8px rgba(224,49,49,0.04)" }}>
-        <motion.div
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1] }}
-        >
-          <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Payments</div>
-          <div style={{ fontSize:11.5, color:"#b09090", marginTop:1 }}>
-            {loading ? "Loading…" : `${pageMeta.count} transaction${pageMeta.count !== 1 ? "s" : ""} · ${fmt(totalCollected)} this page`}
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={isFirstRender ? { opacity:0, y:-8 } : false}
-          animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:[0.4,0,0.2,1], delay:0.05 }}
-          style={{ display:"flex", gap:10 }}
-        >
-          <motion.button
-            onClick={() => navigate("/invoices")}
-            whileHover={{ borderColor:"#fca5a5", color:"#e03131" }}
-            whileTap={{ scale:0.96 }}
-            transition={{ duration:0.12 }}
-            style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#7a5050", border:"1.5px solid #f0e4e4", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-          >
-            <i className="ti ti-receipt" style={{ fontSize:13 }} />View Invoices
-          </motion.button>
-          <motion.button
-            onClick={() => setShowModal(true)}
-            whileHover={{ scale:1.02, boxShadow:"0 6px 20px rgba(46,107,13,0.32)" }}
-            whileTap={{ scale:0.96 }}
-            transition={{ duration:0.12 }}
-            style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}
-          >
-            <i className="ti ti-cash" style={{ fontSize:15 }} />Record Payment
-          </motion.button>
-        </motion.div>
-      </div>
+      <PageHeader
+        title="Payments"
+        icon="ti-cash"
+        subtitle={loading ? "Loading…" : `${pageMeta.count} transaction${pageMeta.count !== 1 ? "s" : ""} · ${fmt(totalCollected)} this page`}
+        actions={
+          <>
+            <Button variant="secondary" icon="ti-receipt" onClick={() => navigate("/invoices")}>
+              View Invoices
+            </Button>
+            <Button icon="ti-cash" onClick={() => setShowModal(true)}>
+              Record Payment
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", display:"flex", flexDirection:"column", gap:14 }}>
@@ -434,6 +421,16 @@ export default function PaymentsPage() {
                     ))}
                   </tr>
                 ))
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={7}>
+                    <ErrorState
+                      error={loadError}
+                      subject="payments"
+                      onRetry={() => fetchPayments(page)}
+                    />
+                  </td>
+                </tr>
               ) : payments.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
@@ -586,6 +583,6 @@ export default function PaymentsPage() {
         )}
       </AnimatePresence>
 
-    </AppLayout>
+    </>
   );
 }

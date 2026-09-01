@@ -23,6 +23,10 @@ class RiskAssessmentRun(models.Model):
 
     triggered_by = models.BigIntegerField(null=True, blank=True)  # user_id from identity-service JWT
     created_at   = models.DateTimeField(auto_now_add=True)
+    # Re-running the same filters on the same day updates that run in place
+    # rather than inserting a duplicate (see RiskAssessmentRunView), so
+    # created_at alone would report a stale "computed at" time.
+    updated_at   = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "risk_assessment_runs"
@@ -57,10 +61,33 @@ class StudentRiskScore(models.Model):
 
     grade_component      = models.FloatField(null=True, blank=True)
     attendance_component = models.FloatField(null=True, blank=True)
+    trend_component      = models.FloatField(null=True, blank=True)
     narrative_component  = models.FloatField(null=True, blank=True)
 
     risk_score = models.FloatField()  # 0-100, higher = more at-risk
     risk_level = models.CharField(max_length=20, choices=RISK_LEVEL_CHOICES)
+
+    # Why this student was flagged, in plain sentences a teacher can act on
+    # ([{code, text, severity}] — see ai/services.py). Stored rather than
+    # regenerated on read so a historical run still explains itself after the
+    # thresholds behind it have been retuned.
+    reasons_json = models.JSONField(default=list, blank=True)
+
+    # How many of the four signals actually had data for this student. The
+    # weight renormalization in score_students() hides this otherwise, so a
+    # score built from one signal looks as confident as one built from four.
+    signals_present = models.IntegerField(default=0)
+
+    # The raw figures behind the score, snapshotted at run time. The
+    # components above are risk contributions (higher = worse) and several
+    # are not invertible — grade_component is max(average, failing-count), so
+    # an 88 average and a 95 average with one failed subject both land on 65.
+    # A teacher reading the list needs the actual grade and the actual
+    # attendance percentage, so they are stored rather than reconstructed.
+    average_grade         = models.FloatField(null=True, blank=True)
+    attendance_rate       = models.FloatField(null=True, blank=True)  # 0-1
+    grade_delta           = models.FloatField(null=True, blank=True)  # vs preceding period
+    failing_subject_count = models.IntegerField(default=0)
 
     class Meta:
         db_table = "student_risk_scores"
