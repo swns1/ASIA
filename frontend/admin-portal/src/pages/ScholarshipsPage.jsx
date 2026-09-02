@@ -593,7 +593,7 @@ function ManualAwardsTab() {
                       initial={false}
                       animate={{
                         backgroundColor: active ? "#fff0f0" : "#ffffff",
-                        color:           active ? "#e03131" : "#855c5c",
+                        color:           active ? "#c92a2a" : "#855c5c",
                         borderColor:     active ? "#e03131" : "#f0e4e4",
                       }}
                       transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -620,7 +620,7 @@ function ManualAwardsTab() {
                   border:`1.5px solid ${dateOpen || dateFrom || dateTo ? "#e03131" : "#f0e4e4"}`,
                   borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                   background: dateOpen || dateFrom || dateTo ? "#fff0f0" : "#ffffff",
-                  color: dateOpen || dateFrom || dateTo ? "#e03131" : "#7a5050",
+                  color: dateOpen || dateFrom || dateTo ? "#c92a2a" : "#7a5050",
                   transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                   whiteSpace:"nowrap",
                 }}>
@@ -890,7 +890,7 @@ function EligibilityTab({ scholarshipTypes }) {
                     fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                     cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                     background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#e03131" : "#855c5c",
+                    color: active ? "#c92a2a" : "#855c5c",
                     transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                   }}>
                   <i className="ti ti-calendar" style={{ fontSize:11 }} />{sy}
@@ -915,7 +915,7 @@ function EligibilityTab({ scholarshipTypes }) {
                     fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                     cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                     background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#e03131" : "#855c5c",
+                    color: active ? "#c92a2a" : "#855c5c",
                     transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                   }}>
                   {p.label}

@@ -73,7 +73,7 @@ export function Field({
           >
             {label}
             {required && (
-              <span className="text-brand-500">
+              <span className="text-brand-600">
                 {" *"}
                 {/* Spoken by screen readers; the asterisk alone is ambiguous. */}
                 <span className="sr-only"> (required)</span>

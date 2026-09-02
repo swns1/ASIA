@@ -27,7 +27,7 @@ export default function Breadcrumbs({ items = [], className = "" }) {
               ) : (
                 <Link
                   to={item.to}
-                  className="focus-ring rounded-sm transition-colors hover:text-brand-500 hover:underline"
+                  className="focus-ring rounded-sm transition-colors hover:text-brand-600 hover:underline"
                 >
                   {item.label}
                 </Link>

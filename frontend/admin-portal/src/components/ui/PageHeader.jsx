@@ -31,7 +31,7 @@ export default function PageHeader({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="flex min-w-0 items-center gap-3">
           {icon && (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-500">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-600">
               <i className={`ti ${icon} text-[18px]`} aria-hidden="true" />
             </div>
           )}

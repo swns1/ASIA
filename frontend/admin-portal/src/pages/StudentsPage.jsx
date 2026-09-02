@@ -296,7 +296,7 @@ export default function StudentsPage() {
                   type="button"
                   onClick={handleClearSearch}
                   aria-label="Clear search"
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
+                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
                 >
                   <i className="ti ti-x text-[13px]" aria-hidden="true" />
                 </button>
@@ -363,8 +363,8 @@ export default function StudentsPage() {
                   className={[
                     "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-xs font-semibold transition-colors",
                     isRecents
-                      ? "border-brand-500 bg-brand-100 text-brand-500"
-                      : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-500",
+                      ? "border-brand-500 bg-brand-100 text-brand-600"
+                      : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600",
                   ].join(" ")}
                 >
                   <i className="ti ti-clock text-[13px]" aria-hidden="true" />
@@ -430,7 +430,7 @@ export default function StudentsPage() {
                           {initialsFrom(st.first_name, st.last_name)}
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-neutral-900 transition-colors group-hover:text-brand-500">
+                          <div className="truncate text-sm font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
                             {fullName}
                           </div>
                           <div className="truncate text-xs text-neutral-500">

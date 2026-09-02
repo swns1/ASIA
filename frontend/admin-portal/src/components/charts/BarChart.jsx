@@ -10,10 +10,12 @@
 // the ordinal ramp only when the order is the point; here the labels carry it.
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 import ChartFrame, { NoData } from "./ChartFrame";
 import { barPath, niceMax } from "./geometry";
 import { GAP, chartInk } from "./tokens";
+import { chartVariants } from "../../utils/motion";
 
 const W = 760;
 const PAD_L = 116;
@@ -47,6 +49,7 @@ export default function BarChart({
 
   return (
     <ChartFrame viewBox={[W, height]} title={title} caption={caption} tip={tip}>
+      <motion.g variants={chartVariants.container} initial="hidden" animate="visible">
       {rows.map((row, i) => {
         const y = PAD_T + i * ROW_H;
         const barH = ROW_H - GAP * 3;
@@ -78,7 +81,18 @@ export default function BarChart({
             >
               {row.label}
             </text>
-            {value > 0 && <path d={barPath(PAD_L, y, width, barH)} fill={fill} />}
+            {value > 0 && (
+              <motion.path
+                variants={chartVariants.bar}
+                // originX belongs in `style`, not as a prop: framer-motion treats
+                // it as a transform property and writes transform-origin from it.
+                // As a bare prop it is ignored and the origin stays 50% 50%, which
+                // grows the bar from its centre outward.
+                style={{ transformBox: "fill-box", originX: 0 }}
+                d={barPath(PAD_L, y, width, barH)}
+                fill={fill}
+              />
+            )}
             <text
               x={PAD_L + width + 8} y={y + barH / 2 + 4}
               fontSize="11" fontWeight="700" fill={ink.ink}
@@ -88,6 +102,7 @@ export default function BarChart({
           </g>
         );
       })}
+      </motion.g>
       {/* Baseline the bars are measured from. */}
       <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={height - PAD_B} stroke={ink.grid} />
     </ChartFrame>

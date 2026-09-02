@@ -174,8 +174,8 @@ export default function Sidebar({
                       "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                       showLabels ? "" : "justify-center",
                       active
-                        ? "bg-brand-100 font-semibold text-brand-500 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-brand-500"
-                        : "text-neutral-700 hover:bg-brand-50 hover:text-brand-500",
+                        ? "bg-brand-100 font-semibold text-brand-600 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-brand-500"
+                        : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
                     ].join(" ")}
                   >
                     <i
@@ -200,7 +200,7 @@ export default function Sidebar({
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={[
-              "focus-ring flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-semibold text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-500",
+              "focus-ring flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-semibold text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-600",
               showLabels ? "" : "justify-center",
             ].join(" ")}
           >
@@ -241,7 +241,7 @@ export default function Sidebar({
                   title="Log out"
                   aria-label="Log out"
                   onClick={() => setShowLogout(true)}
-                  className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-500"
+                  className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
                 >
                   <i className="ti ti-logout text-[15px]" aria-hidden="true" />
                 </button>
@@ -254,7 +254,7 @@ export default function Sidebar({
               title="Log out"
               aria-label="Log out"
               onClick={() => setShowLogout(true)}
-              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-500"
+              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
             >
               <i className="ti ti-logout text-[15px]" aria-hidden="true" />
             </button>

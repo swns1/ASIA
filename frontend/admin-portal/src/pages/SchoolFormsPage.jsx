@@ -381,7 +381,7 @@ export default function SchoolFormsPage() {
                         </div>
                         <button
                           onClick={() => { setSf9Student(null); setSf9Enrollments([]); setSf9EnrollmentId(""); }}
-                          style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#888", fontFamily: "'DM Sans',sans-serif" }}
+                          style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#5c5752", fontFamily: "'DM Sans',sans-serif" }}
                         >
                           ✕
                         </button>
@@ -437,7 +437,7 @@ export default function SchoolFormsPage() {
                       </div>
                       <button
                         onClick={() => setSf10Student(null)}
-                        style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#888", fontFamily: "'DM Sans',sans-serif" }}
+                        style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#5c5752", fontFamily: "'DM Sans',sans-serif" }}
                       >
                         ✕
                       </button>

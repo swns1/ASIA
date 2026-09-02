@@ -425,7 +425,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               <i className={`ti ${t.icon}`} style={{ fontSize:13, position:"relative" }} />
               <span style={{ position:"relative" }}>{t.label}</span>
               {t.id === "payments" && (invoice.payments?.length ?? 0) > 0 && (
-                <span style={{ fontSize:10, fontWeight:700, background:active ? "rgba(255,255,255,0.3)" : "#f0e8e8", color:active ? "white" : "#e03131", borderRadius:99, padding:"1px 6px", position:"relative" }}>
+                <span style={{ fontSize:10, fontWeight:700, background:active ? "rgba(255,255,255,0.3)" : "#f0e8e8", color:active ? "white" : "#c92a2a", borderRadius:99, padding:"1px 6px", position:"relative" }}>
                   {invoice.payments.length}
                 </span>
               )}
@@ -851,7 +851,7 @@ export default function InvoicesPage() {
                   type="button"
                   aria-label="Clear search"
                   onClick={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
+                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
                 >
                   <i className="ti ti-x text-[13px]" aria-hidden="true" />
                 </button>

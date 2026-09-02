@@ -826,14 +826,14 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
       ) : (
         <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? "#fff0f0" : "#f5f0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#e03131" : "#8a6a6a" }} />
+            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#c92a2a" : "#8a6a6a" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: active ? "#1a0a0a" : "#9a8080" }}>{cat.name}</div>
             {cat.description && <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: active ? "#fff0f0" : "#f5f0f0", color: active ? "#e03131" : "#9a8080" }}>{active ? "Active" : "Inactive"}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: active ? "#fff0f0" : "#f5f0f0", color: active ? "#c92a2a" : "#9a8080" }}>{active ? "Active" : "Inactive"}</span>
             <span style={{ fontSize: 11, color: "#8a6a6a", background: "#fdfafa", border: "1px solid #f5eaea", padding: "2px 8px", borderRadius: 6 }}>#{cat.sort_order}</span>
             <button onClick={handleToggleActive} disabled={saving}
               style={{ height: 28, padding: "0 10px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>

@@ -12,6 +12,7 @@ import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { describeApiError } from "../utils/apiError";
+import { pageVariants } from "../utils/motion";
 import Sparkline from "../components/charts/Sparkline";
 import { AttendanceBand, PipelineBand, RiskBand } from "./dashboard/DashboardBands";
 
@@ -93,7 +94,7 @@ function DashboardStat({
           {label}
         </span>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-100">
-          <i className={`ti ${icon} text-[15px] text-brand-500`} aria-hidden="true" />
+          <i className={`ti ${icon} text-[15px] text-brand-600`} aria-hidden="true" />
         </div>
       </div>
 
@@ -105,7 +106,7 @@ function DashboardStat({
             type="button"
             onClick={onOpen}
             aria-label={openLabel}
-            className="focus-ring rounded-sm transition-colors hover:text-brand-500"
+            className="focus-ring rounded-sm transition-colors hover:text-brand-600"
           >
             <AnimatedCount target={value ?? 0} loading={loading} />
           </button>
@@ -417,7 +418,12 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-6 xl:overflow-hidden">
+      <motion.div
+        variants={pageVariants.container}
+        initial="hidden"
+        animate="visible"
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-6 xl:overflow-hidden"
+      >
         <AnimatePresence>
           {error && (
             <Alert variant="error" dismissible onDismiss={() => setError("")}>
@@ -428,7 +434,7 @@ export default function DashboardPage() {
 
         {/* Things needing attention, surfaced before the metrics. */}
         {alerts.length > 0 && (
-          <div className="flex flex-wrap gap-2.5">
+          <motion.div variants={pageVariants.item} className="flex flex-wrap gap-2.5">
             {alerts.map((al) => (
               <button
                 key={al.id}
@@ -446,11 +452,11 @@ export default function DashboardPage() {
                 <i className="ti ti-arrow-right ml-auto text-[13px]" aria-hidden="true" />
               </button>
             ))}
-          </div>
+          </motion.div>
         )}
 
         {/* Headline metrics */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <DashboardStat
             label="Total Students" icon="ti-users" value={totalStudents} loading={loading}
             chipText={`${activeStudents.toLocaleString()} active`} chipTone="up"
@@ -497,12 +503,12 @@ export default function DashboardPage() {
             onOpen={canViewScholarships ? () => navigate("/scholarships") : undefined}
             openLabel="View scholarships"
           />
-        </div>
+        </motion.div>
 
         {/* Revenue — billing roles only; the backend 403s everyone else, so
             showing a ₱0.00 strip to other roles would just mislead. */}
         {canViewFinancials && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {revenueCells.map((item) => (
               <Card key={item.key} padding="md" className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
@@ -519,7 +525,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => navigate(item.link)}
-                    className="focus-ring rounded-sm text-left text-xl font-bold tracking-[-0.02em] text-neutral-900 transition-colors hover:text-brand-500"
+                    className="focus-ring rounded-sm text-left text-xl font-bold tracking-[-0.02em] text-neutral-900 transition-colors hover:text-brand-600"
                     style={{
                       filter: showAmounts ? "none" : "blur(8px)",
                       userSelect: showAmounts ? "auto" : "none",
@@ -631,14 +637,14 @@ export default function DashboardPage() {
                 )}
               </div>
             </Card>
-          </div>
+          </motion.div>
         )}
 
         {/* The three questions the dashboard exists to answer, in one row:
             where students are in the process, who needs help, and whether the
             school is turning up. All three are scoped server-side — a teacher
             sees their own advisory roster, not the school. */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <PipelineBand
             pipeline={summary?.pipeline}
             loading={loading}
@@ -659,9 +665,9 @@ export default function DashboardPage() {
             }
           />
           <AttendanceBand series={summary?.attendance_series} loading={loading} compact />
-        </div>
+        </motion.div>
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <motion.div variants={pageVariants.item} className="flex min-h-0 flex-1 flex-col">
           <Panel
             title="Recent Enrollments"
             padding="none"
@@ -708,8 +714,8 @@ export default function DashboardPage() {
               ))}
             </Table>
           </Panel>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </>
   );
 }

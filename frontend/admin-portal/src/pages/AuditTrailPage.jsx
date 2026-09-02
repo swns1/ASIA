@@ -231,7 +231,7 @@ function Th({ children, sortable, active, direction, onClick, align = "left", st
     <th style={thStyle}>
       <button onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", color: "inherit", font: "inherit", textTransform: "inherit", letterSpacing: "inherit", cursor: "pointer", padding: 0 }}>
         {children}
-        <i className={`ti ${active && direction === "asc" ? "ti-sort-ascending" : "ti-sort-descending"}`} style={{ fontSize: 12, color: active ? C.red : C.micro }} />
+        <i className={`ti ${active && direction === "asc" ? "ti-sort-ascending" : "ti-sort-descending"}`} style={{ fontSize: 12, color: active ? C.redDark : C.micro }} />
       </button>
     </th>
   );
@@ -452,7 +452,7 @@ export default function AuditTrailPage() {
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              <Chip label="All" active={statusFilter === "all"} activeBg={C.redLight} activeColor={C.red} activeBorder={C.redBorder} onClick={() => setStatusFilter("all")} />
+              <Chip label="All" active={statusFilter === "all"} activeBg={C.redLight} activeColor={C.redDark} activeBorder={C.redBorder} onClick={() => setStatusFilter("all")} />
               {Object.entries(STATUS_META).map(([key, meta], idx) => (
                 <Chip key={key} label={meta.label} active={statusFilter === key}
                   activeBg={meta.bg} activeColor={meta.color} activeBorder={meta.border}
@@ -466,7 +466,7 @@ export default function AuditTrailPage() {
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Role</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                <Chip label="All" active={roleFilter === "all"} activeBg={C.redLight} activeColor={C.red} activeBorder={C.redBorder} onClick={() => setRoleFilter("all")} />
+                <Chip label="All" active={roleFilter === "all"} activeBg={C.redLight} activeColor={C.redDark} activeBorder={C.redBorder} onClick={() => setRoleFilter("all")} />
                 {roles.map((role, idx) => (
                   <Chip key={role} label={normalizeRole(role)} active={roleFilter === role}
                     activeBg="#f7eeee" activeColor={C.muted} activeBorder={C.border}
@@ -482,6 +482,7 @@ export default function AuditTrailPage() {
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Module</div>
                 <select
+                  aria-label="Filter by module"
                   value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
                   style={{ height: 36, border: `1.5px solid ${moduleFilter !== "all" ? "#93c5fd" : "#f0e4e4"}`, borderRadius: 10, padding: "0 12px", background: moduleFilter !== "all" ? "#e3f0fd" : C.white, color: moduleFilter !== "all" ? "#1455a0" : C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", fontWeight: moduleFilter !== "all" ? 600 : 400, minWidth: 160 }}
                 >
@@ -492,17 +493,17 @@ export default function AuditTrailPage() {
             )}
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Date</div>
-              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+              <input type="date" aria-label="Filter from date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
                 style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>From</div>
-              <input type="time" value={timeFrom} onChange={e => setTimeFrom(e.target.value)}
+              <input type="time" aria-label="From time" value={timeFrom} onChange={e => setTimeFrom(e.target.value)}
                 style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>To</div>
-              <input type="time" value={timeTo} onChange={e => setTimeTo(e.target.value)}
+              <input type="time" aria-label="To time" value={timeTo} onChange={e => setTimeTo(e.target.value)}
                 style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
             </div>
 
@@ -512,7 +513,7 @@ export default function AuditTrailPage() {
                   initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }}
                   onClick={clearFilters}
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ height: 36, padding: "0 14px", borderRadius: 99, border: `1.5px solid ${C.redBorder}`, background: C.redLight, color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}
+                  style={{ height: 36, padding: "0 14px", borderRadius: 99, border: `1.5px solid ${C.redBorder}`, background: C.redLight, color: C.redDark, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}
                 >
                   <i className="ti ti-x" style={{ fontSize: 12 }} /> Clear filters
                 </motion.button>
@@ -568,7 +569,7 @@ export default function AuditTrailPage() {
                             <div style={{ fontSize: 13, color: C.pale }}>Try adjusting your status, role, module, or date filters.</div>
                             {hasActiveFilters && (
                               <motion.button onClick={clearFilters} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                                style={{ fontSize: 12, color: C.red, background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                                style={{ fontSize: 12, color: C.redDark, background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
                                 Clear filters
                               </motion.button>
                             )}
@@ -594,6 +595,7 @@ export default function AuditTrailPage() {
             </span>
             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
               <select
+                aria-label="Rows per page"
                 value={pageSize}
                 onChange={e => setPageSize(Number(e.target.value))}
                 style={{ height: 32, border: "1px solid #f0e4e4", borderRadius: 8, padding: "0 8px", fontSize: 12, color: "#855c5c", background: "white", fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", marginRight: 4 }}
@@ -602,7 +604,7 @@ export default function AuditTrailPage() {
               </select>
               <motion.button
                 whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                style={pgBtn} disabled={page === 1}
+                style={pgBtn} disabled={page === 1} aria-label="Previous page"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
               >
                 <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
@@ -616,6 +618,8 @@ export default function AuditTrailPage() {
                   key={n}
                   whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
                   style={{ ...pgBtn, ...(n === page ? pgBtnActive : {}) }}
+                  aria-label={`Page ${n}`}
+                  aria-current={n === page ? "page" : undefined}
                   onClick={() => setPage(n)}
                 >
                   {n}
@@ -623,7 +627,7 @@ export default function AuditTrailPage() {
               ))}
               <motion.button
                 whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                style={pgBtn} disabled={page === totalPages}
+                style={pgBtn} disabled={page === totalPages} aria-label="Next page"
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               >
                 <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />

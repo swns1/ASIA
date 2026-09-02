@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
 import Pagination from "../components/Pagination";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -89,6 +90,11 @@ function OverviewTab({ onNavigate }) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [rows,     setRows]     = useState([]);
+  // The roster fetch used to swallow its failure into `setRows([])`, so an
+  // outage or a 403 rendered the same "No students found - try adjusting the
+  // filters" as a genuinely empty result: the page told a registrar to fix
+  // their filters while the server was down.
+  const [loadError, setLoadError] = useState(null);
   const [pageMeta, setPageMeta] = useState({ count: 0, next: null, previous: null });
   const [page,     setPage]     = useState(1);
   const [loading,  setLoading]  = useState(false);
@@ -127,6 +133,7 @@ function OverviewTab({ onNavigate }) {
     const srch = opts.search       ?? debouncedSearch;
 
     setLoading(true);
+    setLoadError(null);
     try {
       const params = {
         page: nextPage,
@@ -175,8 +182,9 @@ function OverviewTab({ onNavigate }) {
       setRows(built);
       setPageMeta(meta);
       setPage(nextPage);
-    } catch {
+    } catch (e) {
       setRows([]);
+      setLoadError(e);
     } finally {
       setLoading(false);
     }
@@ -219,6 +227,7 @@ function OverviewTab({ onNavigate }) {
             <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a", flexShrink: 0 }} />
             <input
               ref={searchInputRef}
+              aria-label="Search students by name or LRN"
               placeholder="Search student name or LRN…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -273,7 +282,7 @@ function OverviewTab({ onNavigate }) {
                     key={o.value}
                     layout
                     initial={false}
-                    animate={{ backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#e03131" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
+                    animate={{ backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#c92a2a" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
                     transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
                     onClick={() => setSchoolYear(o.value)}
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
@@ -330,7 +339,7 @@ function OverviewTab({ onNavigate }) {
                       key={`${schoolLevel}-${g}`}
                       layout
                       initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
-                      animate={{ opacity: 1, y: 0, backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#e03131" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
+                      animate={{ opacity: 1, y: 0, backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#c92a2a" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
                       transition={{
                         opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
                         y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
@@ -536,7 +545,13 @@ function OverviewTab({ onNavigate }) {
         )}
 
         {/* No results */}
-        {!loading && sorted.length === 0 && rows.length === 0 && (
+        {/* A failed load must look like a failure, say why, and offer a way
+            out — it must never fall through to the empty state. */}
+        {!loading && loadError && (
+          <ErrorState error={loadError} subject="the class list" onRetry={() => fetchPage(1)} />
+        )}
+
+        {!loading && !loadError && sorted.length === 0 && rows.length === 0 && (
           <EmptyState icon="ti-users" title="No students found" subtitle="Try adjusting the filters above." />
         )}
 
@@ -640,7 +655,9 @@ const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const thStyle = {
-  textAlign:"center", fontSize:10.5, fontWeight:600, color:"#8a6a6a",
+  // neutral-600, not 500: these headers sit on the tinted #f9f4f4 sticky
+  // row, where neutral-500 measures 4.43:1 — under AA by a whisker.
+  textAlign:"center", fontSize:10.5, fontWeight:600, color:"#855c5c",
   padding:"12px 16px", borderBottom:"1px solid #f5eaea",
   textTransform:"uppercase", letterSpacing:"0.07em",
 };
@@ -714,7 +731,7 @@ function StudentPicker({ value, onChange }) {
     <div style={{ position:"relative" }}>
       <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:12, padding:"0 14px", height:46 }}>
         <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a" }} />
-        <input placeholder="Search student by name or LRN…" value={query}
+        <input placeholder="Search student by name or LRN…" aria-label="Search students" value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           style={{ flex:1, border:"none", background:"transparent", fontSize:14, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
@@ -1592,10 +1609,10 @@ export default function GradesPage() {
                         style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`, background: active ? "#fff0f0" : "white", cursor:"pointer", textAlign:"left", fontFamily:"'DM Sans',sans-serif", transition:"border-color 0.14s" }}
                       >
                         <div style={{ width:34, height:34, borderRadius:9, background: active ? "#fde8e8" : "#f5f0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          <i className="ti ti-book" style={{ fontSize:15, color: active ? "#e03131" : "#855c5c" }} />
+                          <i className="ti ti-book" style={{ fontSize:15, color: active ? "#c92a2a" : "#855c5c" }} />
                         </div>
                         <div style={{ minWidth:0, flex:1 }}>
-                          <div style={{ fontSize:13, fontWeight:700, color: active ? "#e03131" : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub.subject_name}</div>
+                          <div style={{ fontSize:13, fontWeight:700, color: active ? "#c92a2a" : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub.subject_name}</div>
                           <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2, display:"flex", alignItems:"center", gap:5 }}>
                             <span style={{ fontFamily:"monospace" }}>{sub.subject_code}</span>
                             {hasTpl

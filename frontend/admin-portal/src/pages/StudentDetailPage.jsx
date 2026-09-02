@@ -225,7 +225,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
                 aria-label={showPw ? "Hide password" : "Show password"}
-                className="focus-ring absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
+                className="focus-ring absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
               >
                 <i className={`ti ${showPw ? "ti-eye-off" : "ti-eye"}`} aria-hidden="true" />
               </button>
@@ -306,7 +306,7 @@ function InfoRow({ icon, label, value, mono = false }) {
   return (
     <div className="flex items-start gap-3 border-b border-neutral-200/70 py-3 last:border-0">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
-        <i className={`ti ${icon} text-[14px] text-brand-500`} aria-hidden="true" />
+        <i className={`ti ${icon} text-[14px] text-brand-600`} aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 text-xs font-bold uppercase tracking-[0.07em] text-neutral-500">
@@ -330,7 +330,7 @@ function SectionCard({ title, icon, children, badge, motionProps = {} }) {
       <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3.5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-100">
-            <i className={`ti ${icon} text-[15px] text-brand-500`} aria-hidden="true" />
+            <i className={`ti ${icon} text-[15px] text-brand-600`} aria-hidden="true" />
           </div>
           <h2 className="text-base font-bold text-neutral-900">{title}</h2>
         </div>

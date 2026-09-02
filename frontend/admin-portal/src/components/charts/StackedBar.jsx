@@ -10,10 +10,12 @@
 // wearing a costume.
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 import ChartFrame, { NoData } from "./ChartFrame";
 import { barPath } from "./geometry";
 import { GAP, RADIUS, chartInk } from "./tokens";
+import { chartVariants } from "../../utils/motion";
 
 const W = 760;
 
@@ -58,6 +60,7 @@ export default function StackedBar({
       tip={tip}
       legend={legend}
     >
+      <motion.g variants={chartVariants.container} initial="hidden" animate="visible">
       {laid.map((seg, i) => {
         const isLast = i === laid.length - 1;
         // Trim a surface gap off every segment but the last, so adjacent
@@ -65,7 +68,15 @@ export default function StackedBar({
         const drawWidth = Math.max(1, seg.width - (isLast ? 0 : GAP));
         return (
           <g key={seg.key}>
-            <path
+            <motion.path
+              variants={chartVariants.bar}
+              // `originX: 0` must live in `style`, and it is not the same as a CSS
+              // `transform-origin`. framer-motion writes transform-origin itself
+              // from originX/originY, overwriting any CSS value with its 50%
+              // default — which grows each bar from its centre outward, animating
+              // a quantity the chart never claims. fill-box scopes that origin to
+              // the segment's own box rather than the whole SVG's.
+              style={{ transformBox: "fill-box", originX: 0, cursor: "pointer" }}
               d={barPath(seg.x, barY, drawWidth, barH, i === 0 || isLast ? RADIUS : 0)}
               fill={seg.color}
               onMouseEnter={() =>
@@ -80,7 +91,6 @@ export default function StackedBar({
                 })
               }
               onMouseLeave={() => setTip(null)}
-              style={{ cursor: "pointer" }}
             />
             {/* Direct-label only where the segment is genuinely wide enough to
                 hold the text — otherwise the legend and tooltip carry it. */}
@@ -111,6 +121,7 @@ export default function StackedBar({
           </g>
         );
       })}
+      </motion.g>
     </ChartFrame>
   );
 }

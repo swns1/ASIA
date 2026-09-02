@@ -539,7 +539,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                           onClick={() => setPendingRemove(isPendingThisRemove ? null : en)}
                           disabled={isRemoving}
                           title="Remove from class"
-                          style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#8a6a6a", flexShrink:0 }}>
+                          style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#c92a2a" : "#8a6a6a", flexShrink:0 }}>
                           {isRemoving
                             ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
                             : <i className="ti ti-x" style={{ fontSize:12 }} />}
@@ -1341,7 +1341,7 @@ export default function EnrollmentsPage() {
                   style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
                   <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a", flexShrink:0 }} />
                   <input
-                    placeholder="Search student name or section…"
+                    placeholder="Search student name or section…" aria-label="Search students"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -1394,7 +1394,7 @@ export default function EnrollmentsPage() {
                           initial={false}
                           animate={{
                             backgroundColor: active ? "#fff0f0" : "#ffffff",
-                            color:           active ? "#e03131" : "#855c5c",
+                            color:           active ? "#c92a2a" : "#855c5c",
                             borderColor:     active ? "#e03131" : "#f0e4e4",
                           }}
                           transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -1468,7 +1468,7 @@ export default function EnrollmentsPage() {
                             animate={{
                               opacity: 1, y: 0,
                               backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#e03131" : "#855c5c",
+                              color:           active ? "#c92a2a" : "#855c5c",
                               borderColor:     active ? "#e03131" : "#f0e4e4",
                             }}
                             transition={{
@@ -1701,6 +1701,7 @@ export default function EnrollmentsPage() {
                     transition={{ duration: 0.12 }}
                     style={{ ...pgBtn, opacity: pageMeta.previous ? 1 : 0.3, cursor: pageMeta.previous ? "pointer" : "not-allowed" }}
                     disabled={!pageMeta.previous}
+                    aria-label="Previous page"
                     onClick={() => fetchEnrollments(page - 1)}>
                     <i className="ti ti-chevron-left" style={{ fontSize:13 }} />
                   </motion.button>
@@ -1725,6 +1726,7 @@ export default function EnrollmentsPage() {
                     transition={{ duration: 0.12 }}
                     style={{ ...pgBtn, opacity: pageMeta.next ? 1 : 0.3, cursor: pageMeta.next ? "pointer" : "not-allowed" }}
                     disabled={!pageMeta.next}
+                    aria-label="Next page"
                     onClick={() => fetchEnrollments(page + 1)}>
                     <i className="ti ti-chevron-right" style={{ fontSize:13 }} />
                   </motion.button>

@@ -16,10 +16,12 @@
 //     the plot does not need a number on every point.
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 import ChartFrame, { NoData } from "./ChartFrame";
 import { linePath, niceMax } from "./geometry";
 import { MARKER, STROKE, chartInk } from "./tokens";
+import { chartVariants } from "../../utils/motion";
 
 const PAD_L = 46;
 const PAD_R = 16;
@@ -164,8 +166,11 @@ export default function LineChart({
           return (
             <g key={s.key}>
               {linePath(points).map((d) => (
-                <path
+                <motion.path
                   key={d}
+                  variants={chartVariants.line}
+                  initial="hidden"
+                  animate="visible"
                   d={d}
                   fill="none"
                   stroke={color}

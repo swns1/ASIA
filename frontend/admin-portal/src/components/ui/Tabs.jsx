@@ -72,9 +72,9 @@ export default function Tabs({
               isPill ? "rounded-full px-4 py-2" : "px-4 py-2.5",
               selected
                 ? isPill
-                  ? "bg-brand-100 text-brand-500"
-                  : "text-brand-500 after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand-500"
-                : "text-neutral-600 hover:text-brand-500",
+                  ? "bg-brand-100 text-brand-600"
+                  : "text-brand-600 after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand-500"
+                : "text-neutral-600 hover:text-brand-600",
             ]
               .filter(Boolean)
               .join(" ")}

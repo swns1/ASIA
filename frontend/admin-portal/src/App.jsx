@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { MotionConfig } from "framer-motion";
 import { Toaster } from "react-hot-toast";
 import PrivateRoute from "./components/PrivateRoute";
 import { SchoolYearProvider } from "./context/SchoolYearContext";
 import AppLayout from "./components/AppLayout";
 import GuardianLayout from "./components/GuardianLayout";
 import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
+import PageTransition from "./components/PageTransition";
 import { toasterProps } from "./utils/toastConfig";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -57,18 +59,30 @@ const GUARDIAN = ["guardian"];
 // and remounted on every navigation.
 const StaffShell = () => (
   <AppLayout>
-    <Outlet />
+    <PageTransition>
+      <Outlet />
+    </PageTransition>
   </AppLayout>
 );
 
 const GuardianShell = () => (
   <GuardianLayout>
-    <Outlet />
+    <PageTransition>
+      <Outlet />
+    </PageTransition>
   </GuardianLayout>
 );
 
 export default function App() {
   return (
+    // reducedMotion="user" is the one place the OS "reduce motion" setting
+    // reaches framer-motion. The @media (prefers-reduced-motion) block in
+    // index.css only governs CSS transitions and keyframes; framer-motion
+    // drives style properties from JavaScript frame by frame, so every one of
+    // the ~35 animated components was ignoring that setting entirely. This
+    // disables transform and layout animation while leaving opacity and colour
+    // fades, which is the behaviour the setting actually asks for.
+    <MotionConfig reducedMotion="user">
     <SchoolYearProvider>
     <BrowserRouter>
       <Routes>
@@ -147,5 +161,6 @@ export default function App() {
         work on the login page (which never had a Toaster of its own). */}
     <Toaster {...toasterProps} />
     </SchoolYearProvider>
+    </MotionConfig>
   );
 }

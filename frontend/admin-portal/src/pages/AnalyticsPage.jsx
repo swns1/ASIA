@@ -656,7 +656,7 @@ export default function AnalyticsPage() {
                         <button
                           type="button"
                           onClick={() => setActive("students")}
-                          className="focus-ring rounded-sm font-semibold text-brand-500 hover:underline"
+                          className="focus-ring rounded-sm font-semibold text-brand-600 hover:underline"
                         >
                           Students to follow up
                         </button>{" "}

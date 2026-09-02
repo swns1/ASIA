@@ -274,7 +274,7 @@ export default function PaymentsPage() {
                       fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                       background: active ? "#fff0f0" : "#ffffff",
-                      color: active ? "#e03131" : "#855c5c",
+                      color: active ? "#c92a2a" : "#855c5c",
                       transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                     }}
                   >
@@ -294,7 +294,7 @@ export default function PaymentsPage() {
                   border:`1.5px solid ${filtersOpen || hasDateOrAmount ? "#e03131" : "#f0e4e4"}`,
                   borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap",
                   background: filtersOpen || hasDateOrAmount ? "#fff0f0" : "#ffffff",
-                  color: filtersOpen || hasDateOrAmount ? "#e03131" : "#7a5050",
+                  color: filtersOpen || hasDateOrAmount ? "#c92a2a" : "#7a5050",
                   transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                 }}
               >

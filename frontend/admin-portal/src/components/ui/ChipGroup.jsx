@@ -35,8 +35,8 @@ export default function ChipGroup({
               "focus-ring inline-flex items-center gap-1.5 rounded-full border-[1.5px] font-semibold transition-colors duration-150",
               sizeClass,
               selected
-                ? "border-brand-500 bg-brand-100 text-brand-500"
-                : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-500",
+                ? "border-brand-500 bg-brand-100 text-brand-600"
+                : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600",
             ].join(" ")}
           >
             {opt.icon && <i className={`ti ${opt.icon} text-[13px]`} aria-hidden="true" />}

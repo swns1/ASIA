@@ -90,7 +90,7 @@ export default function Table({
                     <button
                       type="button"
                       onClick={() => onSort(col.key)}
-                      className="focus-ring inline-flex items-center gap-1.5 rounded-sm uppercase tracking-[0.08em] transition-colors hover:text-brand-500"
+                      className="focus-ring inline-flex items-center gap-1.5 rounded-sm uppercase tracking-[0.08em] transition-colors hover:text-brand-600"
                     >
                       {col.label}
                       <i
@@ -100,7 +100,7 @@ export default function Table({
                               ? "ti-sort-ascending"
                               : "ti-sort-descending"
                             : "ti-arrows-sort"
-                        } text-[13px] ${isSorted ? "text-brand-500" : "opacity-50"}`}
+                        } text-[13px] ${isSorted ? "text-brand-600" : "opacity-50"}`}
                         aria-hidden="true"
                       />
                     </button>

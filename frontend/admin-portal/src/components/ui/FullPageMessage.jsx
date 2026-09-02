@@ -6,7 +6,7 @@
 // on react-router — callers pass plain nodes as actions.
 
 const TONES = {
-  brand: "bg-brand-100 text-brand-500",
+  brand: "bg-brand-100 text-brand-600",
   error: "bg-error-50 text-error-500",
   warning: "bg-warning-50 text-warning-500",
   info: "bg-info-50 text-info-500",

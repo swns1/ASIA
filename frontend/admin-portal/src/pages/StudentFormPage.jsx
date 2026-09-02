@@ -159,8 +159,11 @@ function StepBar({ current, onStepClick }) {
                 </AnimatePresence>
               </motion.div>
               <span style={{
-                fontSize: 9, fontWeight: active ? 700 : 500,
-                color: active ? C.red : done ? C.muted : "#c4a4a0",
+                // 11px is the floor tokens.css sets: the 9px this used measured
+                // 2.18:1 on the inactive steps, which is unreadable at any size
+                // and doubly so at nine pixels.
+                fontSize: 11, fontWeight: active ? 700 : 500,
+                color: active ? "#c92a2a" : done ? C.muted : "#8a6a6a",
                 letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap",
               }}>
                 {s.label}
@@ -679,7 +682,7 @@ function DocStatusBadge({ submitted }) {
       <i className="ti ti-circle-check" style={{ fontSize: 12 }} />Submitted
     </span>
   ) : (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#888", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#5c5752", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
       <i className="ti ti-clock" style={{ fontSize: 12 }} />Pending
     </span>
   );

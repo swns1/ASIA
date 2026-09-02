@@ -43,7 +43,7 @@ export default function Card({
 }
 
 const ICON_TONES = {
-  brand: "bg-brand-100 text-brand-500",
+  brand: "bg-brand-100 text-brand-600",
   success: "bg-success-50 text-success-500",
   warning: "bg-warning-50 text-warning-500",
   error: "bg-error-50 text-error-500",
@@ -127,7 +127,7 @@ export function Panel({
       {(title || action) && (
         <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3.5">
           <div className="flex min-w-0 items-center gap-2.5">
-            {icon && <i className={`ti ${icon} text-brand-500`} aria-hidden="true" />}
+            {icon && <i className={`ti ${icon} text-brand-600`} aria-hidden="true" />}
             <div className="min-w-0">
               {title && <h3 className="truncate text-sm font-bold text-neutral-900">{title}</h3>}
               {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}

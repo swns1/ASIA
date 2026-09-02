@@ -1184,7 +1184,7 @@ function StatsTab({ advisory }) {
                         padding: "5px 11px", borderRadius: 7,
                         border: `1.5px solid ${sortBy === opt.key ? "#e03131" : "#f0e4e4"}`,
                         background: sortBy === opt.key ? "#fff0f0" : "white",
-                        color: sortBy === opt.key ? "#e03131" : "#855c5c",
+                        color: sortBy === opt.key ? "#c92a2a" : "#855c5c",
                         fontSize: 11, fontWeight: 700, cursor: "pointer",
                         fontFamily: "'DM Sans',sans-serif",
                       }}
@@ -1289,7 +1289,7 @@ function SectionDetail({ entry }) {
                 borderBottom: `2px solid ${active ? "#e03131" : "transparent"}`,
                 background: "transparent", cursor: "pointer",
                 fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: active ? 700 : 500,
-                color: active ? "#e03131" : "#855c5c",
+                color: active ? "#c92a2a" : "#855c5c",
               }}
             >
               <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />{t.label}
@@ -1364,7 +1364,7 @@ function SectionRail({ sections, selectedKey, onSelect }) {
                   <i className="ti ti-users-group" style={{ fontSize: 15, color: levelColors.color }} />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "#e03131" : "#1a0a0a" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "#c92a2a" : "#1a0a0a" }}>
                     {sectionLabel(a)}
                   </div>
                   <div style={{ fontSize: 11, color: "#8a6a6a" }}>

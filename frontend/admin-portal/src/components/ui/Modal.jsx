@@ -52,7 +52,7 @@ export default function Modal({
       ? "bg-error-50 text-error-500"
       : iconTone === "neutral"
         ? "bg-muted-50 text-muted-500"
-        : "bg-brand-100 text-brand-500";
+        : "bg-brand-100 text-brand-600";
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
@@ -87,7 +87,7 @@ export default function Modal({
             onClick={onClose}
             disabled={loading}
             aria-label="Close dialog"
-            className="focus-ring absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-brand-50 hover:text-brand-500 disabled:opacity-40"
+            className="focus-ring absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-brand-50 hover:text-brand-600 disabled:opacity-40"
           >
             <i className="ti ti-x" aria-hidden="true" />
           </button>

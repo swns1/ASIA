@@ -137,7 +137,7 @@ export default function OcrReviewModal({
               </span>
               <span className="flex gap-2 text-xs">
                 <button type="button" onClick={() => setAll(true)}
-                        className="focus-ring rounded-sm font-semibold text-brand-500 hover:underline">
+                        className="focus-ring rounded-sm font-semibold text-brand-600 hover:underline">
                   Select all
                 </button>
                 <button type="button" onClick={() => setAll(false)}

@@ -97,7 +97,7 @@ function StatusBadge({ submitted }) {
       <i className="ti ti-circle-check" style={{ fontSize: 12 }} />Submitted
     </span>
   ) : (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#888", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#5c5752", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
       <i className="ti ti-clock" style={{ fontSize: 12 }} />Pending
     </span>
   );
@@ -643,7 +643,7 @@ export default function RequirementsPage() {
                             animate={{
                               opacity: 1, y: 0,
                               backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#e03131" : "#855c5c",
+                              color:           active ? "#c92a2a" : "#855c5c",
                               borderColor:     active ? "#e03131" : "#f0e4e4",
                             }}
                             transition={{

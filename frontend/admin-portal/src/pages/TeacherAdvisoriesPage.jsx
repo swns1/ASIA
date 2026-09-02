@@ -192,7 +192,7 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
                       borderRadius: 10, border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       background: active ? "#fff0f0" : "white", cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: active ? 700 : 500,
-                      color: active ? "#e03131" : "#7a5050",
+                      color: active ? "#c92a2a" : "#7a5050",
                     }}>
                     <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
                   </button>
@@ -471,7 +471,7 @@ export default function TeacherAdvisoriesPage() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       background: active ? "#fff0f0" : "white",
-                      color: active ? "#e03131" : "#855c5c",
+                      color: active ? "#c92a2a" : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                     }}

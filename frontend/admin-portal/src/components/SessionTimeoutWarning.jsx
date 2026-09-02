@@ -85,7 +85,7 @@ export default function SessionTimeoutWarning() {
         >
           <div className="mb-3 flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-200">
-              <i className="ti ti-clock text-[18px] text-brand-500" aria-hidden="true" />
+              <i className="ti ti-clock text-[18px] text-brand-600" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <div className="text-sm font-bold text-neutral-900">Session expiring soon</div>

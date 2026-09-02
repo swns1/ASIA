@@ -445,7 +445,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                       width: 24, height: 24, borderRadius: "50%",
                       fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
                       background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
-                      color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#8a6a6a" : "#2a1a1a",
+                      color: isToday ? "white" : isSelected ? "#c92a2a" : isWeekend ? "#8a6a6a" : "#2a1a1a",
                       transition: "background-color 0.15s ease, color 0.15s ease",
                     }}>
                       {day}
@@ -1077,7 +1077,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           <button
             onClick={() => setFilterType("all")}
-            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "#e03131" : "#f0e4e4"}`, background: filterType === "all" ? "#fff0f0" : "white", fontSize: 10.5, color: filterType === "all" ? "#e03131" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
+            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "#e03131" : "#f0e4e4"}`, background: filterType === "all" ? "#fff0f0" : "white", fontSize: 10.5, color: filterType === "all" ? "#c92a2a" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
             All
           </button>
           {EVENT_TYPES.map((t) => {
@@ -1387,7 +1387,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
           { value: "month", label: "Monthly Sheets",  icon: "ti-layout-grid" },
         ].map((opt) => (
           <button key={opt.value} onClick={() => setPrintView(opt.value)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#e03131" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#c92a2a" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
             <i className={`ti ${opt.icon}`} style={{ fontSize: 13 }} />{opt.label}
           </button>
         ))}
@@ -1618,7 +1618,7 @@ export default function AcademicCalendarPage() {
                       height: 26, padding: "0 9px", borderRadius: 99, cursor: "pointer",
                       border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       background: active ? "#fff0f0" : "white",
-                      fontSize: 11, color: active ? "#e03131" : "#855c5c",
+                      fontSize: 11, color: active ? "#c92a2a" : "#855c5c",
                       fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500,
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
                     }}>

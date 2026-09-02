@@ -78,7 +78,7 @@ export default function AppLayout({ children }) {
               onClick={() => setMobileOpen(true)}
               aria-label="Open navigation menu"
               aria-expanded={mobileOpen}
-              className="focus-ring flex h-9 w-9 items-center justify-center rounded-md text-neutral-700 transition-colors hover:bg-brand-50 hover:text-brand-500"
+              className="focus-ring flex h-9 w-9 items-center justify-center rounded-md text-neutral-700 transition-colors hover:bg-brand-50 hover:text-brand-600"
             >
               <i className="ti ti-menu-2 text-[19px]" aria-hidden="true" />
             </button>

@@ -90,7 +90,7 @@ function PasswordInput({ id, value, onChange, placeholder, autoComplete }) {
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Hide password" : "Show password"}
-        className="focus-ring absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
+        className="focus-ring absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
       >
         <i className={`ti ${visible ? "ti-eye-off" : "ti-eye"}`} aria-hidden="true" />
       </button>
@@ -425,7 +425,7 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
               <button
                 type="button"
                 onClick={removePic}
-                className="focus-ring rounded-sm text-xs text-neutral-500 underline hover:text-brand-500"
+                className="focus-ring rounded-sm text-xs text-neutral-500 underline hover:text-brand-600"
               >
                 Remove photo
               </button>
@@ -470,7 +470,7 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
           type="button"
           onClick={() => setChangingPw((v) => !v)}
           aria-expanded={changingPw}
-          className="focus-ring mb-3 inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-500 hover:underline"
+          className="focus-ring mb-3 inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-600 hover:underline"
         >
           <i
             className={`ti ${changingPw ? "ti-chevron-up" : "ti-chevron-down"} text-[14px]`}
@@ -685,7 +685,7 @@ export default function UsersPage() {
                   type="button"
                   onClick={() => setSearch("")}
                   aria-label="Clear search"
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-500"
+                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
                 >
                   <i className="ti ti-x text-[13px]" aria-hidden="true" />
                 </button>

@@ -24,12 +24,12 @@ const VARIANTS = {
     "disabled:bg-none disabled:bg-brand-400 disabled:shadow-none disabled:translate-y-0",
   secondary:
     "bg-white text-neutral-700 border-[1.5px] border-neutral-300 " +
-    "hover:border-brand-300 hover:text-brand-500 hover:bg-brand-50 " +
+    "hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 " +
     "active:scale-[0.98] focus-visible:ring-brand-500/25 " +
     "disabled:bg-neutral-50 disabled:text-neutral-400 disabled:border-neutral-200 disabled:hover:bg-neutral-50",
   ghost:
     "bg-transparent text-neutral-600 " +
-    "hover:bg-brand-50 hover:text-brand-500 " +
+    "hover:bg-brand-50 hover:text-brand-600 " +
     "active:scale-[0.98] focus-visible:ring-brand-500/25 " +
     "disabled:text-neutral-400 disabled:hover:bg-transparent",
   // Deliberately a deeper, flatter red than the vivid brand red, so a

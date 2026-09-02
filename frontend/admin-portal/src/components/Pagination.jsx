@@ -12,8 +12,8 @@ const BTN =
   "focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-sm border px-2 text-xs " +
   "transition-colors disabled:cursor-not-allowed disabled:opacity-40";
 const BTN_IDLE =
-  "border-neutral-300 bg-white text-neutral-600 hover:enabled:border-brand-500 hover:enabled:bg-brand-100 hover:enabled:text-brand-500";
-const BTN_ACTIVE = "border-brand-500 bg-brand-100 font-bold text-brand-500";
+  "border-neutral-300 bg-white text-neutral-600 hover:enabled:border-brand-500 hover:enabled:bg-brand-100 hover:enabled:text-brand-600";
+const BTN_ACTIVE = "border-brand-500 bg-brand-100 font-bold text-brand-600";
 
 export default function Pagination({
   page,

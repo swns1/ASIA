@@ -490,7 +490,7 @@ export default function SubjectsPage() {
                           animate={{
                             opacity: 1, y: 0,
                             backgroundColor: active ? "#fff0f0" : "#ffffff",
-                            color:           active ? "#e03131" : "#855c5c",
+                            color:           active ? "#c92a2a" : "#855c5c",
                             borderColor:     active ? "#e03131" : "#f0e4e4",
                           }}
                           transition={{

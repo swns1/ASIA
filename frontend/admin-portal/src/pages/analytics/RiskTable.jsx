@@ -99,7 +99,7 @@ function ReasonCell({ reasons }) {
             e.stopPropagation();
             setExpanded(true);
           }}
-          className="focus-ring self-start rounded-sm text-xs font-semibold text-brand-500 hover:underline"
+          className="focus-ring self-start rounded-sm text-xs font-semibold text-brand-600 hover:underline"
         >
           +{hidden} more
         </button>
