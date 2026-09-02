@@ -25,7 +25,7 @@ export function SignatureBlock({ heading, printedName, role, caption, width = 20
       <div style={{ borderTop: `1px solid ${PRINT_COLORS.dark}`, width, margin: "0 auto 4px" }} />
       {printedName && <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLORS.dark }}>{printedName}</div>}
       <div>{role}</div>
-      {caption && <div style={{ fontSize: 9, color: "#8a7a7a", marginTop: 2 }}>{caption}</div>}
+      {caption && <div style={{ fontSize: 9, color: "#8a6a6a", marginTop: 2 }}>{caption}</div>}
     </div>
   );
 }

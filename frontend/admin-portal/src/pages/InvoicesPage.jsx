@@ -59,7 +59,7 @@ const PLAN_META = {
   monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd" },
   quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0" },
   semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd" },
-  annual:      { label:"Annual",      color:"#d97706", bg:"#fdf5e8" },
+  annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8" },
 };
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
@@ -127,19 +127,19 @@ function GenerateModal({ onClose, onGenerated }) {
         <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:12 }}>
             <div style={{ width:38, height:38, borderRadius:10, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-receipt" style={{ fontSize:18, color:"#e03131" }} />
+              <i className="ti ti-receipt" style={{ fontSize:18, color:"#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Generate Invoice</div>
-              <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Auto-creates invoice from fee schedule + scholarships</div>
+              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Auto-creates invoice from fee schedule + scholarships</div>
             </div>
           </div>
           <motion.button
             onClick={onClose}
-            whileHover={{ scale:1.1, color:"#e03131" }}
+            whileHover={{ scale:1.1, color:"#c92a2a" }}
             whileTap={{ scale:0.9 }}
             transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", fontSize:20, display:"flex", alignItems:"center" }}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}
           >
             <i className="ti ti-x" />
           </motion.button>
@@ -165,22 +165,22 @@ function GenerateModal({ onClose, onGenerated }) {
                 animate={{ opacity:1, scale:1 }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid #fde2de", borderRadius:10, background:"#fff8f6" }}
               >
-                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#e03131" }} />
+                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#c92a2a" }} />
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{selected.student_name ?? `Enrollment #${selected.enrollment_id}`}</div>
-                  <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>S.Y. {selected.school_year} · {selected.grade_level} · {selected.section}</div>
+                  <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>S.Y. {selected.school_year} · {selected.grade_level} · {selected.section}</div>
                 </div>
                 <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"5px 10px", fontSize:12, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
               </motion.div>
             ) : (
               <div style={{ position:"relative" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#c0a0a0" }} />
+                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
                   <input placeholder="Search by student name, LRN, or grade…" value={search}
                     onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
                     style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-                  {loading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#e03131", animation:"spin 1s linear infinite" }} />}
+                  {loading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
                 </div>
                 <AnimatePresence>
                   {open && search && (
@@ -191,16 +191,16 @@ function GenerateModal({ onClose, onGenerated }) {
                       transition={{ duration:0.14 }}
                       style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}
                     >
-                      {enrollments.length === 0 && !loading && <div style={{ padding:"16px", textAlign:"center", color:"#b09090", fontSize:13 }}>No enrolled students found.</div>}
+                      {enrollments.length === 0 && !loading && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No enrolled students found.</div>}
                       {enrollments.map((en) => (
                         <div key={en.enrollment_id} onClick={() => { setSelected(en); setOpen(false); setSearch(""); }}
                           style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
                           onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
                           onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
-                          <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#e03131" }} />
+                          <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#c92a2a" }} />
                           <div>
                             <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en.student_name ?? `Enrollment #${en.enrollment_id}`}</div>
-                            <div style={{ fontSize:11, color:"#b09090" }}>S.Y. {en.school_year} · {en.grade_level} · {en.section}</div>
+                            <div style={{ fontSize:11, color:"#8a6a6a" }}>S.Y. {en.school_year} · {en.grade_level} · {en.section}</div>
                           </div>
                         </div>
                       ))}
@@ -214,7 +214,7 @@ function GenerateModal({ onClose, onGenerated }) {
           {/* Payment plan */}
           <div style={{ marginBottom:6 }}>
             <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:8 }}>
               {Object.entries(PLAN_META).map(([val, meta]) => {
                 const active = plan === val;
                 const discountNote = val === "semi_annual" ? " · 3% off tuition" : val === "annual" ? " · 5% off tuition" : "";
@@ -229,7 +229,7 @@ function GenerateModal({ onClose, onGenerated }) {
                     transition={{ duration:0.15, ease:"easeOut" }}
                     style={{ padding:"12px 14px", borderRadius:12, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textAlign:"left" }}>
                     <div style={{ fontSize:13, fontWeight:700, color:active ? meta.color : "#1a0a0a" }}>{meta.label}</div>
-                    <div style={{ fontSize:11, color:active ? meta.color : "#b09090", marginTop:2, opacity:0.85 }}>
+                    <div style={{ fontSize:11, color:active ? meta.color : "#8a6a6a", marginTop:2, opacity:0.85 }}>
                       {val === "monthly" ? "10 installments (Jun–Mar)" : val === "quarterly" ? "4 installments" : val === "semi_annual" ? "2 installments" : "1 installment"}
                       {discountNote}
                     </div>
@@ -243,10 +243,10 @@ function GenerateModal({ onClose, onGenerated }) {
         <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
           <motion.button
             onClick={onClose}
-            whileHover={{ borderColor:"#e03131", color:"#e03131" }}
+            whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
             whileTap={{ scale:0.97 }}
             transition={{ duration:0.12 }}
-            style={{ background:"transparent", color:"#9a7070", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}
+            style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}
           >Cancel</motion.button>
           <motion.button
             onClick={handleGenerate}
@@ -299,7 +299,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
   );
 
   if (!invoice) return (
-    <div style={{ padding:"40px", textAlign:"center", color:"#b09090", fontSize:13, fontStyle:"italic" }}>Failed to load invoice.</div>
+    <div style={{ padding:"40px", textAlign:"center", color:"#8a6a6a", fontSize:13, fontStyle:"italic" }}>Failed to load invoice.</div>
   );
 
   const en         = invoice.enrollment_detail;
@@ -335,15 +335,15 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               <span style={{ fontSize:18, fontWeight:700, color:"#1a0a0a" }}>{invoice.invoice_no}</span>
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:statusMeta.bg, color:statusMeta.color }}>{statusMeta.label}</span>
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:planMeta.bg, color:planMeta.color }}>{planMeta.label}</span>
-              {invoice.recalculated_at && <span style={{ fontSize:10, color:"#b09090", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
+              {invoice.recalculated_at && <span style={{ fontSize:10, color:"#8a6a6a", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
             </div>
             {en && (
               <div style={{ fontSize:13, color:"#5a4a4a" }}>
                 <span style={{ fontWeight:600 }}>{en.student_name}</span>
-                <span style={{ color:"#b09090" }}> · LRN {en.lrn} · {en.grade_level} · {en.section} · S.Y. {en.school_year}</span>
+                <span style={{ color:"#8a6a6a" }}> · LRN {en.lrn} · {en.grade_level} · {en.section} · S.Y. {en.school_year}</span>
               </div>
             )}
-            <div style={{ fontSize:12, color:"#b09090", marginTop:4 }}>Issued {fmtDate(invoice.invoice_date)} · Next due: {fmtDate(invoice.due_date)}</div>
+            <div style={{ fontSize:12, color:"#8a6a6a", marginTop:4 }}>Issued {fmtDate(invoice.invoice_date)} · Next due: {fmtDate(invoice.due_date)}</div>
           </div>
           {invoice.status !== "void" && (
             <div style={{ display:"flex", gap:8 }}>
@@ -361,16 +361,16 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                 whileHover={{ borderColor: "#1e3a5f", color: "#1e3a5f" }}
                 whileTap={{ scale: 0.96 }}
                 transition={{ duration: 0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#9a7070", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#855c5c", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
               >
                 <i className="ti ti-printer" style={{ fontSize: 13 }} />Print
               </motion.button>
               <motion.button
                 onClick={() => setShowVoidConfirm(true)}
-                whileHover={{ borderColor:"#e03131", color:"#e03131" }}
+                whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
                 whileTap={{ scale:0.96 }}
                 transition={{ duration:0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#9a7070", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#855c5c", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
               >
                 <i className="ti ti-ban" style={{ fontSize:13 }} />Void
               </motion.button>
@@ -382,12 +382,12 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
         <div style={{ marginTop:16 }}>
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
             <div>
-              <span style={{ fontSize:11, color:"#b09090" }}>Total paid </span>
+              <span style={{ fontSize:11, color:"#8a6a6a" }}>Total paid </span>
               <span style={{ fontSize:14, fontWeight:700, color:"#2e6b0d" }}>{fmt(totalPaid)}</span>
-              <span style={{ fontSize:11, color:"#b09090" }}> of {fmt(netAmount)}</span>
+              <span style={{ fontSize:11, color:"#8a6a6a" }}> of {fmt(netAmount)}</span>
             </div>
             <div>
-              <span style={{ fontSize:11, color:"#b09090" }}>Balance </span>
+              <span style={{ fontSize:11, color:"#8a6a6a" }}>Balance </span>
               <span style={{ fontSize:14, fontWeight:700, color: balance > 0 ? "#a32d2d" : "#2e6b0d" }}>{fmt(balance)}</span>
             </div>
           </div>
@@ -410,10 +410,10 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
             <motion.button
               key={t.id}
               onClick={() => setTab(t.id)}
-              whileHover={active ? {} : { color:"#e03131" }}
+              whileHover={active ? {} : { color:"#c92a2a" }}
               whileTap={{ scale:0.97 }}
               transition={{ duration:0.12 }}
-              style={{ display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", borderRadius:8, border:"none", background:"transparent", color:active ? "white" : "#9a7070", fontSize:12, fontWeight:active ? 700 : 500, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", position:"relative", zIndex:1, whiteSpace:"nowrap" }}
+              style={{ display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", borderRadius:8, border:"none", background:"transparent", color:active ? "white" : "#855c5c", fontSize:12, fontWeight:active ? 700 : 500, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", position:"relative", zIndex:1, whiteSpace:"nowrap" }}
             >
               {active && (
                 <motion.div
@@ -446,7 +446,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
             style={{ display:"flex", flexDirection:"column", gap:12 }}
           >
             {[
-              { key:"tuition", items:tuitionItems, label:"Tuition Fees",        color:"#e03131", bg:"#fff0f0", note:"Discounts applied below" },
+              { key:"tuition", items:tuitionItems, label:"Tuition Fees",        color:"#c92a2a", bg:"#fff0f0", note:"Discounts applied below" },
               { key:"misc",    items:miscItems,    label:"Miscellaneous Fees",   color:"#1455a0", bg:"#e3f0fd", note:"No discount" },
               { key:"other",   items:otherItems,   label:"Other Fees",           color:"#2e6b0d", bg:"#e8f5e0", note:"No discount" },
             ].filter((g) => g.items.length > 0).map((group) => (
@@ -512,7 +512,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               <thead>
                 <tr style={{ background:"#fdfafa" }}>
                   {["#","Due Date","Amount","Paid","Balance","Status"].map((h) => (
-                    <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                    <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -524,7 +524,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                     <tr key={inst.installment_id} style={{ borderBottom:"1px solid #f9f0f0" }}
                       onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
                       onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background=""); }}>
-                      <td style={{ padding:"11px 18px", color:"#b09090" }}>{inst.sequence}</td>
+                      <td style={{ padding:"11px 18px", color:"#8a6a6a" }}>{inst.sequence}</td>
                       <td style={{ padding:"11px 18px", fontWeight:600, color:"#1a0a0a" }}>{fmtDate(inst.due_date)}</td>
                       <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmt(inst.amount)}</td>
                       <td style={{ padding:"11px 18px", color:"#2e6b0d", fontWeight:600 }}>{fmt(inst.amount_paid)}</td>
@@ -548,7 +548,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               { value:"cash",          color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-cash"          },
               { value:"gcash",         color:"#1455a0", bg:"#e3f0fd", icon:"ti-device-mobile"  },
               { value:"bank_transfer", color:"#7c3aed", bg:"#f0e8fd", icon:"ti-building-bank"  },
-              { value:"card",          color:"#d97706", bg:"#fdf5e8", icon:"ti-credit-card"    },
+              { value:"card",          color:"#854f0b", bg:"#fdf5e8", icon:"ti-credit-card"    },
               { value:"check",         color:"#854f0b", bg:"#faeeda", icon:"ti-file-text"      },
               { value:"others",        color:"#5c5752", bg:"#f0ede8", icon:"ti-dots"           },
             ].map((m) => [m.value, m])
@@ -589,7 +589,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                   <div style={{ width:44, height:44, borderRadius:12, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
                     <i className="ti ti-cash" style={{ fontSize:20, color:"#2e6b0d" }} />
                   </div>
-                  <div style={{ fontSize:13, color:"#b09090", fontStyle:"italic" }}>No payments recorded yet.</div>
+                  <div style={{ fontSize:13, color:"#8a6a6a", fontStyle:"italic" }}>No payments recorded yet.</div>
                   {invoice.status !== "void" && (
                     <motion.button
                       onClick={() => onRecordPayment(invoiceId)}
@@ -608,7 +608,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                     <thead>
                       <tr style={{ background:"#fdfafa" }}>
                         {["Date","Amount","Method","Reference","Notes",""].map((h) => (
-                          <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                          <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -643,7 +643,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                     </tbody>
                   </table>
                   <div style={{ padding:"10px 18px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", justifyContent:"flex-end", gap:20 }}>
-                    <span style={{ fontSize:12, color:"#b09090" }}>Total collected</span>
+                    <span style={{ fontSize:12, color:"#8a6a6a" }}>Total collected</span>
                     <span style={{ fontSize:13, fontWeight:700, color:"#2e6b0d" }}>{fmt(totalPaidAmt)}</span>
                   </div>
                 </>
@@ -982,7 +982,7 @@ export default function InvoicesPage() {
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                           <div style={{ display:"flex", gap:5, alignItems:"center" }}>
                             <span style={{ fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background:pm.bg, color:pm.color }}>{pm.label}</span>
-                            <span style={{ fontSize:11, color:"#b09090" }}>{en?.grade_level ?? ""}</span>
+                            <span style={{ fontSize:11, color:"#8a6a6a" }}>{en?.grade_level ?? ""}</span>
                           </div>
                           <span style={{ fontSize:12, fontWeight:700, color: balance > 0 ? "#a32d2d" : "#2e6b0d" }}>{fmt(balance)} bal.</span>
                         </div>
@@ -1014,7 +1014,7 @@ export default function InvoicesPage() {
               const overdueCount = invoices.filter((i) => i.due_date && new Date(i.due_date) < new Date() && i.status !== "paid" && i.status !== "void").length;
               return (
                 <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", gap:12, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:11, color:"#b09090" }}>
+                  <div style={{ fontSize:11, color:"#8a6a6a" }}>
                     <span style={{ fontWeight:600, color:"#1a0a0a" }}>{fmt(pageTotal)}</span> outstanding this page
                   </div>
                   {overdueCount > 0 && (
@@ -1052,10 +1052,10 @@ export default function InvoicesPage() {
                 animate={{ opacity:1 }}
                 exit={{ opacity:0 }}
                 transition={{ duration:0.18 }}
-                style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"56px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:"#b09090", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
+                style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"56px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:"#8a6a6a", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
               >
                 <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <i className="ti ti-receipt" style={{ fontSize:22, color:"#e08080" }} />
+                  <i className="ti ti-receipt" style={{ fontSize:22, color:"#8a6a6a" }} />
                 </div>
                 <div style={{ fontSize:14, fontWeight:600, color:"#7a5050" }}>Select an invoice</div>
                 <div style={{ fontSize:13 }}>Click an invoice on the left to view its details</div>

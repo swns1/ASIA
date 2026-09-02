@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     "requirements",
     "academic_calendar",
     "attendance",
+    "dashboard",
 ]
 
 MIDDLEWARE = [

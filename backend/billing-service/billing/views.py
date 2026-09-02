@@ -303,14 +303,32 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         outstanding = net - collected
         count = invoice_qs.aggregate(n=Count("invoice_id"))["n"] or 0
 
+        # Collections grouped by month, for the dashboard's trend chart. The
+        # totals above are balances as of now and cannot show how the school
+        # got there; StudentPayment.payment_date is the only real time axis in
+        # billing, so the series is derived from the same invoice scope rather
+        # than a separate query path that could drift out of agreement with it.
+        from django.db.models.functions import TruncMonth
+        from .services import shape_collections_series
+
+        series_rows = (
+            StudentPayment.objects
+            .filter(invoice_id__in=invoice_ids)
+            .annotate(month=TruncMonth("payment_date"))
+            .values("month")
+            .annotate(collected=Sum("amount_paid"))
+            .order_by("month")
+        )
+
         return Response({
-            "school_year":      school_year or "all",
-            "invoice_count":    count,
-            "gross_billed":     f"{gross:.2f}",
-            "total_discounts":  f"{discounts:.2f}",
-            "net_billed":       f"{net:.2f}",
-            "total_collected":  f"{collected:.2f}",
-            "outstanding":      f"{outstanding:.2f}",
+            "school_year":        school_year or "all",
+            "invoice_count":      count,
+            "gross_billed":       f"{gross:.2f}",
+            "total_discounts":    f"{discounts:.2f}",
+            "net_billed":         f"{net:.2f}",
+            "total_collected":    f"{collected:.2f}",
+            "outstanding":        f"{outstanding:.2f}",
+            "collections_series": shape_collections_series(series_rows),
         })
 
     @action(detail=True, methods=["get"], url_path="breakdown")

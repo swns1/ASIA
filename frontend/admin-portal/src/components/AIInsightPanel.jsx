@@ -25,7 +25,7 @@ function renderInterpretation(text) {
       const label = line.replace(/\*\*/g, "");
       elements.push(
         <div key={key++} style={{
-          fontSize: 10.5, fontWeight: 700, color: "#e03131",
+          fontSize: 10.5, fontWeight: 700, color: "#c92a2a",
           textTransform: "uppercase", letterSpacing: "0.08em",
           marginTop: 14, marginBottom: 4,
         }}>
@@ -147,12 +147,12 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
               border: "1px solid #fca5a5",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <i className="ti ti-sparkles" style={{ fontSize: 15, color: "#e03131" }} />
+              <i className="ti ti-sparkles" style={{ fontSize: 15, color: "#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{title}</div>
               {description && (
-                <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>{description}</div>
+                <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>{description}</div>
               )}
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                   display: "flex", alignItems: "center", gap: 6,
                   height: 32, padding: "0 12px",
                   border: "1px solid #f0e4e4", borderRadius: 8,
-                  background: "white", fontSize: 12, color: "#9a7070",
+                  background: "white", fontSize: 12, color: "#855c5c",
                   cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 500, transition: "all 0.12s",
                 }}
@@ -186,7 +186,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                 background: disabled || status === "loading"
                   ? "#f0dada"
                   : "linear-gradient(135deg, #e03131, #c92a2a)",
-                color: disabled || status === "loading" ? "#b09090" : "white",
+                color: disabled || status === "loading" ? "#8a6a6a" : "white",
                 border: "none", borderRadius: 9,
                 fontSize: 12.5, fontWeight: 700,
                 cursor: disabled || status === "loading" ? "not-allowed" : "pointer",
@@ -218,20 +218,20 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             <div style={{
               display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", padding: "28px 20px", gap: 10,
-              color: "#c0a0a0", textAlign: "center",
+              color: "#8a6a6a", textAlign: "center",
             }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
                 background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
-                <i className="ti ti-sparkles" style={{ fontSize: 22, color: "#e8a0a0" }} />
+                <i className="ti ti-sparkles" style={{ fontSize: 22, color: "#8a6a6a" }} />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#b09090" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#8a6a6a" }}>
                 No analysis yet
               </div>
-              <div style={{ fontSize: 12, color: "#c8b0b0", maxWidth: 280, lineHeight: 1.6 }}>
-                Click <strong style={{ color: "#e03131" }}>Analyze</strong> to generate an AI-powered interpretation of this data using Gemini.
+              <div style={{ fontSize: 12, color: "#8a6a6a", maxWidth: 280, lineHeight: 1.6 }}>
+                Click <strong style={{ color: "#c92a2a" }}>Analyze</strong> to generate an AI-powered interpretation of this data using Gemini.
               </div>
             </div>
           )}
@@ -262,10 +262,10 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
               display: "flex", alignItems: "flex-start", gap: 10,
               animation: "fadeUp 0.2s ease both",
             }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#e03131", flexShrink: 0, marginTop: 1 }} />
+              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#c92a2a", flexShrink: 0, marginTop: 1 }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#b91c1c" }}>Analysis failed</div>
-                <div style={{ fontSize: 12, color: "#c0504a", marginTop: 3, lineHeight: 1.5 }}>{errMsg}</div>
+                <div style={{ fontSize: 12, color: "#9b2020", marginTop: 3, lineHeight: 1.5 }}>{errMsg}</div>
               </div>
             </div>
           )}
@@ -278,8 +278,8 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                 marginTop: 16, paddingTop: 12, borderTop: "1px solid #f5eaea",
                 display: "flex", alignItems: "center", gap: 6,
               }}>
-                <i className="ti ti-sparkles" style={{ fontSize: 11, color: "#e8a0a0" }} />
-                <span style={{ fontSize: 10.5, color: "#c0a8a8", fontStyle: "italic" }}>
+                <i className="ti ti-sparkles" style={{ fontSize: 11, color: "#8a6a6a" }} />
+                <span style={{ fontSize: 10.5, color: "#8a6a6a", fontStyle: "italic" }}>
                   {source === "groq" ? "Generated by Groq (Llama 4)" : "Generated by Gemini"} · For guidance purposes only
                 </span>
               </div>

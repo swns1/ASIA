@@ -5,6 +5,21 @@ const enrollmentClient = createApiClient({
   timeout: 15000,
 });
 
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+/**
+ * One aggregate call behind the whole staff dashboard: enrolment pipeline,
+ * level distribution, weekly attendance and risk bands.
+ *
+ * Replaces eleven list requests that each fetched a page with `page_size=1`
+ * just to read `.count` off it — five of those only to break enrolment down by
+ * school level. It is also the only source of period-grouped data in the API,
+ * so the trend charts cannot be built without it.
+ *
+ * Scoped server-side: a teacher gets their own advisory roster, not the school.
+ */
+export const getDashboardSummary = (params = {}) =>
+  enrollmentClient.get("/dashboard/summary/", { params }).then((r) => r.data);
+
 // ── Enrollments ───────────────────────────────────────────────────────────────
 export const getEnrollments = (params = {}) =>
   enrollmentClient.get("/enrollments/", { params }).then((r) => r.data);

@@ -483,7 +483,7 @@ export default function StudentDetailPage() {
                 ))}
               </div>
             ) : !student ? (
-              <div style={{ textAlign:"center", padding:"80px 0", color:"#b09090", fontSize:15 }}>
+              <div style={{ textAlign:"center", padding:"80px 0", color:"#8a6a6a", fontSize:15 }}>
                 Student not found.
               </div>
             ) : (
@@ -530,7 +530,7 @@ export default function StudentDetailPage() {
                       <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1.2, letterSpacing:"-0.01em" }}>
                         {fullName}
                       </div>
-                      <div style={{ fontSize:12, color:"#b09090", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:12, color:"#8a6a6a", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                         {student.student_number && (
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <i className="ti ti-id-badge" style={{ fontSize:13 }} />
@@ -579,7 +579,7 @@ export default function StudentDetailPage() {
                       {student.mobile_number && (
                         <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#5a4a4a" }}>
                           <div style={{ width:30, height:30, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <i className="ti ti-phone" style={{ fontSize:13, color:"#e03131" }} />
+                            <i className="ti ti-phone" style={{ fontSize:13, color:"#c92a2a" }} />
                           </div>
                           {student.mobile_number}
                         </div>
@@ -587,7 +587,7 @@ export default function StudentDetailPage() {
                       {student.email && (
                         <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#5a4a4a" }}>
                           <div style={{ width:30, height:30, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <i className="ti ti-mail" style={{ fontSize:13, color:"#e03131" }} />
+                            <i className="ti ti-mail" style={{ fontSize:13, color:"#c92a2a" }} />
                           </div>
                           {student.email}
                         </div>
@@ -691,12 +691,12 @@ export default function StudentDetailPage() {
                               </div>
                               <div>
                                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
-                                <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
+                                <div style={{ fontSize:11.5, color:"#8a6a6a", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
                               </div>
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                               {g.is_primary_contact && (
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#e03131", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#c92a2a", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
                                   <i className="ti ti-star-filled" style={{ fontSize:10 }} />
                                   Primary Contact
                                 </span>
@@ -716,7 +716,7 @@ export default function StudentDetailPage() {
                               ) : null}
                               {g.user_id && canLink && (
                                 <button title="Manage portal access" onClick={() => setLinkGuardian(g)}
-                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c" }}>
                                   <i className="ti ti-settings" style={{ fontSize:12 }} />
                                 </button>
                               )}
@@ -749,9 +749,9 @@ export default function StudentDetailPage() {
                                 </div>
                                 <div style={{ flex:1 }}>
                                   <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.full_name}</div>
-                                  {s.age && <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>{s.age} years old</div>}
+                                  {s.age && <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>{s.age} years old</div>}
                                 </div>
-                                <div style={{ fontSize:11, color:"#c0a0a0", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
+                                <div style={{ fontSize:11, color:"#8a6a6a", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
                                   Sibling {i + 1}
                                 </div>
                               </div>
@@ -784,7 +784,7 @@ export default function StudentDetailPage() {
                             </div>
                             <div>
                               <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{s.school_name}</div>
-                              <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>School {i + 1}</div>
+                              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>School {i + 1}</div>
                             </div>
                           </div>
                           <div style={{ padding:"4px 22px 14px" }}>
@@ -832,11 +832,11 @@ export default function StudentDetailPage() {
                           >
                             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                               <div style={{ width:38, height:38, borderRadius:10, background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#e03131" }} />
+                                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#c92a2a" }} />
                               </div>
                               <div>
                                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{en.grade_level} — {en.section}</div>
-                                <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>
+                                <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>
                                   {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}{en.strand ? ` · ${en.strand}` : ""}
                                 </div>
                               </div>
@@ -845,7 +845,7 @@ export default function StudentDetailPage() {
                               <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
                                 {sc.label}
                               </span>
-                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#b09090" }} />
+                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#8a6a6a" }} />
                             </div>
                           </motion.div>
                         );
@@ -894,7 +894,7 @@ export default function StudentDetailPage() {
                               transition={{ delay: i * 0.06, duration:0.22 }}
                               style={{ background:bg, border:`1px solid ${border}`, borderRadius:12, padding:"14px 18px" }}
                             >
-                              <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
                               <div style={{ fontSize:18, fontWeight:800, color }}>
                                 ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                               </div>
@@ -918,7 +918,7 @@ export default function StudentDetailPage() {
                                 </span>
                               }
                             >
-                              <div style={{ fontSize:11, color:"#b09090", marginBottom:10 }}>
+                              <div style={{ fontSize:11, color:"#8a6a6a", marginBottom:10 }}>
                                 {levelLabel}{yr.section ? ` · ${yr.section}` : ""} · <span style={{ fontWeight:600 }}>{yr.enrollment_status}</span>
                               </div>
                               {yr.invoices.length === 0 ? (
@@ -946,7 +946,7 @@ export default function StudentDetailPage() {
                                         <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>{inv.invoice_no}</span>
                                         <span style={{ fontSize:10, fontWeight:700, color:isMeta.color, background:isMeta.bg, padding:"2px 8px", borderRadius:50 }}>{isMeta.label}</span>
                                       </div>
-                                      <span style={{ fontSize:11, color:"#b09090" }}>
+                                      <span style={{ fontSize:11, color:"#8a6a6a" }}>
                                         {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—"}
                                         {" · "}{inv.payment_plan?.replace(/_/g, " ")}
                                       </span>
@@ -958,7 +958,7 @@ export default function StudentDetailPage() {
                                         { label:"Balance", value:balAmt,  color:balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                       ].map(({ label, value, color }) => (
                                         <div key={label}>
-                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
                                           <div style={{ fontSize:13, fontWeight:700, color }}>₱{value.toLocaleString("en-PH", { minimumFractionDigits:2 })}</div>
                                         </div>
                                       ))}
@@ -973,7 +973,7 @@ export default function StudentDetailPage() {
                                   { label:"Year Balance", value:yr.year_balance, bold:true, color:balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                 ].map(({ label, value, bold, color }) => (
                                   <div key={label} style={{ textAlign:"right" }}>
-                                    <div style={{ fontSize:9.5, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
+                                    <div style={{ fontSize:9.5, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
                                     <div style={{ fontSize:13, fontWeight:bold ? 800 : 600, color:color || "#1a0a0a" }}>
                                       ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                                     </div>

@@ -16,7 +16,7 @@ const PAYMENT_METHODS = [
   { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0" },
   { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd" },
   { value:"bank_transfer", label:"Bank Transfer", icon:"ti-building-bank", color:"#7c3aed", bg:"#f0e8fd" },
-  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#d97706", bg:"#fdf5e8" },
+  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#854f0b", bg:"#fdf5e8" },
   { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda" },
   { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8" },
 ];
@@ -49,7 +49,7 @@ const AVATAR_PALETTES = [
   { bg:"#e8f5e0", color:"#2e6b0d" },
   { bg:"#f0e8fd", color:"#7c3aed" },
   { bg:"#faeeda", color:"#854f0b" },
-  { bg:"#fdf5e8", color:"#d97706" },
+  { bg:"#fdf5e8", color:"#854f0b" },
 ];
 function avatarPalette(name) {
   if (!name) return AVATAR_PALETTES[0];
@@ -141,7 +141,7 @@ export default function PaymentsPage() {
   );
 
   const filterLabel = {
-    fontSize:10, fontWeight:700, color:"#c0a0a0",
+    fontSize:10, fontWeight:700, color:"#8a6a6a",
     textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4,
     display:"block",
   };
@@ -204,7 +204,7 @@ export default function PaymentsPage() {
                 </div>
                 {loading
                   ? <Sk w="80%" h={14} />
-                  : <div style={{ fontSize:15, fontWeight:700, color: isActive ? pm.color : (total > 0 ? "#1a0a0a" : "#c0a0a0"), letterSpacing:"-0.01em" }}>{fmt(total)}</div>
+                  : <div style={{ fontSize:15, fontWeight:700, color: isActive ? pm.color : (total > 0 ? "#1a0a0a" : "#8a6a6a"), letterSpacing:"-0.01em" }}>{fmt(total)}</div>
                 }
               </motion.div>
             );
@@ -231,9 +231,9 @@ export default function PaymentsPage() {
         <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 8px rgba(224,49,49,0.04)", display:"flex", flexDirection:"column", gap:0 }}>
           {/* Method chips */}
           <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Payment Method</div>
+            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Payment Method</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-              {[{ value:"all", label:"All", color:"#e03131", bg:"#fff0f0" }, ...PAYMENT_METHODS.map((m) => ({ value:m.value, label:m.label, color:m.color, bg:m.bg, icon:m.icon }))].map((m) => {
+              {[{ value:"all", label:"All", color:"#c92a2a", bg:"#fff0f0" }, ...PAYMENT_METHODS.map((m) => ({ value:m.value, label:m.label, color:m.color, bg:m.bg, icon:m.icon }))].map((m) => {
                 const active = methodFilter === m.value;
                 return (
                   <motion.button key={m.value}
@@ -244,7 +244,7 @@ export default function PaymentsPage() {
                       fontSize:12, fontWeight:600, border:`1.5px solid ${active ? m.color : "#f0e4e4"}`,
                       cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                       background: active ? m.bg : "#ffffff",
-                      color: active ? m.color : "#9a7070",
+                      color: active ? m.color : "#855c5c",
                       transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                     }}
                   >
@@ -261,7 +261,7 @@ export default function PaymentsPage() {
 
           {/* Sort chips + date toggle + clear */}
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:2 }}>Sort</div>
+            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:2 }}>Sort</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
               {SORT_OPTIONS.map((opt) => {
                 const active = sortField === opt.value;
@@ -274,7 +274,7 @@ export default function PaymentsPage() {
                       fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                       background: active ? "#fff0f0" : "#ffffff",
-                      color: active ? "#e03131" : "#9a7070",
+                      color: active ? "#e03131" : "#855c5c",
                       transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                     }}
                   >
@@ -350,7 +350,7 @@ export default function PaymentsPage() {
                   <div>
                     <label style={filterLabel}>Min amount</label>
                     <div style={{ position:"relative" }}>
-                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#c0a0a0", fontWeight:600 }}>₱</span>
+                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
                       <input type="number" min="0" step="0.01" value={amountMin} onChange={(e) => setAmountMin(e.target.value)}
                         placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
                     </div>
@@ -358,7 +358,7 @@ export default function PaymentsPage() {
                   <div>
                     <label style={filterLabel}>Max amount</label>
                     <div style={{ position:"relative" }}>
-                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#c0a0a0", fontWeight:600 }}>₱</span>
+                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
                       <input type="number" min="0" step="0.01" value={amountMax} onChange={(e) => setAmountMax(e.target.value)}
                         placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
                     </div>
@@ -373,7 +373,7 @@ export default function PaymentsPage() {
                         { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
                       ].map((q) => (
                         <motion.button key={q.label} type="button" onClick={q.fn}
-                          whileHover={{ borderColor:"#e03131", color:"#e03131" }}
+                          whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
                           whileTap={{ scale:0.96 }}
                           transition={{ duration:0.12 }}
                           style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
@@ -404,7 +404,7 @@ export default function PaymentsPage() {
             <thead>
               <tr style={{ background:"#fdfafa" }}>
                 {["Student","Invoice","Date","Amount","Method","Reference","Notes"].map((h) => (
-                  <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 16px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
+                  <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 16px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -479,7 +479,7 @@ export default function PaymentsPage() {
                               {name ? initials(name) : <i className="ti ti-user" style={{ fontSize:15 }} />}
                             </div>
                             <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap" }}>
-                              {name ?? <span style={{ color:"#b09090", fontStyle:"italic", fontWeight:400 }}>Unknown</span>}
+                              {name ?? <span style={{ color:"#8a6a6a", fontStyle:"italic", fontWeight:400 }}>Unknown</span>}
                             </span>
                           </div>
                         </td>
@@ -490,7 +490,7 @@ export default function PaymentsPage() {
                             onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
                             whileHover={{ color:"#c01a1a" }}
                             transition={{ duration:0.12 }}
-                            style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"monospace", fontSize:11.5, color:"#e03131", fontWeight:700, textDecoration:"underline", padding:0, whiteSpace:"nowrap" }}
+                            style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"monospace", fontSize:11.5, color:"#c92a2a", fontWeight:700, textDecoration:"underline", padding:0, whiteSpace:"nowrap" }}
                           >
                             {invNo}
                           </motion.button>
@@ -515,14 +515,14 @@ export default function PaymentsPage() {
 
                         {/* Reference */}
                         <td style={{ padding:"11px 16px", color:"#5a4a4a", fontFamily:"monospace", fontSize:11.5 }}>
-                          {p.reference_number || <span style={{ color:"#d0b8b8" }}>—</span>}
+                          {p.reference_number || <span style={{ color:"#8a6a6a" }}>—</span>}
                         </td>
 
                         {/* Notes */}
                         <td style={{ padding:"11px 16px", color:"#7a5050", fontSize:12, maxWidth:180 }}>
                           {p.notes
                             ? <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.notes}</span>
-                            : <span style={{ color:"#d0b8b8" }}>—</span>}
+                            : <span style={{ color:"#8a6a6a" }}>—</span>}
                         </td>
                       </motion.tr>
                     );
@@ -535,25 +535,25 @@ export default function PaymentsPage() {
           {/* Pagination */}
           {!loading && pageMeta.count > 20 && (
             <div style={{ padding:"12px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, color:"#b09090" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
+              <span style={{ fontSize:12, color:"#8a6a6a" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
               <div style={{ display:"flex", gap:6 }}>
                 <motion.button
                   disabled={!pageMeta.previous}
                   onClick={() => fetchPayments(page - 1)}
-                  whileHover={pageMeta.previous ? { borderColor:"#e03131", color:"#e03131" } : {}}
+                  whileHover={pageMeta.previous ? { borderColor:"#e03131", color:"#c92a2a" } : {}}
                   whileTap={pageMeta.previous ? { scale:0.93 } : {}}
                   transition={{ duration:0.12 }}
-                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.previous ? "pointer" : "not-allowed", color:pageMeta.previous ? "#5a4a4a" : "#c0a0a0", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.previous ? 1 : 0.5 }}
+                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.previous ? "pointer" : "not-allowed", color:pageMeta.previous ? "#5a4a4a" : "#8a6a6a", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.previous ? 1 : 0.5 }}
                 >
                   <i className="ti ti-chevron-left" style={{ fontSize:13 }} />Prev
                 </motion.button>
                 <motion.button
                   disabled={!pageMeta.next}
                   onClick={() => fetchPayments(page + 1)}
-                  whileHover={pageMeta.next ? { borderColor:"#e03131", color:"#e03131" } : {}}
+                  whileHover={pageMeta.next ? { borderColor:"#e03131", color:"#c92a2a" } : {}}
                   whileTap={pageMeta.next ? { scale:0.93 } : {}}
                   transition={{ duration:0.12 }}
-                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.next ? "pointer" : "not-allowed", color:pageMeta.next ? "#5a4a4a" : "#c0a0a0", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.next ? 1 : 0.5 }}
+                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.next ? "pointer" : "not-allowed", color:pageMeta.next ? "#5a4a4a" : "#8a6a6a", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.next ? 1 : 0.5 }}
                 >
                   Next<i className="ti ti-chevron-right" style={{ fontSize:13 }} />
                 </motion.button>

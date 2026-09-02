@@ -88,7 +88,7 @@ export default function GuardianHomePage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>
           Hello{user?.name ? `, ${user.name.split(" ")[0]}` : ""} 👋
         </h1>
-        <p style={{ fontSize: 14, color: "#a07878", marginTop: 4 }}>
+        <p style={{ fontSize: 14, color: "#8a6a6a", marginTop: 4 }}>
           Here are your children's academic records. Select a child to view grades, attendance, and billing.
         </p>
       </motion.div>
@@ -114,10 +114,10 @@ export default function GuardianHomePage() {
       ) : children.length === 0 ? (
         <div style={{ textAlign: "center", padding: "72px 16px", background: "white", borderRadius: 16, border: "1px solid #f5eaea" }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-            <i className="ti ti-users" style={{ fontSize: 24, color: "#e08080" }} />
+            <i className="ti ti-users" style={{ fontSize: 24, color: "#8a6a6a" }} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#7a5050" }}>No linked students yet</div>
-          <div style={{ fontSize: 13, color: "#b09090", marginTop: 6, maxWidth: 380, marginInline: "auto", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 6, maxWidth: 380, marginInline: "auto", lineHeight: 1.6 }}>
             Your account hasn't been linked to a student record yet. Please contact the school's registrar or administrator to complete the link.
           </div>
         </div>
@@ -136,26 +136,26 @@ export default function GuardianHomePage() {
                 style={{ background: "white", borderRadius: 16, padding: 22, border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.06)", cursor: "pointer" }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: "#e03131", flexShrink: 0 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: "#c92a2a", flexShrink: 0 }}>
                     {child.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.name}</div>
-                    {child.lrn && <div style={{ fontSize: 11.5, color: "#b09090", fontFamily: "monospace", marginTop: 2 }}>LRN {child.lrn}</div>}
+                    {child.lrn && <div style={{ fontSize: 11.5, color: "#8a6a6a", fontFamily: "monospace", marginTop: 2 }}>LRN {child.lrn}</div>}
                   </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10, padding: "10px 14px" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{e.grade_level} · {e.section}</div>
-                    <div style={{ fontSize: 11, color: "#a07878", marginTop: 2 }}>{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</div>
+                    <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</div>
                   </div>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 99, background: st.bg, color: st.color }}>
                     {st.label}
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 14, fontSize: 12.5, fontWeight: 600, color: "#e03131" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 14, fontSize: 12.5, fontWeight: 600, color: "#c92a2a" }}>
                   View records <i className="ti ti-arrow-right" style={{ fontSize: 14 }} />
                 </div>
               </motion.div>

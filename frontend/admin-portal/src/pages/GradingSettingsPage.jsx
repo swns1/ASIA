@@ -37,7 +37,7 @@ const updateCategory = (id, p)  => _updateCategory(id, p);
 const deleteCategory = (id)     => _deleteCategory(id);
 
 // ── Shared constants ─────────────────────────────────────────────────────────
-const C = { red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", border: "#f5eaea", muted: "#7a5050", pale: "#b09090" };
+const C = { red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", border: "#f5eaea", muted: "#7a5050", pale: "#8a6a6a" };
 
 const baseCss = `
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
@@ -90,7 +90,7 @@ export default function GradingSettingsPage() {
 
 const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", color: "#be185d", bg: "#fde8f8" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#d97706", bg: "#fdf5e8" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#854f0b", bg: "#fdf5e8" },
   { value: "elementary",        label: "Elementary",   icon: "ti-book",          color: "#2e6b0d", bg: "#e8f5e0" },
   { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        color: "#1455a0", bg: "#e3f0fd" },
   { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   color: "#7c3aed", bg: "#f0e8fd" },
@@ -150,21 +150,21 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>{template.template_name}</div>
             {template.description && (
-              <div style={{ fontSize: 12, color: "#b09090", marginTop: 4, lineHeight: 1.5 }}>{template.description}</div>
+              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 4, lineHeight: 1.5 }}>{template.description}</div>
             )}
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
             <motion.button onClick={() => onEdit(template)} title="Edit"
               whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
               whileTap={{ scale: 0.93 }}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
               <i className="ti ti-pencil" style={{ fontSize: 13 }} />
             </motion.button>
             {canManage && (
               <motion.button onClick={() => onDelete(template)} title="Delete"
                 whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
                 whileTap={{ scale: 0.93 }}
-                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
                 <i className="ti ti-trash" style={{ fontSize: 13 }} />
               </motion.button>
             )}
@@ -174,7 +174,7 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
         <div style={{ marginTop: 12 }}>
           <WeightBar components={template.components} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: "#b09090" }}>{template.components?.length ?? 0} components</span>
+            <span style={{ fontSize: 11, color: "#8a6a6a" }}>{template.components?.length ?? 0} components</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: totalOk ? "#2e6b0d" : "#a32d2d" }}>
               {total.toFixed(0)}% {totalOk ? "✓" : "⚠ not 100%"}
             </span>
@@ -184,7 +184,7 @@ function TemplateCard({ template, onEdit, onDelete, canManage }) {
 
       <div style={{ padding: "10px 20px 14px" }}>
         {(!template.components || template.components.length === 0) ? (
-          <div style={{ fontSize: 12, color: "#d0b8b8", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No components defined yet</div>
+          <div style={{ fontSize: 12, color: "#8a6a6a", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No components defined yet</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {template.components.map((comp, i) => (
@@ -322,15 +322,15 @@ function TemplateModal({ template, onClose, onRefresh }) {
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right, #fdfafa, white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-report-analytics" style={{ fontSize: 20, color: "#e03131" }} />
+              <i className="ti ti-report-analytics" style={{ fontSize: 20, color: "#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>{isEdit ? "Edit Template" : "New Grading Template"}</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Define components and their weights</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>Define components and their weights</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -369,7 +369,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
                       borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
-                      background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070",
+                      background: active ? lvl.bg : "white", color: active ? lvl.color : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans', sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -394,15 +394,15 @@ function TemplateModal({ template, onClose, onRefresh }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>Grading Components</div>
-                <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Weights must sum to exactly 100%</div>
+                <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>Weights must sum to exactly 100%</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: weightOk ? "#2e6b0d" : totalWeight > 0 ? "#a32d2d" : "#b09090" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: weightOk ? "#2e6b0d" : totalWeight > 0 ? "#a32d2d" : "#8a6a6a" }}>
                   {totalWeight.toFixed(1)}% / 100%
                 </span>
                 <motion.button type="button" onClick={addComponent}
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: "#fff0f0", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: "#fff0f0", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                   <i className="ti ti-plus" style={{ fontSize: 13 }} />Add
                 </motion.button>
               </div>
@@ -417,7 +417,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
             </div>
 
             {components.length === 0 && (
-              <div style={{ textAlign: "center", padding: "20px 0", color: "#c0a0a0", fontSize: 13, fontStyle: "italic" }}>
+              <div style={{ textAlign: "center", padding: "20px 0", color: "#8a6a6a", fontSize: 13, fontStyle: "italic" }}>
                 No components yet. Click "Add" to get started.
               </div>
             )}
@@ -444,12 +444,12 @@ function TemplateModal({ template, onClose, onRefresh }) {
                         onChange={(e) => updateComp(comp._key, "weight", e.target.value)}
                         placeholder="0"
                         style={{ ...inp, width: 70, padding: "8px 10px", textAlign: "right" }} />
-                      <span style={{ fontSize: 12, color: "#b09090", fontWeight: 600 }}>%</span>
+                      <span style={{ fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>%</span>
                     </div>
                     <motion.button onClick={() => removeComponent(comp._key)}
                       whileHover={{ scale: 1.08, backgroundColor: "#fff0f0" }}
                       whileTap={{ scale: 0.92 }}
-                      style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", flexShrink: 0 }}>
+                      style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", flexShrink: 0 }}>
                       <i className="ti ti-x" style={{ fontSize: 12 }} />
                     </motion.button>
                   </motion.div>
@@ -461,8 +461,8 @@ function TemplateModal({ template, onClose, onRefresh }) {
 
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleSave} disabled={saving}
@@ -588,7 +588,7 @@ function GradingTemplatesTab() {
           style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
+            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -600,7 +600,7 @@ function GradingTemplatesTab() {
                 <motion.button
                   initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                   onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 0 }}>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
                   <i className="ti ti-x" style={{ fontSize: 12 }} />
                 </motion.button>
               )}
@@ -609,8 +609,8 @@ function GradingTemplatesTab() {
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
-              {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
+              {[{ value: "all", label: "All", color: "#c92a2a", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
                 const active = levelFilter === lvl.value;
                 return (
                   <motion.button key={lvl.value} onClick={() => setLevelFilter(lvl.value)}
@@ -619,7 +619,7 @@ function GradingTemplatesTab() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
                       background: active ? lvl.bg : "white",
-                      color: active ? lvl.color : "#9a7070",
+                      color: active ? lvl.color : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -633,9 +633,9 @@ function GradingTemplatesTab() {
             </div>
 
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
               {[
-                { value: "all",      label: "All",      color: "#e03131", bg: "#fff0f0" },
+                { value: "all",      label: "All",      color: "#c92a2a", bg: "#fff0f0" },
                 { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
                 { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
               ].map((s) => {
@@ -646,7 +646,7 @@ function GradingTemplatesTab() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
                       background: active ? s.bg : "white",
-                      color: active ? s.color : "#9a7070",
+                      color: active ? s.color : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -664,7 +664,7 @@ function GradingTemplatesTab() {
                   initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
                   transition={{ duration: 0.16 }}
                   onClick={() => { setLevelFilter("all"); setStatusFilter("all"); setSearch(""); }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
                   <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
                 </motion.button>
               )}
@@ -688,12 +688,12 @@ function GradingTemplatesTab() {
             style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "64px 24px", textAlign: "center" }}
           >
             <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-              <i className="ti ti-report-analytics" style={{ fontSize: 22, color: "#e08080" }} />
+              <i className="ti ti-report-analytics" style={{ fontSize: 22, color: "#8a6a6a" }} />
             </div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
               {hasFilters ? "No templates match your filters" : "No templates found"}
             </div>
-            <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 6 }}>
               {hasFilters ? "Try adjusting your search or filters" : "Create your first grading template to get started"}
             </div>
             {!hasFilters && (
@@ -816,7 +816,7 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
             </label>
             <div style={{ flex: 1 }} />
             <button onClick={() => { setEditing(false); setName(cat.name); setDesc(cat.description ?? ""); setOrder(String(cat.sort_order)); setActive(cat.is_active); }}
-              style={{ height: 32, padding: "0 12px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
+              style={{ height: 32, padding: "0 12px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
             <button onClick={handleSave} disabled={saving || !name.trim()}
               style={{ height: 32, padding: "0 14px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
               {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Save
@@ -826,23 +826,23 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
       ) : (
         <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? "#fff0f0" : "#f5f0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#e03131" : "#c0a0a0" }} />
+            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#e03131" : "#8a6a6a" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: active ? "#1a0a0a" : "#9a8080" }}>{cat.name}</div>
-            {cat.description && <div style={{ fontSize: 11, color: "#b09090", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
+            {cat.description && <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: active ? "#fff0f0" : "#f5f0f0", color: active ? "#e03131" : "#9a8080" }}>{active ? "Active" : "Inactive"}</span>
-            <span style={{ fontSize: 11, color: "#c0a0a0", background: "#fdfafa", border: "1px solid #f5eaea", padding: "2px 8px", borderRadius: 6 }}>#{cat.sort_order}</span>
+            <span style={{ fontSize: 11, color: "#8a6a6a", background: "#fdfafa", border: "1px solid #f5eaea", padding: "2px 8px", borderRadius: 6 }}>#{cat.sort_order}</span>
             <button onClick={handleToggleActive} disabled={saving}
-              style={{ height: 28, padding: "0 10px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
+              style={{ height: 28, padding: "0 10px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
               {active ? "Deactivate" : "Activate"}
             </button>
             <button onClick={() => setEditing(true)}
-              style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; }}>
+              style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#855c5c"; }}>
               <i className="ti ti-pencil" style={{ fontSize: 12 }} />
             </button>
             {canManage && (confirm ? (
@@ -852,13 +852,13 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
                   {deleting && <i className="ti ti-loader-2" style={{ fontSize: 11, animation: "spin 1s linear infinite" }} />}Confirm
                 </button>
                 <button onClick={() => setConfirm(false)}
-                  style={{ height: 28, padding: "0 8px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
+                  style={{ height: 28, padding: "0 8px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
               </div>
             ) : (
               <button onClick={() => setConfirm(true)}
-                style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}>
+                style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#8a6a6a"; }}>
                 <i className="ti ti-trash" style={{ fontSize: 12 }} />
               </button>
             ))}
@@ -925,7 +925,7 @@ function NarrativeCategoriesTab() {
         {!loading && categories.length > 0 && (
           <div style={{ display: "flex", gap: 10 }}>
             {[
-              { label: "Total",    value: categories.length, color: "#e03131", bg: "#fff0f0", icon: "ti-list" },
+              { label: "Total",    value: categories.length, color: "#c92a2a", bg: "#fff0f0", icon: "ti-list" },
               { label: "Active",   value: activeCount,       color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-circle-check" },
               { label: "Inactive", value: inactiveCount,     color: "#854f0b", bg: "#faeeda", icon: "ti-circle-x" },
             ].map((s) => (
@@ -935,7 +935,7 @@ function NarrativeCategoriesTab() {
                 </div>
                 <div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontSize: 10, color: "#a07878", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>{s.label}</div>
+                  <div style={{ fontSize: 10, color: "#8a6a6a", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>{s.label}</div>
                 </div>
               </div>
             ))}
@@ -946,7 +946,7 @@ function NarrativeCategoriesTab() {
           {adding && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}
               style={{ background: "white", borderRadius: 14, border: "2px solid #fca5a5", padding: "18px 20px", boxShadow: "0 4px 20px rgba(224,49,49,0.12)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#e03131", display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#c92a2a", display: "flex", alignItems: "center", gap: 6 }}>
                 <i className="ti ti-plus" style={{ fontSize: 13 }} />New Category
               </div>
               {error && <div style={{ fontSize: 11, color: "#b91c1c" }}>{error}</div>}
@@ -960,7 +960,7 @@ function NarrativeCategoriesTab() {
                 style={{ ...inp, width: "100%" }} onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button onClick={() => { setAdding(false); setError(""); }}
-                  style={{ height: 34, padding: "0 14px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
+                  style={{ height: 34, padding: "0 14px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
                 <button onClick={handleAdd} disabled={saving || !newName.trim()}
                   style={{ height: 34, padding: "0 16px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
                   {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Add Category
@@ -980,10 +980,10 @@ function NarrativeCategoriesTab() {
           ) : categories.length === 0 ? (
             <div style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "60px 24px", textAlign: "center" }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-                <i className="ti ti-clipboard-text" style={{ fontSize: 24, color: "#e03131" }} />
+                <i className="ti ti-clipboard-text" style={{ fontSize: 24, color: "#c92a2a" }} />
               </div>
               <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No categories yet</div>
-              <div style={{ fontSize: 13, color: "#b09090", marginTop: 6 }}>Click "Add Category" to get started.</div>
+              <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 6 }}>Click "Add Category" to get started.</div>
             </div>
           ) : (
             <AnimatePresence>

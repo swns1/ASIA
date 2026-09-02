@@ -47,16 +47,16 @@ function ReportCardTab({ data }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
           <thead>
             <tr style={{ background: "#fdfafa" }}>
-              <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "11px 18px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Subject</th>
+              <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "11px 18px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Subject</th>
               {periods.map((p) => (
-                <th key={p.key} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "11px 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</th>
+                <th key={p.key} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "11px 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</th>
               ))}
-              <th style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "11px 14px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Avg</th>
+              <th style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "11px 14px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Avg</th>
             </tr>
           </thead>
           <tbody>
             {(data.subjects || []).length === 0 ? (
-              <tr><td colSpan={periods.length + 2} style={{ textAlign: "center", padding: "40px 16px", color: "#b09090", fontSize: 13 }}>No grades recorded yet.</td></tr>
+              <tr><td colSpan={periods.length + 2} style={{ textAlign: "center", padding: "40px 16px", color: "#8a6a6a", fontSize: 13 }}>No grades recorded yet.</td></tr>
             ) : data.subjects.map((s) => (
               <tr key={s.subject_id}>
                 <td style={{ padding: "11px 18px", borderTop: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>{s.subject_name}</td>
@@ -105,7 +105,7 @@ function AttendanceTab({ summary, loading }) {
           {items.map((_, i) => <Sk key={i} h={72} r={12} />)}
         </div>
       ) : total === 0 ? (
-        <div style={{ textAlign: "center", padding: "32px 16px", color: "#b09090", fontSize: 13 }}>No attendance records yet.</div>
+        <div style={{ textAlign: "center", padding: "32px 16px", color: "#8a6a6a", fontSize: 13 }}>No attendance records yet.</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 12 }}>
           {items.map((it) => (
@@ -126,7 +126,7 @@ function AttendanceTab({ summary, loading }) {
 // ── Billing tab ───────────────────────────────────────────────────────────────
 function BillingTab({ ledger, loading }) {
   if (loading) return <div style={{ ...card, padding: 22 }}><Sk h={120} r={12} /></div>;
-  if (!ledger) return <div style={{ ...card, padding: 22, textAlign: "center", color: "#b09090", fontSize: 13 }}>No billing records found.</div>;
+  if (!ledger) return <div style={{ ...card, padding: 22, textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>No billing records found.</div>;
 
   const balance = Number(ledger.total_balance || 0);
   return (
@@ -138,7 +138,7 @@ function BillingTab({ ledger, loading }) {
           { label: "Balance",      value: ledger.total_balance, color: balance > 0 ? "#c92a2a" : "#2e6b0d", bg: balance > 0 ? "#fde8e8" : "#e8f5e0" },
         ].map((s) => (
           <div key={s.label} style={{ ...card, padding: "16px 20px", background: s.bg }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{peso(s.value)}</div>
           </div>
         ))}
@@ -160,7 +160,7 @@ function BillingTab({ ledger, loading }) {
         </div>
       ))}
 
-      <p style={{ fontSize: 12, color: "#b09090", textAlign: "center", lineHeight: 1.6 }}>
+      <p style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>
         For payment arrangements or questions about your balance, please contact the school's accounting office.
       </p>
     </div>
@@ -240,12 +240,12 @@ export default function GuardianChildPage() {
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, color: "#e03131", flexShrink: 0 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, color: "#c92a2a", flexShrink: 0 }}>
               {fullName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
             </div>
             <div>
               <div style={{ fontSize: 19, fontWeight: 700, color: "#1a0a0a" }}>{fullName}</div>
-              <div style={{ fontSize: 13, color: "#a07878", marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 2 }}>
                 {enrollment && <>{enrollment.grade_level} · {enrollment.section} · {LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} · SY {enrollment.school_year}</>}
               </div>
             </div>

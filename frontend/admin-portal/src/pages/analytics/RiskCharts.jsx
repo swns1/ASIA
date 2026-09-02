@@ -1,4 +1,7 @@
 import { useState } from "react";
+import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
+import { barPath } from "../../components/charts/geometry";
+import { GAP, RADIUS, SURFACE, chartInk } from "../../components/charts/tokens";
 import {
   GOOD_ATTENDANCE,
   PASSING_GRADE,
@@ -29,62 +32,18 @@ import {
 //   · labels are direct and selective — never a number on every mark
 //   · the Students tab is the table-view twin for every chart here
 
-const SURFACE = "#fdfcfb";
-const GRID = "#f0e4e4"; // neutral-300 — one shade off the surface
-const AXIS_INK = "#8a6a6a"; // neutral-500, AA on the surface
-const BAR_HUE = "#e03131"; // brand-500 — validated for a single-series fill
-const GAP = 2; // surface gap between adjacent fills
-const RADIUS = 4; // rounded data-end
+// The primitives below used to live in this file. They now live in
+// components/charts/, so the dashboard draws on the same surface with the same
+// tooltip, gaps and rounding rather than a second look invented beside it.
+// The colours moved with them: these were hardcoded hex, which is exactly how
+// the app accumulated its contrast failures.
+//
+// `ink()` is resolved on first render, not at import: chartInk() reads the CSS
+// custom properties off :root, and this module can execute before the
+// stylesheet has been parsed. Values are cached inside tokens.js after that.
+const ink = () => chartInk();
 
 // ── Small shared pieces ──────────────────────────────────────────────────────
-
-/**
- * A horizontal bar with only its data-end rounded, so the baseline stays a
- * straight edge and the bar reads as measured from it.
- */
-function barPath(x, y, width, height, radius = RADIUS) {
-  const r = Math.max(0, Math.min(radius, width, height / 2));
-  if (r === 0) return `M ${x} ${y} h ${width} v ${height} h ${-width} Z`;
-  return [
-    `M ${x} ${y}`,
-    `h ${width - r}`,
-    `a ${r} ${r} 0 0 1 ${r} ${r}`,
-    `v ${height - 2 * r}`,
-    `a ${r} ${r} 0 0 1 ${-r} ${r}`,
-    `h ${-(width - r)}`,
-    "Z",
-  ].join(" ");
-}
-
-/**
- * Tooltips are HTML rather than SVG text so they wrap, use real type tokens and
- * stay readable. The SVG fills its container at a fixed viewBox, so a mark's
- * position maps to a percentage of the container exactly.
- */
-function ChartTooltip({ tip, viewBox }) {
-  if (!tip) return null;
-  const [w, h] = viewBox;
-  const flipX = tip.x > w * 0.62;
-  const flipY = tip.y < h * 0.24;
-  return (
-    <div
-      className="pointer-events-none absolute z-10 w-max max-w-[240px] rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-xs shadow-lg"
-      style={{
-        left: `${(tip.x / w) * 100}%`,
-        top: `${(tip.y / h) * 100}%`,
-        transform: `translate(${flipX ? "-100%" : "0"}, ${flipY ? "8px" : "calc(-100% - 8px)"})`,
-      }}
-      role="tooltip"
-    >
-      <div className="font-bold text-neutral-900">{tip.title}</div>
-      {tip.lines.map((line) => (
-        <div key={line} className="mt-0.5 text-neutral-600">
-          {line}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /**
  * The band legend. Always rendered wherever bands are drawn: the reserved
@@ -106,33 +65,6 @@ export function RiskLegend({ counts, className = "" }) {
           </span>
         );
       })}
-    </div>
-  );
-}
-
-function ChartFrame({ viewBox, children, tip, caption, height = "auto" }) {
-  return (
-    <div>
-      <div className="relative w-full">
-        <svg
-          viewBox={`0 0 ${viewBox[0]} ${viewBox[1]}`}
-          className="w-full"
-          style={{ background: SURFACE, borderRadius: 10, height }}
-          role="img"
-        >
-          {children}
-        </svg>
-        <ChartTooltip tip={tip} viewBox={viewBox} />
-      </div>
-      {caption && <p className="mt-2 text-xs text-neutral-500">{caption}</p>}
-    </div>
-  );
-}
-
-function NoData({ message = "Nothing to chart for this selection yet." }) {
-  return (
-    <div className="flex min-h-[160px] items-center justify-center rounded-[10px] bg-neutral-50 px-6 text-center text-sm text-neutral-500">
-      {message}
     </div>
   );
 }
@@ -199,7 +131,7 @@ function RiskMixChart({ summary, total }) {
                 textAnchor="middle"
                 fontSize="17"
                 fontWeight="700"
-                fill="#1a0a0a"
+                fill={ink().ink}
               >
                 {seg.count}
               </text>
@@ -211,7 +143,7 @@ function RiskMixChart({ summary, total }) {
                 textAnchor="middle"
                 fontSize="11"
                 fontWeight="600"
-                fill="#5a4040"
+                fill={ink().muted}
               >
                 {meta.label}
               </text>
@@ -222,7 +154,7 @@ function RiskMixChart({ summary, total }) {
                 y={BAR_Y + BAR_H + 34}
                 textAnchor="middle"
                 fontSize="10"
-                fill={AXIS_INK}
+                fill={ink().axis}
               >
                 {Math.round(seg.share * 100)}% of the group
               </text>
@@ -230,10 +162,10 @@ function RiskMixChart({ summary, total }) {
           </g>
         );
       })}
-      <text x={0} y={16} fontSize="11" fontWeight="600" fill={AXIS_INK}>
+      <text x={0} y={16} fontSize="11" fontWeight="600" fill={ink().axis}>
         Most urgent
       </text>
-      <text x={W} y={16} textAnchor="end" fontSize="11" fontWeight="600" fill={AXIS_INK}>
+      <text x={W} y={16} textAnchor="end" fontSize="11" fontWeight="600" fill={ink().axis}>
         Doing fine
       </text>
     </ChartFrame>
@@ -280,7 +212,7 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
         const rowEnd = segments.length ? segments[segments.length - 1].x + segments[segments.length - 1].width : LABEL_W;
         return (
           <g key={row.name}>
-            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill="#5a4040">
+            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill={ink().muted}>
               {row.name.length > 20 ? `${row.name.slice(0, 19)}…` : row.name}
             </text>
             {segments.map(({ level, count, x, width }) => {
@@ -307,7 +239,7 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
                 />
               );
             })}
-            <text x={rowEnd + 8} y={y + BAR_H / 2 + 4} fontSize="11" fill={AXIS_INK} className="tabular-nums">
+            <text x={rowEnd + 8} y={y + BAR_H / 2 + 4} fontSize="11" fill={ink().axis} className="tabular-nums">
               {row.total}
             </text>
           </g>
@@ -345,12 +277,12 @@ function ReasonChart({ summary }) {
         const width = Math.max(2, (row.count / max) * plotW);
         return (
           <g key={row.code}>
-            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill="#5a4040">
+            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill={ink().muted}>
               {reasonLabel(row.code)}
             </text>
             <path
               d={barPath(LABEL_W, y, width, BAR_H)}
-              fill={BAR_HUE}
+              fill={ink().bar}
               style={{ cursor: "pointer" }}
               onMouseEnter={() =>
                 setTip({
@@ -367,7 +299,7 @@ function ReasonChart({ summary }) {
               y={y + BAR_H / 2 + 4}
               fontSize="12"
               fontWeight="700"
-              fill="#1a0a0a"
+              fill={ink().ink}
               className="tabular-nums"
             >
               {row.count}
@@ -435,9 +367,9 @@ function GradeDistributionChart({ scores }) {
             x2={W - PAD_R}
             y1={PAD_T + plotH - f * plotH}
             y2={PAD_T + plotH - f * plotH}
-            stroke={GRID}
+            stroke={ink().grid}
           />
-          <text x={PAD_L - 8} y={PAD_T + plotH - f * plotH + 4} textAnchor="end" fontSize="10" fill={AXIS_INK}>
+          <text x={PAD_L - 8} y={PAD_T + plotH - f * plotH + 4} textAnchor="end" fontSize="10" fill={ink().axis}>
             {Math.round(f * max)}
           </text>
         </g>
@@ -454,7 +386,7 @@ function GradeDistributionChart({ scores }) {
                 d={barPath(x + GAP / 2, PAD_T + plotH - h, colW - GAP, h)}
                 // The one place a second hue appears: bins entirely below the
                 // passing mark are the exception the chart exists to show.
-                fill={failing ? "#d03b3b" : BAR_HUE}
+                fill={failing ? riskLevelMeta("critical").color : ink().bar}
                 opacity={failing ? 1 : 0.85}
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() =>
@@ -478,7 +410,7 @@ function GradeDistributionChart({ scores }) {
                 textAnchor="middle"
                 fontSize="12"
                 fontWeight="700"
-                fill="#1a0a0a"
+                fill={ink().ink}
                 className="tabular-nums"
               >
                 {bin.count}
@@ -489,7 +421,7 @@ function GradeDistributionChart({ scores }) {
               y={H - PAD_B + 18}
               textAnchor="middle"
               fontSize="10"
-              fill={AXIS_INK}
+              fill={ink().axis}
               className="tabular-nums"
             >
               {bin.from}
@@ -499,11 +431,11 @@ function GradeDistributionChart({ scores }) {
       })}
 
       {/* The only dashed line on the page — an actual threshold, not a grid */}
-      <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke="#1a0a0a" strokeDasharray="4,3" strokeWidth={1.5} />
-      <text x={passX + 6} y={PAD_T + 11} fontSize="11" fontWeight="700" fill="#1a0a0a">
+      <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5} />
+      <text x={passX + 6} y={PAD_T + 11} fontSize="11" fontWeight="700" fill={ink().ink}>
         Passing mark ({PASSING_GRADE})
       </text>
-      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill={AXIS_INK}>
+      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill={ink().axis}>
         Average grade
       </text>
       <text
@@ -511,7 +443,7 @@ function GradeDistributionChart({ scores }) {
         y={PAD_T + plotH / 2}
         textAnchor="middle"
         fontSize="11"
-        fill={AXIS_INK}
+        fill={ink().axis}
         transform={`rotate(-90 14 ${PAD_T + plotH / 2})`}
       >
         Students
@@ -585,8 +517,8 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
       caption="Each dot is one student. Click a dot to open their follow-up details."
     >
       {/* Quadrant guides — solid hairlines at the two lines the school acts on */}
-      <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke={GRID} strokeWidth={1.5} />
-      <line x1={PAD_L} x2={W - PAD_R} y1={goodY} y2={goodY} stroke={GRID} strokeWidth={1.5} />
+      <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().grid} strokeWidth={1.5} />
+      <line x1={PAD_L} x2={W - PAD_R} y1={goodY} y2={goodY} stroke={ink().grid} strokeWidth={1.5} />
 
       {QUADRANTS.map((q) => (
         <text
@@ -603,22 +535,22 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
       ))}
 
       {/* Axes */}
-      <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke={GRID} />
-      <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={PAD_T + plotH} stroke={GRID} />
+      <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke={ink().grid} />
+      <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().grid} />
       {[60, 70, PASSING_GRADE, 80, 90, 100].map((g) => (
-        <text key={g} x={scaleX(g)} y={PAD_T + plotH + 16} textAnchor="middle" fontSize="10" fill={AXIS_INK}>
+        <text key={g} x={scaleX(g)} y={PAD_T + plotH + 16} textAnchor="middle" fontSize="10" fill={ink().axis}>
           {g}
         </text>
       ))}
       {[50, 70, GOOD_ATTENDANCE, 100].map((p) => (
-        <text key={p} x={PAD_L - 8} y={scaleY(p) + 4} textAnchor="end" fontSize="10" fill={AXIS_INK}>
+        <text key={p} x={PAD_L - 8} y={scaleY(p) + 4} textAnchor="end" fontSize="10" fill={ink().axis}>
           {p}%
         </text>
       ))}
-      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize="11" fill={AXIS_INK}>
+      <text x={W / 2} y={H - 8} textAnchor="middle" fontSize="11" fill={ink().axis}>
         Average grade
       </text>
-      <text x={14} y={PAD_T + plotH / 2} textAnchor="middle" fontSize="11" fill={AXIS_INK} transform={`rotate(-90 14 ${PAD_T + plotH / 2})`}>
+      <text x={14} y={PAD_T + plotH / 2} textAnchor="middle" fontSize="11" fill={ink().axis} transform={`rotate(-90 14 ${PAD_T + plotH / 2})`}>
         Attendance
       </text>
 

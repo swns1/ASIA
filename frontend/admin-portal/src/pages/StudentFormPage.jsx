@@ -214,9 +214,9 @@ function StudentStep({ data, onChange }) {
 
   const statusColors = {
     active:      { bg: "#e8f5e0", color: "#2e7d32", border: "#a5d6a7" },
-    inactive:    { bg: "#f5f5f5", color: "#757575", border: "#e0e0e0" },
+    inactive:    { bg: "#f5f5f5", color: "#5c5752", border: "#e0e0e0" },
     transferred: { bg: "#e3f2fd", color: "#1565c0", border: "#90caf9" },
-    graduated:   { bg: "#fff8e1", color: "#f57f17", border: "#ffe082" },
+    graduated:   { bg: "#fff8e1", color: "#854f0b", border: "#ffe082" },
     dropped:     { bg: "#fce4ec", color: "#c62828", border: "#f48fb1" },
   };
   const sc = statusColors[data.status] || statusColors.active;
@@ -226,7 +226,7 @@ function StudentStep({ data, onChange }) {
       <SectionHeader icon="ti-user" title="Student Information" subtitle="Basic identity and enrollment details" />
 
       {/* LRN + Status row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
         <Field label="LRN *">
           <Input name="lrn" value={data.lrn} onChange={h} required placeholder="e.g. 123456789012" />
         </Field>
@@ -246,7 +246,7 @@ function StudentStep({ data, onChange }) {
       </div>
 
       <Divider label="Full Name" />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
         <Field label="First Name *">
           <Input name="first_name" value={data.first_name} onChange={h} required placeholder="Juan" />
         </Field>
@@ -262,7 +262,7 @@ function StudentStep({ data, onChange }) {
       </div>
 
       <Divider label="Personal Details" />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
         <Field label="Sex *">
           <Select name="sex" value={data.sex} onChange={h}>
             <option value="male">Male</option>
@@ -323,7 +323,7 @@ function HouseholdStep({ data, onChange }) {
       <SectionHeader icon="ti-home" title="Household Information" subtitle="All fields are optional — fill in what's applicable" />
 
       <Divider label="Parents" />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
         <Field label="Parent Marital Status">
           <Select name="parent_marital_status" value={data.parent_marital_status || ""} onChange={h}>
             <option value="">— Select —</option>
@@ -408,7 +408,7 @@ function GuardiansStep({ data, onChange }) {
       {data.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-users" style={{ fontSize: 26, color: "#e8a0a0" }} />
+            <i className="ti ti-users" style={{ fontSize: 26, color: "#8a6a6a" }} />
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No guardians added yet</div>
           <div style={{ fontSize: 12 }}>Click "Add Guardian" to add a parent or guardian.</div>
@@ -449,7 +449,7 @@ function GuardiansStep({ data, onChange }) {
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
               <Field label="Full Name *">
                 <Input value={g.full_name} onChange={e => update(i, "full_name", e.target.value)} required placeholder="Full name" />
               </Field>
@@ -528,7 +528,7 @@ function SiblingsStep({ data, onChange }) {
       {data.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-friends" style={{ fontSize: 26, color: "#e8a0a0" }} />
+            <i className="ti ti-friends" style={{ fontSize: 26, color: "#8a6a6a" }} />
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No siblings added</div>
           <div style={{ fontSize: 12 }}>Click "Add Sibling" if applicable.</div>
@@ -599,7 +599,7 @@ function SchoolsStep({ data, onChange }) {
       {data.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-school" style={{ fontSize: 26, color: "#e8a0a0" }} />
+            <i className="ti ti-school" style={{ fontSize: 26, color: "#8a6a6a" }} />
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No previous schools added</div>
           <div style={{ fontSize: 12 }}>Add any schools the student previously attended.</div>
@@ -670,7 +670,7 @@ const isImageUrl = (url) => url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.
 
 const DC = {
   green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
-  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#b09090",
+  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#8a6a6a",
 };
 
 function DocStatusBadge({ submitted }) {
@@ -799,7 +799,7 @@ function DocUploadModal({ req, isEdit, pendingEntry, onClose, onFileSelected }) 
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#c0a0a0" }} />
+                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
                   {isReplace || hasPending ? "Drop new file or click to browse" : "Drop file here or click to browse"}
                 </div>
@@ -870,7 +870,7 @@ function EnrollmentPromptModal({ studentName, onSkip, onProceed }) {
         style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#e03131" }} />
+            <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#c92a2a" }} />
           </div>
           <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Enrollment?</h3>
           <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
@@ -940,7 +940,7 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#c8b0b0" }} />
+            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#8a6a6a" }} />
             <span style={{ fontSize: 11, color: DC.pale }}>No document yet</span>
           </div>
         )}

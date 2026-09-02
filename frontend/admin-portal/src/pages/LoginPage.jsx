@@ -393,7 +393,7 @@ export default function LoginPage() {
                   onClick={(e) => e.preventDefault()}
                   style={{
                     fontSize: 12,
-                    color: "#e03131",
+                    color: "#c92a2a",
                     textDecoration: "none",
                     fontWeight: 500,
                   }}
@@ -566,7 +566,7 @@ export default function LoginPage() {
             <a
               href="mailto:admin@southlakes.edu"
               style={{
-                color: "#e03131",
+                color: "#c92a2a",
                 textDecoration: "none",
                 fontWeight: 500,
               }}

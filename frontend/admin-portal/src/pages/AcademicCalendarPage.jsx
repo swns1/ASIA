@@ -59,13 +59,13 @@ function exportCSV(events, schoolYear) {
 // ── Event types ───────────────────────────────────────────────────────────────
 
 const EVENT_TYPE_DEFAULTS = [
-  { value: "holiday",        label: "Holiday",       color: "#e03131", icon: "ti-flag" },
+  { value: "holiday",        label: "Holiday",       color: "#c92a2a", icon: "ti-flag" },
   { value: "exam",           label: "Exam",          color: "#1455a0", icon: "ti-writing" },
   { value: "enrollment",     label: "Enrollment",    color: "#2e6b0d", icon: "ti-clipboard-list" },
   { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
-  { value: "school_day_off", label: "No Classes",    color: "#d97706", icon: "ti-school-off" },
-  { value: "event",          label: "Event",         color: "#0e9488", icon: "ti-star" },
-  { value: "other",          label: "Other",         color: "#9a7070", icon: "ti-calendar" },
+  { value: "school_day_off", label: "No Classes",    color: "#854f0b", icon: "ti-school-off" },
+  { value: "event",          label: "Event",         color: "#1455a0", icon: "ti-star" },
+  { value: "other",          label: "Other",         color: "#855c5c", icon: "ti-calendar" },
 ];
 
 const COLOR_STORAGE_KEY = "cal_event_colors";
@@ -377,7 +377,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
       {/* Day-of-week header */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,#fff)" }}>
         {DAYS_SHORT.map((d, i) => (
-          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "#e0a0a0" : "#c8a8a8", textTransform: "uppercase" }}>{d}</div>
+          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "#a32d2d" : "#8a6a6a", textTransform: "uppercase" }}>{d}</div>
         ))}
       </div>
 
@@ -445,7 +445,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                       width: 24, height: 24, borderRadius: "50%",
                       fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
                       background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
-                      color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#c09090" : "#2a1a1a",
+                      color: isToday ? "white" : isSelected ? "#e03131" : isWeekend ? "#8a6a6a" : "#2a1a1a",
                       transition: "background-color 0.15s ease, color 0.15s ease",
                     }}>
                       {day}
@@ -514,7 +514,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                       );
                     })}
                     {overflow > 0 && (
-                      <div style={{ fontSize: 9.5, color: "#b09090", paddingLeft: 2 }}>+{overflow} more</div>
+                      <div style={{ fontSize: 9.5, color: "#8a6a6a", paddingLeft: 2 }}>+{overflow} more</div>
                     )}
                   </div>
                 </div>
@@ -547,7 +547,7 @@ function EventCard({ event, onEdit, onDelete }) {
                 </span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
-              <div style={{ fontSize: 11, color: "#9a7070", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "#855c5c", marginTop: 2 }}>
                 <i className="ti ti-calendar" style={{ fontSize: 10, marginRight: 3 }} />
                 {formatDateRange(event.start_date, event.end_date)}
               </div>
@@ -561,13 +561,13 @@ function EventCard({ event, onEdit, onDelete }) {
               <motion.button onClick={() => onEdit(event)} title="Edit"
                 whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
                 whileTap={{ scale: 0.9 }}
-                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
                 <i className="ti ti-pencil" style={{ fontSize: 12 }} />
               </motion.button>
               <motion.button onClick={() => onDelete(event)} title="Delete"
                 whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
                 whileTap={{ scale: 0.9 }}
-                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
                 <i className="ti ti-trash" style={{ fontSize: 12 }} />
               </motion.button>
             </div>
@@ -639,10 +639,10 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>{mode === "edit" ? "Edit Event" : "Add New Event"}</div>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>S.Y. {schoolYear}</div>
+            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>S.Y. {schoolYear}</div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a6a" }}>
             <i className="ti ti-x" style={{ fontSize: 14 }} />
           </motion.button>
         </div>
@@ -679,7 +679,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
                       backgroundColor: active ? t.bg : "white",
                       transition: "background-color 0.15s ease, border-color 0.15s ease",
                     }}>
-                    <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? t.color : "#b09090", transition: "color 0.15s ease" }} />
+                    <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? t.color : "#8a6a6a", transition: "color 0.15s ease" }} />
                     <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? t.color : "#7a5a5a", transition: "color 0.15s ease" }}>{t.label}</span>
                   </button>
                 );
@@ -687,7 +687,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
             <div><label style={LBL}>Start Date *</label><input type="date" value={form.start_date} min={syMin} max={syMax} onChange={(e) => setF("start_date", e.target.value)} style={INP} /></div>
             <div><label style={LBL}>End Date *</label><input type="date" value={form.end_date} min={syMin} max={syMax} onChange={(e) => setF("end_date", e.target.value)} style={INP} /></div>
           </div>
@@ -697,7 +697,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
 
         <div style={{ display: "flex", gap: 10, padding: "0 28px 24px" }}>
           <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
             style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
             Cancel
           </motion.button>
@@ -744,14 +744,14 @@ function ColorSettingsModal({ onClose, onSaved }) {
         {/* Header */}
         <div style={{ background: "linear-gradient(135deg,#fff5f5,white)", padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fde8e8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-palette" style={{ fontSize: 22, color: "#e03131" }} />
+            <i className="ti ti-palette" style={{ fontSize: 22, color: "#c92a2a" }} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Event Colors</div>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Customize strip colors for each event type</div>
+            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>Customize strip colors for each event type</div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a6a" }}>
             <i className="ti ti-x" style={{ fontSize: 14 }} />
           </motion.button>
         </div>
@@ -766,7 +766,7 @@ function ColorSettingsModal({ onClose, onSaved }) {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1a0a0a" }}>{t.label}</div>
-                <div style={{ fontSize: 10.5, color: "#b09090", marginTop: 1 }}>
+                <div style={{ fontSize: 10.5, color: "#8a6a6a", marginTop: 1 }}>
                   {/* Mini strip preview */}
                   <span style={{ display: "inline-block", background: t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 10, color: t.color, fontWeight: 600 }}>
                     Sample event
@@ -788,7 +788,7 @@ function ColorSettingsModal({ onClose, onSaved }) {
                 <button
                   onClick={() => setOverrides((p) => { const n = { ...p }; delete n[t.value]; return n; })}
                   title="Reset to default"
-                  style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#c0a0a0" }}>
+                  style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a6a" }}>
                   <i className="ti ti-refresh" style={{ fontSize: 12 }} />
                 </button>
               )}
@@ -799,13 +799,13 @@ function ColorSettingsModal({ onClose, onSaved }) {
         {/* Footer */}
         <div style={{ display: "flex", gap: 10, padding: "0 28px 24px", alignItems: "center" }}>
           <motion.button onClick={resetAll}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ height: 38, padding: "0 14px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 12, color: "#b09090", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+            style={{ height: 38, padding: "0 14px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 12, color: "#8a6a6a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
             <i className="ti ti-refresh" style={{ fontSize: 13 }} />Reset all
           </motion.button>
           <div style={{ flex: 1 }} />
           <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
             style={{ height: 38, padding: "0 16px", border: "1.5px solid #f0e0e0", borderRadius: 9, background: "white", fontSize: 13, color: "#7a5050", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
             Cancel
           </motion.button>
@@ -869,15 +869,15 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
         {/* Header */}
         <div style={{ background: "linear-gradient(135deg,#fff5f5,white)", padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 13, background: "#fde8e8", border: "1.5px solid #fca5a530", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-flag" style={{ fontSize: 22, color: "#e03131" }} />
+            <i className="ti ti-flag" style={{ fontSize: 22, color: "#c92a2a" }} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Import PH Holidays</div>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>Official Philippine public holidays · S.Y. {schoolYear}</div>
+            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>Official Philippine public holidays · S.Y. {schoolYear}</div>
           </div>
           {!importing && (
             <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#b09090" }}>
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a6a" }}>
               <i className="ti ti-x" style={{ fontSize: 14 }} />
             </motion.button>
           )}
@@ -905,7 +905,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
               )}
 
               {/* Summary counts */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
                 <div style={{ background: "#e8f5e0", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
                   <i className="ti ti-circle-plus" style={{ fontSize: 20, color: "#2e6b0d" }} />
                   <div>
@@ -914,9 +914,9 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
                   </div>
                 </div>
                 <div style={{ background: "#f5eeee", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: 20, color: "#9a7070" }} />
+                  <i className="ti ti-circle-check" style={{ fontSize: 20, color: "#855c5c" }} />
                   <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: "#9a7070" }}>{skipped.length}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "#855c5c" }}>{skipped.length}</div>
                     <div style={{ fontSize: 11, color: "#7a5050", fontWeight: 600 }}>already exist</div>
                   </div>
                 </div>
@@ -925,18 +925,18 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
               {/* Holiday list preview */}
               {toAdd.length > 0 ? (
                 <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
                   {toAdd.map((h) => (
                     <div key={h.date} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: "#fff8f8", borderRadius: 9, border: "1px solid #fde8e8" }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#e03131", flexShrink: 0 }} />
                       <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "#1a0a0a" }}>{h.title}</span>
-                      <span style={{ fontSize: 11, color: "#b09090", fontVariantNumeric: "tabular-nums" }}>{h.date}</span>
+                      <span style={{ fontSize: 11, color: "#8a6a6a", fontVariantNumeric: "tabular-nums" }}>{h.date}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{ background: "#f5eeee", borderRadius: 12, padding: "16px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: 18, color: "#9a7070" }} />
+                  <i className="ti ti-circle-check" style={{ fontSize: 18, color: "#855c5c" }} />
                   <div style={{ fontSize: 13, color: "#7a5050" }}>All holidays for S.Y. {schoolYear} are already in the calendar.</div>
                 </div>
               )}
@@ -956,7 +956,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
           ) : (
             <>
               <motion.button onClick={onClose} disabled={importing}
-                whileHover={!importing ? { borderColor: "#e03131", color: "#e03131" } : {}}
+                whileHover={!importing ? { borderColor: "#e03131", color: "#c92a2a" } : {}}
                 style={{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: "white", fontSize: 13, color: "#7a5050", cursor: importing ? "not-allowed" : "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
                 Cancel
               </motion.button>
@@ -1049,12 +1049,12 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
       <div style={{ padding: "13px 14px 10px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>All Events</div>
-          <span style={{ fontSize: 10.5, color: "#b09090" }}>{filtered.length} / {events.length}</span>
+          <span style={{ fontSize: 10.5, color: "#8a6a6a" }}>{filtered.length} / {events.length}</span>
         </div>
 
         {/* Search */}
         <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 6, border: "1.5px solid #f0e4e4", borderRadius: 8, padding: "5px 10px", background: "#fffbfb", marginBottom: 7 }}>
-          <i className="ti ti-search" style={{ fontSize: 12, color: "#c0a0a0", flexShrink: 0 }} />
+          <i className="ti ti-search" style={{ fontSize: 12, color: "#8a6a6a", flexShrink: 0 }} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1066,7 +1066,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
               <motion.button
                 initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                 onClick={() => setSearch("")}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", padding: 0, display: "flex" }}>
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", padding: 0, display: "flex" }}>
                 <i className="ti ti-x" style={{ fontSize: 11 }} />
               </motion.button>
             )}
@@ -1077,7 +1077,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           <button
             onClick={() => setFilterType("all")}
-            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "#e03131" : "#f0e4e4"}`, background: filterType === "all" ? "#fff0f0" : "white", fontSize: 10.5, color: filterType === "all" ? "#e03131" : "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
+            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "#e03131" : "#f0e4e4"}`, background: filterType === "all" ? "#fff0f0" : "white", fontSize: 10.5, color: filterType === "all" ? "#e03131" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
             All
           </button>
           {EVENT_TYPES.map((t) => {
@@ -1086,7 +1086,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
             if (count === 0) return null;
             return (
               <button key={t.value} onClick={() => setFilterType(active ? "all" : t.value)}
-                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "#f0e4e4"}`, background: active ? t.bg : "white", fontSize: 10.5, color: active ? t.color : "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
+                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "#f0e4e4"}`, background: active ? t.bg : "white", fontSize: 10.5, color: active ? t.color : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
                 <i className={`ti ${t.icon}`} style={{ fontSize: 10 }} />{t.label} <span style={{ opacity: 0.7 }}>·{count}</span>
               </button>
             );
@@ -1102,8 +1102,8 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "28px 0" }}>
-            <i className="ti ti-calendar-off" style={{ fontSize: 26, color: "#e8d0d0" }} />
-            <div style={{ fontSize: 12, color: "#c0a0a0", textAlign: "center", lineHeight: 1.6 }}>
+            <i className="ti ti-calendar-off" style={{ fontSize: 26, color: "#8a6a6a" }} />
+            <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>
               {events.length === 0
                 ? <>No events yet.<br />Click <strong>Add Event</strong> to get started.</>
                 : "No events match your filter."}
@@ -1121,15 +1121,15 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fff8f6"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: "1px solid #faf0f0", transition: "background-color 0.12s ease" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
                     {MONTHS[m]}
                   </span>
-                  <span style={{ fontSize: 10, color: "#d0b0b0", fontWeight: 600 }}>{monthEvs.length}</span>
+                  <span style={{ fontSize: 10, color: "#8a6a6a", fontWeight: 600 }}>{monthEvs.length}</span>
                   <motion.i
                     animate={{ rotate: isCollapsed ? 0 : 180 }}
                     transition={{ duration: 0.18 }}
                     className="ti ti-chevron-down"
-                    style={{ fontSize: 11, color: "#d0b0b0" }}
+                    style={{ fontSize: 11, color: "#8a6a6a" }}
                   />
                 </button>
 
@@ -1155,20 +1155,20 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                               <div style={{ fontSize: 12, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
                               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
                                 <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, background: meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
-                                <span style={{ fontSize: 10, color: "#c0a0a0" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
+                                <span style={{ fontSize: 10, color: "#8a6a6a" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
                               <button onClick={() => onEdit(ev)} title="Edit"
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#9a7070"; }}
-                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#855c5c"; }}
+                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c", transition: "background-color 0.12s ease, color 0.12s ease" }}>
                                 <i className="ti ti-pencil" style={{ fontSize: 11 }} />
                               </button>
                               <button onClick={() => onDelete(ev)} title="Delete"
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#e03131"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#c09090"; }}
-                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#8a6a6a"; }}
+                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", transition: "background-color 0.12s ease, color 0.12s ease" }}>
                                 <i className="ti ti-trash" style={{ fontSize: 11 }} />
                               </button>
                             </div>
@@ -1200,7 +1200,7 @@ function PrintHeader({ schoolName, schoolYear }) {
           <div style={{ fontSize: 12, color: "#7a5050", marginTop: 2 }}>Academic Calendar — S.Y. {schoolYear}</div>
         </div>
       </div>
-      <div style={{ fontSize: 10, color: "#b09090", textAlign: "right" }}>
+      <div style={{ fontSize: 10, color: "#8a6a6a", textAlign: "right" }}>
         Generated on {today}
       </div>
     </div>
@@ -1224,20 +1224,20 @@ function YearListPrint({ events, schoolYear, schoolName }) {
         return (
           <div key={mi} style={{ marginBottom: 18, breakInside: "avoid" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fde8e8", padding: "5px 10px", borderRadius: 4, marginBottom: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#e03131" }}>{month} {monthYear}</span>
-              <span style={{ fontSize: 10, color: "#b09090" }}>{monthEvs.length} event{monthEvs.length !== 1 ? "s" : ""}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#c92a2a" }}>{month} {monthYear}</span>
+              <span style={{ fontSize: 10, color: "#8a6a6a" }}>{monthEvs.length} event{monthEvs.length !== 1 ? "s" : ""}</span>
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
               <thead>
                 <tr style={{ background: "#fdf8f8" }}>
                   {["Date", "Event", "Type", "Description"].map((h) => (
-                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", borderBottom: "1px solid #f0e4e4", color: "#9a7070", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", borderBottom: "1px solid #f0e4e4", color: "#855c5c", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {monthEvs.length === 0 ? (
-                  <tr><td colSpan={4} style={{ padding: "6px 8px", color: "#c8b0b0", fontStyle: "italic", fontSize: 10 }}>No events this month</td></tr>
+                  <tr><td colSpan={4} style={{ padding: "6px 8px", color: "#8a6a6a", fontStyle: "italic", fontSize: 10 }}>No events this month</td></tr>
                 ) : monthEvs.map((ev) => {
                   const meta = eventMeta(ev.event_type);
                   return (
@@ -1294,14 +1294,14 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
             <PrintHeader schoolName={schoolName} schoolYear={schoolYear} />
 
             {/* Month title */}
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#e03131", marginBottom: 10 }}>{month} {monthYear}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#c92a2a", marginBottom: 10 }}>{month} {monthYear}</div>
 
             {/* Mini calendar grid */}
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14, tableLayout: "fixed" }}>
               <thead>
                 <tr>
                   {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
-                    <th key={d} style={{ padding: "4px 0", textAlign: "center", fontSize: 9, fontWeight: 700, color: i === 0 || i === 6 ? "#e0a0a0" : "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #f0e4e4" }}>{d}</th>
+                    <th key={d} style={{ padding: "4px 0", textAlign: "center", fontSize: 9, fontWeight: 700, color: i === 0 || i === 6 ? "#a32d2d" : "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #f0e4e4" }}>{d}</th>
                   ))}
                 </tr>
               </thead>
@@ -1315,7 +1315,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
                       const isWeekend = ci === 0 || ci === 6;
                       return (
                         <td key={k} style={{ border: "1px solid #f0e4e4", height: 44, verticalAlign: "top", padding: "3px 3px 2px", background: isWeekend ? "#fdfafa" : "white" }}>
-                          <div style={{ fontSize: 10, fontWeight: dayEvs.length ? 700 : 400, color: isWeekend ? "#c09090" : "#2a1a1a", marginBottom: 2 }}>{day}</div>
+                          <div style={{ fontSize: 10, fontWeight: dayEvs.length ? 700 : 400, color: isWeekend ? "#8a6a6a" : "#2a1a1a", marginBottom: 2 }}>{day}</div>
                           {dayEvs.slice(0, 2).map((ev) => {
                             const meta = eventMeta(ev.event_type);
                             const isStart = ev.start_date === k;
@@ -1325,7 +1325,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
                               </div>
                             );
                           })}
-                          {dayEvs.length > 2 && <div style={{ fontSize: 7.5, color: "#b09090" }}>+{dayEvs.length - 2}</div>}
+                          {dayEvs.length > 2 && <div style={{ fontSize: 7.5, color: "#8a6a6a" }}>+{dayEvs.length - 2}</div>}
                         </td>
                       );
                     })}
@@ -1337,7 +1337,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
             {/* Event list for this month */}
             {monthEvs.length > 0 && (
               <div style={{ borderTop: "1px solid #f0e4e4", paddingTop: 8 }}>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Events This Month</div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Events This Month</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   {monthEvs.map((ev) => {
                     const meta = eventMeta(ev.event_type);
@@ -1345,7 +1345,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
                       <div key={ev.event_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", background: meta.bg, borderLeft: `3px solid ${meta.color}`, borderRadius: "0 5px 5px 0" }}>
                         <span style={{ fontSize: 9.5, fontVariantNumeric: "tabular-nums", color: "#7a5050", whiteSpace: "nowrap" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                         <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, flex: 1 }}>{ev.title}</span>
-                        {ev.description && <span style={{ fontSize: 9, color: "#9a7070", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: 180 }}>{ev.description}</span>}
+                        {ev.description && <span style={{ fontSize: 9, color: "#855c5c", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: 180 }}>{ev.description}</span>}
                       </div>
                     );
                   })}
@@ -1376,8 +1376,8 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
 function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "white", borderRadius: 12, border: "1px solid #f0e6e6", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", marginTop: 4 }}>
-      <i className="ti ti-printer" style={{ fontSize: 15, color: "#c0a0a0" }} />
-      <span style={{ fontSize: 12, fontWeight: 600, color: "#9a7070" }}>Export</span>
+      <i className="ti ti-printer" style={{ fontSize: 15, color: "#8a6a6a" }} />
+      <span style={{ fontSize: 12, fontWeight: 600, color: "#855c5c" }}>Export</span>
       <div style={{ width: 1, height: 18, background: "#f0e4e4" }} />
 
       {/* View toggle */}
@@ -1387,7 +1387,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
           { value: "month", label: "Monthly Sheets",  icon: "ti-layout-grid" },
         ].map((opt) => (
           <button key={opt.value} onClick={() => setPrintView(opt.value)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#e03131" : "#9a7070", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#e03131" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
             <i className={`ti ${opt.icon}`} style={{ fontSize: 13 }} />{opt.label}
           </button>
         ))}
@@ -1397,7 +1397,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 
       {/* CSV */}
       <motion.button onClick={onExportCSV}
-        whileHover={{ borderColor: "#fca5a5", color: "#e03131", background: "#fff8f8" }}
+        whileHover={{ borderColor: "#fca5a5", color: "#c92a2a", background: "#fff8f8" }}
         whileTap={{ scale: 0.96 }}
         style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#7a5a5a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
         <i className="ti ti-table-export" style={{ fontSize: 14 }} />Download CSV
@@ -1582,10 +1582,10 @@ export default function AcademicCalendarPage() {
             style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
           >
             <motion.button
-              whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
+              whileHover={{ background: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setActiveMonth((m) => (m - 1 + 12) % 12)}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
               <i className="ti ti-chevron-left" style={{ fontSize: 15 }} />
             </motion.button>
             <AnimatePresence mode="wait">
@@ -1595,14 +1595,14 @@ export default function AcademicCalendarPage() {
                 transition={{ duration: 0.15, ease: "easeOut" }}
                 style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", minWidth: 148, textAlign: "center" }}
               >
-                {MONTHS[activeMonth]} <span style={{ color: "#c09090", fontWeight: 500 }}>{activeMonthYear}</span>
+                {MONTHS[activeMonth]} <span style={{ color: "#8a6a6a", fontWeight: 500 }}>{activeMonthYear}</span>
               </motion.div>
             </AnimatePresence>
             <motion.button
-              whileHover={{ background: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" }}
+              whileHover={{ background: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setActiveMonth((m) => (m + 1) % 12)}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
               <i className="ti ti-chevron-right" style={{ fontSize: 15 }} />
             </motion.button>
             <div style={{ width: 1, height: 20, background: "#f0e4e4", margin: "0 6px" }} />
@@ -1618,7 +1618,7 @@ export default function AcademicCalendarPage() {
                       height: 26, padding: "0 9px", borderRadius: 99, cursor: "pointer",
                       border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       background: active ? "#fff0f0" : "white",
-                      fontSize: 11, color: active ? "#e03131" : "#9a7070",
+                      fontSize: 11, color: active ? "#e03131" : "#855c5c",
                       fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500,
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
                     }}>
@@ -1684,7 +1684,7 @@ export default function AcademicCalendarPage() {
                 transition={{ duration: 0.26, ease: "easeOut" }}
                 style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "14px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
               >
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#c0a0a0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
                 <motion.div
                   variants={listVariants.container} initial={ifr ? "hidden" : false} animate="visible"
                   style={{ display: "flex", flexDirection: "column", gap: 7 }}
@@ -1726,21 +1726,21 @@ export default function AcademicCalendarPage() {
               >
                 <div style={{ padding: "13px 16px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 9, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className="ti ti-calendar" style={{ fontSize: 15, color: "#e03131" }} />
+                    <i className="ti ti-calendar" style={{ fontSize: 15, color: "#c92a2a" }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{selectedLabel}</div>
-                    <div style={{ fontSize: 10.5, color: "#b09090", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: 10.5, color: "#8a6a6a", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
                   </div>
                   <motion.button onClick={() => setSelectedDay(null)}
                     whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0" }}>
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a" }}>
                     <i className="ti ti-x" style={{ fontSize: 15 }} />
                   </motion.button>
                 </div>
                 <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
                   {uniqueForDay.length === 0
-                    ? <div style={{ fontSize: 12, color: "#b09090", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
+                    ? <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
                     : uniqueForDay.map((ev) => <EventCard key={ev.event_id} event={ev} onEdit={(e) => setModal({ mode: "edit", event: e })} onDelete={setToDelete} />)
                   }
                 </div>
@@ -1753,10 +1753,10 @@ export default function AcademicCalendarPage() {
                 style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "22px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
               >
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#e8a0a0" }} />
+                  <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#8a6a6a" }} />
                 </div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#b09090" }}>No date selected</div>
-                <div style={{ fontSize: 11, color: "#c8b0b0", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#8a6a6a" }}>No date selected</div>
+                <div style={{ fontSize: 11, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
               </motion.div>
             )}
           </AnimatePresence>

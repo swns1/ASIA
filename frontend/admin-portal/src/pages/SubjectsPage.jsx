@@ -28,7 +28,7 @@ const getTemplates  = ()       => _getTemplates({ is_active: true });
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", color: "#be185d", bg: "#fde8f8" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#d97706", bg: "#fdf5e8" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#854f0b", bg: "#fdf5e8" },
   { value: "elementary",        label: "Elementary",   icon: "ti-book",          color: "#2e6b0d", bg: "#e8f5e0" },
   { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        color: "#1455a0", bg: "#e3f0fd" },
   { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   color: "#7c3aed", bg: "#f0e8fd" },
@@ -136,23 +136,23 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right, #fdfafa, white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-book" style={{ fontSize: 18, color: "#e03131" }} />
+              <i className="ti ti-book" style={{ fontSize: 18, color: "#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
                 {isEdit ? "Edit Subject" : "New Subject"}
               </div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>
                 {isEdit ? "Update subject details" : "Add a new subject to the curriculum"}
               </div>
             </div>
           </div>
           <motion.button
             onClick={onClose}
-            whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", color: "#e03131" }}
+            whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", color: "#c92a2a" }}
             whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.12 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center", borderRadius: 8, padding: 4 }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center", borderRadius: 8, padding: 4 }}
           >
             <i className="ti ti-x" />
           </motion.button>
@@ -187,7 +187,7 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.95 }}
                     transition={{ duration: 0.12 }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#9a7070", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.14s" }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#855c5c", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.14s" }}
                   >
                     <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
                   </motion.button>
@@ -197,7 +197,7 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
           </div>
 
           {/* Grid fields */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Subject Code *</label>
               <input value={form.subject_code} onChange={(e) => setF("subject_code", e.target.value)} placeholder="e.g. MATH-7" style={inp} />
@@ -225,8 +225,8 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
                 style={{ overflow: "hidden" }}
               >
                 <div style={{ padding: "14px 16px", background: "#fff8f6", border: "1px dashed #fca5a5", borderRadius: 10, marginBottom: 14 }}>
-                  <div style={{ fontSize: 10.5, color: "#e03131", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10 }}>Senior HS specifics</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                  <div style={{ fontSize: 10.5, color: "#c92a2a", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10 }}>Senior HS specifics</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
                     <div style={{ marginBottom: 0 }}>
                       <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Strand</label>
                       <select value={form.strand} onChange={(e) => setF("strand", e.target.value)} style={{ ...inp, cursor: "pointer" }}>
@@ -258,7 +258,7 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
                 </option>
               ))}
             </select>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 5, fontStyle: "italic" }}>
+            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 5, fontStyle: "italic" }}>
               Determines how raw scores are weighted into a final grade.
             </div>
           </div>
@@ -392,7 +392,7 @@ export default function SubjectsPage() {
           {/* Row 1: search + clear */}
           <div style={{ display: "flex", gap: 10 }}>
             <div className="search-wrap" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border 0.15s,box-shadow 0.15s" }}>
-              <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
+              <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a", flexShrink: 0 }} />
               <input
                 placeholder="Search by code or name…"
                 value={inputVal}
@@ -402,7 +402,7 @@ export default function SubjectsPage() {
               />
               {inputVal && (
                 <button
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
                   onClick={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter, gradeFilter); }}
                 >
                   <i className="ti ti-x" style={{ fontSize: 13 }} />
@@ -411,7 +411,7 @@ export default function SubjectsPage() {
             </div>
             <button
               style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#c92a2a"; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
               onClick={() => { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter, gradeFilter); }}
             >
@@ -427,9 +427,9 @@ export default function SubjectsPage() {
 
               {/* School Level chips */}
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
                 <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#e03131", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
+                  {[{ value: "all", label: "All Subjects", icon: "ti-books", color: "#c92a2a", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
                     const active = levelFilter === lvl.value;
                     return (
                       <motion.button
@@ -438,7 +438,7 @@ export default function SubjectsPage() {
                         initial={false}
                         animate={{
                           backgroundColor: active ? lvl.bg    : "#ffffff",
-                          color:           active ? lvl.color : "#9a7070",
+                          color:           active ? lvl.color : "#855c5c",
                           borderColor:     active ? lvl.color : "#f0e4e4",
                         }}
                         transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
@@ -477,7 +477,7 @@ export default function SubjectsPage() {
                 pointerEvents: levelFilter !== "all" ? "auto" : "none",
               }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
                   <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {["All Grades", ...gradeOptions].map((g, idx) => {
                       const val = g === "All Grades" ? "" : g;
@@ -486,11 +486,11 @@ export default function SubjectsPage() {
                         <motion.button
                           key={`${levelFilter}-${g}`}
                           layout
-                          initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                          initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
                           animate={{
                             opacity: 1, y: 0,
                             backgroundColor: active ? "#fff0f0" : "#ffffff",
-                            color:           active ? "#e03131" : "#9a7070",
+                            color:           active ? "#e03131" : "#855c5c",
                             borderColor:     active ? "#e03131" : "#f0e4e4",
                           }}
                           transition={{
@@ -539,7 +539,7 @@ export default function SubjectsPage() {
                   { label: "Grading Template", w: "15%" },
                   { label: "",                 w: "4%"  },
                 ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w, position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }}>
+                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w, position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }}>
                     {label}
                   </th>
                 ))}
@@ -574,10 +574,10 @@ export default function SubjectsPage() {
                         <td colSpan={7} style={{ textAlign: "center", padding: "64px 16px" }}>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                             <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
-                              <i className="ti ti-book-off" style={{ fontSize: 24, color: "#e08080" }} />
+                              <i className="ti ti-book-off" style={{ fontSize: 24, color: "#8a6a6a" }} />
                             </div>
                             <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No subjects found</div>
-                            <div style={{ fontSize: 12, color: "#b09090" }}>Try a different search or add a new subject</div>
+                            <div style={{ fontSize: 12, color: "#8a6a6a" }}>Try a different search or add a new subject</div>
                           </div>
                         </td>
                       </motion.tr>
@@ -623,9 +623,9 @@ export default function SubjectsPage() {
                               {sub.strand || sub.semester
                                 ? <div style={{ fontSize: 12, color: "#7a5a5a" }}>
                                     {sub.strand && <span style={{ display: "block" }}>{sub.strand}</span>}
-                                    {sub.semester && <span style={{ color: "#b09090", fontSize: 11 }}>{sub.semester === "1st" ? "1st Semester" : "2nd Semester"}</span>}
+                                    {sub.semester && <span style={{ color: "#8a6a6a", fontSize: 11 }}>{sub.semester === "1st" ? "1st Semester" : "2nd Semester"}</span>}
                                   </div>
-                                : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>
+                                : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>
                               }
                             </td>
                             {/* Grading template */}
@@ -635,11 +635,11 @@ export default function SubjectsPage() {
                                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>
                                       <i className="ti ti-check" style={{ fontSize: 10 }} />{hasTpl.template_name}
                                     </span>
-                                    <span style={{ fontSize: 11, color: "#b09090", paddingLeft: 2 }}>
+                                    <span style={{ fontSize: 11, color: "#8a6a6a", paddingLeft: 2 }}>
                                       {hasTpl.components?.length ?? 0} components · {hasTpl.total_weight ?? 0}%
                                     </span>
                                   </div>
-                                : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontStyle: "italic", padding: "3px 9px", borderRadius: 99, border: "1px dashed #f0d8d8", color: "#c0a0a0" }}>
+                                : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontStyle: "italic", padding: "3px 9px", borderRadius: 99, border: "1px dashed #f0d8d8", color: "#8a6a6a" }}>
                                     <i className="ti ti-minus" style={{ fontSize: 10 }} />No template
                                   </span>
                               }
@@ -651,7 +651,7 @@ export default function SubjectsPage() {
                                   <i className="ti ti-pencil" style={{ fontSize: 13 }} />
                                 </button>
                                 {canManage && (
-                                  <button className="row-action danger" title="Delete" style={{ color: "#c09090" }} onClick={() => setToDelete(sub)}>
+                                  <button className="row-action danger" title="Delete" style={{ color: "#8a6a6a" }} onClick={() => setToDelete(sub)}>
                                     <i className="ti ti-trash" style={{ fontSize: 13 }} />
                                   </button>
                                 )}
@@ -669,7 +669,7 @@ export default function SubjectsPage() {
         {/* Pagination */}
         {!loading && pageMeta.count > 0 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: "#b09090" }}>
+            <span style={{ fontSize: 12, color: "#8a6a6a" }}>
               Page <strong style={{ color: "#7a5050" }}>{page}</strong> of <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong> · {pageMeta.count.toLocaleString()} subjects
             </span>
             <div style={{ display: "flex", gap: 4 }}>
@@ -749,10 +749,10 @@ export default function SubjectsPage() {
 const pgBtn = {
   width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
   background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  cursor: "pointer", fontSize: 12, color: "#855c5c",
   fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
 };
 
 const pgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
+  background: "#fff0f0", borderColor: "#e03131", color: "#c92a2a", fontWeight: 700,
 };

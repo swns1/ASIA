@@ -693,3 +693,61 @@ def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
     invoice.save(update_fields=["status"])
 
     return invoice
+
+
+# ── Collections over time ─────────────────────────────────────────────────────
+
+def _next_month(year: int, month: int):
+    return (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+def shape_collections_series(rows):
+    """
+    Monthly collections for the dashboard's financial chart.
+
+    rows: [{"month": date(2025, 1, 1), "collected": Decimal("12000.00")}, ...]
+          as emitted by .annotate(month=TruncMonth("payment_date"))
+                        .values("month").annotate(collected=Sum("amount_paid"))
+
+    Returns, oldest first:
+        [{"month": "2025-01", "collected": "12000.00", "cumulative": "12000.00"}]
+
+    Two decisions worth stating, because the obvious alternatives are wrong:
+
+    * **Gap months are filled with zero, not skipped.** A month with no
+      payments must still occupy its slot on the time axis. Dropping it
+      compresses the gap and draws one straight line across two distant
+      months, which reads as steady collection through a period when nothing
+      actually came in.
+
+    * **`cumulative` is included so the chart never has to put a flow and a
+      stock on the same axis.** Monthly collections are a flow; `outstanding`
+      and `net_billed` from financial-summary are balances at a point in time.
+      Charting "collected this month" against "outstanding" would invite a
+      second y-scale, and a dual-axis chart invents a relationship the data
+      does not contain. Cumulative collected is itself a stock, so it compares
+      honestly against net_billed on one peso axis.
+
+    Amounts are strings at 2dp, matching the rest of financial-summary — the
+    frontend formats pesos and must not inherit a float rounding error.
+    """
+    totals = {}
+    for row in rows:
+        month = row["month"]
+        totals[(month.year, month.month)] = Decimal(row["collected"] or 0)
+
+    if not totals:
+        return []
+
+    cursor, last = min(totals), max(totals)
+    series, running = [], Decimal("0")
+    while cursor <= last:
+        collected = totals.get(cursor, Decimal("0"))
+        running += collected
+        series.append({
+            "month":      f"{cursor[0]:04d}-{cursor[1]:02d}",
+            "collected":  f"{collected:.2f}",
+            "cumulative": f"{running:.2f}",
+        })
+        cursor = _next_month(*cursor)
+    return series

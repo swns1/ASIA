@@ -25,7 +25,7 @@ const C = {
   red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
   green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
   border: "#f5eaea", softBorder: "#f9f0f0",
-  text: "#1a0a0a", muted: "#7a5050", pale: "#b09090",
+  text: "#1a0a0a", muted: "#7a5050", pale: "#8a6a6a",
   bg: "#fdf8f6", white: "#ffffff",
 };
 
@@ -33,11 +33,11 @@ const C = {
 const AVATAR_PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" },
   { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#16a34a" },
-  { bg: "#fdf5e8", color: "#d97706" },
+  { bg: "#e8fdf0", color: "#2e6b0d" },
+  { bg: "#fdf5e8", color: "#854f0b" },
   { bg: "#f0e8fd", color: "#7c3aed" },
   { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#0891b2" },
+  { bg: "#e8fdfd", color: "#1455a0" },
 ];
 function getAvatarPalette(name = "X") {
   return AVATAR_PALETTES[name.charCodeAt(0) % AVATAR_PALETTES.length];
@@ -64,11 +64,11 @@ function reqIcon(code) { return REQ_ICONS[code] || "ti-file"; }
 
 // ── Filter constants ──────────────────────────────────────────────────────────
 const SCHOOL_LEVELS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#e03131" },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#c27a12" },
+  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#c92a2a" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#854f0b" },
   { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          bg: "#f0e8fd", color: "#7c3aed" },
   { value: "elementary",        label: "Elementary",   icon: "ti-book",          bg: "#e8f0fd", color: "#2563eb" },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#16a34a" },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#2e6b0d" },
   { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   bg: "#fde8f8", color: "#be185d" },
 ];
 
@@ -213,7 +213,7 @@ function UploadModal({ requirement, studentId, onClose, onSuccess }) {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#c0a0a0" }} />
+                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
                   {isReplace ? "Drop new file or click to browse" : "Drop file here or click to browse"}
                 </div>
@@ -247,7 +247,7 @@ function UploadModal({ requirement, studentId, onClose, onSuccess }) {
           <button
             onClick={handleSubmit}
             disabled={uploading || (!file && !isReplace)}
-            style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: uploading ? "#f0dada" : `linear-gradient(135deg,${C.red},${C.redDark})`, color: uploading ? "#b09090" : "white", fontSize: 13, fontWeight: 700, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: uploading ? "#f0dada" : `linear-gradient(135deg,${C.red},${C.redDark})`, color: uploading ? "#8a6a6a" : "white", fontSize: 13, fontWeight: 700, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
             {uploading
               ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Uploading…</>
@@ -506,7 +506,7 @@ export default function RequirementsPage() {
                     className="search-wrap"
                     style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border .15s, box-shadow .15s" }}
                   >
-                    <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0", flexShrink: 0 }} />
+                    <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a", flexShrink: 0 }} />
                     <input
                       value={searchInput}
                       onChange={(e) => {
@@ -519,7 +519,7 @@ export default function RequirementsPage() {
                     {searchInput && (
                       <button
                         onClick={() => { setSearchInput(""); setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
                       >
                         <i className="ti ti-x" style={{ fontSize: 13 }} />
                       </button>
@@ -563,7 +563,7 @@ export default function RequirementsPage() {
 
                 <button
                   style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#e03131"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#c92a2a"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
                   onClick={() => { if (searchInput.trim()) setShowDropdown(true); }}
                 >
@@ -594,7 +594,7 @@ export default function RequirementsPage() {
 
                 {/* School Level chips */}
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
                   <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {SCHOOL_LEVELS.map((lvl) => {
                       const active = levelFilter === lvl.value;
@@ -605,7 +605,7 @@ export default function RequirementsPage() {
                           initial={false}
                           animate={{
                             backgroundColor: active ? lvl.bg    : "#ffffff",
-                            color:           active ? lvl.color : "#9a7070",
+                            color:           active ? lvl.color : "#855c5c",
                             borderColor:     active ? lvl.color : "#f0e4e4",
                           }}
                           transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
@@ -630,7 +630,7 @@ export default function RequirementsPage() {
                   pointerEvents: levelFilter !== "" ? "auto" : "none",
                 }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
                     <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       {gradeOptions.map((g, idx) => {
                         const val = g === "All Grades" ? "" : g;
@@ -639,11 +639,11 @@ export default function RequirementsPage() {
                           <motion.button
                             key={`${levelFilter}-${g}`}
                             layout
-                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
                             animate={{
                               opacity: 1, y: 0,
                               backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#e03131" : "#9a7070",
+                              color:           active ? "#e03131" : "#855c5c",
                               borderColor:     active ? "#e03131" : "#f0e4e4",
                             }}
                             transition={{
@@ -795,7 +795,7 @@ export default function RequirementsPage() {
                         ].map(({ label, w }) => (
                           <th key={label} style={{
                             textAlign: "left", fontSize: 10.5, fontWeight: 600,
-                            color: "#c0a0a0", padding: "13px 18px",
+                            color: "#8a6a6a", padding: "13px 18px",
                             borderBottom: `1px solid ${C.border}`,
                             textTransform: "uppercase", letterSpacing: "0.07em",
                             width: w,
@@ -860,7 +860,7 @@ export default function RequirementsPage() {
                                           {req.requirement_name}
                                         </div>
                                         {req.description && (
-                                          <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>{req.description}</div>
+                                          <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>{req.description}</div>
                                         )}
                                       </div>
                                     </div>
@@ -876,20 +876,20 @@ export default function RequirementsPage() {
                                     {req.submitted_at
                                       ? (
                                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                          <i className="ti ti-calendar" style={{ fontSize: 12, color: "#c0a0a0" }} />
+                                          <i className="ti ti-calendar" style={{ fontSize: 12, color: "#8a6a6a" }} />
                                           <span style={{ fontSize: 12, color: "#5a4a4a" }}>
                                             {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
                                           </span>
                                         </div>
                                       )
-                                      : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                      : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                   </td>
 
                                   {/* Remarks */}
                                   <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
                                     {req.remarks
                                       ? <span style={{ fontSize: 12, color: "#7a5050", fontStyle: "italic" }}>"{req.remarks}"</span>
-                                      : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                      : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                   </td>
 
                                   {/* Actions */}
@@ -916,7 +916,7 @@ export default function RequirementsPage() {
                                           </button>
                                           <button
                                             className="row-action danger" title="Remove"
-                                            style={{ color: "#c09090" }}
+                                            style={{ color: "#8a6a6a" }}
                                             onClick={() => handleRemove(req)}
                                           >
                                             <i className="ti ti-trash" style={{ fontSize: 14 }} />
@@ -960,7 +960,7 @@ export default function RequirementsPage() {
                       ].map(({ label, w }, i, arr) => (
                         <th key={label} style={{
                           textAlign: "left", fontSize: 10.5, fontWeight: 600,
-                          color: "#c0a0a0", padding: "13px 18px",
+                          color: "#8a6a6a", padding: "13px 18px",
                           borderBottom: `1px solid ${C.border}`,
                           textTransform: "uppercase", letterSpacing: "0.07em",
                           width: w,
@@ -1045,10 +1045,10 @@ export default function RequirementsPage() {
                                       <div className="row-name" style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3, transition: "color 0.12s" }}>
                                         {fullName}
                                       </div>
-                                      <div style={{ fontSize: 11, color: "#b09090", marginTop: 2 }}>
+                                      <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>
                                         {st.student_number
                                           ? st.student_number
-                                          : <span style={{ fontStyle: "italic", color: "#d0b8b8" }}>no student number</span>}
+                                          : <span style={{ fontStyle: "italic", color: "#8a6a6a" }}>no student number</span>}
                                       </div>
                                     </div>
                                   </div>
@@ -1058,14 +1058,14 @@ export default function RequirementsPage() {
                                 <td style={tdStyle()}>
                                   {st.lrn
                                     ? <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{st.lrn}</span>
-                                    : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                    : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                 </td>
 
                                 {/* Grade */}
                                 <td style={tdStyle()}>
                                   {gradeLabel
                                     ? <span style={{ fontSize: 12, color: "#5a4a4a" }}>{gradeLabel}</span>
-                                    : <span style={{ color: "#d0b8b8", fontStyle: "italic", fontSize: 12 }}>—</span>}
+                                    : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
                                 </td>
 
                                 {/* Status */}
@@ -1083,7 +1083,7 @@ export default function RequirementsPage() {
 
                                 {/* Arrow */}
                                 <td style={tdStyle({ padding: "13px 14px" })}>
-                                  <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#c0a0a0" }} />
+                                  <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#8a6a6a" }} />
                                 </td>
                               </tr>
                             );
@@ -1102,7 +1102,7 @@ export default function RequirementsPage() {
                 const pages = Array.from({ length: windowSize }, (_, i) => start + i);
                 return (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, color: "#b09090" }}>
+                    <span style={{ fontSize: 12, color: "#8a6a6a" }}>
                       Page <strong style={{ color: "#7a5050" }}>{recentPage}</strong> of{" "}
                       <strong style={{ color: "#7a5050" }}>{totalPages}</strong>
                       &nbsp;·&nbsp;{recentPageMeta.count.toLocaleString()} total records
@@ -1181,13 +1181,13 @@ const s = {
   sidebar:     { width: 224, flexShrink: 0, background: C.white, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" },
   brandWrap:   { padding: "22px 18px 18px", borderBottom: `1px solid ${C.border}` },
   nav:         { flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
-  navSection:  { fontSize: 9.5, color: "#cdb0b0", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 },
+  navSection:  { fontSize: 9.5, color: "#8a6a6a", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 },
   navItem:     { display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, cursor: "pointer" },
   userBox:     { display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" },
   avatar:      { width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red, flexShrink: 0 },
   userName:    { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   userRole:    { fontSize: 11, color: C.pale, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  logoutBtn:   { width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: C.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090", transition: "all 0.12s" },
+  logoutBtn:   { width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: C.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", transition: "all 0.12s" },
   main:        { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
   topbar:      { background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
   topbarTitle: { fontSize: 16, fontWeight: 700, color: C.text},
@@ -1197,7 +1197,7 @@ const s = {
   panelHeader: { padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" },
   panelTitle:  { fontSize: 14, fontWeight: 700, color: C.text},
   statCard:    { background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" },
-  statLabel:   { fontSize: 11, color: "#a07878", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" },
+  statLabel:   { fontSize: 11, color: "#8a6a6a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" },
   statIcon:    { width: 30, height: 30, borderRadius: 8, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" },
   statValue:   { fontSize: 26, fontWeight: 700, lineHeight: 1 },
   primaryBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: `linear-gradient(135deg,#e03131,#c92a2a)`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)" },
@@ -1209,10 +1209,10 @@ const s = {
 const pgBtn = {
   width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
   background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  cursor: "pointer", fontSize: 12, color: "#855c5c",
   fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
 };
 
 const pgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#e03131", fontWeight: 700,
+  background: "#fff0f0", borderColor: "#e03131", color: "#c92a2a", fontWeight: 700,
 };

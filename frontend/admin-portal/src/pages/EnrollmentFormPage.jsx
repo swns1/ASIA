@@ -117,9 +117,9 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" }, { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#16a34a" }, { bg: "#fdf5e8", color: "#d97706" },
+  { bg: "#e8fdf0", color: "#2e6b0d" }, { bg: "#fdf5e8", color: "#854f0b" },
   { bg: "#f0e8fd", color: "#7c3aed" }, { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#0891b2" },
+  { bg: "#e8fdfd", color: "#1455a0" },
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
 
@@ -211,7 +211,7 @@ function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, 
     return (
       <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <i className="ti ti-star" style={{ fontSize: 15, color: "#16a34a" }} />
+          <i className="ti ti-star" style={{ fontSize: 15, color: "#2e6b0d" }} />
         </div>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>New Student</div>
@@ -399,7 +399,7 @@ function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "0 14px", height: 44 }}>
-        <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0" }} />
+        <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a" }} />
         <input placeholder="Search by name, LRN, or student number…" value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
@@ -872,7 +872,7 @@ export default function EnrollmentFormPage() {
                     </span>
                   </label>
                   {isTransferIn && (
-                    <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                    <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
                       <Field label="Effective Date" required>
                         <Input type="date" value={transferInDate} onChange={(e) => setTransferInDate(e.target.value)} />
                       </Field>
@@ -897,12 +897,12 @@ export default function EnrollmentFormPage() {
             {/* 2. Term */}
             <SectionCard title="Academic Term" icon="ti-calendar-event"
               motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.1 : 0 } }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
                 <Field label="School Year" required
                   hint={isEdit && !gradePlacementUnlocked ? "Locked — unlock grade placement to change." : undefined}>
                   {isEdit && !gradePlacementUnlocked ? (
                     <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
                       {form.school_year}
                     </div>
                   ) : (
@@ -1005,11 +1005,11 @@ export default function EnrollmentFormPage() {
                   })}
                 </div>
               </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
                 <Field label="Grade Level" required hint={!isEdit && nextAllowedGrade ? `Locked to ${nextAllowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
                   {(isEdit && !gradePlacementUnlocked) || (!isEdit && nextAllowedGrade) ? (
                     <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
                       {form.grade_level}
                     </div>
                   ) : (
@@ -1031,11 +1031,11 @@ export default function EnrollmentFormPage() {
                     transition={{ duration: 0.2 }}
                     style={{ marginTop: 6, padding: "16px 18px", background: "linear-gradient(to right, #fff8f6, #fff)", border: `1px dashed ${C.redBorder}`, borderRadius: 12 }}>
                     <div style={{ fontSize: 11, color: C.red, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Senior HS specifics</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
                       <Field label="Strand" required>
                         {isEdit && !gradePlacementUnlocked ? (
                           <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
                             {form.strand || "—"}
                           </div>
                         ) : (
@@ -1048,7 +1048,7 @@ export default function EnrollmentFormPage() {
                       <Field label="Semester" required>
                         {isEdit && !gradePlacementUnlocked ? (
                           <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#94a3b8" }} />
+                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
                             {form.semester || "—"}
                           </div>
                         ) : (
@@ -1083,7 +1083,7 @@ export default function EnrollmentFormPage() {
                             transition={{ duration: 0.14 }}
                             onClick={() => toggleScholarship(sc.scholarship_type_id)}
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "#fffbfb", cursor: "pointer" }}>
-                            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${active ? C.red : "#d0b8b8"}`, background: active ? C.red : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${active ? C.red : "#8a6a6a"}`, background: active ? C.red : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               {active && <i className="ti ti-check" style={{ fontSize: 12, color: "white" }} />}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1246,7 +1246,7 @@ function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose,
               <AnimatePresence>
                 {error && (
                   <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
-                    style={{ color: "#e03131", fontSize: 13, marginBottom: 12 }}>{error}
+                    style={{ color: "#c92a2a", fontSize: 13, marginBottom: 12 }}>{error}
                   </motion.p>
                 )}
               </AnimatePresence>

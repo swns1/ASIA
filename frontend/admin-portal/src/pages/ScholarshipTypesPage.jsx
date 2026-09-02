@@ -105,19 +105,19 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-discount" style={{ fontSize: 20, color: "#e03131" }} />
+              <i className="ti ti-discount" style={{ fontSize: 20, color: "#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
                 {isEdit ? "Edit Scholarship" : "New Scholarship Type"}
               </div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>
                 {isEdit ? "Update scholarship details" : "Create a new scholarship type"}
               </div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -137,7 +137,7 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
           </AnimatePresence>
 
           {/* Code + Name */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Scholarship Code *</label>
               <input value={form.scholarship_code} onChange={(e) => setF("scholarship_code", e.target.value)}
@@ -177,7 +177,7 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
                       transition: "background-color 0.15s ease, border-color 0.15s ease",
                     }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: active ? "white" : "#f9f4f4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s ease" }}>
-                      <i className={`ti ${opt.icon}`} style={{ fontSize: 16, color: active ? opt.color : "#9a7070", transition: "color 0.15s ease" }} />
+                      <i className={`ti ${opt.icon}`} style={{ fontSize: 16, color: active ? opt.color : "#855c5c", transition: "color 0.15s ease" }} />
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 600, color: active ? opt.color : "#7a5050", transition: "color 0.15s ease" }}>{opt.label}</span>
                   </button>
@@ -195,11 +195,11 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
                 onChange={(e) => setF("discount_value", e.target.value)}
                 placeholder={form.discount_mode === "percentage" ? "e.g. 50" : "e.g. 5000"}
                 style={{ ...inp, paddingRight: 50 }} />
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 13, fontWeight: 700, color: "#b09090" }}>
+              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 13, fontWeight: 700, color: "#8a6a6a" }}>
                 {form.discount_mode === "percentage" ? "%" : "₱"}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: "#b09090", marginTop: 5, fontStyle: "italic", visibility: form.discount_mode === "percentage" ? "visible" : "hidden" }}>Must be between 0 and 100%</div>
+            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 5, fontStyle: "italic", visibility: form.discount_mode === "percentage" ? "visible" : "hidden" }}>Must be between 0 and 100%</div>
           </div>
 
           {/* Active toggle */}
@@ -216,8 +216,8 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
         {/* Footer */}
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleSave} disabled={saving}
@@ -271,7 +271,7 @@ function ScholarshipRow({ sch, onEdit, onDelete }) {
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{sch.scholarship_name}</div>
             {sch.description && (
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sch.description}</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sch.description}</div>
             )}
           </div>
         </div>
@@ -306,13 +306,13 @@ function ScholarshipRow({ sch, onEdit, onDelete }) {
           <motion.button title="Edit" onClick={() => onEdit(sch)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
             <i className="ti ti-pencil" style={{ fontSize: 13 }} />
           </motion.button>
           <motion.button title="Delete" onClick={() => onDelete(sch)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 13 }} />
           </motion.button>
         </div>
@@ -427,7 +427,7 @@ export default function ScholarshipTypesPage() {
         >
           {/* Search — full width */}
           <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
+            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -439,7 +439,7 @@ export default function ScholarshipTypesPage() {
                 <motion.button
                   initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                   onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 0 }}>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
                   <i className="ti ti-x" style={{ fontSize: 12 }} />
                 </motion.button>
               )}
@@ -451,9 +451,9 @@ export default function ScholarshipTypesPage() {
 
             {/* Status chips */}
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
               {[
-                { value: "all",      label: "All",      color: "#e03131", bg: "#fff0f0" },
+                { value: "all",      label: "All",      color: "#c92a2a", bg: "#fff0f0" },
                 { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
                 { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
               ].map((f) => {
@@ -468,7 +468,7 @@ export default function ScholarshipTypesPage() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? f.color : "#f0e4e4"}`,
                       background: active ? f.bg : "white",
-                      color: active ? f.color : "#9a7070",
+                      color: active ? f.color : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -485,9 +485,9 @@ export default function ScholarshipTypesPage() {
 
             {/* Discount type chips */}
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Type</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Type</span>
               {[
-                { value: "all",          label: "All",          color: "#e03131", bg: "#fff0f0",  icon: null },
+                { value: "all",          label: "All",          color: "#c92a2a", bg: "#fff0f0",  icon: null },
                 { value: "percentage",   label: "Percentage",   color: "#1455a0", bg: "#e3f0fd",  icon: "ti-percentage" },
                 { value: "fixed_amount", label: "Fixed Amount", color: "#7c3aed", bg: "#f0e8fd",  icon: "ti-currency-peso" },
               ].map((f) => {
@@ -503,7 +503,7 @@ export default function ScholarshipTypesPage() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? f.color : "#f0e4e4"}`,
                       background: active ? f.bg : "white",
-                      color: active ? f.color : "#9a7070",
+                      color: active ? f.color : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -523,7 +523,7 @@ export default function ScholarshipTypesPage() {
                   initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
                   transition={{ duration: 0.16 }}
                   onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setSearch(""); }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#e03131", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
                   <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
                 </motion.button>
               )}
@@ -549,7 +549,7 @@ export default function ScholarshipTypesPage() {
                   { label: "Status",         w: "13%" },
                   { label: "",               w: "5%"  },
                 ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
+                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
                     {label}
                   </th>
                 ))}
@@ -582,12 +582,12 @@ export default function ScholarshipTypesPage() {
                       <td colSpan={6} style={{ textAlign: "center", padding: "64px 16px" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                           <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className="ti ti-discount-off" style={{ fontSize: 22, color: "#e08080" }} />
+                            <i className="ti ti-discount-off" style={{ fontSize: 22, color: "#8a6a6a" }} />
                           </div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
                             {hasFilters ? "No scholarships match your filters" : "No scholarship types found"}
                           </div>
-                          <div style={{ fontSize: 12, color: "#b09090" }}>
+                          <div style={{ fontSize: 12, color: "#8a6a6a" }}>
                             {hasFilters ? "Try adjusting your search or filters" : "Create your first scholarship type to get started"}
                           </div>
                           {!hasFilters && (

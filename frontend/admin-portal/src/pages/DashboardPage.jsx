@@ -10,20 +10,21 @@ import Alert from "../components/ui/Alert";
 import Skeleton from "../components/ui/Skeleton";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
-import { ENROLLMENT_STATUS_MAP, STUDENT_STATUS_MAP } from "../constants/statusMaps";
-import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { describeApiError } from "../utils/apiError";
+import Sparkline from "../components/charts/Sparkline";
+import { AttendanceBand, PipelineBand, RiskBand } from "./dashboard/DashboardBands";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import { getStudents as _getStudents } from "../api/studentApi";
 import {
   getEnrollments as _getEnrollments,
   getEnrollmentScholarships as _getEnrollmentScholarships,
-  getSubjects as _getSubjects,
+  getDashboardSummary as _getDashboardSummary,
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { getCurrentUser, hasAnyRole, BILLING_ROLES, GRADE_ROLES, ACADEMIC_STAFF } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
   const motionVal = useMotionValue(0);
@@ -51,18 +52,6 @@ const LEVEL_ICONS = {
   nursery: "ti-baby-carriage", kindergarten: "ti-star", elementary: "ti-book",
   junior_highschool: "ti-school", senior_highschool: "ti-certificate",
 };
-const LEVEL_TONES = {
-  nursery:           "bg-accent-50 text-accent-500",
-  kindergarten:      "bg-warning-50 text-warning-500",
-  elementary:        "bg-success-50 text-success-500",
-  junior_highschool: "bg-info-50 text-info-500",
-  senior_highschool: "bg-accent-50 text-accent-500",
-};
-const LEVEL_BARS = {
-  nursery: "bg-accent-500", kindergarten: "bg-warning-500", elementary: "bg-success-500",
-  junior_highschool: "bg-info-500", senior_highschool: "bg-accent-500",
-};
-
 const CHIP_TONES = {
   up:      "bg-success-50 text-success-500",
   down:    "bg-error-50 text-error-500",
@@ -217,6 +206,7 @@ export default function DashboardPage() {
   // scholarship count stays visible (its own data is fine for any staff
   // role) but the links to /scholarships are hidden for roles that can't use them.
   const canViewScholarships = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  const canViewAnalytics = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [enrolledFilters, setEnrolledFilters] = useState({ year: null, level: null, grade: null });
   const [pendingFilters, setPendingFilters]   = useState({ year: null, level: null, grade: null });
@@ -240,15 +230,11 @@ export default function DashboardPage() {
   const [enrolledCount, setEnrolledCount]       = useState(0);
   const [pendingCount, setPendingCount]         = useState(0);
   const [scholarshipCount, setScholarshipCount] = useState(0);
-  const [, setSubjectCount] = useState(0);
 
+  const [summary, setSummary] = useState(null);
   const [recentEnrollments, setRecentEnrollments] = useState([]);
-  const [levelBreakdown, setLevelBreakdown]       = useState([]);
-  const [recentStudents, setRecentStudents]       = useState([]);
-  const [scholarships, setScholarships]           = useState([]);
 
   const [financialSummary, setFinancialSummary] = useState(null);
-  const [completedCount, setCompletedCount]     = useState(0);
   const [alerts, setAlerts] = useState([]);
 
   const { schoolYear, options: schoolYearOptions } = useSchoolYear();
@@ -261,17 +247,20 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       await Promise.all([
+        // One call for the pipeline, level distribution, attendance series and
+        // risk bands. It replaces six requests — five of which existed only to
+        // read `.count` off a one-row page per school level — and is the only
+        // source of period-grouped data, so the trend charts depend on it.
+        fetchDashboardSummary(),
         fetchStudentStats(),
+        // These two stay separate: their tiles are independently filterable by
+        // year/level/grade, and the summary describes the whole school year.
         fetchEnrollmentStats(),
         fetchPendingStats(),
         fetchRecentEnrollments(),
-        fetchLevelBreakdown(),
-        fetchRecentStudents(),
         fetchScholarships(),
-        fetchSubjectCount(),
         fetchAlerts(),
         ...(canViewFinancials ? [fetchFinancialSummary()] : []),
-        fetchCompletedCount(),
       ]);
       setError("");
     } catch (e) {
@@ -293,6 +282,10 @@ export default function DashboardPage() {
       Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ""))
     ).toString();
     return qs ? `${path}?${qs}` : path;
+  }
+
+  async function fetchDashboardSummary() {
+    setSummary(await _getDashboardSummary({ school_year: schoolYear }));
   }
 
   async function fetchStudentStats() {
@@ -321,45 +314,15 @@ export default function DashboardPage() {
     setRecentEnrollments((data.results ?? []).slice(0, 5));
   }
 
-  async function fetchLevelBreakdown() {
-    const levels = ["nursery","kindergarten","elementary","junior_highschool","senior_highschool"];
-    const counts = await Promise.all(
-      levels.map((lv) =>
-        _getEnrollments({ school_level: lv, school_year: schoolYear, enrollment_status: "enrolled", page_size: 1 })
-          .then((d) => ({ school_level: lv, count: d.count ?? 0 }))
-          .catch(() => ({ school_level: lv, count: 0 }))
-      )
-    );
-    setLevelBreakdown(counts.filter((c) => c.count > 0));
-  }
-
-  async function fetchRecentStudents() {
-    const data = await _getStudents({ page_size: 5, ordering: "-student_id" });
-    setRecentStudents((data.results ?? []).slice(0, 5));
-  }
-
   async function fetchScholarships() {
     const data = await _getEnrollmentScholarships({ page_size: 4, school_year: schoolYear });
     const results = Array.isArray(data) ? data : data.results ?? [];
-    setScholarships(results);
     setScholarshipCount(results.length);
-  }
-
-  async function fetchSubjectCount() {
-    const data = await _getSubjects({ page_size: 1 });
-    setSubjectCount(data.count ?? 0);
   }
 
   async function fetchFinancialSummary() {
     try {
       setFinancialSummary(await _getFinancialSummary(financialYear ?? schoolYear));
-    } catch { /* non-critical */ }
-  }
-
-  async function fetchCompletedCount() {
-    try {
-      const data = await _getEnrollments({ enrollment_status: "completed", school_year: schoolYear, page_size: 1 });
-      setCompletedCount(data.count ?? 0);
     } catch { /* non-critical */ }
   }
 
@@ -414,40 +377,23 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [financialYear]);
 
-  const maxLevel = Math.max(...levelBreakdown.map((l) => l.count), 1);
-  const enrollmentRate = totalStudents > 0 ? Math.round((enrolledCount / totalStudents) * 100) : 0;
-
-  const scholarshipsByType = scholarships.reduce((acc, sc) => {
-    const name = sc.scholarship_type_detail?.scholarship_name ?? "Unknown";
-    acc[name] = (acc[name] || 0) + 1;
-    return acc;
-  }, {});
-  const topScholarships = Object.entries(scholarshipsByType).sort((a, b) => b[1] - a[1]).slice(0, 4);
 
   const yearOpts = schoolYearOptions.map((y) => ({ value: y, label: y }));
   const levelOpts = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }));
   const gradeOpts = (f) => (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
 
-  const quickActions = [
-    // roles mirror each path's actual App.jsx route guard — omit for
-    // STAFF_ALL-level actions. Without this, clicking a button your role can't
-    // use just bounces you back here with no explanation why.
-    { label: "New Student",    icon: "ti-user-plus",      path: "/students/new" },
-    { label: "New Enrollment", icon: "ti-clipboard-list", path: "/enrollments/new" },
-    { label: "Enter Grades",   icon: "ti-pencil",         path: "/grades/entry",  roles: GRADE_ROLES },
-    { label: "Scholarships",   icon: "ti-award",          path: "/scholarships",  roles: ACADEMIC_STAFF },
-    { label: "Invoices",       icon: "ti-receipt",        path: "/invoices",      roles: BILLING_ROLES },
-    { label: "Payments",       icon: "ti-cash",           path: "/payments",      roles: BILLING_ROLES },
-    { label: "Requirements",   icon: "ti-file-check",     path: "/requirements",  roles: ACADEMIC_STAFF },
-    { label: "Analytics",      icon: "ti-chart-dots-3",   path: "/analytics",     roles: ACADEMIC_STAFF },
-    { label: "Subjects",       icon: "ti-book",           path: "/subjects" },
-  ].filter((qa) => hasAnyRole(getCurrentUser(), qa.roles));
-
   const revenueCells = [
     { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",      tone: "bg-info-50 text-info-500",       link: "/invoices" },
-    { label: "Collected",   key: "total_collected", icon: "ti-cash",         tone: "bg-success-50 text-success-500", link: "/invoices?status=paid" },
+    { label: "Collected",   key: "total_collected", icon: "ti-cash",         tone: "bg-success-50 text-success-500", link: "/invoices?status=paid", series: "cumulative" },
     { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", tone: "bg-error-50 text-error-500",     link: "/invoices?status=unpaid" },
   ];
+
+  // Only "Collected" gets a sparkline: it is the one figure with real
+  // month-by-month history. `net_billed` is a single balance and
+  // `outstanding` is derived from it, so neither has a series to draw.
+  const collectionsSpark = {
+    cumulative: (financialSummary?.collections_series ?? []).map((m) => Number(m.cumulative)),
+  };
 
   const net = parseFloat(financialSummary?.net_billed ?? 0);
   const collected = parseFloat(financialSummary?.total_collected ?? 0);
@@ -471,7 +417,7 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-6 xl:overflow-hidden">
         <AnimatePresence>
           {error && (
             <Alert variant="error" dismissible onDismiss={() => setError("")}>
@@ -582,7 +528,20 @@ export default function DashboardPage() {
                     {peso(financialSummary?.[item.key])}
                   </button>
                 )}
-                <div className="text-xs text-neutral-500">S.Y. {financialYear ?? schoolYear}</div>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="text-xs text-neutral-500">S.Y. {financialYear ?? schoolYear}</div>
+                  {/* A sparkline only where a real series exists. Collections
+                      are the one dashboard figure with month-by-month history
+                      behind them (Payment.payment_date); the student and
+                      enrolment counts have no time axis in the schema, and
+                      drawing a trend line for them would be inventing one. */}
+                  {!loading && item.series && (
+                    <Sparkline
+                      values={collectionsSpark[item.series] ?? []}
+                      className={showAmounts ? "" : "blur-[6px]"}
+                    />
+                  )}
+                </div>
               </Card>
             ))}
 
@@ -675,12 +634,39 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Recent enrollments · funnel · level breakdown */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        {/* The three questions the dashboard exists to answer, in one row:
+            where students are in the process, who needs help, and whether the
+            school is turning up. All three are scoped server-side — a teacher
+            sees their own advisory roster, not the school. */}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <PipelineBand
+            pipeline={summary?.pipeline}
+            loading={loading}
+            schoolYear={schoolYear}
+            compact
+          />
+          <RiskBand
+            risk={summary?.risk}
+            loading={loading}
+            compact
+            onOpen={
+              canViewAnalytics ? (
+                <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right"
+                  onClick={() => navigate("/analytics")}>
+                  Analytics
+                </Button>
+              ) : undefined
+            }
+          />
+          <AttendanceBand series={summary?.attendance_series} loading={loading} compact />
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
           <Panel
             title="Recent Enrollments"
             padding="none"
-            className="lg:col-span-2 xl:col-span-1"
+            className="min-h-0 flex-1"
+            bodyClassName="overflow-auto"
             action={
               <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
                 View all
@@ -721,229 +707,6 @@ export default function DashboardPage() {
                 </TableRow>
               ))}
             </Table>
-          </Panel>
-
-          <Panel
-            title="Enrollment Funnel"
-            subtitle={`S.Y. ${schoolYear}`}
-            action={
-              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
-                View
-              </Button>
-            }
-          >
-            {(() => {
-              const total = pendingCount + enrolledCount + completedCount;
-              const steps = [
-                { label: "Pending",   count: pendingCount,   bar: "bg-warning-dot", text: "text-warning-500", tone: "bg-warning-50 text-warning-500", icon: "ti-clock" },
-                { label: "Enrolled",  count: enrolledCount,  bar: "bg-info-dot",    text: "text-info-500",    tone: "bg-info-50 text-info-500",       icon: "ti-calendar-event" },
-                { label: "Completed", count: completedCount, bar: "bg-success-dot", text: "text-success-500", tone: "bg-success-50 text-success-500", icon: "ti-circle-check" },
-              ];
-              return (
-                <div className="space-y-2.5">
-                  <div className="text-xs text-neutral-500">{total.toLocaleString()} total</div>
-                  {steps.map((step, i) => {
-                    const pct = total > 0 ? Math.round((step.count / total) * 100) : 0;
-                    return (
-                      <div key={step.label}>
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-sm ${step.tone}`}>
-                            <i className={`ti ${step.icon} text-[13px]`} aria-hidden="true" />
-                          </div>
-                          <span className="flex-1 text-sm text-neutral-900">{step.label}</span>
-                          {loading
-                            ? <Skeleton width={40} height={13} variant="pulse" />
-                            : <span className={`text-sm font-bold ${step.text}`}>{step.count.toLocaleString()}</span>}
-                        </div>
-                        <div
-                          className="h-1.5 overflow-hidden rounded-full bg-neutral-200"
-                          role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
-                          aria-label={`${step.label}: ${pct}%`}
-                        >
-                          {!loading && (
-                            <div className={`h-full rounded-full opacity-90 transition-[width] duration-500 ${step.bar}`} style={{ width: `${pct}%` }} />
-                          )}
-                        </div>
-                        {i < steps.length - 1 && (
-                          <div className="mt-1.5 flex justify-center">
-                            <i className="ti ti-chevron-down text-[12px] text-neutral-400" aria-hidden="true" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {!loading && total > 0 && (
-                    <div className="flex items-center justify-between border-t border-neutral-200 pt-2.5">
-                      <span className="text-xs text-neutral-500">Enrollment rate</span>
-                      <span className={`text-sm font-bold ${enrollmentRate >= 70 ? "text-success-500" : "text-warning-500"}`}>
-                        {enrollmentRate}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </Panel>
-
-          <Panel
-            title="Students by Level"
-            padding="none"
-            action={
-              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/enrollments")}>
-                View
-              </Button>
-            }
-          >
-            {loading ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} height={28} variant="pulse" />
-                ))}
-              </div>
-            ) : levelBreakdown.length === 0 ? (
-              <p className="p-6 text-center text-sm italic text-neutral-500">No enrollment data yet</p>
-            ) : (
-              <>
-                {levelBreakdown.map((lv) => (
-                  <div
-                    key={lv.school_level}
-                    className="flex items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5 last:border-0"
-                  >
-                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${LEVEL_TONES[lv.school_level] ?? "bg-muted-50 text-muted-500"}`}>
-                      <i className={`ti ${LEVEL_ICONS[lv.school_level] ?? "ti-school"} text-[14px]`} aria-hidden="true" />
-                    </div>
-                    <span className="flex-1 truncate text-sm text-neutral-900">
-                      {LEVEL_LABELS[lv.school_level] ?? lv.school_level}
-                    </span>
-                    <div className="h-1 w-14 overflow-hidden rounded-full bg-neutral-200">
-                      <div
-                        className={`h-full rounded-full ${LEVEL_BARS[lv.school_level] ?? "bg-brand-500"}`}
-                        style={{ width: `${Math.round((lv.count / maxLevel) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="w-8 text-right text-sm font-bold text-neutral-900">
-                      {lv.count.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-neutral-500">Total enrolled</span>
-                  <span className="text-sm font-bold text-brand-500">{enrolledCount.toLocaleString()}</span>
-                </div>
-              </>
-            )}
-          </Panel>
-        </div>
-
-        {/* Quick actions · recent students · scholarships */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Panel title="Quick Actions">
-            <div className="grid grid-cols-2 gap-2">
-              {quickActions.map((qa) => (
-                <button
-                  key={qa.label}
-                  type="button"
-                  onClick={() => navigate(qa.path)}
-                  className="focus-ring flex items-center gap-2 rounded-sm border border-neutral-200 bg-brand-50 px-3 py-2.5 text-sm text-neutral-900 transition-all hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"
-                >
-                  <i className={`ti ${qa.icon} text-[16px] text-brand-500`} aria-hidden="true" />
-                  <span className="truncate">{qa.label}</span>
-                </button>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Recently Added Students"
-            padding="none"
-            action={
-              <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/students")}>
-                View all
-              </Button>
-            }
-          >
-            {loading ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={32} variant="pulse" />)}
-              </div>
-            ) : recentStudents.length === 0 ? (
-              <p className="p-6 text-center text-sm italic text-neutral-500">No students yet</p>
-            ) : (
-              recentStudents.map((st) => {
-                const pal = getAvatarPalette(`${st.last_name}${st.first_name}`);
-                return (
-                  <button
-                    key={st.student_id}
-                    type="button"
-                    onClick={() => navigate(`/students/${st.student_id}`)}
-                    className="focus-ring flex w-full items-center gap-2.5 border-b border-neutral-200/70 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-brand-50"
-                  >
-                    <div
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                      style={{ background: pal.bg, color: pal.color }}
-                      aria-hidden="true"
-                    >
-                      {initialsFrom(st.first_name, st.last_name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-neutral-900">
-                        {st.last_name}, {st.first_name}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-neutral-500">
-                        <span className="truncate">LRN {st.lrn || "—"}</span>
-                        <StatusBadge status={st.status} map={STUDENT_STATUS_MAP} size="sm" showIcon={false} />
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </Panel>
-
-          <Panel
-            title="Scholarships Awarded"
-            padding="none"
-            action={
-              canViewScholarships ? (
-                <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/scholarships")}>
-                  View all
-                </Button>
-              ) : undefined
-            }
-          >
-            {loading ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={28} variant="pulse" />)}
-              </div>
-            ) : scholarships.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 p-6 text-center">
-                <i className="ti ti-award-off text-2xl text-brand-400" aria-hidden="true" />
-                <p className="text-sm italic text-neutral-500">No scholarships awarded yet</p>
-                {canViewScholarships && (
-                  <Button variant="secondary" size="sm" onClick={() => navigate("/scholarships")}>
-                    Award now
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <>
-                {topScholarships.map(([name, count]) => (
-                  <div key={name} className="flex items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-info-50">
-                      <i className="ti ti-award text-[13px] text-info-500" aria-hidden="true" />
-                    </div>
-                    <span className="flex-1 truncate text-sm text-neutral-900">{name}</span>
-                    <span className="rounded-sm bg-info-50 px-2 py-0.5 text-sm font-bold text-info-500">
-                      {count}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-neutral-500">Total awarded</span>
-                  <span className="text-sm font-bold text-info-500">{scholarshipCount}</span>
-                </div>
-              </>
-            )}
           </Panel>
         </div>
       </div>

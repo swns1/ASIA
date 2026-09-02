@@ -116,7 +116,7 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 12px;
   font-weight: 600;
-  color: #9a7070;
+  color: #855c5c;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
@@ -178,7 +178,7 @@
 .page-btn:hover:not(:disabled) { background:#fff0f0 !important;border-color:#e03131 !important;color:#e03131 !important; }
 .page-btn:disabled { opacity:0.3;cursor:not-allowed; }                       /* SubjectsPage */
 .search-wrap:focus-within { border-color:#e03131 !important;box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
-.row-action { width:30px;height:30px;border:1px solid #f0e4e4;border-radius:8px;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9a7070;transition:all 0.12s;font-family:'DM Sans',sans-serif; }
+.row-action { width:30px;height:30px;border:1px solid #f0e4e4;border-radius:8px;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#855c5c;transition:all 0.12s;font-family:'DM Sans',sans-serif; }
 .row-action:hover { background:#fff0f0 !important;color:#e03131 !important;border-color:#fca5a5 !important; }
 .row-action.danger:hover { background:#fff0f0 !important;color:#e03131 !important; }
 .student-row { transition:background 0.12s;cursor:pointer; }                 /* RequirementsPage, TeacherSectionsPage */

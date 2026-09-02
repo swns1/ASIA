@@ -75,9 +75,9 @@ const LEVEL_ICONS = {
 
 const PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" }, { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#16a34a" }, { bg: "#fdf5e8", color: "#d97706" },
+  { bg: "#e8fdf0", color: "#2e6b0d" }, { bg: "#fdf5e8", color: "#854f0b" },
   { bg: "#f0e8fd", color: "#7c3aed" }, { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#0891b2" },
+  { bg: "#e8fdfd", color: "#1455a0" },
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
 
@@ -114,7 +114,7 @@ const inp = {
   background:"#fffbfb", outline:"none", width:"100%", boxSizing:"border-box",
 };
 const sel = { ...inp, cursor:"pointer" };
-const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#9a7070", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
+const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#855c5c", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
 
 function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
   const [schoolYear,  setSchoolYear]  = useState(initSchoolYear  || "");
@@ -282,9 +282,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
   const avatarFor = (name = "X") => {
     const palettes = [
       { bg:"#fde8e8",color:"#c0392b" },{ bg:"#e8f0fd",color:"#2563eb" },
-      { bg:"#e8fdf0",color:"#16a34a" },{ bg:"#fdf5e8",color:"#d97706" },
+      { bg:"#e8fdf0",color:"#2e6b0d" },{ bg:"#fdf5e8",color:"#854f0b" },
       { bg:"#f0e8fd",color:"#7c3aed" },{ bg:"#fde8f8",color:"#be185d" },
-      { bg:"#e8fdfd",color:"#0891b2" },
+      { bg:"#e8fdfd",color:"#1455a0" },
     ];
     return palettes[name.charCodeAt(0) % palettes.length];
   };
@@ -314,19 +314,19 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ width:36, height:36, borderRadius:10, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <i className="ti ti-users-plus" style={{ fontSize:17, color:"#e03131" }} />
+                <i className="ti ti-users-plus" style={{ fontSize:17, color:"#c92a2a" }} />
               </div>
               <div>
                 <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Mass Enroll</div>
-                <div style={{ fontSize:11.5, color:"#b09090" }}>Bulk-assign students to a class section · Created as <strong>Pending</strong></div>
+                <div style={{ fontSize:11.5, color:"#8a6a6a" }}>Bulk-assign students to a class section · Created as <strong>Pending</strong></div>
               </div>
             </div>
             <motion.button
-              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131" }}
+              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#c92a2a" }}
               whileTap={{ scale: 0.93 }}
               transition={{ duration: 0.12 }}
               onClick={onClose}
-              style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+              style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c" }}>
               <i className="ti ti-x" style={{ fontSize:14 }} />
             </motion.button>
           </div>
@@ -346,7 +346,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
               </select>
             </div>
             <div>
-              <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
+              <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
               <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. Sampaguita" style={inp} />
             </div>
             <div>
@@ -364,13 +364,13 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           {isSHS && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginTop:10 }}>
               <div style={{ gridColumn:"1/3" }}>
-                <label style={lbl}>Strand <span style={{ color:"#e03131" }}>*</span></label>
+                <label style={lbl}>Strand <span style={{ color:"#c92a2a" }}>*</span></label>
                 <select value={strand} onChange={(e) => setStrand(e.target.value)} style={{ ...sel, borderColor: isSHS && !strand ? "#fca5a5" : undefined }}>
                   <option value="">— Select strand —</option>
                   {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 {isSHS && !strand && (
-                  <div style={{ fontSize:10, color:"#e03131", marginTop:3 }}>Strand is required for Senior HS</div>
+                  <div style={{ fontSize:10, color:"#c92a2a", marginTop:3 }}>Strand is required for Senior HS</div>
                 )}
               </div>
               <div style={{ gridColumn:"3/5" }}>
@@ -390,27 +390,27 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           <div style={{ display:"flex", flexDirection:"column", borderRight:"1px solid #f5eaea", minHeight:0 }}>
             <div style={{ padding:"12px 18px 10px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
               <div style={{ fontSize:11, fontWeight:700, color:"#7a5050", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
-                Add Students {candidates.length > 0 && <span style={{ color:"#b09090", fontWeight:400 }}>({candidates.length} eligible)</span>}
+                Add Students {candidates.length > 0 && <span style={{ color:"#8a6a6a", fontWeight:400 }}>({candidates.length} eligible)</span>}
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8, background:"white", border:"1.5px solid #f0e4e4", borderRadius:9, padding:"0 12px", height:36 }}>
-                <i className="ti ti-search" style={{ fontSize:13, color:"#c0a0a0" }} />
+                <i className="ti ti-search" style={{ fontSize:13, color:"#8a6a6a" }} />
                 <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={classReady ? "Search by name or LRN…" : "Fill class fields above first"}
                   disabled={!classReady}
                   style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
-                {candLoading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#e03131", animation:"spin 1s linear infinite" }} />}
+                {candLoading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
               </div>
             </div>
 
             <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
               {!classReady && (
-                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#8a6a6a", fontSize:12 }}>
                   <i className="ti ti-arrow-up" style={{ fontSize:20, display:"block", marginBottom:8 }} />
                   Complete the class fields above to search for students.
                 </div>
               )}
               {classReady && !candLoading && candidates.length === 0 && (
-                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#8a6a6a", fontSize:12 }}>
                   {searchQuery ? `No eligible students match "${searchQuery}".` : "No eligible students found for this grade. Try searching by name."}
                 </div>
               )}
@@ -419,12 +419,12 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                   <div style={{ padding:"6px 18px", display:"flex", alignItems:"center", gap:8, borderBottom:"1px solid #f9f0f0" }}>
                     <input type="checkbox" checked={allSelected} onChange={toggleAll}
                       style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer" }} />
-                    <span style={{ fontSize:11.5, color:"#9a7070", fontWeight:600 }}>{allSelected ? "Deselect all" : "Select all"}</span>
+                    <span style={{ fontSize:11.5, color:"#855c5c", fontWeight:600 }}>{allSelected ? "Deselect all" : "Select all"}</span>
                     {selected.size > 0 && (
                       <motion.span
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        style={{ marginLeft:"auto", fontSize:11, background:"#fff0f0", color:"#e03131", border:"1px solid #fca5a5", borderRadius:99, padding:"2px 8px", fontWeight:700 }}>
+                        style={{ marginLeft:"auto", fontSize:11, background:"#fff0f0", color:"#c92a2a", border:"1px solid #fca5a5", borderRadius:99, padding:"2px 8px", fontWeight:700 }}>
                         {selected.size} selected
                       </motion.span>
                     )}
@@ -458,11 +458,11 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                           <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                            <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                            <div style={{ fontSize:10.5, color:"#8a6a6a", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                               <span>LRN {st.lrn ?? "—"}</span>
                               {st.lastGrade ? (
                                 <span style={{ background:"#fff0e8", color:"#b45309", border:"1px solid #fcd9a8", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
-                                  {st.lastGrade} → <span style={{ color:"#e03131" }}>{gradeLevel}</span>
+                                  {st.lastGrade} → <span style={{ color:"#c92a2a" }}>{gradeLevel}</span>
                                 </span>
                               ) : (
                                 <span style={{ background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
@@ -488,19 +488,19 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
             <div style={{ padding:"12px 18px 10px", borderBottom:"1px solid #f5eaea", flexShrink:0 }}>
               <div style={{ fontSize:11, fontWeight:700, color:"#7a5050", textTransform:"uppercase", letterSpacing:"0.07em" }}>
                 In This Class
-                <span style={{ marginLeft:6, fontWeight:400, color:"#b09090" }}>
+                <span style={{ marginLeft:6, fontWeight:400, color:"#8a6a6a" }}>
                   {enrollLoading ? "loading…" : `(${enrolled.length})`}
                 </span>
               </div>
             </div>
             <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
               {!classReady && (
-                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#8a6a6a", fontSize:12 }}>
                   Fill in the class fields to see enrolled students.
                 </div>
               )}
               {classReady && !enrollLoading && enrolled.length === 0 && (
-                <div style={{ padding:"40px 18px", textAlign:"center", color:"#b09090", fontSize:12 }}>No students in this class yet.</div>
+                <div style={{ padding:"40px 18px", textAlign:"center", color:"#8a6a6a", fontSize:12 }}>No students in this class yet.</div>
               )}
               <AnimatePresence mode="popLayout">
                 {enrolled.map((en) => {
@@ -523,7 +523,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                         <div style={{ width:30, height:30, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:12.5, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                          <div style={{ fontSize:10.5, color:"#b09090", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                          <div style={{ fontSize:10.5, color:"#8a6a6a", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
                             <span>#{en.enrollment_id}</span>
                             {statusPill && (
                               <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:statusPill.bg, color:statusPill.color, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
@@ -533,13 +533,13 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                           </div>
                         </div>
                         <motion.button
-                          whileHover={!isRemoving ? { scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131", borderColor: "#fca5a5" } : {}}
+                          whileHover={!isRemoving ? { scale: 1.08, backgroundColor: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" } : {}}
                           whileTap={!isRemoving ? { scale: 0.93 } : {}}
                           transition={{ duration: 0.12 }}
                           onClick={() => setPendingRemove(isPendingThisRemove ? null : en)}
                           disabled={isRemoving}
                           title="Remove from class"
-                          style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#c0a0a0", flexShrink:0 }}>
+                          style={{ width:28, height:28, border:"1px solid #fde2de", borderRadius:7, background: isPendingThisRemove ? "#fff0f0" : "white", display:"flex", alignItems:"center", justifyContent:"center", cursor: isRemoving ? "wait" : "pointer", color: isPendingThisRemove ? "#e03131" : "#8a6a6a", flexShrink:0 }}>
                           {isRemoving
                             ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
                             : <i className="ti ti-x" style={{ fontSize:12 }} />}
@@ -611,7 +611,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
             )}
           </AnimatePresence>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
-            <div style={{ fontSize:11, color:"#b09090", fontStyle:"italic" }}>
+            <div style={{ fontSize:11, color:"#8a6a6a", fontStyle:"italic" }}>
               Students are added as <strong>Pending</strong> — activate each to Enrolled after documents are submitted.
             </div>
             <div style={{ display:"flex", gap:10 }}>
@@ -768,7 +768,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.14 }}
-                  style={{ fontSize:11.5, color:"#b09090" }}>
+                  style={{ fontSize:11.5, color:"#8a6a6a" }}>
                   {step === "input"   && "Move a completed section to the next grade level"}
                   {step === "preview" && `Preview · ${previewData?.to_promote?.length ?? 0} to promote, ${previewData?.to_skip?.length ?? 0} to skip`}
                   {step === "result"  && `Done · ${resultData?.created?.length ?? 0} promoted`}
@@ -777,11 +777,11 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
             </div>
           </div>
           <motion.button
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#e03131" }}
+            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", color: "#c92a2a" }}
             whileTap={{ scale: 0.93 }}
             transition={{ duration: 0.12 }}
             onClick={onClose}
-            style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+            style={{ background:"none", border:"1px solid #f0e4e4", borderRadius:8, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c" }}>
             <i className="ti ti-x" style={{ fontSize:14 }} />
           </motion.button>
         </div>
@@ -806,33 +806,33 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                   </div>
 
                   <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>From (Source Section)</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#855c5c", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>From (Source Section)</div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                       <div>
-                        <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                        <label style={lbl}>School Year <span style={{ color:"#c92a2a" }}>*</span></label>
                         <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
                           <option value="">— Select —</option>
                           {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label style={lbl}>Grade Level <span style={{ color:"#e03131" }}>*</span></label>
+                        <label style={lbl}>Grade Level <span style={{ color:"#c92a2a" }}>*</span></label>
                         <select value={fromGradeLevel} onChange={(e) => setFromGradeLevel(e.target.value)} style={sel}>
                           {allGrades.map((g) => <option key={g} value={g}>{g}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label style={lbl}>Section <span style={{ color:"#e03131" }}>*</span></label>
+                        <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
                         <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
                       </div>
                     </div>
                   </div>
 
                   <div style={{ borderTop:"1px dashed #f0e4e4", paddingTop:18 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"#9a7070", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#855c5c", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                       <div>
-                        <label style={lbl}>School Year <span style={{ color:"#e03131" }}>*</span></label>
+                        <label style={lbl}>School Year <span style={{ color:"#c92a2a" }}>*</span></label>
                         <select value={toSchoolYear} onChange={(e) => setToSchoolYear(e.target.value)} style={sel}>
                           <option value="">— Select —</option>
                           {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -845,12 +845,12 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                           readOnly
                           style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }}
                         />
-                        <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Auto-computed from source grade</div>
+                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Auto-computed from source grade</div>
                       </div>
                       <div>
                         <label style={lbl}>Section</label>
                         <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
-                        <div style={{ fontSize:10, color:"#b09090", marginTop:3 }}>Defaults to source section name</div>
+                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Defaults to source section name</div>
                       </div>
                     </div>
                   </div>
@@ -886,7 +886,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2, ease: "easeOut", delay: i * 0.055 }}
                         style={{ background:"#fff8f6", border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px" }}>
-                        <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
                         <div style={{ fontSize:15, fontWeight:700, color, marginTop:4 }}>{value}</div>
                       </motion.div>
                     ))}
@@ -1036,7 +1036,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
 
         {/* Footer */}
         <div style={{ padding:"14px 26px 18px", borderTop:"1px solid #f5eaea", flexShrink:0, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <div style={{ fontSize:11, color:"#b09090", fontStyle:"italic" }}>
+          <div style={{ fontSize:11, color:"#8a6a6a", fontStyle:"italic" }}>
             {step === "input"   && "Promoted students are created as Pending — activate to Enrolled after documents."}
             {step === "preview" && "Review the lists above, then click Confirm to create the enrollment records."}
             {step === "result"  && "You can find the new enrollments under the destination school year."}
@@ -1117,9 +1117,9 @@ function StatCard({ label, value, icon, color, bg, loading, isActive, onClick })
       <div>
         {loading
           ? <Sk w={40} h={20} r={4} />
-          : <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? color : (value > 0 ? "#1a0a0a" : "#c0a0a0"), lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
+          : <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? color : (value > 0 ? "#1a0a0a" : "#8a6a6a"), lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
         }
-        <div style={{ fontSize: 11, color: isActive ? color : "#a07878", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+        <div style={{ fontSize: 11, color: isActive ? color : "#8a6a6a", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
       </div>
     </motion.div>
   );
@@ -1299,7 +1299,7 @@ export default function EnrollmentsPage() {
             {/* ── Stat cards ── */}
             <div style={{ display:"flex", gap:12 }}>
               {[
-                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#e03131", bg:"#fff0f0", status:"" },
+                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#c92a2a", bg:"#fff0f0", status:"" },
                 { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  color:"#2e6b0d", bg:"#e8f5e0", status:"enrolled" },
                 { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   color:"#7a4a08", bg:"#fef3e2", status:"pending" },
                 { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, color:"#1455a0", bg:"#e3f0fd", status:"completed" },
@@ -1339,7 +1339,7 @@ export default function EnrollmentsPage() {
               <div style={{ display:"flex", gap:10, alignItems:"center" }}>
                 <div className="search-wrap"
                   style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
-                  <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0", flexShrink:0 }} />
+                  <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a", flexShrink:0 }} />
                   <input
                     placeholder="Search student name or section…"
                     value={searchInput}
@@ -1348,7 +1348,7 @@ export default function EnrollmentsPage() {
                     style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }}
                   />
                   {searchInput && (
-                    <button onClick={() => { setSearchInput(""); setSearch(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}>
+                    <button onClick={() => { setSearchInput(""); setSearch(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}>
                       <i className="ti ti-x" style={{ fontSize:13 }} />
                     </button>
                   )}
@@ -1356,7 +1356,7 @@ export default function EnrollmentsPage() {
                 <button
                   onClick={handleSearch}
                   style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s", flexShrink:0 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#e03131"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#c92a2a"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
                   Search
                 </button>
@@ -1384,7 +1384,7 @@ export default function EnrollmentsPage() {
 
                 {/* Row 2: School Year chips */}
                 <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
                   <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
                     {schoolYearOptions.map((o) => {
                       const active = schoolYear === o.value;
@@ -1394,7 +1394,7 @@ export default function EnrollmentsPage() {
                           initial={false}
                           animate={{
                             backgroundColor: active ? "#fff0f0" : "#ffffff",
-                            color:           active ? "#e03131" : "#9a7070",
+                            color:           active ? "#e03131" : "#855c5c",
                             borderColor:     active ? "#e03131" : "#f0e4e4",
                           }}
                           transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -1415,14 +1415,14 @@ export default function EnrollmentsPage() {
 
                 {/* Row 3: School Level chips */}
                 <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
                   <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
                     {[
-                      { value:"",                  label:"All Levels",   icon:"ti-layout-grid",   bg:"#fff0f0", color:"#e03131" },
-                      { value:"nursery",           label:"Nursery",      icon:"ti-baby-carriage", bg:"#fdf5e8", color:"#c27a12" },
+                      { value:"",                  label:"All Levels",   icon:"ti-layout-grid",   bg:"#fff0f0", color:"#c92a2a" },
+                      { value:"nursery",           label:"Nursery",      icon:"ti-baby-carriage", bg:"#fdf5e8", color:"#854f0b" },
                       { value:"kindergarten",      label:"Kindergarten", icon:"ti-star",          bg:"#f0e8fd", color:"#7c3aed" },
                       { value:"elementary",        label:"Elementary",   icon:"ti-book",          bg:"#e8f0fd", color:"#2563eb" },
-                      { value:"junior_highschool", label:"Junior High",  icon:"ti-school",        bg:"#e8fdf0", color:"#16a34a" },
+                      { value:"junior_highschool", label:"Junior High",  icon:"ti-school",        bg:"#e8fdf0", color:"#2e6b0d" },
                       { value:"senior_highschool", label:"Senior High",  icon:"ti-certificate",   bg:"#fde8f8", color:"#be185d" },
                     ].map((lvl) => {
                       const active = schoolLevel === lvl.value;
@@ -1432,7 +1432,7 @@ export default function EnrollmentsPage() {
                           initial={false}
                           animate={{
                             backgroundColor: active ? lvl.bg    : "#ffffff",
-                            color:           active ? lvl.color : "#9a7070",
+                            color:           active ? lvl.color : "#855c5c",
                             borderColor:     active ? lvl.color : "#f0e4e4",
                           }}
                           transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -1456,7 +1456,7 @@ export default function EnrollmentsPage() {
                   pointerEvents: schoolLevel !== "" ? "auto" : "none",
                 }}>
                   <div style={{ paddingTop: 0 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
                     <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
                       {gradeOptions.map((g, idx) => {
                         const val = g === "All Grades" ? "" : g;
@@ -1464,11 +1464,11 @@ export default function EnrollmentsPage() {
                         return (
                           <motion.button key={`${schoolLevel}-${g}`}
                             layout
-                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#9a7070", borderColor: "#f0e4e4" }}
+                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
                             animate={{
                               opacity: 1, y: 0,
                               backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#e03131" : "#9a7070",
+                              color:           active ? "#e03131" : "#855c5c",
                               borderColor:     active ? "#e03131" : "#f0e4e4",
                             }}
                             transition={{
@@ -1491,10 +1491,10 @@ export default function EnrollmentsPage() {
 
                 {/* Row 5: Status chips */}
                 <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
                   <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
                     {[
-                      { value:"",          label:"All",       bg:"#fff0f0", color:"#e03131", dot:null       },
+                      { value:"",          label:"All",       bg:"#fff0f0", color:"#c92a2a", dot:null       },
                       { value:"enrolled",  label:"Enrolled",  bg:"#e8f5e0", color:"#2e6b0d", dot:"#4caf50" },
                       { value:"pending",   label:"Pending",   bg:"#fef3e2", color:"#7a4a08", dot:"#ff9800" },
                       { value:"completed", label:"Completed", bg:"#e3f0fd", color:"#1455a0", dot:"#2196f3" },
@@ -1507,7 +1507,7 @@ export default function EnrollmentsPage() {
                           initial={false}
                           animate={{
                             backgroundColor: active ? s.bg    : "#ffffff",
-                            color:           active ? s.color : "#9a7070",
+                            color:           active ? s.color : "#855c5c",
                             borderColor:     active ? s.color : "#f0e4e4",
                           }}
                           transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -1560,7 +1560,7 @@ export default function EnrollmentsPage() {
                       { label:"Status",     w:"11%" },
                       { label:"",           w:"8%"  },
                     ].map(({ label, w }) => (
-                      <th key={label} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", width:w }}>{label}</th>
+                      <th key={label} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", width:w }}>{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1630,7 +1630,7 @@ export default function EnrollmentsPage() {
                                   <div style={{ width:36, height:36, borderRadius:"50%", background:palette.bg, color:palette.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{initials || "?"}</div>
                                   <div>
                                     <div className="row-name" style={{ fontSize:13, fontWeight:600, color:"#1a0a0a", transition:"color .12s" }}>{name}</div>
-                                    <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>ID #{en.enrollment_id}</div>
+                                    <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>ID #{en.enrollment_id}</div>
                                   </div>
                                 </div>
                               </td>
@@ -1638,7 +1638,7 @@ export default function EnrollmentsPage() {
                               {/* Level */}
                               <td style={{ padding:"13px 18px", borderBottom:"1px solid #f9f0f0", verticalAlign:"middle" }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                  <i className={`ti ${levelIcon}`} style={{ fontSize:14, color:"#e03131" }} />
+                                  <i className={`ti ${levelIcon}`} style={{ fontSize:14, color:"#c92a2a" }} />
                                   <span style={{ fontSize:12, color:"#5a4a4a" }}>
                                     {SCHOOL_LEVELS.find((l) => l.value === en.school_level)?.label ?? en.school_level}
                                   </span>
@@ -1672,9 +1672,9 @@ export default function EnrollmentsPage() {
                                 onClick={(e) => e.stopPropagation()}>
                                 <button title="Edit"
                                   onClick={(e) => { e.stopPropagation(); navigate(`/enrollments/${en.enrollment_id}/edit`); }}
-                                  style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070", transition:"all .12s" }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#e03131"; e.currentTarget.style.borderColor="#fca5a5"; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#9a7070"; e.currentTarget.style.borderColor="#f0e4e4"; }}>
+                                  style={{ width:30, height:30, border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c", transition:"all .12s" }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#c92a2a"; e.currentTarget.style.borderColor="#fca5a5"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#855c5c"; e.currentTarget.style.borderColor="#f0e4e4"; }}>
                                   <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                                 </button>
                               </td>
@@ -1690,13 +1690,13 @@ export default function EnrollmentsPage() {
             {/* ── Pagination ── */}
             {!loading && pageMeta.count > 0 && (
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <span style={{ fontSize:12, color:"#b09090" }}>
+                <span style={{ fontSize:12, color:"#8a6a6a" }}>
                   Page <strong style={{ color:"#7a5050" }}>{page}</strong> of <strong style={{ color:"#7a5050" }}>{totalPages || 1}</strong>
                   &nbsp;·&nbsp;{pageMeta.count.toLocaleString()} total records
                 </span>
                 <div style={{ display:"flex", gap:4 }}>
                   <motion.button
-                    whileHover={pageMeta.previous ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                    whileHover={pageMeta.previous ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#c92a2a" } : {}}
                     whileTap={pageMeta.previous ? { scale: 0.93 } : {}}
                     transition={{ duration: 0.12 }}
                     style={{ ...pgBtn, opacity: pageMeta.previous ? 1 : 0.3, cursor: pageMeta.previous ? "pointer" : "not-allowed" }}
@@ -1711,7 +1711,7 @@ export default function EnrollmentsPage() {
                     const isActive = p === page;
                     return (
                       <motion.button key={p}
-                        whileHover={!isActive ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                        whileHover={!isActive ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#c92a2a" } : {}}
                         whileTap={{ scale: 0.93 }}
                         transition={{ duration: 0.12 }}
                         style={{ ...pgBtn, ...(isActive ? pgActive : {}) }}
@@ -1720,7 +1720,7 @@ export default function EnrollmentsPage() {
                     );
                   })}
                   <motion.button
-                    whileHover={pageMeta.next ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#e03131" } : {}}
+                    whileHover={pageMeta.next ? { scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#e03131", color: "#c92a2a" } : {}}
                     whileTap={pageMeta.next ? { scale: 0.93 } : {}}
                     transition={{ duration: 0.12 }}
                     style={{ ...pgBtn, opacity: pageMeta.next ? 1 : 0.3, cursor: pageMeta.next ? "pointer" : "not-allowed" }}
@@ -1764,9 +1764,9 @@ export default function EnrollmentsPage() {
 const pgBtn = {
   width:32, height:32, border:"1px solid #f0e4e4", borderRadius:8, background:"white",
   display:"flex", alignItems:"center", justifyContent:"center",
-  cursor:"pointer", fontSize:12, color:"#9a7070",
+  cursor:"pointer", fontSize:12, color:"#855c5c",
   fontFamily:"'DM Sans',sans-serif", transition:"all .12s",
 };
 const pgActive = {
-  background:"#fff0f0", borderColor:"#e03131", color:"#e03131", fontWeight:700,
+  background:"#fff0f0", borderColor:"#e03131", color:"#c92a2a", fontWeight:700,
 };

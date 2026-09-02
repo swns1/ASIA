@@ -31,14 +31,14 @@ const recalculateSchedule = (id)     => _recalculateSchedule(id);
 const C = {
   red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
   border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
-  muted: "#7a5050", pale: "#b09090", micro: "#c0a0a0", bg: "#fdf8f6", white: "#ffffff",
+  muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
 };
 
 const baseCss = `
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   @keyframes spin    { to{transform:rotate(360deg)} }
   .settings-input:focus { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; outline:none; }
-  .settings-input::placeholder { color:#c0a0a0; }
+  .settings-input::placeholder { color:#8a6a6a; }
 `;
 
 const TABS = [
@@ -129,7 +129,7 @@ const PAYMENT_PLANS = [
   { label: "Monthly plan",     detail: "10 installments — end of June through March",  color: "#1455a0", bg: "#e3f0fd" },
   { label: "Quarterly plan",   detail: "4 installments — end of Aug, Nov, Feb, May",   color: "#2e6b0d", bg: "#e8f5e0" },
   { label: "Semi-annual (3%)", detail: "2 installments — end of Oct and Mar",          color: "#7c3aed", bg: "#f0e8fd" },
-  { label: "Annual (5%)",      detail: "1 installment — end of October",               color: "#d97706", bg: "#fdf5e8" },
+  { label: "Annual (5%)",      detail: "1 installment — end of October",               color: "#854f0b", bg: "#fdf5e8" },
 ];
 
 function syProgress(startDate, endDate) {
@@ -267,7 +267,7 @@ function GeneralSettingsTab() {
             {isDirty && !saving && (
               <motion.span
                 initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                style={{ fontSize: 11, fontWeight: 600, color: "#d97706", background: "#fdf5e8", border: "1px solid #fcd34d", borderRadius: 99, padding: "3px 10px" }}
+                style={{ fontSize: 11, fontWeight: 600, color: "#854f0b", background: "#fdf5e8", border: "1px solid #fcd34d", borderRadius: 99, padding: "3px 10px" }}
               >
                 Unsaved changes
               </motion.span>
@@ -305,7 +305,7 @@ function GeneralSettingsTab() {
           )}
         </AnimatePresence>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16, alignItems: "start" }}>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <SectionCard title="School Information" subtitle="Basic school identity" icon="ti-school" delay={0.04}>
@@ -359,7 +359,7 @@ function GeneralSettingsTab() {
                     </select>
                   </Field>
                   <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                     <Field label="S.Y. Start Date" required hint="Early bird counts from here">
                       <input className="settings-input" type="date" value={form.sy_start_date} onChange={e => setF("sy_start_date", e.target.value)} style={inputStyle} />
                     </Field>
@@ -420,7 +420,7 @@ function GeneralSettingsTab() {
 const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      color: "#be185d", bg: "#fde8f8", icon: "ti-baby-carriage",
     grades: ["Nursery"] },
-  { value: "kindergarten",      label: "Kindergarten", color: "#d97706", bg: "#fdf5e8", icon: "ti-star",
+  { value: "kindergarten",      label: "Kindergarten", color: "#854f0b", bg: "#fdf5e8", icon: "ti-star",
     grades: ["Junior Kinder", "Senior Kinder"] },
   { value: "elementary",        label: "Elementary",   color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-book",
     grades: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"] },
@@ -431,7 +431,7 @@ const SCHOOL_LEVELS = [
 ];
 
 const CATEGORY_META = {
-  tuition: { label: "Tuition",       color: "#e03131", bg: "#fff0f0", icon: "ti-school" },
+  tuition: { label: "Tuition",       color: "#c92a2a", bg: "#fff0f0", icon: "ti-school" },
   misc:    { label: "Miscellaneous",  color: "#1455a0", bg: "#e3f0fd", icon: "ti-clipboard-list" },
   other:   { label: "Other",          color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-dots-circle-horizontal" },
 };
@@ -490,15 +490,15 @@ function NewScheduleModal({ onClose, onSaved }) {
         <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-cash" style={{ fontSize: 20, color: "#e03131" }} />
+              <i className="ti ti-cash" style={{ fontSize: 20, color: "#c92a2a" }} />
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -527,7 +527,7 @@ function NewScheduleModal({ onClose, onSaved }) {
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
                       borderRadius: 99, border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
-                      background: active ? lv.bg : "white", color: active ? lv.color : "#9a7070",
+                      background: active ? lv.bg : "white", color: active ? lv.color : "#855c5c",
                       fontSize: 12, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -549,8 +549,8 @@ function NewScheduleModal({ onClose, onSaved }) {
 
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
+            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleCreate} disabled={saving}
@@ -611,7 +611,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
             style={{ ...inp, flex: 1, minWidth: 0 }} />
           <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#b09090", fontWeight: 600 }}>₱</span>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
               style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }} />
           </div>
@@ -625,7 +625,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           </motion.button>
           <motion.button onClick={() => { setEditing(false); setName(item.item_name); setAmount(String(item.amount)); }}
             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-            style={{ background: "white", color: "#9a7070", border: "1px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
+            style={{ background: "white", color: "#855c5c", border: "1px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" style={{ fontSize: 12 }} />
           </motion.button>
         </>
@@ -636,13 +636,13 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           <motion.button onClick={() => setEditing(true)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
             <i className="ti ti-pencil" style={{ fontSize: 11 }} />
           </motion.button>
           <motion.button onClick={() => setConfirmDelete(true)} aria-label={`Delete fee item ${item.item_name}`}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 11 }} />
           </motion.button>
         </>
@@ -701,14 +701,14 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
           style={{ ...inp, flex: 1, minWidth: 0 }}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
         <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#b09090", fontWeight: 600 }}>₱</span>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
           <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00" style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
         </div>
         <motion.button onClick={handleAdd} disabled={saving}
           whileHover={!saving ? { scale: 1.04 } : {}} whileTap={!saving ? { scale: 0.96 } : {}}
-          style={{ background: saving ? "#e87474" : "#fff0f0", color: "#e03131", border: "1px solid #fca5a5", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+          style={{ background: saving ? "#e87474" : "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
           {saving
             ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} />
             : <i className="ti ti-plus" style={{ fontSize: 12 }} />
@@ -779,7 +779,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
           </AnimatePresence>
           <motion.button onClick={handleRecalculate} disabled={recalcing}
             whileHover={!recalcing ? { scale: 1.02 } : {}} whileTap={!recalcing ? { scale: 0.97 } : {}}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff0f0", color: "#e03131", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             {recalcing
               ? <i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />
               : <i className="ti ti-refresh" style={{ fontSize: 13 }} />
@@ -795,14 +795,14 @@ function ScheduleDetail({ schedule, onUpdated }) {
         style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}
       >
         {[
-          { label: "Tuition",       val: tuitionTotal, color: "#e03131", bg: "#fff0f0" },
+          { label: "Tuition",       val: tuitionTotal, color: "#c92a2a", bg: "#fff0f0" },
           { label: "Miscellaneous", val: miscTotal,    color: "#1455a0", bg: "#e3f0fd" },
           { label: "Other",         val: otherTotal,   color: "#2e6b0d", bg: "#e8f5e0" },
           { label: "Grand Total",   val: grandTotal,   color: "#7c3aed", bg: "#f0e8fd" },
         ].map((s) => (
           <div key={s.label} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "14px 16px", textAlign: "center", boxShadow: "0 2px 8px rgba(224,49,49,0.04)" }}>
             <AnimatedAmount value={parseFloat(s.val)} style={{ fontSize: 15, fontWeight: 700, color: s.color }} />
-            <div style={{ fontSize: 11, color: "#a07878", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 11, color: "#8a6a6a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
       </motion.div>
@@ -823,10 +823,10 @@ function ScheduleDetail({ schedule, onUpdated }) {
                   <i className={`ti ${catMeta.icon}`} style={{ fontSize: 14, color: catMeta.color }} />
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{catMeta.label}</span>
-                <span style={{ fontSize: 11, color: "#b09090" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
+                <span style={{ fontSize: 11, color: "#8a6a6a" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
                 {cat !== "tuition"
-                  ? <span style={{ fontSize: 11, color: "#b09090", fontStyle: "italic" }}>· no discount applied</span>
-                  : <span style={{ fontSize: 11, color: "#e03131", fontStyle: "italic" }}>· discounts applied here</span>
+                  ? <span style={{ fontSize: 11, color: "#8a6a6a", fontStyle: "italic" }}>· no discount applied</span>
+                  : <span style={{ fontSize: 11, color: "#c92a2a", fontStyle: "italic" }}>· discounts applied here</span>
                 }
               </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: catMeta.color }}>
@@ -835,7 +835,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
             </div>
             <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
               {catItems.length === 0 && (
-                <div style={{ fontSize: 12, color: "#d0b8b8", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No items yet</div>
+                <div style={{ fontSize: 12, color: "#8a6a6a", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No items yet</div>
               )}
               <motion.div
                 variants={listVariants.container}
@@ -912,9 +912,9 @@ function FeeSchedulesTab() {
           style={{ borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", overflow: "hidden", background: "white" }}
         >
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f5eaea", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 10, color: "#c0a0a0", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
+            <div style={{ fontSize: 10, color: "#8a6a6a", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
+              {[{ value: "all", label: "All", color: "#c92a2a", bg: "#fff0f0", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
                 const active = levelFilter === lv.value;
                 return (
                   <motion.button
@@ -925,7 +925,7 @@ function FeeSchedulesTab() {
                       height: 26, padding: "0 10px", borderRadius: 99,
                       border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
                       background: active ? lv.bg : "white",
-                      color: active ? lv.color : "#9a7070",
+                      color: active ? lv.color : "#855c5c",
                       fontSize: 11, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -948,8 +948,8 @@ function FeeSchedulesTab() {
                 ))
               : schedules.length === 0
                 ? (
-                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#b09090", fontSize: 13 }}>
-                    <i className="ti ti-cash" style={{ fontSize: 28, color: "#f0c8c8", display: "block", marginBottom: 10 }} />
+                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>
+                    <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a", display: "block", marginBottom: 10 }} />
                     No fee schedules yet.<br />
                     <span style={{ fontSize: 12 }}>Click "New Schedule" to create one.</span>
                   </div>
@@ -986,7 +986,7 @@ function FeeSchedulesTab() {
                             <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{sch.grade_level}</span>
                             <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 6px", borderRadius: 99, background: lv.bg, color: lv.color }}>{lv.label}</span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#b09090", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
+                          <div style={{ fontSize: 12, color: "#8a6a6a", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
                           {grandTotal > 0 && (
                             <div style={{ display: "flex", height: 4, borderRadius: 99, overflow: "hidden", gap: 1, marginBottom: 5 }}>
                               {tTotal > 0 && <div style={{ flex: tTotal / barTotal, background: "#e03131", minWidth: 2 }} title={`Tuition: ${fmt(tTotal)}`} />}
@@ -1014,10 +1014,10 @@ function FeeSchedulesTab() {
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 14 }}
               >
                 <div style={{ width: 60, height: 60, borderRadius: 18, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="ti ti-cash" style={{ fontSize: 28, color: "#e08080" }} />
+                  <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a" }} />
                 </div>
                 <div style={{ fontSize: 16, color: "#7a5050", fontWeight: 600 }}>Select a fee schedule</div>
-                <div style={{ fontSize: 13, color: "#b09090" }}>Click a schedule on the left to view and edit its items</div>
+                <div style={{ fontSize: 13, color: "#8a6a6a" }}>Click a schedule on the left to view and edit its items</div>
               </motion.div>
             ) : (
               <motion.div
