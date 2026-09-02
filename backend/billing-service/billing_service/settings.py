@@ -111,6 +111,7 @@ REST_FRAMEWORK = {
     # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "billing_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
 }
 
 SIMPLE_JWT = {

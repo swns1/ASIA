@@ -211,3 +211,35 @@ class EnrollmentTransfer(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"{self.get_transfer_type_display()} · enrollment #{self.enrollment_id} · {self.effective_date}"
+
+
+# ─── Email delivery failure record ───────────────────────────────────────────
+class EmailDeliveryFailure(models.Model):
+    """
+    Written whenever an outbound email exhausts its retries (see
+    email_views.py). There's only one email provider (Resend) configured in
+    this codebase and no task queue to retry through later, so this is the
+    fallback for "the send failed": instead of the error vanishing into an
+    HTTP response nobody reads, it's durable and visible here (and in the
+    Django admin) so a failed enrollment confirmation can be noticed and
+    resent by hand.
+    """
+
+    email_delivery_failure_id = models.BigAutoField(primary_key=True)
+
+    to_email = models.EmailField(max_length=150)
+    subject = models.CharField(max_length=200)
+    # e.g. {"enrollment_id": 123} — enough to identify what triggered the
+    # send without a hard FK, since the trigger type may vary later.
+    context = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "email_delivery_failures"
+        ordering = ["-created_at"]
+
+    def __str__(self):  # pragma: no cover
+        return f"Failed email to {self.to_email} · {self.created_at:%Y-%m-%d %H:%M}"

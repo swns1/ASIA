@@ -1,10 +1,16 @@
+import logging
+
 import resend
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
-from .models import Enrollment
+from shared.resilience import retry_with_backoff
+
+from .models import EmailDeliveryFailure, Enrollment
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["POST"])
@@ -17,7 +23,7 @@ def send_enrollment_email(request):
     # trigger an official-looking email to an arbitrary address.
     enrollment_id = request.data.get("enrollment_id")
     if not enrollment_id:
-        return Response({"error": "enrollment_id is required."}, status=400)
+        return Response({"detail": "enrollment_id is required."}, status=400)
 
     enrollment = (
         Enrollment.objects.select_related("student")
@@ -25,11 +31,11 @@ def send_enrollment_email(request):
         .first()
     )
     if not enrollment:
-        return Response({"error": "Enrollment not found."}, status=404)
+        return Response({"detail": "Enrollment not found."}, status=404)
 
     student = enrollment.student
     if not student.email:
-        return Response({"error": "No email address on file for this student."}, status=400)
+        return Response({"detail": "No email address on file for this student."}, status=400)
 
     student_name = " ".join(
         filter(None, [student.first_name, student.middle_name, student.last_name])
@@ -39,14 +45,14 @@ def send_enrollment_email(request):
     school_year  = enrollment.school_year
     school_level = enrollment.get_school_level_display()
 
-    try:
-        resend.api_key = settings.RESEND_API_KEY
+    resend.api_key = settings.RESEND_API_KEY
+    subject = f"Enrollment Confirmation – {school_year}"
 
-        params: resend.Emails.SendParams = {
-            "from": "South Lakes Integrated School <onboarding@resend.dev>",
-            "to": [student.email],
-            "subject": f"Enrollment Confirmation – {school_year}",
-            "html": f"""
+    params: resend.Emails.SendParams = {
+        "from": "South Lakes Integrated School <onboarding@resend.dev>",
+        "to": [student.email],
+        "subject": subject,
+        "html": f"""
             <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;background:#fff8f6;border:1px solid #fde2de;border-radius:16px;padding:36px;">
               <div style="text-align:center;margin-bottom:28px;">
                 <h1 style="font-family:Georgia,serif;color:#1a0a0a;font-size:26px;margin:0 0 6px;">
@@ -93,12 +99,21 @@ def send_enrollment_email(request):
                 South Lakes Integrated School · Registrar's Office
               </p>
             </div>
-            """,
-        }
+        """,
+    }
 
-        resend.Emails.send(params)
+    try:
+        retry_with_backoff(lambda: resend.Emails.send(params), attempts=3, label="resend")
         return Response({"success": True})
-
     except Exception as e:
-        print(f"[Resend] Email send failed: {e}")
-        return Response({"error": str(e)}, status=500)
+        logger.exception("Enrollment email to %s failed after retries", student.email)
+        EmailDeliveryFailure.objects.create(
+            to_email=student.email,
+            subject=subject,
+            context={"enrollment_id": enrollment_id},
+            error_message=str(e),
+        )
+        return Response(
+            {"detail": "The confirmation email could not be sent. It has been logged for follow-up."},
+            status=502,
+        )

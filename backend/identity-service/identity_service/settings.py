@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -6,6 +7,9 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Makes backend/shared/ importable as `shared.*` — see backend/shared/.
+sys.path.insert(0, str(BASE_DIR.parent))
 
 
 def _required_env(name: str) -> str:
@@ -85,6 +89,7 @@ REST_FRAMEWORK = {
         "user": "200/minute",
         "login": "10/minute",
     },
+    "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
 }
 
 # ✅ Token signed with this config

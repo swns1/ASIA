@@ -7,22 +7,35 @@ handwritten entry the recogniser could not read, or a form variant no anchor
 set knows about. It costs tokens and it can hallucinate a plausible-looking
 value, which is exactly why it runs second and why everything it returns
 lands in the review gate unticked alongside whatever the local path found.
+
+Tries Groq first, then Gemini if Groq is unavailable or exhausted (both keys
+are optional independently) — a 429/5xx/timeout from one no longer takes the
+whole cloud path down while the other is still up.
 """
 
 import base64
 import json
 import logging
 import re
-import time
 
 import requests
 from django.conf import settings
+from google import genai
+from google.genai import types as genai_types
+
+from shared.resilience import AllProvidersFailedError, call_with_provider_fallback, is_transient_error
 
 logger = logging.getLogger(__name__)
 
-ENGINE_NAME = "groq"
-API_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "qwen/qwen3.6-27b"
+ENGINE_GROQ = "groq"
+ENGINE_GEMINI = "gemini"
+# Kept for callers that only care "was this cloud-sourced at all" — the
+# actual engine used is now returned alongside the data by call().
+ENGINE_NAME = ENGINE_GROQ
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "qwen/qwen3.6-27b"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 MAX_ATTEMPTS = 3
 REQUEST_TIMEOUT = 45
@@ -101,19 +114,19 @@ def _strip_wrapper(raw_text: str) -> str:
     return raw_text.strip()
 
 
-def call(image_bytes: bytes, family: str | None = None,
-         mime_type: str = "image/jpeg") -> dict:
-    """
-    Ask the vision model for fields. Raises ValueError on anything the caller
-    should turn into a 4xx; requests exceptions propagate for the 5xx paths.
-    """
-    api_key = getattr(settings, "GROQ_API_KEY", "")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY is not configured.")
+class _RetryableContentError(Exception):
+    """Truncated or non-JSON model output on an otherwise-OK HTTP response
+    — a content-shape problem, not a network one, but still worth one more
+    attempt (the model output is fairly noisy for this task)."""
 
-    b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+def _is_transient(exc: Exception) -> bool:
+    return isinstance(exc, _RetryableContentError) or is_transient_error(exc)
+
+
+def _call_groq(image_b64: str, mime_type: str, family: str | None, api_key: str) -> dict:
     payload = {
-        "model": MODEL,
+        "model": GROQ_MODEL,
         "temperature": 0.1,
         "max_tokens": MAX_TOKENS,
         # Without this, a dense document sends the model into a long reasoning
@@ -123,44 +136,90 @@ def call(image_bytes: bytes, family: str | None = None,
             "role": "user",
             "content": [
                 {"type": "image_url",
-                 "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+                 "image_url": {"url": f"data:{mime_type};base64,{image_b64}"}},
                 {"type": "text", "text": prompt_for(family)},
             ],
         }],
     }
-    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.post(
+        GROQ_API_URL, json=payload,
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    result = response.json()
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        if attempt > 1:
-            # Retrying immediately against a per-minute token budget
-            # self-inflicts the 429 the retry exists to survive.
-            time.sleep(2 ** (attempt - 1))
+    try:
+        choice = result["choices"][0]
+        raw_text = choice["message"]["content"].strip()
+    except (KeyError, IndexError) as exc:
+        logger.error("Unexpected Groq response structure: %s", result)
+        raise ValueError("Could not read the OCR service response.") from exc
 
-        response = requests.post(API_URL, json=payload, headers=headers,
-                                 timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        result = response.json()
+    if choice.get("finish_reason") == "length":
+        raise _RetryableContentError("Groq response truncated")
 
-        try:
-            choice = result["choices"][0]
-            raw_text = choice["message"]["content"].strip()
-        except (KeyError, IndexError) as exc:
-            logger.error("Unexpected Groq response structure: %s", result)
-            raise ValueError("Could not read the OCR service response.") from exc
+    try:
+        return json.loads(_strip_wrapper(raw_text))
+    except json.JSONDecodeError as exc:
+        # Log the model output for debugging; never return it. It used to
+        # be interpolated into the error message and sent to the browser.
+        logger.warning("Groq returned non-JSON: %s", raw_text[:200])
+        raise _RetryableContentError("Groq returned non-JSON") from exc
 
-        if choice.get("finish_reason") == "length":
-            logger.warning("Groq response truncated (attempt %d/%d)", attempt, MAX_ATTEMPTS)
-            continue
 
-        try:
-            return json.loads(_strip_wrapper(raw_text))
-        except json.JSONDecodeError:
-            # Log the model output for debugging; never return it. It used to
-            # be interpolated into the error message and sent to the browser.
-            logger.warning("Groq returned non-JSON (attempt %d/%d): %s",
-                           attempt, MAX_ATTEMPTS, raw_text[:200])
+def _call_gemini(image_bytes: bytes, mime_type: str, family: str | None, api_key: str) -> dict:
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[
+            genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            prompt_for(family),
+        ],
+    )
+    raw_text = (response.text or "").strip()
+    try:
+        return json.loads(_strip_wrapper(raw_text))
+    except json.JSONDecodeError as exc:
+        logger.warning("Gemini returned non-JSON: %s", raw_text[:200])
+        raise _RetryableContentError("Gemini returned non-JSON") from exc
 
-    raise ValueError("The OCR service did not return usable data. Please try again.")
+
+def call(image_bytes: bytes, family: str | None = None,
+         mime_type: str = "image/jpeg") -> tuple[dict, str]:
+    """
+    Ask a vision model for fields — Groq first, Gemini second if Groq is
+    unavailable or exhausted. Returns (fields, engine_name_used). Raises
+    ValueError on anything the caller should turn into a 4xx; requests
+    exceptions propagate for the 5xx paths.
+    """
+    groq_key = getattr(settings, "GROQ_API_KEY", "")
+    gemini_key = getattr(settings, "GEMINI_API_KEY", "")
+    if not groq_key and not gemini_key:
+        raise ValueError("Neither GROQ_API_KEY nor GEMINI_API_KEY is configured.")
+
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    providers: list[tuple[str, "callable"]] = []
+    if groq_key:
+        providers.append((
+            ENGINE_GROQ,
+            lambda: (_call_groq(b64, mime_type, family, groq_key), ENGINE_GROQ),
+        ))
+    if gemini_key:
+        providers.append((
+            ENGINE_GEMINI,
+            lambda: (_call_gemini(image_bytes, mime_type, family, gemini_key), ENGINE_GEMINI),
+        ))
+
+    try:
+        return call_with_provider_fallback(
+            providers, attempts_per_provider=MAX_ATTEMPTS, is_transient=_is_transient,
+        )
+    except AllProvidersFailedError as exc:
+        raise ValueError(
+            "The OCR service did not return usable data. Please try again."
+        ) from exc
 
 
 def sanitize(data: dict) -> tuple[dict, dict]:

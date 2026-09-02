@@ -93,6 +93,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import HasRole
+from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
 from subjects.models import Subject
 
 from .services import build_student_features
@@ -188,12 +189,28 @@ class ClusterRateThrottle(UserRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": uid}
 
 
+def _parse_interpretation_json(raw: str) -> dict:
+    raw = (raw or "").strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+    return json.loads(raw)
+
+
 def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
+    """
+    Groq first, Gemini second (both keys are optional independently) — a
+    canned degrade message if neither is configured or both fail. Never
+    raises: this endpoint's UI treats "interpretation" as best-effort.
+    """
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if not groq_key and not gemini_key:
         return {
             "cluster_names": [],
-            "interpretation": "AI interpretation unavailable — GROQ_API_KEY not configured.",
+            "interpretation": "AI interpretation unavailable — no AI provider is configured.",
         }
 
     prompt = CLUSTER_INTERPRETATION_PROMPT.format(
@@ -205,7 +222,7 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         silhouette_score=meta.get("silhouette_score", "N/A"),
     )
 
-    try:
+    def _call_groq() -> dict:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json={
@@ -214,25 +231,31 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
                 "max_tokens": 512,
                 "messages": [{"role": "user", "content": prompt}],
             },
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"Authorization": f"Bearer {groq_key}"},
             timeout=15,
         )
         response.raise_for_status()
-        raw = response.json()["choices"][0]["message"]["content"].strip()
+        return _parse_interpretation_json(response.json()["choices"][0]["message"]["content"])
 
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
+    def _call_gemini() -> dict:
+        from google import genai
+        client = genai.Client(api_key=gemini_key)
+        response = client.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
+        return _parse_interpretation_json(response.text)
 
-        return json.loads(raw)
+    providers = []
+    if groq_key:
+        providers.append(("groq", _call_groq))
+    if gemini_key:
+        providers.append(("gemini", _call_gemini))
 
-    except Exception as e:
-        logger.warning("Groq cluster interpretation failed: %s", e)
+    try:
+        return call_with_provider_fallback(providers, attempts_per_provider=2)
+    except AllProvidersFailedError as exc:
+        logger.warning("Cluster interpretation: all providers failed: %s", exc)
         return {
             "cluster_names": [],
-            "interpretation": f"AI interpretation temporarily unavailable ({type(e).__name__}).",
+            "interpretation": "AI interpretation temporarily unavailable.",
         }
 
 

@@ -722,7 +722,10 @@ export default function EnrollmentFormPage() {
           // (registrar/admin only) -- we only pass the id.
           if (student?.email) {
             sendEnrollmentEmail({ enrollment_id: created.enrollment_id })
-              .catch((e) => console.warn("Enrollment email failed (non-critical):", e));
+              .catch((e) => {
+                console.warn("Enrollment email failed (non-critical):", e);
+                toast.error("Enrollment saved, but the confirmation email could not be sent.");
+              });
           }
 
           // Prompt to generate invoice when enrollment status is enrolled

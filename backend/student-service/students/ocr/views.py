@@ -113,15 +113,14 @@ class OCRScanView(APIView):
                 if reason:
                     logger.info("Escalating %s to the cloud: %s", requirement_code, reason)
                     try:
-                        cloud_fields, cloud_conf = groq_vision.sanitize(
-                            groq_vision.call(raw, family)
-                        )
+                        cloud_data, cloud_engine = groq_vision.call(raw, family)
+                        cloud_fields, cloud_conf = groq_vision.sanitize(cloud_data)
                         # Local values win where both engines found something:
                         # the recogniser cannot invent text, the model can.
                         for key, value in cloud_fields.items():
                             fields.setdefault(key, value)
                             confidence.setdefault(key, cloud_conf.get(key, "low"))
-                        engine = groq_vision.ENGINE_NAME
+                        engine = cloud_engine
                     except (ValueError, requests.RequestException) as exc:
                         logger.warning("Fallback unavailable: %s", exc)
                         warnings.append(
@@ -205,21 +204,22 @@ class OCRScanView(APIView):
 
     def _cloud_only(self, request, raw, requirement_code, student_id):
         """Local reader unavailable — the previous behaviour, unchanged."""
-        fields, confidence = groq_vision.sanitize(groq_vision.call(raw, None))
+        cloud_data, engine = groq_vision.call(raw, None)
+        fields, confidence = groq_vision.sanitize(cloud_data)
         extraction = DocumentExtraction.objects.create(
             student_id=int(student_id) if student_id else None,
             requirement_code=requirement_code or "unknown",
             source_label=_label_for(requirement_code, None),
             extracted_json=fields,
             field_confidence_json=confidence,
-            source_engine=groq_vision.ENGINE_NAME,
+            source_engine=engine,
             scanned_by=getattr(request.user, "user_id", None),
         )
         return Response({
             "success": True,
             "policy": EXTRACT,
             "family": None,
-            "source_engine": groq_vision.ENGINE_NAME,
+            "source_engine": engine,
             "extracted": fields,
             "field_confidence": confidence,
             "check": None,

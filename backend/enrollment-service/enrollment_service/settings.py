@@ -158,6 +158,7 @@ REST_FRAMEWORK = {
     # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "enrollment_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
 }
 
 
@@ -203,3 +204,4 @@ MEDIA_ROOT = BASE_DIR / "media"
 # ─── External APIs ───────────────────────────────────────────────────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")

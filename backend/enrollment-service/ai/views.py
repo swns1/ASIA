@@ -1,10 +1,16 @@
-import os
+import logging
+
+import requests
+from django.conf import settings
 from google import genai
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.permissions import HasRole
+from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
+
+logger = logging.getLogger(__name__)
 
 _client = None
 
@@ -12,7 +18,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        _client = genai.Client(api_key=getattr(settings, "GEMINI_API_KEY", ""))
     return _client
 
 PROMPTS = {
@@ -101,25 +107,62 @@ class GeminiInterpretView(APIView):
 
         if context_type not in PROMPTS:
             return Response(
-                {"error": f"Unknown context_type '{context_type}'. Valid: {list(PROMPTS.keys())}"},
+                {"detail": f"Unknown context_type '{context_type}'. Valid: {list(PROMPTS.keys())}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not payload:
             return Response(
-                {"error": "payload is required"},
+                {"detail": "payload is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            prompt   = PROMPTS[context_type].format(payload=payload)
+        prompt     = PROMPTS[context_type].format(payload=payload)
+        gemini_key = getattr(settings, "GEMINI_API_KEY", "")
+        groq_key   = getattr(settings, "GROQ_API_KEY", "")
+
+        def _call_gemini() -> str:
             response = _get_client().models.generate_content(
                 model="gemini-2.5-flash-lite",
                 contents=prompt,
             )
-            return Response({"interpretation": response.text})
-        except Exception as e:
+            return response.text
+
+        def _call_groq() -> str:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "temperature": 0.3,
+                    "max_tokens": 700,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                headers={"Authorization": f"Bearer {groq_key}"},
+                timeout=20,
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"].strip()
+
+        # Gemini first — these prompts are tuned against it — Groq as the
+        # fallback when Gemini is unavailable or exhausted.
+        providers = []
+        if gemini_key:
+            providers.append(("gemini", _call_gemini))
+        if groq_key:
+            providers.append(("groq", _call_groq))
+
+        if not providers:
             return Response(
-                {"error": f"Gemini error: {str(e)}"},
-                status=status.HTTP_502_BAD_GATEWAY,
+                {"detail": "AI interpretation is not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            interpretation = call_with_provider_fallback(providers, attempts_per_provider=2)
+            return Response({"interpretation": interpretation})
+        except AllProvidersFailedError as exc:
+            logger.warning("AI interpretation: all providers failed: %s", exc)
+            return Response(
+                {"detail": "AI interpretation is temporarily unavailable. Please try again in a moment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
