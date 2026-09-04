@@ -141,7 +141,7 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
 
   if (students.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
         No enrolled students in this section yet.
       </div>
     );
@@ -152,7 +152,7 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
       <thead>
         <tr style={{ background: "#fdfafa" }}>
           {["Name", "LRN", "Student No.", "Sex", ""].map((label) => (
-            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
               {label}
             </th>
           ))}
@@ -195,25 +195,25 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
                   <td colSpan={5} style={{ padding: 0, borderBottom: "1px solid #f9f0f0", background: "#fdfafa" }}>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 24, padding: "14px 26px" }}>
                       <div>
-                        <div style={{ fontSize: 10, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
+                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
                         <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.lrn}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
+                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
                         <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.student_number}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
+                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
                         <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.sex}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#b09090", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
+                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
                         {statusMeta ? (
                           <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, marginTop: 2, display: "inline-block" }}>
                             {statusMeta.label}
                           </span>
                         ) : (
-                          <div style={{ fontSize: 13, color: "#c0a0a0", marginTop: 2 }}>Not marked yet</div>
+                          <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 2 }}>Not marked yet</div>
                         )}
                       </div>
                       <div style={{ marginLeft: "auto", alignSelf: "center" }}>
@@ -222,7 +222,7 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 6,
                             border: "1px solid #f0e4e4", borderRadius: 8, background: "white",
-                            padding: "6px 12px", fontSize: 12, color: "#9a7070", cursor: "pointer",
+                            padding: "6px 12px", fontSize: 12, color: "#855c5c", cursor: "pointer",
                             fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
                           }}
                         >
@@ -246,7 +246,7 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
 function SubjectsTab({ subjects }) {
   if (subjects.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
         No subjects configured for this grade level yet.
       </div>
     );
@@ -256,7 +256,7 @@ function SubjectsTab({ subjects }) {
       <thead>
         <tr style={{ background: "#fdfafa" }}>
           {["Code", "Subject", "Semester"].map((label) => (
-            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
               {label}
             </th>
           ))}
@@ -362,7 +362,7 @@ function GradesTab({ advisory, subjects }) {
 
   if (subjects.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
         No subjects configured for this grade level yet.
       </div>
     );
@@ -410,7 +410,7 @@ function GradesTab({ advisory, subjects }) {
           {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
         </div>
       ) : rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
           No enrolled students in this section.
         </div>
       ) : (
@@ -418,7 +418,7 @@ function GradesTab({ advisory, subjects }) {
           <thead>
             <tr style={{ background: "#fdfafa" }}>
               {["Name", "Grade", "Remarks", ""].map((label) => (
-                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                   {label}
                 </th>
               ))}
@@ -578,7 +578,7 @@ function NarrativeTab({ advisory }) {
 
   if (categories.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
         No narrative categories configured yet.{" "}
         <a href="/grading-templates?tab=narrative" style={{ color: "#e03131", fontWeight: 600 }}>Ask an admin to add some</a>.
       </div>
@@ -610,7 +610,7 @@ function NarrativeTab({ advisory }) {
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
           No enrolled students in this section.
         </div>
       ) : (
@@ -618,11 +618,11 @@ function NarrativeTab({ advisory }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#fdfafa" }}>
-                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                   Name
                 </th>
                 {categories.map((c) => (
-                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 16px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 16px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                     {c.name}
                   </th>
                 ))}
@@ -786,11 +786,11 @@ function AttendanceTab({ advisory, onTodayChange }) {
             </button>
             <button
               onClick={() => setDate(todayISO())}
-              style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", color: "#9a7070", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
+              style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", color: "#855c5c", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
             >
               Today
             </button>
-            <span style={{ fontSize: 12, color: "#b09090", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
+            <span style={{ fontSize: 12, color: "#8a6a6a", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
@@ -835,7 +835,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
           {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
         </div>
       ) : rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
           No enrolled students in this section.
         </div>
       ) : (
@@ -843,7 +843,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
           <thead>
             <tr style={{ background: "#fdfafa" }}>
               {["Name", "Status", "Remarks"].map((label) => (
-                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                   {label}
                 </th>
               ))}
@@ -871,7 +871,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
                               width: 30, height: 26, borderRadius: 7,
                               border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
                               background: active ? s.bg : "white",
-                              color: active ? s.color : "#9a7070",
+                              color: active ? s.color : "#855c5c",
                               fontSize: 11.5, fontWeight: 700, cursor: "pointer",
                               fontFamily: "'DM Sans',sans-serif",
                             }}
@@ -905,9 +905,9 @@ function AttendanceTab({ advisory, onTodayChange }) {
 function StatTile({ label, value, sub, color }) {
   return (
     <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#855c5c", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
       <div style={{ fontSize: 24, fontWeight: 700, color: color || "#1a0a0a", lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "#b09090" }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11.5, color: "#8a6a6a" }}>{sub}</div>}
     </div>
   );
 }
@@ -919,7 +919,7 @@ function GradeDistribution({ distribution, gradedCount }) {
     { key: "below_75", label: "Below 75", color: "#9b2020" },
   ];
   if (!gradedCount) {
-    return <div style={{ fontSize: 12.5, color: "#b09090" }}>No grades recorded yet.</div>;
+    return <div style={{ fontSize: 12.5, color: "#8a6a6a" }}>No grades recorded yet.</div>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -946,7 +946,7 @@ function DailyBarChart({ daily }) {
 
   if (daily.length === 0) {
     return (
-      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
         No attendance recorded yet for this range.
       </div>
     );
@@ -1001,7 +1001,7 @@ function DailyBarChart({ daily }) {
           );
         })}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#c0a0a0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#8a6a6a" }}>
         <span>{formatShortDate(daily[0]?.date)}</span>
         {daily.length > 1 && <span>{formatShortDate(daily[daily.length - 1]?.date)}</span>}
       </div>
@@ -1031,7 +1031,7 @@ function StudentRateRow({ row }) {
             const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
             return (
               <span key={s.value} style={{ color: s.color, fontWeight: 700 }}>
-                {row[key]}<span style={{ color: "#c0a0a0", fontWeight: 500 }}>{s.value}</span>
+                {row[key]}<span style={{ color: "#8a6a6a", fontWeight: 500 }}>{s.value}</span>
               </span>
             );
           })}
@@ -1104,14 +1104,14 @@ function StatsTab({ advisory }) {
       {/* Date range controls (attendance analytics only — grade metrics
           cover every recorded grade for the section, no range needed) */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
         <input
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
           style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
         />
-        <span style={{ color: "#c0a0a0", fontSize: 12 }}>to</span>
+        <span style={{ color: "#8a6a6a", fontSize: 12 }}>to</span>
         <input
           type="date"
           value={dateTo}
@@ -1122,7 +1122,7 @@ function StatsTab({ advisory }) {
           onClick={() => { setDateFrom(defaultRange.from); setDateTo(defaultRange.to); }}
           style={{
             border: "1.5px solid #f0e4e4", borderRadius: 8, background: "white",
-            padding: "7px 12px", fontSize: 12, color: "#9a7070", cursor: "pointer",
+            padding: "7px 12px", fontSize: 12, color: "#855c5c", cursor: "pointer",
             fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
           }}
         >
@@ -1155,7 +1155,7 @@ function StatsTab({ advisory }) {
 
             {/* Grade distribution */}
             <div style={{ margin: "14px 26px 0", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 14, padding: "14px 18px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#855c5c", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
                 Grade Distribution
               </div>
               <GradeDistribution distribution={gradeSummary?.distribution} gradedCount={gradeSummary?.graded_count} />
@@ -1163,7 +1163,7 @@ function StatsTab({ advisory }) {
 
             {/* Per-day composition chart */}
             <div style={{ margin: "14px 26px 0", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 14 }}>
-              <div style={{ padding: "12px 22px 0", fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <div style={{ padding: "12px 22px 0", fontSize: 11, fontWeight: 700, color: "#855c5c", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Daily Attendance Breakdown
               </div>
               <DailyBarChart daily={stats?.daily ?? []} />
@@ -1172,7 +1172,7 @@ function StatsTab({ advisory }) {
             {/* Per-student table */}
             <div style={{ marginTop: 18 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 26px 10px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#a07878", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#855c5c", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Per-Student Attendance
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -1184,7 +1184,7 @@ function StatsTab({ advisory }) {
                         padding: "5px 11px", borderRadius: 7,
                         border: `1.5px solid ${sortBy === opt.key ? "#e03131" : "#f0e4e4"}`,
                         background: sortBy === opt.key ? "#fff0f0" : "white",
-                        color: sortBy === opt.key ? "#e03131" : "#9a7070",
+                        color: sortBy === opt.key ? "#e03131" : "#855c5c",
                         fontSize: 11, fontWeight: 700, cursor: "pointer",
                         fontFamily: "'DM Sans',sans-serif",
                       }}
@@ -1195,7 +1195,7 @@ function StatsTab({ advisory }) {
                 </div>
               </div>
               {perStudentSorted.length === 0 ? (
-                <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#b09090" }}>
+                <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
                   No attendance data in this range.
                 </div>
               ) : (
@@ -1203,7 +1203,7 @@ function StatsTab({ advisory }) {
                   <thead>
                     <tr style={{ background: "#fdfafa" }}>
                       {["Name", "P / A / L / E", "Rate"].map((label) => (
-                        <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "10px 22px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                        <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 22px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                           {label}
                         </th>
                       ))}
@@ -1259,7 +1259,7 @@ function SectionDetail({ entry }) {
           </div>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a" }}>{sectionLabel(advisory)}</div>
-            <div style={{ fontSize: 12, color: "#b09090", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
               {SCHOOL_LEVEL_LABELS[advisory.school_level] || advisory.school_level} · SY {advisory.school_year}
             </div>
           </div>
@@ -1289,7 +1289,7 @@ function SectionDetail({ entry }) {
                 borderBottom: `2px solid ${active ? "#e03131" : "transparent"}`,
                 background: "transparent", cursor: "pointer",
                 fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: active ? 700 : 500,
-                color: active ? "#e03131" : "#9a7070",
+                color: active ? "#e03131" : "#855c5c",
               }}
             >
               <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />{t.label}
@@ -1329,7 +1329,7 @@ function SectionRail({ sections, selectedKey, onSelect }) {
       <div style={{ padding: 16, borderBottom: "1px solid #f5eaea" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", marginBottom: 10 }}>My Sections</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #f0e4e4", borderRadius: 10, padding: "8px 12px", background: "#fdfafa" }}>
-          <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0" }} />
+          <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a" }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1340,7 +1340,7 @@ function SectionRail({ sections, selectedKey, onSelect }) {
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
         {filtered.length === 0 ? (
-          <div style={{ padding: "24px 10px", textAlign: "center", fontSize: 12, color: "#b09090" }}>
+          <div style={{ padding: "24px 10px", textAlign: "center", fontSize: 12, color: "#8a6a6a" }}>
             No sections match "{query}".
           </div>
         ) : (
@@ -1367,7 +1367,7 @@ function SectionRail({ sections, selectedKey, onSelect }) {
                   <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "#e03131" : "#1a0a0a" }}>
                     {sectionLabel(a)}
                   </div>
-                  <div style={{ fontSize: 11, color: "#b09090" }}>
+                  <div style={{ fontSize: 11, color: "#8a6a6a" }}>
                     {entry.student_count} student{entry.student_count === 1 ? "" : "s"}
                   </div>
                 </div>
@@ -1486,7 +1486,7 @@ export default function TeacherSectionsPage() {
                 {teachersUnavailable ? "Teacher list unavailable" : "Select a teacher to view their sections"}
               </div>
               {teachersUnavailable && (
-                <div style={{ fontSize: 12, color: "#b09090", marginTop: 6 }}>Listing users requires admin access.</div>
+                <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 6 }}>Listing users requires admin access.</div>
               )}
             </div>
           </div>
@@ -1542,7 +1542,7 @@ export default function TeacherSectionsPage() {
                 <i className="ti ti-users-group" style={{ fontSize: 22, color: "#e08080" }} />
               </div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>No section assignments found</div>
-              <div style={{ fontSize: 12, color: "#b09090", marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 4 }}>
                 {isTeacher ? "You haven't been assigned as an adviser of any section yet." : "This teacher has no advisory assignments yet."}
               </div>
             </div>

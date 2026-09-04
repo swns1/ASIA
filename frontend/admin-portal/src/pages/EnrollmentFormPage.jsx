@@ -399,7 +399,7 @@ function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "0 14px", height: 44 }}>
-        <i className="ti ti-search" style={{ fontSize: 15, color: "#c0a0a0" }} />
+        <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a" }} />
         <input placeholder="Search by name, LRN, or student number…" value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}

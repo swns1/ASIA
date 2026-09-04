@@ -109,7 +109,7 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
               onMouseLeave={e => e.currentTarget.style.background = "white"}
             >
               <span style={{ fontWeight: 700 }}>{studentLabel(s)}</span>
-              <span style={{ marginLeft: 8, fontSize: 11, color: "#9a7070" }}>LRN: {s.lrn} · {s.student_number}</span>
+              <span style={{ marginLeft: 8, fontSize: 11, color: "#855c5c" }}>LRN: {s.lrn} · {s.student_number}</span>
             </div>
           ))}
         </div>
@@ -250,7 +250,7 @@ export default function SchoolFormsPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>SF1 — School Register</span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "#fff0f0", color: C.red }}>Available</span>
               </div>
-              <div style={{ fontSize: 12, color: "#b09090", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
                 Official class list of all enrolled learners per section. Required per grade level and section every school year.
               </div>
             </div>
@@ -306,7 +306,7 @@ export default function SchoolFormsPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>SF2 — Daily Attendance Register</span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "#e3f0fd", color: "#1455a0" }}>Available</span>
               </div>
-              <div style={{ fontSize: 12, color: "#b09090", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
                 Monthly learner attendance record per class. Pulls data from the Attendance module.
               </div>
             </div>
@@ -367,7 +367,7 @@ export default function SchoolFormsPage() {
                 </span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 5 }}>{form.code} — {form.name}</div>
-              <div style={{ fontSize: 12, color: "#b09090", lineHeight: 1.6, marginBottom: 16 }}>{form.desc}</div>
+              <div style={{ fontSize: 12, color: "#8a6a6a", lineHeight: 1.6, marginBottom: 16 }}>{form.desc}</div>
 
               {/* ── SF9 ── */}
               {form.code === "SF9" && (

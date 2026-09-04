@@ -150,11 +150,11 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
             </div>
             <div>
               <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Award Scholarship</div>
-              <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Manually assign a scholarship to an enrollment</div>
+              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Manually assign a scholarship to an enrollment</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale:1.1, color:"#e03131" }} whileTap={{ scale:0.9 }} transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", fontSize:20, display:"flex", alignItems:"center" }}>
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -179,7 +179,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
                 </div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{student.first_name} {student.last_name}</div>
-                  <div style={{ fontSize:11, color:"#b09090" }}>LRN {student.lrn}</div>
+                  <div style={{ fontSize:11, color:"#8a6a6a" }}>LRN {student.lrn}</div>
                 </div>
                 <button onClick={() => { setStudent(null); setEnrollment(null); }}
                   style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"5px 10px", fontSize:12, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
@@ -187,7 +187,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
             ) : (
               <div style={{ position:"relative" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#c0a0a0" }} />
+                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
                   <input placeholder="Search student by name or LRN…" value={search}
                     onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
@@ -198,7 +198,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
                   {open && search && (
                     <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.14 }}
                       style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
-                      {students.length === 0 && !loadingSt && <div style={{ padding:"16px", textAlign:"center", color:"#b09090", fontSize:13 }}>No students found.</div>}
+                      {students.length === 0 && !loadingSt && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No students found.</div>}
                       {students.map((st) => (
                         <div key={st.student_id} onClick={() => { setStudent(st); setOpen(false); setSearch(""); }}
                           style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0", transition:"background 0.1s" }}
@@ -209,7 +209,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
                           </div>
                           <div>
                             <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{st.last_name}, {st.first_name}</div>
-                            <div style={{ fontSize:11, color:"#b09090" }}>LRN {st.lrn}</div>
+                            <div style={{ fontSize:11, color:"#8a6a6a" }}>LRN {st.lrn}</div>
                           </div>
                         </div>
                       ))}
@@ -224,7 +224,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
             <div style={{ marginBottom:14 }}>
               <label style={lbl}>Enrollment *</label>
               {enrollments.length === 0
-                ? <div style={{ fontSize:13, color:"#b09090", padding:"12px 14px", background:"#fdfafa", borderRadius:10, border:"1px solid #f5eaea", fontStyle:"italic" }}>No active enrollments found for this student.</div>
+                ? <div style={{ fontSize:13, color:"#8a6a6a", padding:"12px 14px", background:"#fdfafa", borderRadius:10, border:"1px solid #f5eaea", fontStyle:"italic" }}>No active enrollments found for this student.</div>
                 : <select value={enrollment?.enrollment_id ?? ""} onChange={(e) => setEnrollment(enrollments.find((en) => en.enrollment_id === parseInt(e.target.value)) ?? null)} style={{ ...inp, cursor:"pointer" }}>
                     <option value="">— Select enrollment —</option>
                     {enrollments.map((en) => (
@@ -255,7 +255,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
 
         <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
           <motion.button onClick={onClose} whileHover={{ borderColor:"#e03131", color:"#e03131" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-            style={{ background:"transparent", color:"#9a7070", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+            style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleSave} disabled={saving}
@@ -338,11 +338,11 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
             </div>
             <div>
               <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Apply Grade-Based Scholarship</div>
-              <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>{eligible.length} eligible student{eligible.length !== 1 ? "s" : ""} with avg ≥ {ELIGIBILITY_THRESHOLD}%</div>
+              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>{eligible.length} eligible student{eligible.length !== 1 ? "s" : ""} with avg ≥ {ELIGIBILITY_THRESHOLD}%</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale:1.1, color:"#e03131" }} whileTap={{ scale:0.9 }} transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", fontSize:20, display:"flex", alignItems:"center" }}>
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -412,7 +412,7 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{elig.student_name}</div>
-                        <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>S.Y. {elig.school_year} · {elig.grade_level} · {PERIOD_LABELS[elig.grading_period] ?? elig.grading_period}</div>
+                        <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>S.Y. {elig.school_year} · {elig.grade_level} · {PERIOD_LABELS[elig.grading_period] ?? elig.grading_period}</div>
                       </div>
                       <span style={{ fontSize:14, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d" }}>{elig.avg.toFixed(2)}</span>
                     </div>
@@ -421,7 +421,7 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
               </div>
               <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
                 <motion.button onClick={onClose} whileHover={{ borderColor:"#e03131", color:"#e03131" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-                  style={{ background:"transparent", color:"#9a7070", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                  style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
                   Cancel
                 </motion.button>
                 <motion.button onClick={handleApply} disabled={applying}
@@ -526,7 +526,7 @@ function ManualAwardsTab() {
       : `₱${parseFloat(sc.discount_value).toLocaleString()} off`
     : "—";
 
-  const filterLabel = { fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8, display:"block" };
+  const filterLabel = { fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8, display:"block" };
   const filterInput = { border:"1.5px solid #f0e4e4", borderRadius:8, padding:"6px 10px", fontSize:12, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box" };
 
   return (
@@ -537,14 +537,14 @@ function ManualAwardsTab() {
         {/* Search row */}
         <div style={{ display:"flex", gap:10, alignItems:"center" }}>
           <div className="search-wrap" style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize:15, color:"#c0a0a0" }} />
+            <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a" }} />
             <input placeholder="Search by student name or scholarship…" value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => { if (e.key==="Enter") setSearch(inputVal); }}
               style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
             {inputVal && (
               <button
-                style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
+                style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
                 onClick={() => { setInputVal(""); setSearch(""); }}>
                 <i className="ti ti-x" style={{ fontSize:13 }} />
               </button>
@@ -582,7 +582,7 @@ function ManualAwardsTab() {
           {/* Scholarship chips */}
           {presentSchTypes.length > 0 && (
             <div>
-              <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Scholarship</div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Scholarship</div>
               <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {[{ scholarship_type_id:"", scholarship_name:"All" }, ...presentSchTypes].map((sc) => {
                   const val    = String(sc.scholarship_type_id);
@@ -593,7 +593,7 @@ function ManualAwardsTab() {
                       initial={false}
                       animate={{
                         backgroundColor: active ? "#fff0f0" : "#ffffff",
-                        color:           active ? "#e03131" : "#9a7070",
+                        color:           active ? "#e03131" : "#855c5c",
                         borderColor:     active ? "#e03131" : "#f0e4e4",
                       }}
                       transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
@@ -610,7 +610,7 @@ function ManualAwardsTab() {
 
           {/* Award Date row */}
           <div>
-            <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Award Date</div>
+            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Award Date</div>
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
               <motion.button
                 onClick={() => setDateOpen((v) => !v)}
@@ -635,7 +635,7 @@ function ManualAwardsTab() {
               </motion.button>
 
               {!loading && (
-                <span style={{ marginLeft:"auto", fontSize:12, color:"#b09090" }}>
+                <span style={{ marginLeft:"auto", fontSize:12, color:"#8a6a6a" }}>
                   <strong style={{ color:"#1a0a0a" }}>{filtered.length}</strong> of {awards.length} award{awards.length !== 1 ? "s" : ""}
                 </span>
               )}
@@ -694,7 +694,7 @@ function ManualAwardsTab() {
           <thead>
             <tr style={{ background:"#fdfafa" }}>
               {["Student / Enrollment","Scholarship","Discount","Awarded On","Notes",""].map((h) => (
-                <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -715,7 +715,7 @@ function ManualAwardsTab() {
                       <i className="ti ti-award-off" style={{ fontSize:22, color:"#e08080" }} />
                     </div>
                     <div style={{ fontSize:14, color:"#7a5050", fontWeight:600 }}>No scholarships awarded yet</div>
-                    <div style={{ fontSize:12, color:"#b09090" }}>Click "Award Scholarship" to manually assign one</div>
+                    <div style={{ fontSize:12, color:"#8a6a6a" }}>Click "Award Scholarship" to manually assign one</div>
                   </div>
                 </td>
               </tr>
@@ -746,7 +746,7 @@ function ManualAwardsTab() {
                           <div style={{ width:34, height:34, borderRadius:"50%", background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{initials}</div>
                           <div>
                             <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{name}</div>
-                            <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>
+                            <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>
                               {en ? `S.Y. ${en.school_year} · ${en.grade_level} · ${en.section}` : `Enrollment #${award.enrollment_id}`}
                             </div>
                           </div>
@@ -755,7 +755,7 @@ function ManualAwardsTab() {
                       <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
                         {sc ? <div>
                           <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{sc.scholarship_name}</div>
-                          <div style={{ fontSize:11, color:"#b09090", fontFamily:"monospace", marginTop:1 }}>{sc.scholarship_code}</div>
+                          <div style={{ fontSize:11, color:"#8a6a6a", fontFamily:"monospace", marginTop:1 }}>{sc.scholarship_code}</div>
                         </div> : <span style={{ color:"#d0b8b8", fontStyle:"italic", fontSize:12 }}>—</span>}
                       </td>
                       <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
@@ -763,10 +763,10 @@ function ManualAwardsTab() {
                           {formatDiscount(sc)}
                         </span>
                       </td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle", fontSize:12, color:"#7a5a5a" }}>{awardedOn}</td>
+                      <td style={{ padding:"13px 18px", verticalAlign:"middle", fontSize:12, color:"#855c5c" }}>{awardedOn}</td>
                       <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
                         {award.notes
-                          ? <span style={{ fontSize:12, color:"#7a5a5a" }}>{award.notes}</span>
+                          ? <span style={{ fontSize:12, color:"#855c5c" }}>{award.notes}</span>
                           : <span style={{ color:"#d0b8b8", fontStyle:"italic", fontSize:12 }}>—</span>}
                       </td>
                       <td style={{ padding:"13px 14px", verticalAlign:"middle" }}>
@@ -776,7 +776,7 @@ function ManualAwardsTab() {
                           whileHover={{ color:"#e03131", scale:1.1 }}
                           whileTap={{ scale:0.9 }}
                           transition={{ duration:0.12 }}
-                          style={{ background:"none", border:"none", cursor:"pointer", color:"#c09090", display:"flex", alignItems:"center", padding:4, borderRadius:6 }}>
+                          style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:4, borderRadius:6 }}>
                           <i className="ti ti-award-off" style={{ fontSize:14 }} />
                         </motion.button>
                       </td>
@@ -877,7 +877,7 @@ function EligibilityTab({ scholarshipTypes }) {
 
         {/* School Year chips */}
         <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {syOptions.map((sy) => {
               const active = schoolYear === sy;
@@ -890,7 +890,7 @@ function EligibilityTab({ scholarshipTypes }) {
                     fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                     cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                     background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#e03131" : "#9a7070",
+                    color: active ? "#e03131" : "#855c5c",
                     transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                   }}>
                   <i className="ti ti-calendar" style={{ fontSize:11 }} />{sy}
@@ -902,7 +902,7 @@ function EligibilityTab({ scholarshipTypes }) {
 
         {/* Grading Period chips */}
         <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#c0a0a0", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grading Period</div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grading Period</div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {PERIOD_OPTIONS.map((p) => {
               const active = gradingPeriod === p.value;
@@ -915,7 +915,7 @@ function EligibilityTab({ scholarshipTypes }) {
                     fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                     cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
                     background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#e03131" : "#9a7070",
+                    color: active ? "#e03131" : "#855c5c",
                     transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
                   }}>
                   {p.label}
@@ -953,7 +953,7 @@ function EligibilityTab({ scholarshipTypes }) {
                     : "No eligible students found"
                   }
                 </div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>
+                <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>
                   S.Y. {schoolYear} · {PERIOD_LABELS[gradingPeriod]} · avg ≥ {ELIGIBILITY_THRESHOLD}%
                 </div>
               </div>
@@ -974,7 +974,7 @@ function EligibilityTab({ scholarshipTypes }) {
                   <i className="ti ti-mood-empty" style={{ fontSize:22, color:"#854f0b" }} />
                 </div>
                 <div style={{ fontSize:14, color:"#7a5050", fontWeight:600 }}>No eligible students</div>
-                <div style={{ fontSize:12, color:"#b09090", marginTop:6 }}>
+                <div style={{ fontSize:12, color:"#8a6a6a", marginTop:6 }}>
                   No students have a general average ≥ {ELIGIBILITY_THRESHOLD}% for {PERIOD_LABELS[gradingPeriod]} in S.Y. {schoolYear}.
                 </div>
               </div>
@@ -983,7 +983,7 @@ function EligibilityTab({ scholarshipTypes }) {
                 <thead>
                   <tr style={{ background:"#fdfafa" }}>
                     {["Student","School Year","Grade / Section","Subjects Graded","General Average",""].map((h) => (
-                      <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#c0a0a0", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                      <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1011,7 +1011,7 @@ function EligibilityTab({ scholarshipTypes }) {
                         <td style={{ padding:"12px 18px", verticalAlign:"middle", fontSize:13, color:"#5a4a4a" }}>{elig.grade_level} · {elig.section}</td>
                         <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
                           <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{elig.grades_count}</span>
-                          <span style={{ fontSize:11, color:"#b09090", marginLeft:4 }}>subject{elig.grades_count !== 1 ? "s" : ""}</span>
+                          <span style={{ fontSize:11, color:"#8a6a6a", marginLeft:4 }}>subject{elig.grades_count !== 1 ? "s" : ""}</span>
                         </td>
                         <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
                           <span style={{ fontSize:15, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d" }}>
