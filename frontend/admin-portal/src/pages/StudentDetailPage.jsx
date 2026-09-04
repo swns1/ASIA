@@ -488,14 +488,23 @@ export default function StudentDetailPage() {
               </div>
             ) : (
               <>
+                {/* ── Hero profile card + tab bar ──
+                    Grouped in one non-animated wrapper with no gap between
+                    them so they read as a single card with the tabs as its
+                    footer strip, while each child keeps its own independent
+                    Framer Motion animation and layout box (nesting the tab
+                    row's flex content inside the hero card's own animated,
+                    overflow:hidden box collapsed its height — see the min-h
+                    note below). */}
+                <div style={{ display:"flex", flexDirection:"column" }}>
                 {/* ── Hero profile card ── */}
                 <motion.div
                   initial={isFirstRender ? { y: 16, opacity: 0 } : false}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
                   style={{
-                    background:"white", borderRadius:20,
-                    border:"1px solid #f5eaea",
+                    background:"white", borderRadius:"20px 20px 0 0",
+                    border:"1px solid #f5eaea", borderBottom:"none",
                     boxShadow:"0 4px 24px rgba(224,49,49,0.07)",
                     overflow:"hidden",
                   }}
@@ -596,17 +605,30 @@ export default function StudentDetailPage() {
                   </div>
                 </motion.div>
 
-                {/* ── Tab bar ── */}
+                {/* ── Tab bar ──
+                    Own animated box (sibling of the hero card, not nested
+                    inside it) — nesting it inside the hero card's animated,
+                    overflow:hidden box collapsed this row's height entirely.
+                    Visually fused to the hero card above via zero gap +
+                    matching border radius on the wrapping div, not by
+                    sharing a layout box. min-h guards against the same
+                    collapse this bar hit before (Framer Motion's y-transform
+                    zeroing out a height that came purely from flex content). */}
                 <motion.div
-                  initial={isFirstRender ? { opacity: 0, y: 8 } : false}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={isFirstRender ? { opacity: 0 } : false}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
-                  className="overflow-hidden rounded-2xl border border-neutral-200 bg-white px-2 shadow-sm"
+                  style={{
+                    background:"#fafafa", borderRadius:"0 0 20px 20px",
+                    border:"1px solid #f5eaea", borderTop:"1px solid #f0e4e4",
+                  }}
+                  className="flex min-h-[52px] items-center overflow-hidden px-3 [&>div]:!overflow-visible [&>div]:!border-b-0 [&>div]:w-full [&>div]:justify-between"
                 >
                   {/* Shared Tabs adds the WAI-ARIA keyboard contract (arrows,
                       Home/End, roving tabindex) the hand-rolled bar lacked. */}
                   <Tabs tabs={TABS} value={activeTab} onChange={handleTabChange} />
                 </motion.div>
+                </div>
 
                 {/* ── Tab content ── */}
                 <TabPanel

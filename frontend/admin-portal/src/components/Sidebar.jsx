@@ -135,7 +135,12 @@ export default function Sidebar({
         ].join(" ")}
       >
         {/* Logo */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-4">
+        <div
+          className={[
+            "flex h-14 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-4",
+            showLabels ? "" : "justify-center px-0",
+          ].join(" ")}
+        >
           <img src={logo} alt="" className="h-[30px] w-5 shrink-0" aria-hidden="true" />
           {showLabels && (
             <div className="min-w-0">
@@ -214,40 +219,33 @@ export default function Sidebar({
 
         {/* User card */}
         <div className="border-t border-neutral-200 p-2.5">
-          <div
-            className={[
-              "flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5",
-              showLabels ? "" : "justify-center",
-            ].join(" ")}
-          >
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
-              aria-hidden="true"
-            >
-              {(currentUser?.name || "SA").slice(0, 2).toUpperCase()}
-            </div>
-            {showLabels && (
-              <>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-neutral-900">
-                    {currentUser?.name || "Super Admin"}
-                  </div>
-                  <div className="truncate text-xs text-neutral-500">
-                    {portalLabelFor(currentUser?.role)}
-                  </div>
+          {showLabels && (
+            <div className="flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5">
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
+                aria-hidden="true"
+              >
+                {(currentUser?.name || "SA").slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-neutral-900">
+                  {currentUser?.name || "Super Admin"}
                 </div>
-                <button
-                  type="button"
-                  title="Log out"
-                  aria-label="Log out"
-                  onClick={() => setShowLogout(true)}
-                  className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
-                >
-                  <i className="ti ti-logout text-[15px]" aria-hidden="true" />
-                </button>
-              </>
-            )}
-          </div>
+                <div className="truncate text-xs text-neutral-500">
+                  {portalLabelFor(currentUser?.role)}
+                </div>
+              </div>
+              <button
+                type="button"
+                title="Log out"
+                aria-label="Log out"
+                onClick={() => setShowLogout(true)}
+                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+              >
+                <i className="ti ti-logout text-[15px]" aria-hidden="true" />
+              </button>
+            </div>
+          )}
           {!showLabels && (
             <button
               type="button"

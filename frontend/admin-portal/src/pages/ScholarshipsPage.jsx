@@ -763,10 +763,10 @@ function ManualAwardsTab() {
                           {formatDiscount(sc)}
                         </span>
                       </td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle", fontSize:12, color:"#7a5a5a" }}>{awardedOn}</td>
+                      <td style={{ padding:"13px 18px", verticalAlign:"middle", fontSize:12, color:"#855c5c" }}>{awardedOn}</td>
                       <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
                         {award.notes
-                          ? <span style={{ fontSize:12, color:"#7a5a5a" }}>{award.notes}</span>
+                          ? <span style={{ fontSize:12, color:"#855c5c" }}>{award.notes}</span>
                           : <span style={{ color:"#8a6a6a", fontStyle:"italic", fontSize:12 }}>—</span>}
                       </td>
                       <td style={{ padding:"13px 14px", verticalAlign:"middle" }}>

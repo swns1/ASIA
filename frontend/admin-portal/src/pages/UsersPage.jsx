@@ -498,7 +498,7 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
               </Field>
             )}
             <Field label="New password" required error={errors.newPw}>
-              <PasswordInput
+            <PasswordInput
                 id="newPw"
                 value={values.newPw}
                 onChange={set("newPw")}
@@ -610,7 +610,11 @@ export default function UsersPage() {
         !q ||
         u.name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q);
-      const matchRole = roleFilter === "all" || u.role === roleFilter;
+      const matchRole =
+        roleFilter === "all" ? true :
+        roleFilter === "staff" ? (!isAdminRole(u.role) && u.role !== "guardian") :
+        roleFilter === "admin" ? isAdminRole(u.role) :
+        u.role === roleFilter;
       return matchSearch && matchRole;
     });
   }, [users, search, roleFilter]);
@@ -658,10 +662,42 @@ export default function UsersPage() {
 
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard label="Total Users" value={stats.total} icon="ti-users" iconTone="brand" loading={loading} />
-          <StatCard label="Admins" value={stats.admins} icon="ti-shield-check" iconTone="accent" loading={loading} />
-          <StatCard label="Staff" value={stats.staff} icon="ti-user" iconTone="info" loading={loading} />
-          <StatCard label="Guardians" value={stats.guardians} icon="ti-users-group" iconTone="muted" loading={loading} />
+          <StatCard
+            label="Total Users"
+            value={stats.total}
+            icon="ti-users"
+            iconTone="brand"
+            loading={loading}
+            active={roleFilter === "all"}
+            onClick={() => setRoleFilter("all")}
+          />
+          <StatCard
+            label="Admins"
+            value={stats.admins}
+            icon="ti-shield-check"
+            iconTone="accent"
+            loading={loading}
+            active={roleFilter === "admin"}
+            onClick={() => setRoleFilter(roleFilter === "admin" ? "all" : "admin")}
+          />
+          <StatCard
+            label="Staff"
+            value={stats.staff}
+            icon="ti-user"
+            iconTone="info"
+            loading={loading}
+            active={roleFilter === "staff"}
+            onClick={() => setRoleFilter(roleFilter === "staff" ? "all" : "staff")}
+          />
+          <StatCard
+            label="Guardians"
+            value={stats.guardians}
+            icon="ti-users-group"
+            iconTone="muted"
+            loading={loading}
+            active={roleFilter === "guardian"}
+            onClick={() => setRoleFilter(roleFilter === "guardian" ? "all" : "guardian")}
+          />
         </div>
 
         <Card>

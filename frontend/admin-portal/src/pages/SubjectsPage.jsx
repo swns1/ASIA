@@ -621,7 +621,7 @@ export default function SubjectsPage() {
                             {/* Strand / Sem */}
                             <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
                               {sub.strand || sub.semester
-                                ? <div style={{ fontSize: 12, color: "#7a5a5a" }}>
+                                ? <div style={{ fontSize: 12, color: "#855c5c" }}>
                                     {sub.strand && <span style={{ display: "block" }}>{sub.strand}</span>}
                                     {sub.semester && <span style={{ color: "#8a6a6a", fontSize: 11 }}>{sub.semester === "1st" ? "1st Semester" : "2nd Semester"}</span>}
                                   </div>

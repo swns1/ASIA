@@ -64,7 +64,7 @@ const EVENT_TYPE_DEFAULTS = [
   { value: "enrollment",     label: "Enrollment",    color: "#2e6b0d", icon: "ti-clipboard-list" },
   { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
   { value: "school_day_off", label: "No Classes",    color: "#854f0b", icon: "ti-school-off" },
-  { value: "event",          label: "Event",         color: "#1455a0", icon: "ti-star" },
+  { value: "event",          label: "Event",         color: "#a3266b", icon: "ti-star" },
   { value: "other",          label: "Other",         color: "#855c5c", icon: "ti-calendar" },
 ];
 
@@ -552,7 +552,7 @@ function EventCard({ event, onEdit, onDelete }) {
                 {formatDateRange(event.start_date, event.end_date)}
               </div>
               {event.description && (
-                <div style={{ fontSize: 11, color: "#7a5a5a", marginTop: 4, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                <div style={{ fontSize: 11, color: "#855c5c", marginTop: 4, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                   {event.description}
                 </div>
               )}
@@ -680,7 +680,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
                       transition: "background-color 0.15s ease, border-color 0.15s ease",
                     }}>
                     <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? t.color : "#8a6a6a", transition: "color 0.15s ease" }} />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? t.color : "#7a5a5a", transition: "color 0.15s ease" }}>{t.label}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? t.color : "#855c5c", transition: "color 0.15s ease" }}>{t.label}</span>
                   </button>
                 );
               })}
@@ -892,7 +892,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
                 <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Import complete!</div>
-              <div style={{ fontSize: 13, color: "#7a5a5a", textAlign: "center", lineHeight: 1.7 }}>
+              <div style={{ fontSize: 13, color: "#855c5c", textAlign: "center", lineHeight: 1.7 }}>
                 <strong style={{ color: "#2e6b0d" }}>{added} holiday{added !== 1 ? "s" : ""}</strong> added to S.Y. {schoolYear}.
               </div>
             </div>
@@ -1247,7 +1247,7 @@ function YearListPrint({ events, schoolYear, schoolName }) {
                       <td style={{ padding: "5px 8px" }}>
                         <span style={{ background: meta.bg, color: meta.color, borderLeft: `3px solid ${meta.color}`, padding: "2px 7px", borderRadius: "0 3px 3px 0", fontSize: 9.5, fontWeight: 700 }}>{meta.label}</span>
                       </td>
-                      <td style={{ padding: "5px 8px", color: "#7a5a5a", fontSize: 10 }}>{ev.description ?? ""}</td>
+                      <td style={{ padding: "5px 8px", color: "#855c5c", fontSize: 10 }}>{ev.description ?? ""}</td>
                     </tr>
                   );
                 })}
@@ -1261,7 +1261,7 @@ function YearListPrint({ events, schoolYear, schoolName }) {
         {EVENT_TYPES.map((t) => (
           <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
-            <span style={{ fontSize: 9.5, color: "#7a5a5a" }}>{t.label}</span>
+            <span style={{ fontSize: 9.5, color: "#855c5c" }}>{t.label}</span>
           </div>
         ))}
       </div>
@@ -1359,7 +1359,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
                 {EVENT_TYPES.map((t) => (
                   <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <div style={{ width: 9, height: 9, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
-                    <span style={{ fontSize: 9, color: "#7a5a5a" }}>{t.label}</span>
+                    <span style={{ fontSize: 9, color: "#855c5c" }}>{t.label}</span>
                   </div>
                 ))}
               </div>
@@ -1399,7 +1399,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
       <motion.button onClick={onExportCSV}
         whileHover={{ borderColor: "#fca5a5", color: "#c92a2a", background: "#fff8f8" }}
         whileTap={{ scale: 0.96 }}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#7a5a5a", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
         <i className="ti ti-table-export" style={{ fontSize: 14 }} />Download CSV
       </motion.button>
 
@@ -1659,7 +1659,7 @@ export default function AcademicCalendarPage() {
             {EVENT_TYPES.map((t) => (
               <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 3, background: t.bg, border: `1.5px solid ${t.color}60` }} />
-                <span style={{ fontSize: 11, color: "#7a5a5a", fontWeight: 500 }}>{t.label}</span>
+                <span style={{ fontSize: 11, color: "#855c5c", fontWeight: 500 }}>{t.label}</span>
               </div>
             ))}
           </motion.div>
