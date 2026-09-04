@@ -29,3 +29,4 @@ media/
 # committed. Keep local copies here for development instead.
 OCR_IMAGES/
 backend/student-service/students/fixtures/*.jpg
+frontend/admin-portal/MAROON_HIGHLIGHT_PLAN.md
