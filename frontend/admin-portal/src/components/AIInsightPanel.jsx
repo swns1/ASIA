@@ -152,7 +152,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{title}</div>
               {description && (
-                <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>{description}</div>
+                <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>{description}</div>
               )}
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                   display: "flex", alignItems: "center", gap: 6,
                   height: 32, padding: "0 12px",
                   border: "1px solid #f0e4e4", borderRadius: 8,
-                  background: "white", fontSize: 12, color: "#9a7070",
+                  background: "white", fontSize: 12, color: "#855c5c",
                   cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 500, transition: "all 0.12s",
                 }}
@@ -186,7 +186,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                 background: disabled || status === "loading"
                   ? "#f0dada"
                   : "linear-gradient(135deg, #e03131, #c92a2a)",
-                color: disabled || status === "loading" ? "#b09090" : "white",
+                color: disabled || status === "loading" ? "#8a6a6a" : "white",
                 border: "none", borderRadius: 9,
                 fontSize: 12.5, fontWeight: 700,
                 cursor: disabled || status === "loading" ? "not-allowed" : "pointer",
@@ -218,7 +218,7 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             <div style={{
               display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", padding: "28px 20px", gap: 10,
-              color: "#c0a0a0", textAlign: "center",
+              color: "#8a6a6a", textAlign: "center",
             }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
@@ -227,10 +227,10 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
               }}>
                 <i className="ti ti-sparkles" style={{ fontSize: 22, color: "#e8a0a0" }} />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#b09090" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#8a6a6a" }}>
                 No analysis yet
               </div>
-              <div style={{ fontSize: 12, color: "#c8b0b0", maxWidth: 280, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: "#8a6a6a", maxWidth: 280, lineHeight: 1.6 }}>
                 Click <strong style={{ color: "#e03131" }}>Analyze</strong> to generate an AI-powered interpretation of this data using Gemini.
               </div>
             </div>

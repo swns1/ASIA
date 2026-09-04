@@ -129,13 +129,13 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
                 {isEdit ? "Edit Advisory Assignment" : "New Advisory Assignment"}
               </div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>
                 {isEdit ? "Update which section this teacher advises" : "Assign a teacher as adviser of a section"}
               </div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -233,7 +233,7 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
             whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
+            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleSave} disabled={saving}
@@ -296,13 +296,13 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
           <motion.button title="Edit" onClick={() => onEdit(advisory)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
             <i className="ti ti-pencil" style={{ fontSize: 13 }} />
           </motion.button>
           <motion.button title="Delete" onClick={() => onDelete(advisory)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 13 }} />
           </motion.button>
         </div>
@@ -439,7 +439,7 @@ export default function TeacherAdvisoriesPage() {
           style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
         >
           <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#c0a0a0", flexShrink: 0 }} />
+            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -451,7 +451,7 @@ export default function TeacherAdvisoriesPage() {
                 <motion.button
                   initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                   onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", display: "flex", alignItems: "center", padding: 0 }}>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
                   <i className="ti ti-x" style={{ fontSize: 12 }} />
                 </motion.button>
               )}
@@ -460,7 +460,7 @@ export default function TeacherAdvisoriesPage() {
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#c0a0a0", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>School Year</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>School Year</span>
               {["all", ...schoolYears].map((y) => {
                 const active = yearFilter === y;
                 return (
@@ -471,7 +471,7 @@ export default function TeacherAdvisoriesPage() {
                       height: 32, padding: "0 14px", borderRadius: 99,
                       border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
                       background: active ? "#fff0f0" : "white",
-                      color: active ? "#e03131" : "#9a7070",
+                      color: active ? "#e03131" : "#855c5c",
                       fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                     }}
@@ -514,7 +514,7 @@ export default function TeacherAdvisoriesPage() {
                   { label: "Strand",            w: "14%" },
                   { label: "",                  w: "10%" },
                 ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#c0a0a0", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
+                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
                     {label}
                   </th>
                 ))}
@@ -550,7 +550,7 @@ export default function TeacherAdvisoriesPage() {
                           <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
                             {hasFilters ? "No assignments match your filters" : "No advisory assignments found"}
                           </div>
-                          <div style={{ fontSize: 12, color: "#b09090" }}>
+                          <div style={{ fontSize: 12, color: "#8a6a6a" }}>
                             {hasFilters ? "Try adjusting your search or filters" : "Assign a teacher to a section to get started"}
                           </div>
                           {!hasFilters && (

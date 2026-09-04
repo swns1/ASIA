@@ -14,7 +14,7 @@ import { listVariants, modalVariants, springTransition } from "../utils/motion";
 const C = {
   red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
   border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
-  muted: "#7a5050", pale: "#b09090", micro: "#c0a0a0", bg: "#fdf8f6", white: "#ffffff",
+  muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
 };
 
 const baseCss = `
@@ -212,7 +212,7 @@ function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, del
       style={{
         height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
         backgroundColor: active ? activeBg     : C.white,
-        color:           active ? activeColor  : "#9a7070",
+        color:           active ? activeColor  : "#855c5c",
         borderColor:     active ? activeBorder : "#f0e4e4",
         transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease",
       }}
@@ -587,7 +587,7 @@ export default function AuditTrailPage() {
         {/* Pagination — outside the card, matching Students page layout */}
         {!loading && filteredLogs.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: "#b09090" }}>
+            <span style={{ fontSize: 12, color: "#8a6a6a" }}>
               Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
               <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
               &nbsp;·&nbsp;{filteredLogs.length.toLocaleString()} total records
@@ -596,7 +596,7 @@ export default function AuditTrailPage() {
               <select
                 value={pageSize}
                 onChange={e => setPageSize(Number(e.target.value))}
-                style={{ height: 32, border: "1px solid #f0e4e4", borderRadius: 8, padding: "0 8px", fontSize: 12, color: "#9a7070", background: "white", fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", marginRight: 4 }}
+                style={{ height: 32, border: "1px solid #f0e4e4", borderRadius: 8, padding: "0 8px", fontSize: 12, color: "#855c5c", background: "white", fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", marginRight: 4 }}
               >
                 {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
               </select>
@@ -640,7 +640,7 @@ export default function AuditTrailPage() {
 const pgBtn = {
   width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
   background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#9a7070",
+  cursor: "pointer", fontSize: 12, color: "#855c5c",
   fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
 };
 

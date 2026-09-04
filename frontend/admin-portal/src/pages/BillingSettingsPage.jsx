@@ -31,14 +31,14 @@ const recalculateSchedule = (id)     => _recalculateSchedule(id);
 const C = {
   red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
   border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
-  muted: "#7a5050", pale: "#b09090", micro: "#c0a0a0", bg: "#fdf8f6", white: "#ffffff",
+  muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
 };
 
 const baseCss = `
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   @keyframes spin    { to{transform:rotate(360deg)} }
   .settings-input:focus { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; outline:none; }
-  .settings-input::placeholder { color:#c0a0a0; }
+  .settings-input::placeholder { color:#8a6a6a; }
 `;
 
 const TABS = [
@@ -494,11 +494,11 @@ function NewScheduleModal({ onClose, onSaved }) {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#b09090", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#c0a0a0", fontSize: 20, display: "flex", alignItems: "center" }}>
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" />
           </motion.button>
         </div>
@@ -527,7 +527,7 @@ function NewScheduleModal({ onClose, onSaved }) {
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
                       borderRadius: 99, border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
-                      background: active ? lv.bg : "white", color: active ? lv.color : "#9a7070",
+                      background: active ? lv.bg : "white", color: active ? lv.color : "#855c5c",
                       fontSize: 12, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -550,7 +550,7 @@ function NewScheduleModal({ onClose, onSaved }) {
         <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
           <motion.button onClick={onClose}
             whileHover={{ borderColor: "#e03131", color: "#e03131" }}
-            style={{ background: "transparent", color: "#9a7070", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
+            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
             Cancel
           </motion.button>
           <motion.button onClick={handleCreate} disabled={saving}
@@ -611,7 +611,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
             style={{ ...inp, flex: 1, minWidth: 0 }} />
           <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#b09090", fontWeight: 600 }}>₱</span>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
               style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }} />
           </div>
@@ -625,7 +625,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           </motion.button>
           <motion.button onClick={() => { setEditing(false); setName(item.item_name); setAmount(String(item.amount)); }}
             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-            style={{ background: "white", color: "#9a7070", border: "1px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
+            style={{ background: "white", color: "#855c5c", border: "1px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" style={{ fontSize: 12 }} />
           </motion.button>
         </>
@@ -636,13 +636,13 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
           <motion.button onClick={() => setEditing(true)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9a7070" }}>
+            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
             <i className="ti ti-pencil" style={{ fontSize: 11 }} />
           </motion.button>
           <motion.button onClick={() => setConfirmDelete(true)} aria-label={`Delete fee item ${item.item_name}`}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#c09090" }}>
+            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 11 }} />
           </motion.button>
         </>
@@ -701,7 +701,7 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
           style={{ ...inp, flex: 1, minWidth: 0 }}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
         <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#b09090", fontWeight: 600 }}>₱</span>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
           <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00" style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
@@ -802,7 +802,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
         ].map((s) => (
           <div key={s.label} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "14px 16px", textAlign: "center", boxShadow: "0 2px 8px rgba(224,49,49,0.04)" }}>
             <AnimatedAmount value={parseFloat(s.val)} style={{ fontSize: 15, fontWeight: 700, color: s.color }} />
-            <div style={{ fontSize: 11, color: "#a07878", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 11, color: "#855c5c", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
       </motion.div>
@@ -823,9 +823,9 @@ function ScheduleDetail({ schedule, onUpdated }) {
                   <i className={`ti ${catMeta.icon}`} style={{ fontSize: 14, color: catMeta.color }} />
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{catMeta.label}</span>
-                <span style={{ fontSize: 11, color: "#b09090" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
+                <span style={{ fontSize: 11, color: "#8a6a6a" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
                 {cat !== "tuition"
-                  ? <span style={{ fontSize: 11, color: "#b09090", fontStyle: "italic" }}>· no discount applied</span>
+                  ? <span style={{ fontSize: 11, color: "#8a6a6a", fontStyle: "italic" }}>· no discount applied</span>
                   : <span style={{ fontSize: 11, color: "#e03131", fontStyle: "italic" }}>· discounts applied here</span>
                 }
               </div>
@@ -912,7 +912,7 @@ function FeeSchedulesTab() {
           style={{ borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", overflow: "hidden", background: "white" }}
         >
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f5eaea", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 10, color: "#c0a0a0", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
+            <div style={{ fontSize: 10, color: "#8a6a6a", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {[{ value: "all", label: "All", color: "#e03131", bg: "#fff0f0", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
                 const active = levelFilter === lv.value;
@@ -925,7 +925,7 @@ function FeeSchedulesTab() {
                       height: 26, padding: "0 10px", borderRadius: 99,
                       border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
                       background: active ? lv.bg : "white",
-                      color: active ? lv.color : "#9a7070",
+                      color: active ? lv.color : "#855c5c",
                       fontSize: 11, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -948,7 +948,7 @@ function FeeSchedulesTab() {
                 ))
               : schedules.length === 0
                 ? (
-                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#b09090", fontSize: 13 }}>
+                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>
                     <i className="ti ti-cash" style={{ fontSize: 28, color: "#f0c8c8", display: "block", marginBottom: 10 }} />
                     No fee schedules yet.<br />
                     <span style={{ fontSize: 12 }}>Click "New Schedule" to create one.</span>
@@ -986,7 +986,7 @@ function FeeSchedulesTab() {
                             <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{sch.grade_level}</span>
                             <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 6px", borderRadius: 99, background: lv.bg, color: lv.color }}>{lv.label}</span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#b09090", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
+                          <div style={{ fontSize: 12, color: "#8a6a6a", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
                           {grandTotal > 0 && (
                             <div style={{ display: "flex", height: 4, borderRadius: 99, overflow: "hidden", gap: 1, marginBottom: 5 }}>
                               {tTotal > 0 && <div style={{ flex: tTotal / barTotal, background: "#e03131", minWidth: 2 }} title={`Tuition: ${fmt(tTotal)}`} />}
@@ -1017,7 +1017,7 @@ function FeeSchedulesTab() {
                   <i className="ti ti-cash" style={{ fontSize: 28, color: "#e08080" }} />
                 </div>
                 <div style={{ fontSize: 16, color: "#7a5050", fontWeight: 600 }}>Select a fee schedule</div>
-                <div style={{ fontSize: 13, color: "#b09090" }}>Click a schedule on the left to view and edit its items</div>
+                <div style={{ fontSize: 13, color: "#8a6a6a" }}>Click a schedule on the left to view and edit its items</div>
               </motion.div>
             ) : (
               <motion.div

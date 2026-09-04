@@ -483,19 +483,28 @@ export default function StudentDetailPage() {
                 ))}
               </div>
             ) : !student ? (
-              <div style={{ textAlign:"center", padding:"80px 0", color:"#b09090", fontSize:15 }}>
+              <div style={{ textAlign:"center", padding:"80px 0", color:"#8a6a6a", fontSize:15 }}>
                 Student not found.
               </div>
             ) : (
               <>
+                {/* ── Hero profile card + tab bar ──
+                    Grouped in one non-animated wrapper with no gap between
+                    them so they read as a single card with the tabs as its
+                    footer strip, while each child keeps its own independent
+                    Framer Motion animation and layout box (nesting the tab
+                    row's flex content inside the hero card's own animated,
+                    overflow:hidden box collapsed its height — see the min-h
+                    note below). */}
+                <div style={{ display:"flex", flexDirection:"column" }}>
                 {/* ── Hero profile card ── */}
                 <motion.div
                   initial={isFirstRender ? { y: 16, opacity: 0 } : false}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
                   style={{
-                    background:"white", borderRadius:20,
-                    border:"1px solid #f5eaea",
+                    background:"white", borderRadius:"20px 20px 0 0",
+                    border:"1px solid #f5eaea", borderBottom:"none",
                     boxShadow:"0 4px 24px rgba(224,49,49,0.07)",
                     overflow:"hidden",
                   }}
@@ -530,7 +539,7 @@ export default function StudentDetailPage() {
                       <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1.2, letterSpacing:"-0.01em" }}>
                         {fullName}
                       </div>
-                      <div style={{ fontSize:12, color:"#b09090", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:12, color:"#8a6a6a", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                         {student.student_number && (
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <i className="ti ti-id-badge" style={{ fontSize:13 }} />
@@ -596,17 +605,30 @@ export default function StudentDetailPage() {
                   </div>
                 </motion.div>
 
-                {/* ── Tab bar ── */}
+                {/* ── Tab bar ──
+                    Own animated box (sibling of the hero card, not nested
+                    inside it) — nesting it inside the hero card's animated,
+                    overflow:hidden box collapsed this row's height entirely.
+                    Visually fused to the hero card above via zero gap +
+                    matching border radius on the wrapping div, not by
+                    sharing a layout box. min-h guards against the same
+                    collapse this bar hit before (Framer Motion's y-transform
+                    zeroing out a height that came purely from flex content). */}
                 <motion.div
-                  initial={isFirstRender ? { opacity: 0, y: 8 } : false}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={isFirstRender ? { opacity: 0 } : false}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
-                  className="overflow-hidden rounded-2xl border border-neutral-200 bg-white px-2 shadow-sm"
+                  style={{
+                    background:"#fafafa", borderRadius:"0 0 20px 20px",
+                    border:"1px solid #f5eaea", borderTop:"1px solid #f0e4e4",
+                  }}
+                  className="flex min-h-[52px] items-center overflow-hidden px-3 [&>div]:!overflow-visible [&>div]:!border-b-0 [&>div]:w-full [&>div]:justify-between"
                 >
                   {/* Shared Tabs adds the WAI-ARIA keyboard contract (arrows,
                       Home/End, roving tabindex) the hand-rolled bar lacked. */}
                   <Tabs tabs={TABS} value={activeTab} onChange={handleTabChange} />
                 </motion.div>
+                </div>
 
                 {/* ── Tab content ── */}
                 <TabPanel
@@ -691,7 +713,7 @@ export default function StudentDetailPage() {
                               </div>
                               <div>
                                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
-                                <div style={{ fontSize:11.5, color:"#b09090", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
+                                <div style={{ fontSize:11.5, color:"#8a6a6a", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
                               </div>
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -716,7 +738,7 @@ export default function StudentDetailPage() {
                               ) : null}
                               {g.user_id && canLink && (
                                 <button title="Manage portal access" onClick={() => setLinkGuardian(g)}
-                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#9a7070" }}>
+                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c" }}>
                                   <i className="ti ti-settings" style={{ fontSize:12 }} />
                                 </button>
                               )}
@@ -749,9 +771,9 @@ export default function StudentDetailPage() {
                                 </div>
                                 <div style={{ flex:1 }}>
                                   <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.full_name}</div>
-                                  {s.age && <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>{s.age} years old</div>}
+                                  {s.age && <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>{s.age} years old</div>}
                                 </div>
-                                <div style={{ fontSize:11, color:"#c0a0a0", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
+                                <div style={{ fontSize:11, color:"#8a6a6a", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
                                   Sibling {i + 1}
                                 </div>
                               </div>
@@ -784,7 +806,7 @@ export default function StudentDetailPage() {
                             </div>
                             <div>
                               <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{s.school_name}</div>
-                              <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>School {i + 1}</div>
+                              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>School {i + 1}</div>
                             </div>
                           </div>
                           <div style={{ padding:"4px 22px 14px" }}>
@@ -836,7 +858,7 @@ export default function StudentDetailPage() {
                               </div>
                               <div>
                                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{en.grade_level} — {en.section}</div>
-                                <div style={{ fontSize:12, color:"#b09090", marginTop:2 }}>
+                                <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>
                                   {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}{en.strand ? ` · ${en.strand}` : ""}
                                 </div>
                               </div>
@@ -845,7 +867,7 @@ export default function StudentDetailPage() {
                               <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
                                 {sc.label}
                               </span>
-                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#b09090" }} />
+                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#8a6a6a" }} />
                             </div>
                           </motion.div>
                         );
@@ -894,7 +916,7 @@ export default function StudentDetailPage() {
                               transition={{ delay: i * 0.06, duration:0.22 }}
                               style={{ background:bg, border:`1px solid ${border}`, borderRadius:12, padding:"14px 18px" }}
                             >
-                              <div style={{ fontSize:10, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
                               <div style={{ fontSize:18, fontWeight:800, color }}>
                                 ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                               </div>
@@ -918,7 +940,7 @@ export default function StudentDetailPage() {
                                 </span>
                               }
                             >
-                              <div style={{ fontSize:11, color:"#b09090", marginBottom:10 }}>
+                              <div style={{ fontSize:11, color:"#8a6a6a", marginBottom:10 }}>
                                 {levelLabel}{yr.section ? ` · ${yr.section}` : ""} · <span style={{ fontWeight:600 }}>{yr.enrollment_status}</span>
                               </div>
                               {yr.invoices.length === 0 ? (
@@ -946,7 +968,7 @@ export default function StudentDetailPage() {
                                         <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>{inv.invoice_no}</span>
                                         <span style={{ fontSize:10, fontWeight:700, color:isMeta.color, background:isMeta.bg, padding:"2px 8px", borderRadius:50 }}>{isMeta.label}</span>
                                       </div>
-                                      <span style={{ fontSize:11, color:"#b09090" }}>
+                                      <span style={{ fontSize:11, color:"#8a6a6a" }}>
                                         {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—"}
                                         {" · "}{inv.payment_plan?.replace(/_/g, " ")}
                                       </span>
@@ -958,7 +980,7 @@ export default function StudentDetailPage() {
                                         { label:"Balance", value:balAmt,  color:balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                       ].map(({ label, value, color }) => (
                                         <div key={label}>
-                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
                                           <div style={{ fontSize:13, fontWeight:700, color }}>₱{value.toLocaleString("en-PH", { minimumFractionDigits:2 })}</div>
                                         </div>
                                       ))}
@@ -973,7 +995,7 @@ export default function StudentDetailPage() {
                                   { label:"Year Balance", value:yr.year_balance, bold:true, color:balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
                                 ].map(({ label, value, bold, color }) => (
                                   <div key={label} style={{ textAlign:"right" }}>
-                                    <div style={{ fontSize:9.5, color:"#b09090", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
+                                    <div style={{ fontSize:9.5, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
                                     <div style={{ fontSize:13, fontWeight:bold ? 800 : 600, color:color || "#1a0a0a" }}>
                                       ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                                     </div>

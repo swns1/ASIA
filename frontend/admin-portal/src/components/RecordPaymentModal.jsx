@@ -132,10 +132,10 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
             </div>
             <div>
               <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Record Payment</div>
-              <div style={{ fontSize:11, color:"#b09090", marginTop:1 }}>Apply a payment to an invoice</div>
+              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Apply a payment to an invoice</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#c0a0a0", fontSize:20 }}><i className="ti ti-x" /></button>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20 }}><i className="ti ti-x" /></button>
         </div>
 
         <div style={{ padding:"22px 28px" }}>
@@ -160,7 +160,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                   </div>
                 </div>
                 <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en?.student_name ?? `Enrollment #${invoice.enrollment_id}`}</div>
-                <div style={{ fontSize:11, color:"#b09090", marginTop:2 }}>{en?.grade_level} · {en?.section} · S.Y. {en?.school_year}</div>
+                <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>{en?.grade_level} · {en?.section} · S.Y. {en?.school_year}</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:12 }}>
                   {[
                     { label:"Total Due",  val:fmt(invoice.net_amount ?? 0), color:"#1a0a0a" },
@@ -169,7 +169,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                   ].map((s) => (
                     <div key={s.label} style={{ textAlign:"center", padding:"10px 8px", background:"white", borderRadius:10, border:"1px solid #f5eaea" }}>
                       <div style={{ fontSize:14, fontWeight:700, color:s.color }}>{s.val}</div>
-                      <div style={{ fontSize:10.5, color:"#b09090", marginTop:3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
+                      <div style={{ fontSize:10.5, color:"#8a6a6a", marginTop:3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
                     </div>
                   ))}
                 </div>
@@ -177,7 +177,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
             ) : (
               <div style={{ position:"relative" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#c0a0a0" }} />
+                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
                   <input placeholder="Search by invoice number or student name…" value={invoiceSearch}
                     onChange={(e) => { setInvoiceSearch(e.target.value); setDropdownOpen(true); }}
                     onFocus={() => setDropdownOpen(true)}
@@ -186,7 +186,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                 </div>
                 {dropdownOpen && invoiceSearch && (
                   <div style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
-                    {invoiceResults.length === 0 && !searching && <div style={{ padding:"16px", textAlign:"center", color:"#b09090", fontSize:13 }}>No invoices found.</div>}
+                    {invoiceResults.length === 0 && !searching && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No invoices found.</div>}
                     {invoiceResults.map((inv) => {
                       if (inv.status === "void" || inv.status === "paid") return null;
                       const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
@@ -219,7 +219,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                 return (
                   <button key={pm.value} type="button" onClick={() => setF("payment_method", pm.value)}
                     style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, border:`1.5px solid ${active?pm.color:"#f0e4e4"}`, background:active?pm.bg:"white", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}>
-                    <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:active?pm.color:"#9a7070" }} />
+                    <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:active?pm.color:"#855c5c" }} />
                     <span style={{ fontSize:12, fontWeight:active?700:500, color:active?pm.color:"#7a5050" }}>{pm.label}</span>
                   </button>
                 );
@@ -232,7 +232,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
             <div>
               <label style={lbl}>Amount Paid *</label>
               <div style={{ position:"relative" }}>
-                <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#b09090", fontWeight:600 }}>₱</span>
+                <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#8a6a6a", fontWeight:600 }}>₱</span>
                 <input type="number" min="0.01" step="0.01"
                   max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
                   value={form.amount_paid} onChange={(e) => setF("amount_paid", e.target.value)}
@@ -277,7 +277,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
         {/* Footer */}
         <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
-          <button onClick={onClose} style={{ background:"transparent", color:"#9a7070", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>Cancel</button>
+          <button onClick={onClose} style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>Cancel</button>
           <button onClick={handleSave} disabled={saving || !invoice}
             style={{ background:saving?"#e87474":"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:saving||!invoice?"not-allowed":"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(46,107,13,0.26)", opacity:!invoice?0.6:1 }}>
             {saving

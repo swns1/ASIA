@@ -670,7 +670,7 @@ const isImageUrl = (url) => url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.
 
 const DC = {
   green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
-  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#b09090",
+  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#8a6a6a",
 };
 
 function DocStatusBadge({ submitted }) {
@@ -799,7 +799,7 @@ function DocUploadModal({ req, isEdit, pendingEntry, onClose, onFileSelected }) 
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#c0a0a0" }} />
+                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
                   {isReplace || hasPending ? "Drop new file or click to browse" : "Drop file here or click to browse"}
                 </div>
@@ -940,7 +940,7 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#c8b0b0" }} />
+            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#8a6a6a" }} />
             <span style={{ fontSize: 11, color: DC.pale }}>No document yet</span>
           </div>
         )}

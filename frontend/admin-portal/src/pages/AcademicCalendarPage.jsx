@@ -1237,7 +1237,7 @@ function YearListPrint({ events, schoolYear, schoolName }) {
               </thead>
               <tbody>
                 {monthEvs.length === 0 ? (
-                  <tr><td colSpan={4} style={{ padding: "6px 8px", color: "#c8b0b0", fontStyle: "italic", fontSize: 10 }}>No events this month</td></tr>
+                  <tr><td colSpan={4} style={{ padding: "6px 8px", color: "#8a6a6a", fontStyle: "italic", fontSize: 10 }}>No events this month</td></tr>
                 ) : monthEvs.map((ev) => {
                   const meta = eventMeta(ev.event_type);
                   return (
@@ -1756,7 +1756,7 @@ export default function AcademicCalendarPage() {
                   <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#e8a0a0" }} />
                 </div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#8a6a6a" }}>No date selected</div>
-                <div style={{ fontSize: 11, color: "#c8b0b0", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
+                <div style={{ fontSize: 11, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
               </motion.div>
             )}
           </AnimatePresence>
