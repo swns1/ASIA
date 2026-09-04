@@ -1,10 +1,10 @@
 from rest_framework import serializers
 from django.db.models import Q
 from django.conf import settings
-from django.core.files.storage import FileSystemStorage
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-import os
+
+from shared.uploads import download_url, file_kind_for, safe_save
 from .models import (
     Student,
     Household,
@@ -157,21 +157,36 @@ class RequirementTypeSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+# This service's own router uses underscores (student_requirement_submissions);
+# enrollment-service's mirror hyphenates its path instead — see that
+# service's requirements/serializers.py for its own copy of this constant.
+# Frontend doesn't call this service's copy of the endpoint today (it talks
+# to enrollment-service's), but this stays correct for defense in depth and
+# any direct API caller.
+DOWNLOAD_PREFIX = "/api/student_requirement_submissions/"
+
+
 class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True, required=False)
-    image_url = serializers.CharField(read_only=True)
+    image_url = serializers.SerializerMethodField()
+    file_kind = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentRequirementSubmission
         fields = "__all__"
 
-    def _save_file(self, upload):
-        requirements_path = os.path.join(settings.MEDIA_ROOT, "requirements")
-        os.makedirs(requirements_path, exist_ok=True)
+    def get_image_url(self, obj):
+        return download_url(DOWNLOAD_PREFIX, obj.student_requirement_submission_id, bool(obj.image_url))
 
-        fs = FileSystemStorage(location=requirements_path)
-        filename = fs.save(upload.name, upload)
-        return f"{settings.MEDIA_URL}requirements/{filename}"
+    def get_file_kind(self, obj):
+        return file_kind_for(obj.image_url)
+
+    def _save_file(self, upload):
+        """Validates and stores the upload; returns the raw value to persist
+        in the image_url column (a storage-relative path, not a public URL —
+        the signed download URL is computed at serialization time)."""
+        stored_value, _kind = safe_save(upload, settings.MEDIA_ROOT)
+        return stored_value
 
     def create(self, validated_data):
         upload = validated_data.pop("file", None)

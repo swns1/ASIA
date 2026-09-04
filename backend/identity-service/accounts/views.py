@@ -2,9 +2,14 @@ import base64
 import re
 import uuid
 
+from axes.helpers import get_client_ip_address
+from axes.utils import reset as axes_reset
+from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.password_validation import validate_password
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -22,6 +27,14 @@ from .throttles import LoginRateThrottle
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
 
+# The refresh cookie only needs to be sent back on this service's own
+# /api/auth/* endpoints (RefreshView, LogoutView read it) -- previously
+# unscoped (path="/"), so it rode along on every request to this service,
+# including /admin/. Used by both the set_cookie() and delete_cookie() calls
+# below; they have to match, or logout's delete_cookie() silently fails to
+# clear a cookie set with a different path.
+REFRESH_COOKIE_PATH = "/api/auth/"
+
 
 class LoginView(APIView):
     authentication_classes = []
@@ -29,7 +42,7 @@ class LoginView(APIView):
     throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             detail = serializer.errors.get("non_field_errors", serializer.errors)
             if isinstance(detail, list) and detail:
@@ -50,6 +63,21 @@ class LoginView(APIView):
 
         user = serializer.validated_data["user"]
         remember_me = serializer.validated_data.get("remember_me", True)
+
+        # axes normally clears its failure counter on Django's
+        # user_logged_in signal, which only fires from
+        # django.contrib.auth.login() -- this API never calls that (it's
+        # stateless JWT, not Django sessions), so a successful login would
+        # otherwise leave prior failed attempts sitting on the counter
+        # indefinitely instead of resetting it. Reset by hand instead.
+        # ip_or_username=True clears whichever key AXES_LOCKOUT_PARAMETERS
+        # is actually using (defaults to IP address alone, not username --
+        # see settings.py) rather than assuming one or the other.
+        axes_reset(
+            ip=get_client_ip_address(request),
+            username=serializer.validated_data["identifier"],
+            ip_or_username=True,
+        )
 
         session_id = uuid.uuid4()
         refresh = RefreshToken.for_user(user)
@@ -78,6 +106,8 @@ class LoginView(APIView):
             str(refresh),
             httponly=True,
             samesite="Lax",
+            secure=settings.SESSION_COOKIE_SECURE,  # off by default; see settings.py
+            path=REFRESH_COOKIE_PATH,
             max_age=cookie_max_age,
         )
         record_audit_event(
@@ -117,6 +147,7 @@ class RefreshView(APIView):
 class LogoutView(APIView):
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
+    ALLOW_ANY_AUTHENTICATED_ROLE = True  # any authenticated user may log themselves out
 
     def post(self, request):
         user = request.resolved_user
@@ -143,7 +174,7 @@ class LogoutView(APIView):
             details="Admin portal logout completed.",
         )
         response = Response({"message": "Logged out."}, status=200)
-        response.delete_cookie("refresh")
+        response.delete_cookie("refresh", path=REFRESH_COOKIE_PATH)
         return response
 
 
@@ -184,6 +215,13 @@ class UserListView(APIView):
             return Response({"detail": "A user with this email already exists."}, status=400)
 
         try:
+            # Unsaved instance, purely so UserAttributeSimilarityValidator can
+            # check the password isn't just this user's own name or email.
+            validate_password(password, user=User(name=name, email=email, role=role))
+        except DjangoValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=400)
+
+        try:
             user = User.objects.create(
                 name=name,
                 email=email,
@@ -216,6 +254,11 @@ class UserDetailView(APIView):
        DELETE /api/auth/users/<id>/ — delete a user (admin only)"""
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
+    # No required_roles: this is reachable by any authenticated user because
+    # it's how a user views/edits their OWN profile, which isn't role-gated
+    # -- it's identity-gated. Each method below enforces ownership-or-admin
+    # by hand (is_own_profile / is_audit_admin(requester)).
+    ALLOW_ANY_AUTHENTICATED_ROLE = True
 
     def _get_target(self, user_id):
         try:
@@ -250,6 +293,17 @@ class UserDetailView(APIView):
 
         data    = request.data
         changes = []
+        # Set True by the role/password sections below. A role or password
+        # change has to kill any existing session for this user immediately
+        # -- otherwise a compromised account stays fully usable with its old
+        # access token for up to ACCESS_TOKEN_LIFETIME (2h) after an admin
+        # "fixes" it, since access tokens are stateless JWTs that are only
+        # ever re-checked against the DB via this current_session_id/sid
+        # comparison (see accounts.audit.resolve_user_from_request and
+        # shared.authentication.SingleSessionJWTAuthentication -- every
+        # service checks it, so this also signs the user out of billing/
+        # enrollment/student-service, not just identity-service).
+        invalidate_session = False
 
         # ── Name ──────────────────────────────────────────────────────────────
         if "name" in data:
@@ -281,12 +335,15 @@ class UserDetailView(APIView):
             if new_role and new_role != target.role:
                 changes.append(f"role changed from '{target.role}' to '{new_role}'")
                 target.role = new_role
+                invalidate_session = True
 
         # ── Password ──────────────────────────────────────────────────────────
         if "new_password" in data:
             new_password = data.get("new_password") or ""
-            if len(new_password) < 8:
-                return Response({"detail": "Password must be at least 8 characters."}, status=400)
+            try:
+                validate_password(new_password, user=target)
+            except DjangoValidationError as exc:
+                return Response({"detail": " ".join(exc.messages)}, status=400)
 
             if is_own_profile:
                 current_password = data.get("current_password") or ""
@@ -295,6 +352,7 @@ class UserDetailView(APIView):
 
             target.password = make_password(new_password)
             changes.append("password updated")
+            invalidate_session = True
 
         # ── Profile picture ───────────────────────────────────────────────────
         if "profile_picture" in data:
@@ -317,6 +375,9 @@ class UserDetailView(APIView):
 
         if not changes:
             return Response(UserSerializer(target).data)
+
+        if invalidate_session:
+            target.current_session_id = None
 
         target.save()
 

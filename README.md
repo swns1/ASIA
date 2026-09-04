@@ -65,6 +65,8 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 
 `enrollment-service` additionally needs `GEMINI_API_KEY`, `GROQ_API_KEY`, and `RESEND_API_KEY`; `student-service` needs `GROQ_API_KEY`. Ask a teammate for current values or provision your own at Google AI Studio / Groq / Resend.
 
+`DEBUG` and `ALLOWED_HOSTS` are also read from `.env` now rather than hardcoded — `.env.example` already sets `DEBUG=1` and `ALLOWED_HOSTS=*` for local development (the `*` is what lets a phone on the same LAN reach a service by IP address during testing). Leaving either unset defaults to the safe, production-appropriate value (`DEBUG=False`, no hosts allowed), so a real deployment needs to set both explicitly — along with `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, and `SECURE_HSTS_SECONDS`, all opt-in and off by default because nothing in this stack terminates TLS yet. Each service also exposes `GET /health/` (checks DB connectivity, no auth required) and caches DRF throttle counters to a local `cache/` directory (`django.core.cache.backends.filebased.FileBasedCache`) instead of the previous per-process in-memory default, so rate limits hold up across more than one worker process on the same machine.
+
 ### 3. Frontend
 
 ```sh
@@ -128,6 +130,10 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
   ```
 
   followed by a force-push to `main`, after which **every holder of `matres` / `niru` / `niel` must re-clone** — merging an old clone silently reintroduces the blobs. That coordination cost is why this has not been done unilaterally.
+
+- **A live Gemini API key is also in git history** — same category as the birth certificate above, found during a later audit and not yet acted on. Commit `5bcd352 "AI Integration"` added `backend/enrollment-service/.env` containing a real `GEMINI_API_KEY`; `d802b93 "Remove .env from tracking"` removed the file from the tree but not from history, and the commit is still reachable from `origin/main`, `wes`, and every other remote branch. **Rotate this key at Google AI Studio** — that step doesn't wait on the `git filter-repo` purge above, though the two should happen in the same coordinated window since both need the same force-push-and-re-clone step.
+
+- **Uploaded requirement documents used to be served unauthenticated** — fixed. `student_service/urls.py` and `enrollment_service/urls.py` no longer mount Django's public `static(MEDIA_URL, ...)` route (it served every file under `MEDIA_ROOT` to anyone, no login required, whenever `DEBUG` was on — which was always, since `DEBUG` was hardcoded). Documents are now served through an authenticated action gated by a short-lived, submission-scoped signed token (`backend/shared/uploads.py`), and uploads are validated by extension *and* magic bytes rather than trusting the filename. `DEBUG`/`ALLOWED_HOSTS`/the `SECURE_*` settings are now read from `.env` instead of being hardcoded — see the Backend setup section above.
 
 ## Testing
 

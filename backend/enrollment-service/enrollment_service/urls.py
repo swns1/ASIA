@@ -1,17 +1,17 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from enrollments.views import EnrollmentViewSet
 from enrollments.email_views import send_enrollment_email
 from enrollments.report_views import report_card
+from shared.health import health_check
 
 router = DefaultRouter()
 router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("health/", health_check, name="health-check"),
 
     path("api/enrollments/<int:enrollment_id>/report-card/", report_card, name="report_card"),
     path("api/", include("enrollments.urls")),
@@ -27,5 +27,9 @@ urlpatterns = [
     path("api/", include("attendance.urls")),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# No public static(MEDIA_URL, ...) route here on purpose. It used to serve
+# every file under MEDIA_ROOT — including every uploaded student document —
+# to anyone, unauthenticated, whenever DEBUG was on (which was always, since
+# DEBUG was hardcoded True). Documents are served instead through the
+# StudentRequirementSubmissionViewSet.file action, gated by a short-lived
+# signed token (see backend/shared/uploads.py).

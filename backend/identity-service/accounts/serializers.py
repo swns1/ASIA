@@ -1,9 +1,9 @@
 import re
 
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 
 from .models import AuditLog, User
-from .services.auth_service import find_user
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -85,10 +85,24 @@ class LoginSerializer(serializers.Serializer):
         if not identifier or not password:
             raise serializers.ValidationError("Identifier and password are required.")
 
-        user, error = find_user(identifier, password)
-        if error:
-            raise serializers.ValidationError(error)
+        # Goes through Django's real authenticate() rather than a bespoke
+        # lookup so django-axes' brute-force lockout actually engages (see
+        # AUTHENTICATION_BACKENDS in settings.py and
+        # accounts.auth_backends.IdentityUserBackend) -- axes.backends
+        # tracks attempts by request + the "username" kwarg specifically,
+        # so that name is required even though this field means "email or
+        # display name" here, not a literal username.
+        # requires context={"request": request} from the view.
+        request = self.context.get("request")
+        user = authenticate(request, username=identifier, password=password)
+        if not user:
+            # Deliberately one message whether the identifier doesn't
+            # exist, the password is wrong, or axes has locked this
+            # identifier/IP out -- distinguishing any of those would let an
+            # attacker enumerate accounts or fingerprint lockout state.
+            raise serializers.ValidationError("Invalid identifier or password.")
 
+        attrs["identifier"] = identifier
         attrs["user"] = user
         return attrs
 

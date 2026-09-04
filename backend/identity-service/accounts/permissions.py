@@ -6,8 +6,17 @@ from .audit import resolve_user_from_request
 
 class HasRole(BasePermission):
     """
-    Reusable: configure `required_roles` on the view (omit it to just require
-    any authenticated user, e.g. logout).
+    Reusable: configure `required_roles` on the view. A view that genuinely
+    wants "any authenticated user, any role" (e.g. logout, or a
+    self-service profile endpoint that does its own ownership/admin checks
+    in-method) must say so explicitly with
+    ALLOW_ANY_AUTHENTICATED_ROLE = True rather than by omission -- omitting
+    required_roles now denies, it doesn't silently allow. It used to allow:
+    this class is DEFAULT_PERMISSION_CLASSES for the whole service, so a
+    view that simply forgot required_roles was reachable by any logged-in
+    account. Every current view was audited when this was tightened; the
+    two that actually need the open behavior (LogoutView, UserDetailView)
+    now say so explicitly.
 
         class MyView(APIView):
             permission_classes = [HasRole]
@@ -34,6 +43,10 @@ class HasRole(BasePermission):
         if not user:
             raise NotAuthenticated("Authentication required.")
         required = getattr(view, "required_roles", None)
-        if required and getattr(user, "role", None) not in required:
-            raise PermissionDenied(self.message)
-        return True
+        if required:
+            if getattr(user, "role", None) not in required:
+                raise PermissionDenied(self.message)
+            return True
+        if getattr(view, "ALLOW_ANY_AUTHENTICATED_ROLE", False):
+            return True
+        raise PermissionDenied(self.message)

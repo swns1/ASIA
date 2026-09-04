@@ -84,10 +84,22 @@ class TestHasRole:
         view = SimpleNamespace(required_roles={"super_admin", "admin"})
         assert HasRole().has_permission(request, view) is True
 
-    def test_no_required_roles_configured_allows_any_authenticated(self):
+    def test_no_required_roles_configured_denies_by_default(self):
+        """
+        Fails closed: a view that forgets required_roles used to be
+        readable by any authenticated user, guardians included, since this
+        class is DEFAULT_PERMISSION_CLASSES for the whole service. See
+        shared/permissions.py's HasRole docstring.
+        """
         request = factory.get("/")
         request.user = _user("teacher")
         view = SimpleNamespace()
+        assert HasRole().has_permission(request, view) is False
+
+    def test_allow_any_authenticated_role_opts_back_in_explicitly(self):
+        request = factory.get("/")
+        request.user = _user("teacher")
+        view = SimpleNamespace(ALLOW_ANY_AUTHENTICATED_ROLE=True)
         assert HasRole().has_permission(request, view) is True
 
     def test_unauthenticated_denied_even_without_required_roles(self):

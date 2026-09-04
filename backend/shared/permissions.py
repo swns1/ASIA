@@ -35,6 +35,16 @@ class HasRole(BasePermission):
         class MyView(APIView):
             permission_classes = [HasRole]
             required_roles = {"super_admin", "accounting"}
+
+    Fails closed if `required_roles` isn't set. It didn't used to -- a view
+    that forgot the line was readable by any authenticated user, guardians
+    included, since this class is DEFAULT_PERMISSION_CLASSES in every
+    service (see settings.py). No current view in this codebase relied on
+    that (verified: every HasRole view sets required_roles), so this has no
+    behavior change for real endpoints -- it only removes the trap for
+    future ones. A view that genuinely wants "any authenticated user, any
+    role" must say so with ALLOW_ANY_AUTHENTICATED_ROLE = True rather than
+    by omission.
     """
 
     message = "Your role does not have access to this action."
@@ -43,6 +53,6 @@ class HasRole(BasePermission):
         if not (request.user and request.user.is_authenticated):
             return False
         required = getattr(view, "required_roles", None)
-        if not required:
-            return True
-        return getattr(request.user, "role", None) in required
+        if required:
+            return getattr(request.user, "role", None) in required
+        return bool(getattr(view, "ALLOW_ANY_AUTHENTICATED_ROLE", False))

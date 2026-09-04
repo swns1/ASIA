@@ -42,9 +42,34 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/${{ matrix.service }}/requirements.txt
 
+      - name: Dependency vulnerability scan
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/${{ matrix.service }}/requirements.txt
+
       - name: Django system check
         working-directory: backend/${{ matrix.service }}
         run: python manage.py check
+
+      - name: Django deploy-readiness check
+        # DEBUG/ALLOWED_HOSTS/SECURE_* are all env-driven now (previously
+        # hardcoded True/["*"] with no way to turn them off — see README).
+        # The job's default env above intentionally leaves them unset, so
+        # the "Django system check" step above runs the way a normal
+        # deployment or local run would. This step separately proves the
+        # settings module CAN pass Django's --deploy checklist when a real
+        # deployment's env vars are supplied — it doesn't affect the tests
+        # below, which keep running under the job's normal env.
+        working-directory: backend/${{ matrix.service }}
+        run: python manage.py check --deploy
+        env:
+          ALLOWED_HOSTS: example.com
+          SECURE_SSL_REDIRECT: "1"
+          SESSION_COOKIE_SECURE: "1"
+          CSRF_COOKIE_SECURE: "1"
+          SECURE_HSTS_SECONDS: "31536000"
+          SECURE_HSTS_INCLUDE_SUBDOMAINS: "1"
+          SECURE_HSTS_PRELOAD: "1"
 
       - name: Run tests
         working-directory: backend/${{ matrix.service }}
@@ -65,6 +90,17 @@ jobs:
           cache-dependency-path: frontend/admin-portal/package-lock.json
 
       - run: npm ci
+
+      - name: Dependency vulnerability scan
+        # Report-only for now: as of this workflow's introduction, `npm
+        # audit` already reports pre-existing high/critical findings (axios,
+        # react-router-dom, and several transitive build/test-only deps)
+        # that haven't been remediated yet. Surface them on every run
+        # without failing the build on debt this step didn't introduce;
+        # tighten this to a hard gate once those are cleared.
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
       - run: npm run lint
       - run: npm run test
       - run: npm run build

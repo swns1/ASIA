@@ -1,12 +1,18 @@
+import os
+
 from rest_framework import viewsets, filters, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import serializers
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.http import FileResponse, Http404
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
+from shared.uploads import resolve_stored_path, verify_download_token
 from .models import (
     Student,
     Household,
@@ -209,3 +215,35 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         if params.get("is_submitted") in ["true", "false"]:
             queryset = queryset.filter(is_submitted=params["is_submitted"] == "true")
         return queryset
+
+    # Deliberately no auth/permission classes: this URL is loaded from plain
+    # <img>/<iframe> src attributes, which can't attach an Authorization
+    # header. Access control is the signed, submission-scoped, 5-minute
+    # token in ?token= (minted only by the authenticated, role-gated
+    # endpoints above) — not the request's own credentials. See
+    # shared/uploads.py.
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="file",
+        authentication_classes=[],
+        permission_classes=[AllowAny],
+    )
+    def file(self, request, pk=None):
+        try:
+            submission = StudentRequirementSubmission.objects.get(pk=pk)
+        except (StudentRequirementSubmission.DoesNotExist, ValueError):
+            raise Http404
+
+        token = request.query_params.get("token")
+        if not verify_download_token(token, submission.student_requirement_submission_id):
+            return Response({"detail": "Invalid or expired download link."}, status=403)
+
+        if not submission.image_url:
+            raise Http404
+
+        file_path = resolve_stored_path(settings.MEDIA_ROOT, submission.image_url)
+        if not os.path.isfile(file_path):
+            raise Http404
+
+        return FileResponse(open(file_path, "rb"), as_attachment=True, filename=os.path.basename(file_path))

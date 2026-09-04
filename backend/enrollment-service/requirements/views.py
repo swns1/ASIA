@@ -1,12 +1,23 @@
+import os
+
+from django.conf import settings
+from django.http import FileResponse, Http404
 from rest_framework import viewsets, filters
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
+from shared.uploads import download_url, file_kind_for, resolve_stored_path, verify_download_token
+
 from .models import RequirementType, StudentRequirementSubmission
-from .serializers import RequirementTypeSerializer, StudentRequirementSubmissionSerializer
+from .serializers import (
+    DOWNLOAD_PREFIX,
+    RequirementTypeSerializer,
+    StudentRequirementSubmissionSerializer,
+)
 
 
 class RequirementTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -56,7 +67,12 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
                     "requirement_name": rt.requirement_name,
                     "description": rt.description,
                     "is_submitted": sub.is_submitted if sub else False,
-                    "image_url": sub.image_url if sub else None,
+                    "image_url": download_url(
+                        DOWNLOAD_PREFIX,
+                        sub.student_requirement_submission_id,
+                        bool(sub.image_url),
+                    ) if sub else None,
+                    "file_kind": file_kind_for(sub.image_url) if sub else None,
                     "remarks": sub.remarks if sub else None,
                     "submitted_at": sub.submitted_at if sub else None,
                     "verified_at": sub.verified_at if sub else None,
@@ -64,3 +80,35 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
                 }
             )
         return Response(result)
+
+    # Deliberately no auth/permission classes: this URL is loaded from plain
+    # <img>/<iframe> src attributes, which can't attach an Authorization
+    # header. Access control is the signed, submission-scoped, 5-minute
+    # token in ?token= (minted only by the authenticated, role-gated
+    # endpoints above) — not the request's own credentials. See
+    # shared/uploads.py.
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="file",
+        authentication_classes=[],
+        permission_classes=[AllowAny],
+    )
+    def file(self, request, pk=None):
+        try:
+            submission = StudentRequirementSubmission.objects.get(pk=pk)
+        except (StudentRequirementSubmission.DoesNotExist, ValueError):
+            raise Http404
+
+        token = request.query_params.get("token")
+        if not verify_download_token(token, submission.student_requirement_submission_id):
+            return Response({"detail": "Invalid or expired download link."}, status=403)
+
+        if not submission.image_url:
+            raise Http404
+
+        file_path = resolve_stored_path(settings.MEDIA_ROOT, submission.image_url)
+        if not os.path.isfile(file_path):
+            raise Http404
+
+        return FileResponse(open(file_path, "rb"), as_attachment=True, filename=os.path.basename(file_path))

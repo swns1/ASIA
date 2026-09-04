@@ -46,7 +46,7 @@ def test_registrar_cannot_create_user(mock_resolve):
 
     response = APIClient().post(
         "/api/auth/users/",
-        {"name": "New Teacher", "email": "new@example.com", "role": "teacher", "password": "x" * 10},
+        {"name": "New Teacher", "email": "new@example.com", "role": "teacher", "password": "Xk9-mQ2vLp-teststrong"},
         format="json",
     )
 
@@ -60,7 +60,7 @@ def test_create_user_rejects_invalid_role(mock_resolve):
 
     response = APIClient().post(
         "/api/auth/users/",
-        {"name": "New Teacher", "email": "new@example.com", "role": "cashier", "password": "x" * 10},
+        {"name": "New Teacher", "email": "new@example.com", "role": "cashier", "password": "Xk9-mQ2vLp-teststrong"},
         format="json",
     )
 
@@ -82,7 +82,7 @@ def test_create_user_accepts_valid_role(mock_user_model, mock_resolve):
 
     response = APIClient().post(
         "/api/auth/users/",
-        {"name": "New Teacher", "email": "new@example.com", "role": "teacher", "password": "x" * 10},
+        {"name": "New Teacher", "email": "new@example.com", "role": "teacher", "password": "Xk9-mQ2vLp-teststrong"},
         format="json",
     )
 

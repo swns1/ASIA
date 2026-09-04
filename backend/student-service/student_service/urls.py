@@ -16,13 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
+from shared.health import health_check
 
+# No public static(MEDIA_URL, ...) route here on purpose. It used to serve
+# every file under MEDIA_ROOT — including every uploaded student document —
+# to anyone, unauthenticated, whenever DEBUG was on (which was always, since
+# DEBUG was hardcoded True). Documents are served instead through the
+# StudentRequirementSubmissionViewSet.file action, gated by a short-lived
+# signed token (see backend/shared/uploads.py).
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/', health_check, name='health-check'),
     path('api/', include('students.urls')),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

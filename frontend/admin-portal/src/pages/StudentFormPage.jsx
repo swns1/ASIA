@@ -669,7 +669,17 @@ const REQ_ICONS = {
   esc_transferee_qc:          "ti-arrows-transfer",
 };
 const reqIcon = (code) => REQ_ICONS[code] || "ti-file";
-const isImageUrl = (url) => url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+// Document download URLs are now signed API links (…/file/?token=…), not
+// plain media paths, so they no longer end in a file extension the way
+// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
+// derived server-side from the stored file's real extension) is the
+// reliable signal; the extension regex on `req.image_url` only remains as
+// a fallback for the brief window before both sides deploy together.
+const isImageUrl = (req) => {
+  if (!req) return false;
+  if (req.file_kind) return req.file_kind === "image";
+  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
+};
 
 const DC = {
   green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
@@ -903,7 +913,7 @@ function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrSta
     : (pendingEntry?.previewUrl || null);
 
   const hasImage = isEdit
-    ? (req.is_submitted && resolvedUrl && isImageUrl(req.image_url))
+    ? (req.is_submitted && resolvedUrl && isImageUrl(req))
     : (pendingEntry && pendingEntry.file?.type.startsWith("image/") && pendingEntry.previewUrl);
 
   const isSubmitted = isEdit ? req.is_submitted : !!pendingEntry;

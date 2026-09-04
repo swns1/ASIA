@@ -21,10 +21,11 @@ Role model:
   * guardian — denied. Guardians have their own portal; this is the staff
     landing page.
 
-`required_roles` is set explicitly and deliberately. The service's DRF default
-is `HasRole` with no roles configured, which returns True for any authenticated
-user — an endpoint that forgets this line is readable by every logged-in
-account, guardians included.
+`required_roles` is set explicitly and deliberately, for clarity even though
+`HasRole` (shared/permissions.py) now fails closed if it's omitted — it used
+to return True for any authenticated user when a view forgot this line,
+guardians included, which is why every `HasRole` view in this codebase sets
+it explicitly rather than relying on the (now safe) default.
 """
 from datetime import timedelta
 

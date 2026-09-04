@@ -81,9 +81,16 @@ const GRADE_LEVELS_BY_LEVEL = {
   senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
 };
 
-function isImageUrl(url) {
-  if (!url) return false;
-  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+// Document download URLs are now signed API links (…/file/?token=…), not
+// plain media paths, so they no longer end in a file extension the way
+// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
+// derived server-side from the stored file's real extension) is the
+// reliable signal; the extension regex on `req.image_url` only remains as
+// a fallback for the brief window before both sides deploy together.
+function isImageUrl(req) {
+  if (!req) return false;
+  if (req.file_kind) return req.file_kind === "image";
+  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -841,7 +848,7 @@ export default function RequirementsPage() {
                           )
                           : requirements.map((req) => {
                               const imageUrl = resolveMediaUrl(req.image_url);
-                              const hasImage = req.is_submitted && imageUrl && isImageUrl(req.image_url);
+                              const hasImage = req.is_submitted && imageUrl && isImageUrl(req);
                               const icon = reqIcon(req.requirement_code);
                               return (
                                 <tr key={req.requirement_type_id} className="student-row">

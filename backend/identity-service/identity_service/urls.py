@@ -17,9 +17,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from accounts.views import LoginView
+from shared.health import health_check
 
 urlpatterns = [
     path("", LoginView.as_view(), name="login-root"),   # POST /
     path("admin/", admin.site.urls),
+    path("health/", health_check, name="health-check"),
     path("api/auth/", include("accounts.urls")),        # POST /api/auth/login/
 ]
