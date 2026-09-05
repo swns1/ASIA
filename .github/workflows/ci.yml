@@ -92,14 +92,16 @@ jobs:
       - run: npm ci
 
       - name: Dependency vulnerability scan
-        # Report-only for now: as of this workflow's introduction, `npm
-        # audit` already reports pre-existing high/critical findings (axios,
-        # react-router-dom, and several transitive build/test-only deps)
-        # that haven't been remediated yet. Surface them on every run
-        # without failing the build on debt this step didn't introduce;
-        # tighten this to a hard gate once those are cleared.
+        # Now a hard gate. This was report-only while the 16 pre-existing
+        # findings stood (axios and react-router-dom in runtime code, the rest
+        # transitive build/test-only); those are cleared, so the tree is at
+        # zero and the only way back above this line is a new dependency or a
+        # newly-published advisory — both of which are worth stopping for.
+        #
+        # If a fresh advisory lands against something with no fix available
+        # yet, prefer a narrow `--exclude` over restoring continue-on-error:
+        # one documented exception beats silently ignoring every finding.
         run: npm audit --audit-level=high
-        continue-on-error: true
 
       - run: npm run lint
       - run: npm run test

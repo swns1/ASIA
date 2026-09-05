@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { MotionConfig } from "framer-motion";
 import { Toaster } from "react-hot-toast";
@@ -7,45 +8,70 @@ import AppLayout from "./components/AppLayout";
 import GuardianLayout from "./components/GuardianLayout";
 import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
 import PageTransition from "./components/PageTransition";
+import RouteFallback from "./components/RouteFallback";
+import lazyRoute from "./utils/lazyRoute";
 import { toasterProps } from "./utils/toastConfig";
-import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import StudentsPage from "./pages/StudentsPage";
-import StudentFormPage from "./pages/StudentFormPage";
-import StudentDetailPage from "./pages/StudentDetailPage";
-import EnrollmentFormPage from "./pages/EnrollmentFormPage";
-import EnrollmentDetailPage from "./pages/EnrollmentDetailPage";
-import EnrollmentsPage from "./pages/EnrollmentsPage";
-import SubjectsPage from "./pages/SubjectsPage";
-import GradingSettingsPage from "./pages/GradingSettingsPage";
-import GradesPage from "./pages/GradesPage";
-import ScholarshipTypesPage from "./pages/ScholarshipTypesPage";
-import ScholarshipsPage from "./pages/ScholarshipsPage";
-import BillingSettingsPage from "./pages/BillingSettingsPage";
-import InvoicesPage       from "./pages/InvoicesPage";
-import PaymentsPage       from "./pages/PaymentsPage";
-import AuditTrailPage     from "./pages/AuditTrailPage";
-import RequirementsPage   from "./pages/RequirementsPage";
-import UsersPage          from "./pages/UsersPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
-import AcademicCalendarPage from "./pages/AcademicCalendarPage";
-import ReportCardPage from "./pages/ReportCardPage";
-import SchoolFormsPage from "./pages/SchoolFormsPage";
-import CORPrintPage       from "./pages/print/CORPrintPage";
-import GradeSlipPrintPage from "./pages/print/GradeSlipPrintPage";
-import ReceiptPrintPage   from "./pages/print/ReceiptPrintPage";
-import InvoicePrintPage   from "./pages/print/InvoicePrintPage";
-import SF1PrintPage from "./pages/print/SF1PrintPage";
-import SF2PrintPage     from "./pages/print/SF2PrintPage";
-import SF9PrintPage from "./pages/print/SF9PrintPage";
-import SF10PrintPage from "./pages/print/SF10PrintPage";
-import TeacherAdvisoriesPage from "./pages/TeacherAdvisoriesPage";
-import GuardianHomePage from "./pages/GuardianHomePage";
-import GuardianChildPage from "./pages/GuardianChildPage";
-import NotFoundPage from "./pages/NotFoundPage";
 import { STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES, STAFF_ALL } from "./utils/auth";
-import TeacherSectionsPage from "./pages/TeacherSectionsPage";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+
+// ── Eager: the two routes that must not cost a second round trip ─────────────
+//
+// LoginPage is the first thing every user sees and the only route reachable
+// without a token, so splitting it would add a request to the critical path it
+// is supposed to shorten. NotFoundPage is the catch-all — a fallback that
+// itself has to be fetched is a fallback that can fail.
+import LoginPage from "./pages/LoginPage";
+import NotFoundPage from "./pages/NotFoundPage";
+
+// ── Lazy: everything behind the login ────────────────────────────────────────
+//
+// All 34 of these were in the entry chunk, which is how a guardian opening one
+// child's grades came to download the entire staff admin portal — every
+// thousand-line page, all eight print documents, the analytics charts and the
+// audit trail — before the login form could paint.
+//
+// Each name below becomes its own chunk, fetched on the navigation that
+// actually needs it. The route table underneath is unchanged: every <P
+// roles={...}> guard is exactly what it was, so this moves *when* code
+// arrives without moving *who* may reach it.
+const DashboardPage         = lazyRoute(() => import("./pages/DashboardPage"));
+const StudentsPage          = lazyRoute(() => import("./pages/StudentsPage"));
+const StudentFormPage       = lazyRoute(() => import("./pages/StudentFormPage"));
+const StudentDetailPage     = lazyRoute(() => import("./pages/StudentDetailPage"));
+const EnrollmentFormPage    = lazyRoute(() => import("./pages/EnrollmentFormPage"));
+const EnrollmentDetailPage  = lazyRoute(() => import("./pages/EnrollmentDetailPage"));
+const EnrollmentsPage       = lazyRoute(() => import("./pages/EnrollmentsPage"));
+const SubjectsPage          = lazyRoute(() => import("./pages/SubjectsPage"));
+const GradingSettingsPage   = lazyRoute(() => import("./pages/GradingSettingsPage"));
+const GradesPage            = lazyRoute(() => import("./pages/GradesPage"));
+const ScholarshipTypesPage  = lazyRoute(() => import("./pages/ScholarshipTypesPage"));
+const ScholarshipsPage      = lazyRoute(() => import("./pages/ScholarshipsPage"));
+const BillingSettingsPage   = lazyRoute(() => import("./pages/BillingSettingsPage"));
+const InvoicesPage          = lazyRoute(() => import("./pages/InvoicesPage"));
+const PaymentsPage          = lazyRoute(() => import("./pages/PaymentsPage"));
+const AuditTrailPage        = lazyRoute(() => import("./pages/AuditTrailPage"));
+const RequirementsPage      = lazyRoute(() => import("./pages/RequirementsPage"));
+const UsersPage             = lazyRoute(() => import("./pages/UsersPage"));
+const AnalyticsPage         = lazyRoute(() => import("./pages/AnalyticsPage"));
+const AcademicCalendarPage  = lazyRoute(() => import("./pages/AcademicCalendarPage"));
+const ReportCardPage        = lazyRoute(() => import("./pages/ReportCardPage"));
+const SchoolFormsPage       = lazyRoute(() => import("./pages/SchoolFormsPage"));
+const TeacherAdvisoriesPage = lazyRoute(() => import("./pages/TeacherAdvisoriesPage"));
+const TeacherSectionsPage   = lazyRoute(() => import("./pages/TeacherSectionsPage"));
+const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
+const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
+
+// The print documents are the clearest case for splitting: eight chunks that
+// the vast majority of sessions never open, and the ones that do pull in
+// html2pdf.js (already async) on top.
+const CORPrintPage       = lazyRoute(() => import("./pages/print/CORPrintPage"));
+const GradeSlipPrintPage = lazyRoute(() => import("./pages/print/GradeSlipPrintPage"));
+const ReceiptPrintPage   = lazyRoute(() => import("./pages/print/ReceiptPrintPage"));
+const InvoicePrintPage   = lazyRoute(() => import("./pages/print/InvoicePrintPage"));
+const SF1PrintPage       = lazyRoute(() => import("./pages/print/SF1PrintPage"));
+const SF2PrintPage       = lazyRoute(() => import("./pages/print/SF2PrintPage"));
+const SF9PrintPage       = lazyRoute(() => import("./pages/print/SF9PrintPage"));
+const SF10PrintPage      = lazyRoute(() => import("./pages/print/SF10PrintPage"));
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
 
@@ -57,10 +83,17 @@ const GUARDIAN = ["guardian"];
 // each page imported and rendered AppLayout itself (25 wrap sites across 21
 // files), which meant the sidebar, toast host and session timer all unmounted
 // and remounted on every navigation.
+// The Suspense boundary sits INSIDE the shell, not around it. Placed outside,
+// every navigation would blank the sidebar and the session timer while the
+// next page's chunk downloaded — undoing the remount fix above and making the
+// app feel like it reloads on each click. Here, only the content column shows
+// the fallback; the chrome never unmounts.
 const StaffShell = () => (
   <AppLayout>
     <PageTransition>
-      <Outlet />
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
     </PageTransition>
   </AppLayout>
 );
@@ -68,7 +101,9 @@ const StaffShell = () => (
 const GuardianShell = () => (
   <GuardianLayout>
     <PageTransition>
-      <Outlet />
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
     </PageTransition>
   </GuardianLayout>
 );
@@ -85,6 +120,11 @@ export default function App() {
     <MotionConfig reducedMotion="user">
     <SchoolYearProvider>
     <BrowserRouter>
+      {/* Outer boundary for the chrome-less routes — the focused forms and the
+          print documents, which render no shell and so have no inner one.
+          Shell routes never reach this: React uses the nearest boundary, which
+          is the one inside StaffShell/GuardianShell above. */}
+      <Suspense fallback={<RouteFallback fullPage />}>
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -150,6 +190,7 @@ export default function App() {
             shows 404 regardless of auth state. */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
 
       {/* Mounted once for every authenticated portal. It renders nothing
           without a valid token, and guardians now get the same expiry warning

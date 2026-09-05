@@ -79,6 +79,13 @@ npm run dev
 
 No `.env` is required for local development — every API client already defaults to the ports above. See `.env.example` if you need to point at non-default URLs.
 
+Two things about this build are deliberate and easy to undo by accident:
+
+- **Routes are code-split.** `App.jsx` loads all 34 post-login pages through `lazyRoute()` (`src/utils/lazyRoute.js`), so each one is its own chunk fetched on the navigation that needs it. Before this, everything — all twelve thousand-line pages, all eight print documents, the analytics charts, the audit trail — sat in one 1.41 MB entry bundle that a guardian had to download in full to look at one child's grades. The entry chunk is now 372 kB (116 kB gzipped, down from 343 kB). `LoginPage` and `NotFoundPage` are deliberately **not** split: the first is the only route reachable without a token and must not cost an extra round trip, and a not-found fallback that has to be fetched is one that can itself fail to arrive. **Adding a page means adding a `lazyRoute()` line, not a static `import`** — a static one silently pulls that page back into the entry chunk for everybody.
+- **Only the `woff2` icon font is emitted.** `@tabler/icons-webfont` ships one `@font-face` listing woff2/woff/ttf; browsers only ever fetch the first they support, so the other two were 3.6 MB of `dist/` that was built, deployed and stored but never served. A small `enforce: 'pre'` transform in `vite.config.js` rewrites that `src:` list to the woff2 alone. It's a transform rather than a vendored copy of the CSS so `npm update @tabler/icons-webfont` still picks up new glyphs.
+
+`src/api/apiClient.js` now shares **one** in-flight refresh across every API client (each backend gets its own axios instance, so this has to live at module scope, not per client). An expired token on the dashboard used to fire ~11 simultaneous `POST /refresh/` calls; they now await the same one. That is also what makes `ROTATE_REFRESH_TOKENS` safe to turn on later — with rotation on and no mutex, the first refresh wins and each of the other ten logs the user out mid-edit.
+
 ### 4. Document OCR (optional)
 
 `student-service` scans uploaded enrollment documents. Two things read them: a **local**

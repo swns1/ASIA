@@ -27,6 +27,51 @@ function extractValidationMessage(data) {
   return messages.length ? messages.join(" ") : null;
 }
 
+// ── Refresh mutex ────────────────────────────────────────────────────────────
+//
+// Deliberately module-level, NOT per-client. Each backend gets its own axios
+// instance from the factory below (studentApi, billingApi, enrollmentApi, …),
+// so a mutex living inside createApiClient would still let one refresh run per
+// service. The dashboard alone fires ~11 requests across four clients on
+// mount; with an expired token that was ~11 simultaneous POSTs to /refresh/.
+//
+// Two reasons that matters:
+//   1. Those 11 refreshes are counted by identity-service's throttle, which
+//      became a real shared-cache limit rather than a per-process no-op.
+//   2. The moment SIMPLE_JWT gains ROTATE_REFRESH_TOKENS (unset today), only
+//      the first refresh is valid — the other 10 get a 401 for a now-rotated
+//      token and each one independently sends the user to /login, discarding
+//      whatever they were editing. The mutex is what makes rotation safe to
+//      turn on, so it lands before the setting does, not after.
+//
+// Held as a promise rather than a boolean so the losers don't poll or retry:
+// they await the same in-flight request and resume with its token.
+let refreshPromise = null;
+// Guards the redirect, not the refresh: when the refresh genuinely fails, all
+// waiters reject together and would otherwise each assign location.href.
+let redirecting = false;
+
+function refreshAccessToken() {
+  if (!refreshPromise) {
+    redirecting = false; // a new refresh cycle earns a new redirect
+    // Deliberately bare `axios`, not a client from the factory — posting
+    // through one would re-enter the interceptor below.
+    refreshPromise = axios
+      .post(IDENTITY_REFRESH_URL, {}, { withCredentials: true })
+      .then((res) => {
+        const token = res.data.access;
+        sessionStorage.setItem("access_token", token);
+        return token;
+      })
+      .finally(() => {
+        // Cleared on both paths so the *next* expiry starts a fresh attempt
+        // instead of replaying this settled promise forever.
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 export function createApiClient({ baseURL, timeout = 10000, withCredentials = false }) {
   const client = axios.create({ baseURL, timeout, withCredentials });
 
@@ -43,16 +88,15 @@ export function createApiClient({ baseURL, timeout = 10000, withCredentials = fa
       if (error.response?.status === 401 && !original._retry) {
         original._retry = true;
         try {
-          // Deliberately bare `axios`, not `client` — posting through the
-          // client itself would re-enter this same interceptor.
-          const res = await axios.post(IDENTITY_REFRESH_URL, {}, { withCredentials: true });
-          const newToken = res.data.access;
-          sessionStorage.setItem("access_token", newToken);
+          const newToken = await refreshAccessToken();
           original.headers.Authorization = `Bearer ${newToken}`;
           return client(original);
         } catch (refreshError) {
           sessionStorage.removeItem("access_token");
-          window.location.href = "/login";
+          if (!redirecting) {
+            redirecting = true;
+            window.location.href = "/login";
+          }
           return Promise.reject(refreshError);
         }
       }
