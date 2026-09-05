@@ -1,8 +1,13 @@
+import logging
+
 from django.db import DatabaseError
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import AccessToken
 
+from shared.audit import client_ip as get_client_ip
 from .models import AuditLog, User
+
+logger = logging.getLogger(__name__)
 
 ADMIN_ROLES = {"admin", "super_admin", "superadmin"}
 
@@ -13,13 +18,6 @@ def normalize_role(role):
 
 def is_audit_admin(user):
     return bool(user and normalize_role(getattr(user, "role", "")) in ADMIN_ROLES)
-
-
-def get_client_ip(request):
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
 
 
 def resolve_user_from_request(request):
@@ -87,4 +85,11 @@ def record_audit_event(
             metadata=metadata or {},
         )
     except DatabaseError:
-        pass
+        # A dropped audit row must not take the request down (the actual
+        # mutation already succeeded), but silence here means a schema
+        # drift or full disk loses every audit entry with zero signal --
+        # log it so it's at least visible to whoever's watching the
+        # process, even before real log aggregation exists (see README).
+        logger.exception(
+            "Failed to write audit log entry: action=%r module=%r", action, module
+        )

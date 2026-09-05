@@ -11,7 +11,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly
+from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
 from shared.uploads import resolve_stored_path, verify_download_token
 from .models import (
     Student,
@@ -25,6 +25,7 @@ from .models import (
 )
 from .serializers import (
     StudentSerializer,
+    StudentBillingSummarySerializer,
     HouseholdSerializer,
     GuardianSerializer,
     StudentSiblingSerializer,
@@ -35,6 +36,26 @@ from .serializers import (
     StudentBulkCreateSerializer,
     StudentBulkCreateResponseSerializer,
 )
+
+
+def _scope_to_teacher_roster(queryset, user, *, field="student_id__in", deny_accounting=True):
+    """
+    A teacher only sees records for students in their own section advisory
+    roster (accounts.permissions.teacher_student_ids). accounting is denied
+    outright by default -- guardian contacts, sibling relationships,
+    previous-school history, and document-submission status aren't
+    billing-relevant (see StudentViewSet.get_serializer_class and
+    HouseholdViewSet, the two places accounting does have a real need, for
+    the deny_accounting=False exception). super_admin/admin/registrar are
+    unfiltered, matching this class's existing behavior before this scoping
+    was added.
+    """
+    role = getattr(user, "role", None)
+    if role == "teacher":
+        return queryset.filter(**{field: teacher_student_ids(user)})
+    if role == "accounting" and deny_accounting:
+        return queryset.none()
+    return queryset
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -66,7 +87,20 @@ class StudentViewSet(viewsets.ModelViewSet):
                 Q(middle_name__icontains=name) |
                 Q(last_name__icontains=name)
             )
-        return queryset
+        # accounting keeps roster-wide access (see get_serializer_class --
+        # it gets a reduced field set instead, not a filtered queryset: any
+        # student could need an invoice, so scoping by teacher-style roster
+        # doesn't make sense here).
+        return _scope_to_teacher_roster(queryset, self.request.user, deny_accounting=False)
+
+    def get_serializer_class(self):
+        # accounting gets enough to identify a student for invoicing (name,
+        # LRN, status, household) without the demographic PII (religion,
+        # birth_date, exact addresses, personal contact info) it has no
+        # billing-relevant need for -- see StudentBillingSummarySerializer.
+        if getattr(self.request.user, "role", None) == "accounting":
+            return StudentBillingSummarySerializer
+        return super().get_serializer_class()
 
     @action(detail=False, methods=["post"], url_path="bulk-create")
     def bulk_create(self, request):
@@ -119,7 +153,13 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         student_id = self.request.query_params.get("student")
         if student_id:
             queryset = queryset.filter(student__student_id=student_id)
-        return queryset
+        # accounting keeps access here (unlike the other viewsets below):
+        # is_4ps_beneficiary / parent_marital_status / living_arrangement
+        # are exactly the kind of thing that affects fee discounts and
+        # scholarship eligibility.
+        return _scope_to_teacher_roster(
+            queryset, self.request.user, field="student__student_id__in", deny_accounting=False
+        )
 
 
 class GuardianViewSet(viewsets.ModelViewSet):
@@ -145,13 +185,25 @@ class GuardianViewSet(viewsets.ModelViewSet):
         if params.get("user_id__in"):
             ids = [v.strip() for v in params["user_id__in"].split(",") if v.strip()]
             queryset = queryset.filter(user_id__in=ids)
-        return queryset
+        return _scope_to_teacher_roster(queryset, self.request.user)
 
 
 class StudentSiblingViewSet(viewsets.ModelViewSet):
     queryset = StudentSibling.objects.all()
     serializer_class = StudentSiblingSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        role = getattr(self.request.user, "role", None)
+        if role == "teacher":
+            # Two FK's to Student (student, sibling_student); a teacher can
+            # see the relationship if either side is one of their own.
+            ids = teacher_student_ids(self.request.user)
+            queryset = queryset.filter(Q(student_id__in=ids) | Q(sibling_student_id__in=ids))
+        elif role == "accounting":
+            queryset = queryset.none()
+        return queryset
 
 
 class SiblingViewSet(viewsets.ModelViewSet):
@@ -164,7 +216,7 @@ class SiblingViewSet(viewsets.ModelViewSet):
         student_id = self.request.query_params.get("student_id")
         if student_id:
             queryset = queryset.filter(student_id=student_id)
-        return queryset
+        return _scope_to_teacher_roster(queryset, self.request.user)
 
 
 class PreviousSchoolViewSet(viewsets.ModelViewSet):
@@ -177,7 +229,7 @@ class PreviousSchoolViewSet(viewsets.ModelViewSet):
         student_id = self.request.query_params.get("student_id")
         if student_id:
             queryset = queryset.filter(student_id=student_id)
-        return queryset
+        return _scope_to_teacher_roster(queryset, self.request.user)
 
 
 class RequirementTypeViewSet(viewsets.ModelViewSet):
@@ -214,7 +266,7 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(requirement_type_id=params["requirement_type_id"])
         if params.get("is_submitted") in ["true", "false"]:
             queryset = queryset.filter(is_submitted=params["is_submitted"] == "true")
-        return queryset
+        return _scope_to_teacher_roster(queryset, self.request.user)
 
     # Deliberately no auth/permission classes: this URL is loaded from plain
     # <img>/<iframe> src attributes, which can't attach an Authorization

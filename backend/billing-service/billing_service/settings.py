@@ -140,6 +140,13 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "billing_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
+    # 0 (never trust X-Forwarded-For) until a real reverse proxy sits in
+    # front of this service and is configured to strip/set it correctly --
+    # there isn't one today (see README), so this header is currently
+    # attacker-controlled end to end. Governs both DRF throttling's client
+    # identification (SimpleRateThrottle.get_ident) and the audit log's
+    # recorded IP (shared.audit.client_ip reads this same setting).
+    "NUM_PROXIES": 0,
 }
 
 SIMPLE_JWT = {

@@ -40,10 +40,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(recorded_by=getattr(self.request, "user_id", None))
+        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
 
     def perform_update(self, serializer):
-        serializer.save(recorded_by=getattr(self.request, "user_id", None))
+        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
 
     # POST /api/attendance/bulk/
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -53,7 +53,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         date        = ser.validated_data["date"]
         records     = ser.validated_data["records"]
-        user_id     = getattr(request, "user_id", None)
+        user_id     = getattr(request.user, "user_id", None)
         created_ids = []
 
         allowed_students = None

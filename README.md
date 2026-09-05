@@ -24,19 +24,21 @@ JWTs are issued by identity-service and verified by every other service using th
 
 ### 1. Database
 
-Create the database and load the seed data:
+Create the database, load the schema, then the seed data:
 
 ```sh
 psql -U postgres -c 'CREATE DATABASE "SLIS THESIS FINAL"'
+psql -U postgres -d "SLIS THESIS FINAL" -f schema.sql
 psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
 ```
 
-`seed_data.sql` only inserts rows into tables that already exist — the schema itself isn't tracked here (built up via pgAdmin over time). One schema addition made outside a migration, needed for the guardian self-service portal: `guardians.user_id`, linking a guardian contact record to a `role=guardian` login account. If you're setting up a fresh database, run this once against it:
+`schema.sql` is a `pg_dump --schema-only` snapshot of the schema, which was built up via pgAdmin over time with no other tracked source — it's the only artifact that captures the whole thing, including two validation triggers (`trg_billing_item_parent_category_match`, `trg_validate_grading_period`) and a view (`student_invoice_balances`) that Django's models/migrations layer can't see at all. Most Django models still declare `managed = False` and point at these tables rather than owning them via migrations (see "Known in-progress work" below), so `schema.sql`, not `manage.py migrate`, is the source of truth for table structure. Regenerate it after a real schema change made via pgAdmin:
 
-```sql
-ALTER TABLE guardians ADD COLUMN IF NOT EXISTS user_id BIGINT NULL;
-CREATE INDEX IF NOT EXISTS guardians_user_id_idx ON guardians (user_id);
+```sh
+pg_dump -h <host> -U postgres -d "SLIS THESIS FINAL" --schema-only --no-owner --no-privileges -f schema.sql
 ```
+
+(strip any `\restrict`/`\unrestrict` lines pg_dump 17+ adds at the top/bottom — they make the file fail to load on older psql clients and add nothing for a tracked reference file.)
 
 ### 2. Backend
 
@@ -120,8 +122,11 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 
 ## Known in-progress work
 
-- **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. Remaining hardening work: the 3 non-identity services still fall back to plain `IsAuthenticated` (not role-aware) if a future endpoint omits explicit `permission_classes`, and `backend/shared/` is an empty placeholder — the permission/authentication classes are hand-copied across services rather than truly shared.
+- **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. `HasRole` (both the shared copy used by billing/enrollment/student and identity-service's own) now fails closed if a view omits `required_roles` — it used to silently allow any authenticated user, guardians included; a view that genuinely wants that must set `ALLOW_ANY_AUTHENTICATED_ROLE = True` explicitly. `backend/shared/` now also holds `authentication.py` (`SingleSessionJWTAuthentication`, de-duplicated from three per-service copies) and `health.py`; `user_stub.py` remains unused dead code (see git history/audit notes for why).
 - **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
+
+- **Flipping the remaining `managed = False` models to `managed = True` needs the `accounts` app-label collision resolved first — not a decision to make in passing.** All four services independently define a local app named `accounts` (their own `User` stub, hand-copied per service — see `backend/shared/`'s notes above), but Django's migration bookkeeping (`django_migrations`) is keyed by `(app_label, migration_name)` in the **one shared database**, not per-service. Checked directly against the real DB: `accounts.0001_initial` is recorded **once**, even though all four services carry a file by that name with different `CreateModel` contents — whichever service happened to migrate first "claimed" that row, and the other three's `0001_initial.py` has never actually executed. Harmless today only because every current `accounts` migration is `managed = False` (a no-op either way). It stops being harmless the moment any service's `accounts` app gets a real, executed migration: a same-named migration in a *different* service would read as "already applied" and silently skip its own `CREATE TABLE`, even against a genuinely empty database. Fix first (e.g. a distinct `AppConfig.label` per service), independently of and before any `managed = True` conversion work.
+- **`schema.sql`** (repo root) is a `pg_dump --schema-only` snapshot of the real schema — see the Database setup section above. Verified by loading it into a throwaway database from scratch (0 errors, exact table/view count match). It's a complete, working substitute for `manage.py migrate` today, but doesn't by itself fix `pytest-django`'s automatic test-database creation, which still drives Django's own migration executor and hits the `django.contrib.admin` → `AUTH_USER_MODEL` wall documented in `enrollment-service/ai/test_risk_assessment.py`'s module docstring (that FK requires `users` to exist, and no *migration* creates it in student-service, billing-service, or enrollment-service). Closing that gap for real integration testing — without re-triggering the collision above — most likely means point pytest-django's `django_db_setup` fixture at `schema.sql` directly instead of at `manage.py migrate`, rather than converting all 55 tables to `managed = True`.
 
 - **Sensitive documents in git history** — *needs a decision, not more code.* `ff09988 "final fixes before demo"` committed a real scanned PSA birth certificate of a named minor (`OCR_IMAGES/4a4e4ed6-….jpg`) plus `students/fixtures/_test_doc.jpg`, and both are reachable from `origin/main`. Under RA 10173 that is sensitive personal information. Nothing new is being added — `OCR_IMAGES/` and `students/fixtures/*.jpg` are gitignored and later commits removed the files from the tree — but **removal from the tree is not removal from history**. Purging them requires:
 
@@ -134,6 +139,8 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 - **A live Gemini API key is also in git history** — same category as the birth certificate above, found during a later audit and not yet acted on. Commit `5bcd352 "AI Integration"` added `backend/enrollment-service/.env` containing a real `GEMINI_API_KEY`; `d802b93 "Remove .env from tracking"` removed the file from the tree but not from history, and the commit is still reachable from `origin/main`, `wes`, and every other remote branch. **Rotate this key at Google AI Studio** — that step doesn't wait on the `git filter-repo` purge above, though the two should happen in the same coordinated window since both need the same force-push-and-re-clone step.
 
 - **Uploaded requirement documents used to be served unauthenticated** — fixed. `student_service/urls.py` and `enrollment_service/urls.py` no longer mount Django's public `static(MEDIA_URL, ...)` route (it served every file under `MEDIA_ROOT` to anyone, no login required, whenever `DEBUG` was on — which was always, since `DEBUG` was hardcoded). Documents are now served through an authenticated action gated by a short-lived, submission-scoped signed token (`backend/shared/uploads.py`), and uploads are validated by extension *and* magic bytes rather than trusting the filename. `DEBUG`/`ALLOWED_HOSTS`/the `SECURE_*` settings are now read from `.env` instead of being hardcoded — see the Backend setup section above.
+
+- **`billing-service` needs a scheduled task, or overdue installments stop updating.** Flagging past-due installments used to run as a side effect of every `GET /api/installments/` — including a guardian just viewing their own child's account — which meant an unscoped, table-wide `UPDATE` ran on every page load, racing with `StudentPaymentViewSet`'s row lock during payment processing. It's now `python manage.py flag_overdue_installments`, a standalone management command with no side effects on read. **Nothing currently invokes it** — there is no cron/Celery/scheduler anywhere in this project yet — so whoever deploys this needs to run it periodically (daily is enough) via cron, Windows Task Scheduler, or equivalent, or installments will stay "pending" past their due date until it's run by hand.
 
 ## Testing
 

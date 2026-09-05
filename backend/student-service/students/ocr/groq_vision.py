@@ -153,7 +153,17 @@ def _call_groq(image_b64: str, mime_type: str, family: str | None, api_key: str)
         choice = result["choices"][0]
         raw_text = choice["message"]["content"].strip()
     except (KeyError, IndexError) as exc:
-        logger.error("Unexpected Groq response structure: %s", result)
+        # Log the response's shape (which keys are present), not its
+        # content -- result is the model's transcription of whatever
+        # document was scanned (a birth certificate, a good-moral
+        # certificate, ...), so logging it verbatim on a partial-success
+        # shape would put a minor's name/birth date/parents' names in the
+        # log. family (the document type, e.g. "psa_birth_certificate") is
+        # not PII and is what's actually useful for debugging this.
+        logger.error(
+            "Unexpected Groq response structure for family=%s: keys=%s",
+            family, sorted(result) if isinstance(result, dict) else type(result).__name__,
+        )
         raise ValueError("Could not read the OCR service response.") from exc
 
     if choice.get("finish_reason") == "length":
@@ -162,9 +172,12 @@ def _call_groq(image_b64: str, mime_type: str, family: str | None, api_key: str)
     try:
         return json.loads(_strip_wrapper(raw_text))
     except json.JSONDecodeError as exc:
-        # Log the model output for debugging; never return it. It used to
-        # be interpolated into the error message and sent to the browser.
-        logger.warning("Groq returned non-JSON: %s", raw_text[:200])
+        # Length only, never the model output itself -- raw_text is the
+        # transcribed document content (see above). This used to be
+        # interpolated into the error message and sent to the browser; the
+        # fix moved it into the log instead of removing it, which just
+        # relocated the same PII exposure.
+        logger.warning("Groq returned non-JSON for family=%s: length=%d", family, len(raw_text))
         raise _RetryableContentError("Groq returned non-JSON") from exc
 
 
@@ -181,7 +194,9 @@ def _call_gemini(image_bytes: bytes, mime_type: str, family: str | None, api_key
     try:
         return json.loads(_strip_wrapper(raw_text))
     except json.JSONDecodeError as exc:
-        logger.warning("Gemini returned non-JSON: %s", raw_text[:200])
+        # Length only, never the model output itself -- see _call_groq's
+        # equivalent log line for why.
+        logger.warning("Gemini returned non-JSON for family=%s: length=%d", family, len(raw_text))
         raise _RetryableContentError("Gemini returned non-JSON") from exc
 
 

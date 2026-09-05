@@ -77,6 +77,32 @@ class StudentSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class StudentBillingSummarySerializer(serializers.ModelSerializer):
+    """
+    Reduced-field view of Student for the accounting role: enough to look
+    up and identify a student for invoicing (name, LRN/student number,
+    enrollment status, linked household for 4Ps/discount eligibility), but
+    excluding demographic PII this role has no billing-relevant need for --
+    religion, sex, birth_date, and exact home/mailing addresses. See
+    StudentViewSet.get_serializer_class.
+    """
+
+    class Meta:
+        model = Student
+        fields = (
+            "student_id",
+            "student_number",
+            "lrn",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "suffix",
+            "status",
+            "household",
+        )
+        read_only_fields = fields
+
+
 class GuardianSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
 

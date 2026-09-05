@@ -1,9 +1,12 @@
 import json
+import logging
 
 import jwt
 from django.conf import settings
 from django.db import DatabaseError, connection
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -18,9 +21,22 @@ METHOD_WORDS = {
 
 
 def client_ip(request):
+    """
+    Resolves the request's IP the same trusted-proxy-aware way DRF's own
+    throttling does (rest_framework.throttling.SimpleRateThrottle.get_ident,
+    reading REST_FRAMEWORK["NUM_PROXIES"]) -- this used to take the
+    left-most X-Forwarded-For value unconditionally, which is spoofable by
+    any client, since nothing in this stack strips or verifies that header
+    (there is no reverse proxy in front of these services -- see README).
+    NUM_PROXIES defaults to 0 in every service's settings (never trust
+    X-Forwarded-For) until a real reverse proxy exists and this is
+    configured to match the actual hop count.
+    """
+    num_proxies = settings.REST_FRAMEWORK.get("NUM_PROXIES") or 0
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    if num_proxies and forwarded_for:
+        addrs = forwarded_for.split(",")
+        return addrs[-min(num_proxies, len(addrs))].strip()
     return request.META.get("REMOTE_ADDR")
 
 
@@ -60,6 +76,7 @@ def user_from_token(request):
             cursor.execute("SELECT name, role FROM users WHERE user_id = %s", [user_id])
             row = cursor.fetchone()
     except DatabaseError:
+        logger.exception("Failed to look up user %r for an audit log entry", user_id)
         return user_id, f"User #{user_id}", "unknown"
 
     if not row:
@@ -168,6 +185,15 @@ class BaseAuditLogMiddleware:
             try:
                 self.insert_audit_log(request, response)
             except DatabaseError:
-                pass
+                # A dropped audit row must not take the request down (the
+                # actual mutation already succeeded), but silence here
+                # means a schema drift or full disk loses every audit entry
+                # with zero signal -- log it so it's at least visible to
+                # whoever's watching the process, even before real log
+                # aggregation exists (see README).
+                logger.exception(
+                    "Failed to write audit log entry: method=%s path=%r",
+                    request.method, request.path,
+                )
 
         return response

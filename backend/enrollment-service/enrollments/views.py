@@ -500,7 +500,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             saved, failed = [], []
-            recorded_by = getattr(request, "user_id", None) or getattr(request.user, "id", None)
+            recorded_by = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
             with transaction.atomic():
                 for entry in entries:
                     student_id = entry.get("student_id")
@@ -818,7 +818,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def _save_override_audit(self, serializer, enrollment):
         """Create or update the override audit record for this enrollment."""
-        user_id = getattr(self.request.user, "id", None) or 0
+        user_id = getattr(self.request.user, "user_id", None) or getattr(self.request.user, "id", None) or 0
         reason = getattr(serializer, "_progression_override_reason", "") or "(no reason provided)"
         EnrollmentOverride.objects.update_or_create(
             enrollment=enrollment,
@@ -845,7 +845,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
         if not changed:
             return
-        user_id = getattr(self.request.user, "id", None) or 0
+        user_id = getattr(self.request.user, "user_id", None) or getattr(self.request.user, "id", None) or 0
         reason = getattr(serializer, "_progression_override_reason", "") or ""
         EnrollmentTransfer.objects.create(
             enrollment=enrollment,
@@ -932,7 +932,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 from_section=enrollment.section,
                 from_strand=enrollment.strand,
                 destination_school_name=destination_school_name,
-                initiated_by=getattr(request.user, "id", None) or 0,
+                initiated_by=getattr(request.user, "user_id", None) or getattr(request.user, "id", None) or 0,
             )
 
         return Response(
@@ -984,7 +984,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             to_section=enrollment.section,
             to_strand=enrollment.strand,
             origin_school_name=origin_school_name,
-            initiated_by=getattr(request.user, "id", None) or 0,
+            initiated_by=getattr(request.user, "user_id", None) or getattr(request.user, "id", None) or 0,
         )
 
         return Response(
@@ -1309,12 +1309,27 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
         # Enrollment eligibility is a staff planning tool, not part of the
         # guardian portal — guardians have no business probing it.
-        if getattr(request.user, "role", None) == "guardian":
+        role = getattr(request.user, "role", None)
+        if role == "guardian":
             return Response({"detail": "You do not have access to this record."}, status=403)
 
         student_id = request.query_params.get("student_id")
         if not student_id:
             return Response({"detail": "student_id is required."}, status=400)
+
+        # A teacher may only run this for a student in their own advisory --
+        # matches {enrollment_id}/grades/ above. This was previously
+        # unscoped for teachers (only guardians were denied), letting a
+        # teacher pull eligibility, failed subjects with grades, and
+        # missing-document status for any student in the school, not just
+        # their own class.
+        if role == "teacher":
+            try:
+                allowed = int(student_id) in teacher_student_ids(request.user)
+            except (TypeError, ValueError):
+                allowed = False
+            if not allowed:
+                return Response({"detail": "You do not have access to this record."}, status=403)
 
         # ── Fetch student's enrollment history ─────────────────────────────────
         all_enrollments = list(

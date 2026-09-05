@@ -9,12 +9,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
 from accounts.permissions import (
+    BILLING_ROLES,
     HasRole,
     IsBillingStaffOrOwnerGuardianReadOnly,
     guardian_enrollment_ids,
 )
-
-BILLING_ROLES = {"super_admin", "admin", "accounting"}
 
 from .models import (
     FeeSchedule, FeeScheduleItem,
@@ -549,16 +548,23 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             serializer.validated_data["payment_date"] = timezone.now().date()
 
         # ── Guard: prevent overpayment ──
+        # Locked here, before the balance read below, not just later inside
+        # apply_payment() -- two concurrent payments against the same
+        # invoice used to both read the same (soon-stale) balance, both
+        # pass this check, and both get applied, overpaying the invoice.
+        # Decimal throughout too: the balance below is already computed
+        # correctly in Decimal by the serializer; converting it to float
+        # for the comparison was pointless precision loss on money math.
         invoice_id = serializer.validated_data["invoice"].invoice_id
-        invoice    = StudentInvoice.objects.get(invoice_id=invoice_id)
+        invoice    = StudentInvoice.objects.select_for_update().get(invoice_id=invoice_id)
         from .serializers import StudentInvoiceSerializer
         inv_data   = StudentInvoiceSerializer(invoice).data
-        net_amount = float(inv_data.get("net_amount", 0))
-        total_paid = float(inv_data.get("total_paid", 0))
+        net_amount = Decimal(inv_data.get("net_amount", 0))
+        total_paid = Decimal(inv_data.get("total_paid", 0))
         balance    = net_amount - total_paid
-        amount     = float(serializer.validated_data["amount_paid"])
+        amount     = Decimal(serializer.validated_data["amount_paid"])
 
-        if amount > balance + 0.01:
+        if amount > balance + Decimal("0.01"):
             from rest_framework.exceptions import ValidationError
             raise ValidationError({
                 "amount_paid": f"Payment of ₱{amount:,.2f} exceeds remaining balance of ₱{balance:,.2f}."
@@ -576,7 +582,14 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
     /api/installments/{id}/                   GET
 
     Read-only — installments are generated automatically.
-    Overdue installments are auto-flagged on every read.
+
+    Overdue installments are flagged by a separate scheduled command
+    (`python manage.py flag_overdue_installments`), not as a side effect of
+    reading this endpoint. It used to run inline in list()/retrieve(), which
+    meant every GET -- including a guardian viewing their own child's
+    installments -- triggered an unscoped write across every installment in
+    the school. See that command's docstring for why, and for the
+    scheduling this now depends on.
     """
     queryset = InvoiceInstallment.objects.all().order_by("invoice_id", "sequence")
     serializer_class = InvoiceInstallmentSerializer
@@ -592,18 +605,4 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
         if getattr(self.request.user, "role", None) == "guardian":
             qs = qs.filter(invoice__enrollment_id__in=guardian_enrollment_ids(self.request.user))
         return qs
-
-    def _flag_overdue(self):
-        today = timezone.now().date()
-        InvoiceInstallment.objects.filter(
-            due_date__lt=today,
-            status__in=("pending", "partially_paid"),
-        ).update(status="overdue")
-
-    def list(self, request, *args, **kwargs):
-        self._flag_overdue()
-        return super().list(request, *args, **kwargs)
-
-    def retrieve(self, request, *args, **kwargs):
-        self._flag_overdue()
         return super().retrieve(request, *args, **kwargs)
