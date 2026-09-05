@@ -8,6 +8,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Makes backend/shared/ importable as `shared.*` — see backend/shared/.
 sys.path.insert(0, str(BASE_DIR.parent))
 
+from shared.logging_config import build_logging  # noqa: E402 — needs the sys.path insert above
+
 load_dotenv(BASE_DIR / ".env")
 
 
@@ -76,6 +78,9 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
+    # First, so every line any later middleware/view/exception handler logs
+    # for this request carries its request ID. See shared/request_id.py.
+    "shared.request_id.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "student_service.audit.AuditLogMiddleware",
     'django.middleware.security.SecurityMiddleware',
@@ -191,3 +196,8 @@ CACHES = {
         "LOCATION": str(BASE_DIR / "cache"),
     }
 }
+
+# See shared/logging_config.py. Console + a rotating file under logs/,
+# structured as JSON outside local dev, every record tagged with the request
+# ID shared.request_id.RequestIDMiddleware assigns.
+LOGGING = build_logging(BASE_DIR, "student-service", DEBUG)

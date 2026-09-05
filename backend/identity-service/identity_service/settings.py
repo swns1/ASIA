@@ -11,6 +11,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Makes backend/shared/ importable as `shared.*` — see backend/shared/.
 sys.path.insert(0, str(BASE_DIR.parent))
 
+from shared.logging_config import build_logging  # noqa: E402 — needs the sys.path insert above
+
 
 def _required_env(name: str) -> str:
     value = os.environ.get(name)
@@ -70,6 +72,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # First, so every line any later middleware/view/exception handler logs
+    # for this request — including axes' own lockout logging — carries its
+    # request ID. See shared/request_id.py.
+    "shared.request_id.RequestIDMiddleware",
     "axes.middleware.AxesMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
@@ -202,3 +208,8 @@ CACHES = {
         "LOCATION": str(BASE_DIR / "cache"),
     }
 }
+
+# See shared/logging_config.py. Console + a rotating file under logs/,
+# structured as JSON outside local dev, every record tagged with the request
+# ID shared.request_id.RequestIDMiddleware assigns.
+LOGGING = build_logging(BASE_DIR, "identity-service", DEBUG)

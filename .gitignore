@@ -27,6 +27,11 @@ media/
 # service's settings.py. Local, disposable, per-machine.
 cache/
 
+# Rotated application logs -- see LOGGING in each service's settings.py
+# (shared/logging_config.py). Local, disposable, per-machine; may contain
+# request paths/metadata that shouldn't be committed.
+logs/
+
 # Scanned documents used for OCR development. These are real civil-registry
 # records of named individuals -- sensitive personal information under RA
 # 10173 -- and nothing in the codebase reads them, so they must never be

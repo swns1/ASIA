@@ -19,6 +19,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Makes backend/shared/ importable as `shared.*` — see backend/shared/.
 sys.path.insert(0, str(BASE_DIR.parent))
 
+from shared.logging_config import build_logging  # noqa: E402 — needs the sys.path insert above
+
 
 # ─── tiny .env loader (no external dep) ─────────────────────────────────────
 def _load_env(path: Path) -> None:
@@ -113,6 +115,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # First, so every line any later middleware/view/exception handler logs
+    # for this request carries its request ID. See shared/request_id.py.
+    "shared.request_id.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "enrollment_service.audit.AuditLogMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -256,3 +261,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# See shared/logging_config.py. Console + a rotating file under logs/,
+# structured as JSON outside local dev, every record tagged with the request
+# ID shared.request_id.RequestIDMiddleware assigns.
+LOGGING = build_logging(BASE_DIR, "enrollment-service", DEBUG)
