@@ -36,7 +36,6 @@ from students.views import (
     PreviousSchoolViewSet,
     SiblingViewSet,
     StudentRequirementSubmissionViewSet,
-    StudentSiblingViewSet,
     StudentViewSet,
     _scope_to_teacher_roster,
 )
@@ -171,23 +170,10 @@ class TestStudentRequirementSubmissionViewSet:
         view.queryset.filter.assert_any_call(student_id__in={4})
 
 
-class TestStudentSiblingViewSet:
-    def test_teacher_sees_either_side_of_the_relationship(self):
-        view = _view(StudentSiblingViewSet, _user("teacher"))
-        with patch("students.views.teacher_student_ids", return_value={1, 2}):
-            view.get_queryset()
-        view.queryset.filter.assert_called_once_with(
-            Q(student_id__in={1, 2}) | Q(sibling_student_id__in={1, 2})
-        )
-
-    def test_accounting_denied(self):
-        view = _view(StudentSiblingViewSet, _user("accounting"))
-        view.queryset.none.return_value = "empty"
-        assert view.get_queryset() == "empty"
-
-    def test_registrar_unfiltered(self):
-        view = _view(StudentSiblingViewSet, _user("registrar"))
-        result = view.get_queryset()
-        view.queryset.filter.assert_not_called()
-        view.queryset.none.assert_not_called()
-        assert result is view.queryset
+# StudentSiblingViewSet's scoping tests were removed with the viewset itself:
+# sibling-ness is now derived from a shared household rather than stored as a
+# separate student-to-student link, so there is no second endpoint left to
+# scope. The replacement path (StudentViewSet.siblings) reuses this viewset's
+# own get_queryset(), so it inherits the teacher/accounting scoping already
+# covered by TestStudentViewSet above rather than needing its own copy --
+# see test_sibling_linking.py for the behaviour of the actions themselves.

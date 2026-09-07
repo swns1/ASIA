@@ -52,3 +52,24 @@ export async function deleteStudent(id) {
   const res = await studentClient.delete(`/students/${id}/`);
   return res.data;
 }
+
+// ── Siblings ─────────────────────────────────────────────────────────────────
+// Siblings are the other students sharing this student's household, not a
+// separate stored link — see StudentViewSet.siblings in student-service.
+
+export async function getSiblingStudents(id) {
+  const res = await studentClient.get(`/students/${id}/siblings/`);
+  return Array.isArray(res.data) ? res.data : res.data?.results ?? [];
+}
+
+export async function linkSibling(id, siblingStudentId) {
+  const res = await studentClient.post(`/students/${id}/link-sibling/`, {
+    sibling_student_id: siblingStudentId,
+  });
+  return res.data;
+}
+
+export async function unlinkSibling(id) {
+  const res = await studentClient.post(`/students/${id}/unlink-sibling/`, {});
+  return res.data;
+}

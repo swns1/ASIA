@@ -76,7 +76,7 @@ describe("PipelineBand", () => {
         schoolYear="2025-2026"
       />
     );
-    expect(screen.getByText(/No enrolments recorded/i)).toBeTruthy();
+    expect(screen.getByText(/No enrollments recorded/i)).toBeTruthy();
   });
 });
 

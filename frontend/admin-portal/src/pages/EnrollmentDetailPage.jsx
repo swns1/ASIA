@@ -12,18 +12,12 @@ import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 import { getRequirementTypes, getStudentRequirementSubmissions } from "../api/enrollmentApi";
 import { updateStudentStatus } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
+import { StatusBadge } from "../components/ui/Badge";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
   dark: "#1a0a0a", muted: "#7a5050", bg: "#fff8f6", white: "#ffffff",
-};
-
-const STATUS_META = {
-  enrolled:         { label: "Enrolled",        color: "#2e6b0d", bg: "#e8f5e0" },
-  pending:          { label: "Pending",         color: "#854f0b", bg: "#faeeda" },
-  completed:        { label: "Completed",       color: "#1455a0", bg: "#e3f0fd" },
-  cancelled:        { label: "Cancelled",       color: "#5c5752", bg: "#f0ede8" },
-  transferred_out:  { label: "Transferred Out", color: "#7a4a08", bg: "#fef3e2" },
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -216,7 +210,6 @@ export default function EnrollmentDetailPage() {
 
   const studentId = enrollment.student_id ?? enrollment.student;
   const studentName = enrollment.student_name ?? enrollment.student_detail?.name ?? `Student #${studentId}`;
-  const statusMeta = STATUS_META[enrollment.enrollment_status] ?? STATUS_META.pending;
 
   // Group grades by subject
   const gradesBySubject = grades.reduce((acc, g) => {
@@ -278,7 +271,7 @@ export default function EnrollmentDetailPage() {
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <Badge label={statusMeta.label} color={statusMeta.color} bg={statusMeta.bg} />
+              <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
               <button onClick={() => navigate(`/report-card/${id}`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card

@@ -28,12 +28,12 @@ export default function GuardianLayout({ children }) {
         <Link
           to="/guardian"
           className="focus-ring flex items-center gap-2.5 rounded-md"
-          aria-label="Parent portal home"
+          aria-label="Guardian portal home"
         >
           <img src={logo} alt="" className="h-[38px] w-[26px]" aria-hidden="true" />
           <div className="min-w-0">
             <div className="truncate text-base font-bold text-neutral-900">South Lakes IS</div>
-            <div className="truncate text-xs text-neutral-500">Parent Portal</div>
+            <div className="truncate text-xs text-neutral-500">Guardian Portal</div>
           </div>
         </Link>
 
@@ -49,11 +49,11 @@ export default function GuardianLayout({ children }) {
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
               aria-hidden="true"
             >
-              {(user?.name || "P").slice(0, 2).toUpperCase()}
+              {(user?.name || "G").slice(0, 2).toUpperCase()}
             </div>
             <div className="hidden min-w-0 leading-tight sm:block">
               <div className="truncate text-sm font-semibold text-neutral-900">
-                {user?.name || "Parent"}
+                {user?.name || "Guardian"}
               </div>
               <div className="truncate text-xs text-neutral-500">Guardian</div>
             </div>

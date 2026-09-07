@@ -142,6 +142,95 @@ class StudentViewSet(viewsets.ModelViewSet):
         response_serializer = StudentBulkCreateResponseSerializer(response_data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
+    # ── Siblings ─────────────────────────────────────────────────────────────
+    # Sibling-ness is *derived* from a shared household rather than stored as
+    # its own student-to-student link. There is a `student_siblings` table that
+    # models the second approach, but keeping both means keeping two answers to
+    # one question that can disagree (A linked to B, but living in different
+    # households -- which is right?). `students.household_id` already exists,
+    # is nullable, has a real FK, and carries no unique constraint, so several
+    # students sharing one household is something the schema already allows;
+    # it just never happened because intake creates a fresh household per
+    # student. These two actions are how that gets established and read back.
+
+    @action(detail=True, methods=["get"], url_path="siblings")
+    def siblings(self, request, pk=None):
+        """
+        GET /api/students/{id}/siblings/
+
+        The other students in this student's household. Empty (not an error)
+        when the student has no household or is the only one in it.
+        """
+        student = self.get_object()
+        if not student.household_id:
+            return Response([])
+
+        # Reuse get_queryset() so a teacher still only sees their own roster
+        # and accounting still gets the reduced serializer -- a sibling list
+        # must not become a way around either.
+        others = self.get_queryset().filter(
+            household_id=student.household_id
+        ).exclude(pk=student.pk)
+        return Response(self.get_serializer(others, many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="link-sibling")
+    def link_sibling(self, request, pk=None):
+        """
+        POST /api/students/{id}/link-sibling/  {"sibling_student_id": N}
+
+        Records that two students are siblings by putting them in the same
+        household. Whichever student already has one wins; if neither does, a
+        household is created for both. Deliberately server-side and atomic:
+        done from the client this is a read, a conditional create and two
+        updates, and a half-finished version leaves a family split in two.
+        """
+        student = self.get_object()
+        sibling_id = request.data.get("sibling_student_id")
+        if not sibling_id:
+            return Response({"detail": "sibling_student_id is required."}, status=400)
+
+        try:
+            sibling = Student.objects.get(pk=int(sibling_id))
+        except (Student.DoesNotExist, TypeError, ValueError):
+            return Response({"detail": "That student could not be found."}, status=404)
+
+        if sibling.pk == student.pk:
+            return Response({"detail": "A student cannot be their own sibling."}, status=400)
+
+        with transaction.atomic():
+            household_id = student.household_id or sibling.household_id
+            if not household_id:
+                household_id = Household.objects.create().household_id
+
+            # Move whichever side isn't already in it. If the two were in
+            # different households the sibling's old one is left behind rather
+            # than deleted -- it may still hold another child, and an empty
+            # household row is harmless.
+            for person in (student, sibling):
+                if person.household_id != household_id:
+                    Student.objects.filter(pk=person.pk).update(household_id=household_id)
+
+        return Response({
+            "household_id": household_id,
+            "detail": f"{student.first_name} and {sibling.first_name} are now recorded as siblings.",
+        })
+
+    @action(detail=True, methods=["post"], url_path="unlink-sibling")
+    def unlink_sibling(self, request, pk=None):
+        """
+        POST /api/students/{id}/unlink-sibling/
+
+        Removes this student from their household, which is what "they aren't
+        siblings after all" means when the link is derived. The household row
+        is left in place for whoever remains in it.
+        """
+        student = self.get_object()
+        if not student.household_id:
+            return Response({"detail": "This student isn't linked to a household."}, status=400)
+
+        Student.objects.filter(pk=student.pk).update(household_id=None)
+        return Response({"detail": "Student removed from the household."})
+
 
 class HouseholdViewSet(viewsets.ModelViewSet):
     queryset = Household.objects.all()
@@ -186,24 +275,6 @@ class GuardianViewSet(viewsets.ModelViewSet):
             ids = [v.strip() for v in params["user_id__in"].split(",") if v.strip()]
             queryset = queryset.filter(user_id__in=ids)
         return _scope_to_teacher_roster(queryset, self.request.user)
-
-
-class StudentSiblingViewSet(viewsets.ModelViewSet):
-    queryset = StudentSibling.objects.all()
-    serializer_class = StudentSiblingSerializer
-    permission_classes = [IsAdminRegistrarOrReadOnly]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        role = getattr(self.request.user, "role", None)
-        if role == "teacher":
-            # Two FK's to Student (student, sibling_student); a teacher can
-            # see the relationship if either side is one of their own.
-            ids = teacher_student_ids(self.request.user)
-            queryset = queryset.filter(Q(student_id__in=ids) | Q(sibling_student_id__in=ids))
-        elif role == "accounting":
-            queryset = queryset.none()
-        return queryset
 
 
 class SiblingViewSet(viewsets.ModelViewSet):

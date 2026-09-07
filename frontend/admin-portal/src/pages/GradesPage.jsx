@@ -943,6 +943,7 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
   const [saving,  setSaving]  = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const pct = entry.max_score > 0 ? Math.round((entry.score / entry.max_score) * 100) : 0;
   const gc  = gradeColor(pct);
@@ -951,18 +952,30 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
     if (!label.trim() || !score || !max || parseFloat(max) <= 0) return;
     if (parseFloat(score) > parseFloat(max)) return;
     setSaving(true);
-    await onUpdate(entry.score_entry_id, { label: label.trim(), score: parseFloat(score), max_score: parseFloat(max) });
-    setEditing(false);
-    setSaving(false);
+    try {
+      await onUpdate(entry.score_entry_id, { label: label.trim(), score: parseFloat(score), max_score: parseFloat(max) });
+      toast.success("Score entry updated.");
+      setEditing(false);
+    } catch (e) {
+      toast.error(e.message || "Update failed.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
     setDeleting(true);
+    setDeleteError("");
     try {
       await onDelete(entry.score_entry_id);
+      toast.success("Score entry deleted.");
+      setConfirmDelete(false);
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      setDeleteError(msg);
+      toast.error(msg);
     } finally {
       setDeleting(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -1014,8 +1027,9 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
             title="Delete score entry?"
             message={<>Remove <strong>{entry.label}</strong> ({entry.score}/{entry.max_score})? This cannot be undone.</>}
             loading={deleting}
+            error={deleteError}
             onConfirm={handleConfirmDelete}
-            onCancel={() => setConfirmDelete(false)}
+            onCancel={() => { setConfirmDelete(false); setDeleteError(""); }}
           />
         )}
       </AnimatePresence>

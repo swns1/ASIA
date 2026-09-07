@@ -124,6 +124,81 @@ class TestSummaryAction(object):
         assert "xyz.pdf" not in row["image_url"]
 
 
+class TestSummaryGuardianScoping:
+    """summary() is the one action on this viewset a guardian may call (the
+    guardian portal's Requirements tab). The viewset's own permission class
+    refuses the guardian role outright, so the action opens the gate and then
+    has to do the ownership check itself -- if that check is ever lost, a
+    parent can read any child's document status by changing a query param."""
+
+    def _request(self, view_instance, url, user):
+        view_instance.action_map = {"get": "summary"}
+        raw = factory.get(url)
+        raw.user = user
+        request = view_instance.initialize_request(raw)
+        request.user = user
+        return request
+
+    def test_guardian_may_read_their_own_child(self):
+        view_instance = StudentRequirementSubmissionViewSet()
+        guardian = SimpleNamespace(role="guardian", user_id=30, is_authenticated=True)
+        request = self._request(
+            view_instance, "/api/student-requirement-submissions/summary/?student_id=111", guardian
+        )
+
+        with patch("requirements.views.guardian_student_ids", return_value={111, 151}), \
+                patch("requirements.views.RequirementType.objects") as rt_objects, \
+                patch("requirements.views.StudentRequirementSubmission.objects") as sub_objects:
+            rt_objects.filter.return_value = []
+            sub_objects.filter.return_value.select_related.return_value = []
+            response = view_instance.summary(request)
+
+        assert response.status_code == 200
+
+    def test_guardian_is_denied_another_familys_child(self):
+        view_instance = StudentRequirementSubmissionViewSet()
+        guardian = SimpleNamespace(role="guardian", user_id=30, is_authenticated=True)
+        request = self._request(
+            view_instance, "/api/student-requirement-submissions/summary/?student_id=999", guardian
+        )
+
+        with patch("requirements.views.guardian_student_ids", return_value={111, 151}):
+            response = view_instance.summary(request)
+
+        assert response.status_code == 403
+
+    def test_an_unlinked_guardian_is_denied_everything(self):
+        # guardian_student_ids() returns an empty set for a guardian account
+        # with no linked Guardian row -- fail closed, not open.
+        view_instance = StudentRequirementSubmissionViewSet()
+        guardian = SimpleNamespace(role="guardian", user_id=31, is_authenticated=True)
+        request = self._request(
+            view_instance, "/api/student-requirement-submissions/summary/?student_id=111", guardian
+        )
+
+        with patch("requirements.views.guardian_student_ids", return_value=set()):
+            response = view_instance.summary(request)
+
+        assert response.status_code == 403
+
+    def test_staff_are_not_scoped_by_the_guardian_check(self):
+        view_instance = StudentRequirementSubmissionViewSet()
+        registrar = SimpleNamespace(role="registrar", user_id=23, is_authenticated=True)
+        request = self._request(
+            view_instance, "/api/student-requirement-submissions/summary/?student_id=999", registrar
+        )
+
+        with patch("requirements.views.guardian_student_ids", return_value=set()) as ids, \
+                patch("requirements.views.RequirementType.objects") as rt_objects, \
+                patch("requirements.views.StudentRequirementSubmission.objects") as sub_objects:
+            rt_objects.filter.return_value = []
+            sub_objects.filter.return_value.select_related.return_value = []
+            response = view_instance.summary(request)
+
+        assert response.status_code == 200
+        ids.assert_not_called()  # staff access is unchanged by this addition
+
+
 class TestFileDownloadAction:
     """
     Deliberately no auth/permission classes on the action itself (see its

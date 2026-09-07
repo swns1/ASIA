@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.guardian_provisioning import provision_for_enrollment
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
@@ -865,6 +866,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         enrollment = serializer.save()
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
+        # Give this student's guardians portal access once they're actually
+        # enrolled. Idempotent and failure-swallowing by design — see
+        # accounts/guardian_provisioning.py.
+        provision_for_enrollment(enrollment)
 
     def perform_update(self, serializer):
         before = {f: getattr(serializer.instance, f, None) for f in self._MOVE_TRACKED_FIELDS}
@@ -872,6 +877,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
         self._log_internal_move_if_changed(serializer, before, enrollment)
+        # Also here, not just on create: an application is usually saved as
+        # "pending" first and flipped to "enrolled" later, which is the moment
+        # access should actually start.
+        provision_for_enrollment(enrollment)
 
     @action(detail=True, methods=["post"], url_path="transfer-out")
     def transfer_out(self, request, pk=None):

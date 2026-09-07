@@ -2,6 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import toast from "react-hot-toast";
 
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
@@ -90,6 +91,7 @@ export default function StudentsPage() {
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [toDelete, setToDelete]   = useState(null);
+  const [deleteError, setDeleteError] = useState("");
   const [statusFilter, setStatus] = useState(() => searchParams.get("status") ?? "all");
   const [sexFilter, setSexFilter] = useState("");
   const [ordering, setOrdering]   = useState("-student_id");
@@ -210,11 +212,17 @@ export default function StudentsPage() {
   const handleDelete = async () => {
     if (!toDelete) return;
     setDeletingStudent(true);
+    setDeleteError("");
     try {
       await deleteStudent(toDelete.student_id);
+      toast.success("Student deleted.");
       setToDelete(null);
       fetchStudents(page, search, statusFilter, sexFilter, ordering);
       fetchCounts();
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      setDeleteError(msg);
+      toast.error(msg);
     } finally {
       setDeletingStudent(false);
     }
@@ -543,8 +551,9 @@ export default function StudentsPage() {
             }
             confirmLabel="Delete student"
             loading={deletingStudent}
+            error={deleteError}
             onConfirm={handleDelete}
-            onCancel={() => setToDelete(null)}
+            onCancel={() => { setToDelete(null); setDeleteError(""); }}
           />
         )}
       </AnimatePresence>

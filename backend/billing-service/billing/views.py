@@ -605,4 +605,3 @@ class InvoiceInstallmentViewSet(viewsets.ReadOnlyModelViewSet):
         if getattr(self.request.user, "role", None) == "guardian":
             qs = qs.filter(invoice__enrollment_id__in=guardian_enrollment_ids(self.request.user))
         return qs
-        return super().retrieve(request, *args, **kwargs)

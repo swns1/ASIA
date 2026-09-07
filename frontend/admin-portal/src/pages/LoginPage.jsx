@@ -289,6 +289,7 @@ export default function LoginPage() {
             {/* Identifier */}
             <div style={{ marginBottom: 18 }}>
               <label
+                htmlFor="login-identifier"
                 style={{
                   display: "block",
                   fontSize: 11,
@@ -333,6 +334,7 @@ export default function LoginPage() {
                   </svg>
                 </span>
                 <input
+                  id="login-identifier"
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -378,6 +380,7 @@ export default function LoginPage() {
                 }}
               >
                 <label
+                  htmlFor="login-password"
                   style={{
                     fontSize: 11,
                     fontWeight: 700,
@@ -388,18 +391,19 @@ export default function LoginPage() {
                 >
                   Password
                 </label>
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                {/* Was a dead `href="#"` link that did nothing on click.
+                    Password reset isn't wired up yet (see README), so this is
+                    plain text pointing at a real path to get one rather than a
+                    control that looks interactive and silently fails. */}
+                <span
                   style={{
                     fontSize: 12,
-                    color: "#c92a2a",
-                    textDecoration: "none",
+                    color: "#8a6a6a",
                     fontWeight: 500,
                   }}
                 >
-                  Forgot password?
-                </a>
+                  Forgot? Contact an admin.
+                </span>
               </div>
               <div
                 style={{
@@ -433,6 +437,7 @@ export default function LoginPage() {
                   </svg>
                 </span>
                 <input
+                  id="login-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

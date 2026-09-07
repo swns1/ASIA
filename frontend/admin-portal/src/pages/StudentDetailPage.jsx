@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
-import { getStudent } from "../api/studentApi";
+import {
+  getStudent,
+  getStudents,
+  getSiblingStudents,
+  linkSibling,
+  unlinkSibling,
+} from "../api/studentApi";
 import { getGuardiansByStudent, patchGuardian, getGuardiansByUserIds } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
@@ -266,6 +272,116 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
 }
 
 
+// ── Sibling-linking modal ─────────────────────────────────────────────────────
+// Recording that two students are siblings means putting them in the same
+// household — that's how this system represents the relationship (see
+// StudentViewSet.siblings). The search is over students rather than
+// households because "who is this child's brother or sister" is the question a
+// registrar can actually answer; the household is an implementation detail
+// they shouldn't have to think about.
+function SiblingLinkModal({ student, onClose, onLinked }) {
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const q = term.trim();
+    let cancelled = false;
+    // Everything runs inside the debounce timer rather than synchronously in
+    // the effect body -- a setState directly in the body is what triggers the
+    // cascading-render warning, and the search wants debouncing anyway.
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      if (q.length < 2) { setResults([]); setSearching(false); return; }
+      setSearching(true);
+      getStudents({ search: q, page_size: 8 })
+        .then((data) => {
+          if (cancelled) return;
+          const rows = Array.isArray(data) ? data : data?.results ?? [];
+          setResults(rows.filter((s) => s.student_id !== student.student_id));
+        })
+        .catch(() => { if (!cancelled) setResults([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [term, student.student_id]);
+
+  async function handleLink(sibling) {
+    setSaving(true);
+    setError("");
+    try {
+      await linkSibling(student.student_id, sibling.student_id);
+      toast.success(`Linked as siblings.`);
+      onLinked();
+      onClose();
+    } catch (e) {
+      const msg = e.message || "Could not link these students.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="md"
+      icon="ti-heart-handshake"
+      title="Link a sibling"
+      description={`Record another enrolled student as ${student.first_name}'s sibling.`}
+      loading={saving}
+    >
+      {error && <Alert variant="error">{error}</Alert>}
+
+      <Field label="Search students" hint="Search by name, LRN, or student number.">
+        <Input
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          placeholder="e.g. Dela Cruz"
+          autoFocus
+        />
+      </Field>
+
+      <div style={{ marginTop: 4, maxHeight: 260, overflowY: "auto" }}>
+        {searching && <div style={{ fontSize: 13, color: "#8a6a6a", padding: "8px 2px" }}>Searching…</div>}
+        {!searching && term.trim().length >= 2 && results.length === 0 && (
+          <div style={{ fontSize: 13, color: "#8a6a6a", padding: "8px 2px" }}>No other students matched.</div>
+        )}
+        {results.map((s) => (
+          <button
+            key={s.student_id}
+            type="button"
+            disabled={saving}
+            onClick={() => handleLink(s)}
+            style={{
+              display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
+              padding: "10px 12px", border: "1px solid #f0e4e4", borderRadius: 10,
+              background: "white", cursor: saving ? "not-allowed" : "pointer", marginBottom: 8,
+              fontFamily: "'DM Sans',sans-serif",
+            }}
+          >
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: getPalette(`${s.first_name} ${s.last_name}`).bg, color: getPalette(`${s.first_name} ${s.last_name}`).color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+              {(s.first_name || "?")[0].toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1a0a0a" }}>
+                {s.first_name} {s.last_name}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#8a6a6a" }}>
+                {s.student_number}{s.lrn ? ` · LRN ${s.lrn}` : ""}
+              </div>
+            </div>
+            <i className="ti ti-link" style={{ fontSize: 15, color: "#c92a2a" }} aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 
 // Status colours and the avatar palette now come from the shared design system
 // (constants/statusMaps.js, utils/avatarPalette.js) so a student looks the same
@@ -287,7 +403,10 @@ function calcAge(birthDate) {
 
 function fmtDate(d) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  // "short" month, matching StudentsPage's fmtDate -- a birthdate used to
+  // read "Jan 5, 2020" on the list and "January 5, 2020" one click later on
+  // this page, for the same student and the same field.
+  return new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
 }
 
 function capitalize(str = "") {
@@ -321,7 +440,7 @@ function InfoRow({ icon, label, value, mono = false }) {
 }
 
 // ── Section card wrapper ──────────────────────────────────────────────────────
-function SectionCard({ title, icon, children, badge, motionProps = {} }) {
+function SectionCard({ title, icon, children, badge, action, motionProps = {} }) {
   return (
     <motion.div
       {...motionProps}
@@ -334,9 +453,12 @@ function SectionCard({ title, icon, children, badge, motionProps = {} }) {
           </div>
           <h2 className="text-base font-bold text-neutral-900">{title}</h2>
         </div>
-        {badge != null && (
-          <Badge variant="brand" size="sm">{badge}</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {badge != null && (
+            <Badge variant="brand" size="sm">{badge}</Badge>
+          )}
+          {action}
+        </div>
       </div>
       <div className="px-5 pb-3 pt-1">{children}</div>
     </motion.div>
@@ -369,6 +491,11 @@ export default function StudentDetailPage() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [linkGuardian,  setLinkGuardian]  = useState(null); // guardian being linked to an account
+  // Siblings who attend this school, derived from a shared household — distinct
+  // from `siblings` above, which is the free-text list typed at intake and may
+  // name children who aren't enrolled here.
+  const [enrolledSiblings, setEnrolledSiblings] = useState([]);
+  const [showLinkSibling, setShowLinkSibling]   = useState(false);
 
   const canLink = hasAnyRole(getCurrentUser(), CAN_LINK_ROLES);
   // getStudentLedger hits a billing-service endpoint that's BILLING_ROLES-only
@@ -392,14 +519,32 @@ export default function StudentDetailPage() {
       getSiblingsByStudent(id).catch(() => []),
       getPreviousSchoolsByStudent(id).catch(() => []),
       getEnrollments({ student: id, page_size: 100, ordering: "-school_year,-enrollment_id" }).catch(() => ({})),
-    ]).then(([s, g, sib, sch, enrData]) => {
+      getSiblingStudents(id).catch(() => []),
+    ]).then(([s, g, sib, sch, enrData, enrolledSibs]) => {
       setStudent(s);
       setGuardians(Array.isArray(g) ? g : g?.results ?? []);
       setSiblings(Array.isArray(sib) ? sib : sib?.results ?? []);
       setSchools(Array.isArray(sch) ? sch : sch?.results ?? []);
       setEnrollments(Array.isArray(enrData) ? enrData : enrData?.results ?? []);
+      setEnrolledSiblings(enrolledSibs);
     }).finally(() => setLoading(false));
   }, [id]);
+
+  async function reloadSiblings() {
+    try {
+      setEnrolledSiblings(await getSiblingStudents(id));
+    } catch { /* the card just keeps its previous contents */ }
+  }
+
+  async function handleUnlinkSibling() {
+    try {
+      await unlinkSibling(id);
+      toast.success("Removed from the household.");
+      await reloadSiblings();
+    } catch (e) {
+      toast.error(e.message || "Could not unlink.");
+    }
+  }
 
   // Lazy-load ledger only when the tab is first opened
   useEffect(() => {
@@ -755,13 +900,57 @@ export default function StudentDetailPage() {
 
                     {/* SIBLINGS TAB */}
                     {activeTab === "family" && (
+                      <SectionCard
+                        title="Siblings at this school"
+                        icon="ti-users"
+                        badge={enrolledSiblings.length}
+                        motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}
+                        action={canLink && (
+                          <Button variant="secondary" size="sm" icon="ti-link" onClick={() => setShowLinkSibling(true)}>
+                            Link sibling
+                          </Button>
+                        )}
+                      >
+                        {enrolledSiblings.length === 0 ? (
+                          <EmptySection message="No other enrolled students are recorded in this student's household." />
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+                            {enrolledSiblings.map((s, i) => (
+                              <div key={s.student_id} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom: i < enrolledSiblings.length - 1 ? "1px solid #f9f0f0" : "none" }}>
+                                <div style={{ width:36, height:36, borderRadius:"50%", background:getPalette(`${s.first_name} ${s.last_name}`).bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:getPalette(`${s.first_name} ${s.last_name}`).color, flexShrink:0 }}>
+                                  {(s.first_name ?? "?")[0].toUpperCase()}
+                                </div>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.first_name} {s.last_name}</div>
+                                  <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>
+                                    {s.student_number}{s.lrn ? ` · LRN ${s.lrn}` : ""}
+                                  </div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => navigate(`/students/${s.student_id}`)}>
+                                  View
+                                </Button>
+                              </div>
+                            ))}
+                            {canLink && (
+                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f9f0f0", display: "flex", justifyContent: "flex-end" }}>
+                                <Button variant="ghost" size="sm" icon="ti-unlink" onClick={handleUnlinkSibling}>
+                                  Remove this student from the household
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </SectionCard>
+                    )}
+
+                    {activeTab === "family" && (
                       siblings.length === 0 ? (
-                        <SectionCard title="Siblings" icon="ti-heart" badge={0}
+                        <SectionCard title="Siblings named at intake" icon="ti-heart" badge={0}
                           motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
-                          <EmptySection message="No siblings have been recorded for this student." />
+                          <EmptySection message="No siblings were named on this student's enrolment form." />
                         </SectionCard>
                       ) : (
-                        <SectionCard title="Siblings" icon="ti-heart" badge={siblings.length}
+                        <SectionCard title="Siblings named at intake" icon="ti-heart" badge={siblings.length}
                           motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
                             {siblings.map((s, i) => (
@@ -1023,6 +1212,14 @@ export default function StudentDetailPage() {
                 onLinked={(updated) =>
                   setGuardians((prev) => prev.map((x) => x.guardian_id === updated.guardian_id ? { ...x, ...updated } : x))
                 }
+              />
+            )}
+            {showLinkSibling && student && (
+              <SiblingLinkModal
+                key="link-sibling-modal"
+                student={student}
+                onClose={() => setShowLinkSibling(false)}
+                onLinked={reloadSiblings}
               />
             )}
           </AnimatePresence>

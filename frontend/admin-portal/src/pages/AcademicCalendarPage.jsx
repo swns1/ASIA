@@ -981,8 +981,21 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
 
 function DeleteModal({ event, onConfirm, onCancel }) {
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
   const meta = eventMeta(event.event_type);
-  async function handleDelete() { setDeleting(true); try { await onConfirm(); } finally { setDeleting(false); } }
+  async function handleDelete() {
+    setDeleting(true);
+    setError("");
+    try {
+      await onConfirm();
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <ConfirmModal
@@ -998,6 +1011,7 @@ function DeleteModal({ event, onConfirm, onCancel }) {
         </>
       }
       loading={deleting}
+      error={error}
       onConfirm={handleDelete}
       onCancel={onCancel}
     />

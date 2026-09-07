@@ -69,7 +69,7 @@ const PORTAL_LABELS = {
   registrar: "Registrar Portal",
   teacher: "Teacher Portal",
   accounting: "Accounting Portal",
-  guardian: "Parent Portal",
+  guardian: "Guardian Portal",
 };
 
 export function portalLabelFor(role) {

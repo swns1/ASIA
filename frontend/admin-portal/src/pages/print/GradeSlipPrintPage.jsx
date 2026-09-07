@@ -26,6 +26,7 @@ export default function GradeSlipPrintPage() {
   const [error,          setError]          = useState(null);
   const [period,         setPeriod]         = useState(searchParams.get("period") || "");
   const [downloading,    setDownloading]    = useState(false);
+  const [gradesError,    setGradesError]    = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -58,9 +59,23 @@ export default function GradeSlipPrintPage() {
 
   useEffect(() => {
     if (!enrollmentId || !period) return;
+    let cancelled = false;
     getGrades({ enrollment: enrollmentId, grading_period: period })
-      .then((d) => setGrades(Array.isArray(d) ? d : d.results ?? []))
-      .catch(console.error);
+      .then((d) => {
+        if (cancelled) return;
+        setGrades(Array.isArray(d) ? d : d.results ?? []);
+        setGradesError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        // Was silently swallowed here -- every subject row still rendered,
+        // just with a blank grade/remarks cell, which reads as "no grades
+        // recorded yet" rather than "the grades failed to load." A printed
+        // grade slip is the wrong place to guess which one it was.
+        console.error(e);
+        setGradesError(e.message || "Grades could not be loaded.");
+      });
+    return () => { cancelled = true; };
   }, [enrollmentId, period]);
 
   const handleDownload = async () => {
@@ -135,6 +150,16 @@ export default function GradeSlipPrintPage() {
             <StatusBadge status={enrollment.enrollment_status} meta={ENROLLMENT_STATUS_META} defaultKey="enrolled" />
           </div>
         </InfoGrid>
+
+        {gradesError && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+            marginBottom: 14, borderRadius: 8, background: C.redBg, color: C.red, fontSize: 13,
+          }}>
+            <i className="ti ti-alert-triangle" aria-hidden="true" />
+            Grades could not be loaded ({gradesError}). The table below may be missing scores — do not treat blank cells as "no grade."
+          </div>
+        )}
 
         {subjects.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>

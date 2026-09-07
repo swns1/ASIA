@@ -313,6 +313,7 @@ export default function SubjectsPage() {
   const [pageMeta,     setPageMeta]    = useState({ count: 0, next: null, previous: null });
   const [modal,        setModal]       = useState(null);
   const [toDelete,     setToDelete]    = useState(null);
+  const [deleteError,  setDeleteError] = useState("");
 
   const gradeOptions = levelFilter !== "all" ? (GRADE_LEVELS_BY_LEVEL[levelFilter] ?? []) : [];
 
@@ -351,11 +352,16 @@ export default function SubjectsPage() {
   const handleDelete = async () => {
     if (!toDelete) return;
     setDeletingSubject(true);
+    setDeleteError("");
     try {
       await deleteSubject(toDelete.subject_id);
       toast.success("Subject deleted.");
       setToDelete(null);
       fetchSubjects(page, search, levelFilter, gradeFilter);
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      setDeleteError(msg);
+      toast.error(msg);
     } finally {
       setDeletingSubject(false);
     }
@@ -737,8 +743,9 @@ export default function SubjectsPage() {
             title="Delete subject?"
             message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{toDelete.subject_name}</strong>. This cannot be undone and may affect existing grades.</>}
             loading={deletingSubject}
+            error={deleteError}
             onConfirm={handleDelete}
-            onCancel={() => setToDelete(null)}
+            onCancel={() => { setToDelete(null); setDeleteError(""); }}
           />
         )}
       </AnimatePresence>

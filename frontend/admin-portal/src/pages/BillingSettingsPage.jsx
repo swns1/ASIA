@@ -575,6 +575,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
   const [saving,  setSaving]  = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const catMeta = CATEGORY_META[item.item_category] ?? CATEGORY_META.other;
   const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
@@ -582,19 +583,32 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
   const handleSave = async () => {
     if (!name.trim() || !amount || parseFloat(amount) < 0) return;
     setSaving(true);
-    await updateItem(item.fee_schedule_item_id, { item_name: name.trim(), amount: parseFloat(amount) });
-    setEditing(false); setSaving(false);
-    onUpdated();
+    try {
+      await updateItem(item.fee_schedule_item_id, { item_name: name.trim(), amount: parseFloat(amount) });
+      toast.success("Fee item updated.");
+      setEditing(false);
+      onUpdated();
+    } catch (e) {
+      toast.error(e.message || "Update failed.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
     setDeleting(true);
+    setDeleteError("");
     try {
       await deleteItem(item.fee_schedule_item_id);
+      toast.success("Fee item deleted.");
+      setConfirmDelete(false);
       onDeleted();
+    } catch (e) {
+      const msg = e.message || "Delete failed.";
+      setDeleteError(msg);
+      toast.error(msg);
     } finally {
       setDeleting(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -654,8 +668,9 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
             title="Delete fee item?"
             message={<>Remove <strong>{item.item_name}</strong> ({fmt(item.amount)}) from this fee schedule? This cannot be undone.</>}
             loading={deleting}
+            error={deleteError}
             onConfirm={handleConfirmDelete}
-            onCancel={() => setConfirmDelete(false)}
+            onCancel={() => { setConfirmDelete(false); setDeleteError(""); }}
           />
         )}
       </AnimatePresence>

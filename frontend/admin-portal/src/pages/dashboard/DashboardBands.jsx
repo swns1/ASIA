@@ -28,11 +28,11 @@ function ChartSkeleton({ height = 180 }) {
   return <Skeleton height={height} variant="pulse" />;
 }
 
-// ── Enrolment pipeline ───────────────────────────────────────────────────────
+// ── Enrollment pipeline ──────────────────────────────────────────────────────
 // Pending → Enrolled → Completed is part-to-whole of the cohort, so a stacked
 // bar reads it correctly: the reader wants the proportion at each stage, not
 // three unrelated magnitudes. `exited` is excluded deliberately — a cancelled
-// enrolment left the funnel rather than sitting in a stage of it (see
+// enrollment left the funnel rather than sitting in a stage of it (see
 // dashboard/services.py).
 
 const PIPELINE_STEPS = [
@@ -42,7 +42,7 @@ const PIPELINE_STEPS = [
 ];
 
 export function PipelineBand({ pipeline, loading, schoolYear, compact = false }) {
-  if (loading) return <Panel title="Enrolment Pipeline"><ChartSkeleton height={150} /></Panel>;
+  if (loading) return <Panel title="Enrollment Pipeline"><ChartSkeleton height={150} /></Panel>;
 
   const segments = PIPELINE_STEPS.map((step) => ({
     key: step.key,
@@ -57,19 +57,19 @@ export function PipelineBand({ pipeline, loading, schoolYear, compact = false })
 
   return (
     <Panel
-      title="Enrolment Pipeline"
+      title="Enrollment Pipeline"
       subtitle={`S.Y. ${schoolYear}`}
     >
       <StackedBar
-        title={`Enrolment pipeline for school year ${schoolYear}`}
+        title={`Enrollment pipeline for school year ${schoolYear}`}
         segments={segments}
         height={compact ? 120 : 150}
         barY={compact ? 18 : 26}
         barH={compact ? 46 : 56}
-        emptyMessage="No enrolments recorded for this school year yet."
+        emptyMessage="No enrollments recorded for this school year yet."
         caption={
           total
-            ? `${total} enrolment${total === 1 ? "" : "s"} in the pipeline` +
+            ? `${total} enrollment${total === 1 ? "" : "s"} in the pipeline` +
               (exited ? ` · ${exited} cancelled or transferred out, not counted above.` : ".")
             : undefined
         }

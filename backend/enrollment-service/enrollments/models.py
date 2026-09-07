@@ -29,6 +29,14 @@ class Student(models.Model):
 
     status = models.CharField(max_length=20, default="active")
 
+    # Nullable FK to households, carried as a plain id (this service doesn't
+    # model the households table). Students sharing one are siblings -- that is
+    # how this system records the relationship, rather than in the
+    # `student_siblings` table, which models the same thing a second way and
+    # is unused. Read by accounts/guardian_provisioning.py so one parent's
+    # portal account covers all of their enrolled children.
+    household_id = models.BigIntegerField(null=True, blank=True)
+
     updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

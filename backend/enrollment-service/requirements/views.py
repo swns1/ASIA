@@ -9,7 +9,11 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly
+from accounts.permissions import (
+    IsAdminRegistrarOrReadOnly,
+    IsStaffOrOwnerGuardianReadOnly,
+    guardian_student_ids,
+)
 from shared.uploads import download_url, file_kind_for, resolve_stored_path, verify_download_token
 
 from .models import RequirementType, StudentRequirementSubmission
@@ -43,11 +47,29 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
             qs = qs.filter(student_id=student_id)
         return qs
 
-    @action(detail=False, methods=["get"], url_path="summary")
+    # Guardians are denied by the viewset's IsAdminRegistrarOrReadOnly (it
+    # refuses the guardian role outright), so this one read action opens the
+    # gate and then scopes by ownership in the body -- the same shape as
+    # billing's student_ledger. Staff access is unchanged; a guardian may pull
+    # only their own child's summary.
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="summary",
+        permission_classes=[IsStaffOrOwnerGuardianReadOnly],
+    )
     def summary(self, request):
         student_id = request.query_params.get("student_id")
         if not student_id:
             return Response({"detail": "student_id is required."}, status=400)
+
+        if getattr(request.user, "role", None) == "guardian":
+            try:
+                requested_id = int(student_id)
+            except (TypeError, ValueError):
+                return Response({"detail": "student_id must be an integer."}, status=400)
+            if requested_id not in guardian_student_ids(request.user):
+                return Response({"detail": "You do not have access to this record."}, status=403)
 
         req_types = RequirementType.objects.filter(is_active=True)
         submissions = {
