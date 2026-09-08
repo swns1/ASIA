@@ -49,6 +49,7 @@ const NAV = [
     items: [
       { label: "Dashboard",         icon: "ti-layout-dashboard",  path: "/dashboard"           },
       { label: "Students",          icon: "ti-users",             path: "/students"            },
+      { label: "Applications",      icon: "ti-user-plus",         path: "/student-applications", allowedRoles: ACADEMIC_STAFF },
       { label: "Enrollments",       icon: "ti-clipboard-list",    path: "/enrollments"         },
       { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: GRADE_ROLES },
       { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },

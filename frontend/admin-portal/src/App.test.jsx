@@ -50,4 +50,18 @@ describe("App routes", () => {
     expect(screen.getByText("Page not found")).toBeTruthy();
     expect(screen.queryByText("Loading…")).toBeNull();
   });
+
+  it("renders the public applicant form without a login redirect", async () => {
+    // Regression guard: /apply/:inviteId must stay a bare <Route>, never
+    // wrapped in <P> or nested under StaffShell — an applicant reaching this
+    // link has no session of their own. If someone adds a guard here by
+    // habit (every other route in this file has one), this fails instead
+    // of quietly locking every applicant out.
+    window.history.pushState({}, "", "/apply/11111111-1111-1111-1111-111111111111");
+
+    render(<App />);
+
+    expect(await screen.findByText("Student Information Form")).toBeTruthy();
+    expect(screen.queryByText("Welcome back")).toBeNull();
+  });
 });

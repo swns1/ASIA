@@ -47,6 +47,18 @@ export const INVOICE_STATUS_MAP = {
   voided:         { label: "Voided",   variant: "muted",   icon: "ti-ban" },
 };
 
+/** Student applications — application.status (self-service intake, see
+ *  api/applicationApi.js). "rejected" reads as a fault (error) since it's
+ *  the one state that needs a registrar's note read back to the family;
+ *  "in_review" and "approved" mirror the enrollment map's warning/success
+ *  split so a registrar reads the same colours the same way across pages. */
+export const STUDENT_APPLICATION_STATUS_MAP = {
+  submitted:  { label: "Submitted",  variant: "warning", icon: "ti-inbox" },
+  in_review:  { label: "In Review",  variant: "info",    icon: "ti-eye" },
+  approved:   { label: "Approved",   variant: "success", icon: "ti-circle-check" },
+  rejected:   { label: "Rejected",   variant: "error",   icon: "ti-circle-x" },
+};
+
 /** Audit trail — log.status */
 export const AUDIT_STATUS_MAP = {
   success: { label: "Success", variant: "success", icon: "ti-circle-check" },

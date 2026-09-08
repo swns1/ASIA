@@ -15,15 +15,27 @@ const IDENTITY_REFRESH_URL =
 // rather than the single `detail` string used for 403s. Flatten that shape into
 // one readable line so callers get the real reason instead of axios's generic
 // "Request failed with status code 400".
+//
+// Recursive, not just one level deep: a serializer built from nested child
+// serializers (e.g. intake's ApplicantSubmissionSerializer — { student: {},
+// household: {}, guardians: [] }) reports errors in the same nested shape —
+// { student: { first_name: ["This field is required."] } }, or, for a
+// many=True child, an array of per-item objects. A shallow version of this
+// (Array/string only) silently returned null for anything nested, so the
+// generic axios message showed instead of the real reason — see
+// apiClient.test.jsx's "nested validation errors" test.
+function flattenErrorMessages(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(flattenErrorMessages);
+  if (value && typeof value === "object") return Object.values(value).flatMap(flattenErrorMessages);
+  return [];
+}
+
 function extractValidationMessage(data) {
   if (!data || typeof data !== "object") return null;
   if (typeof data.detail === "string") return data.detail;
 
-  const messages = [];
-  for (const value of Object.values(data)) {
-    if (Array.isArray(value)) messages.push(...value.map(String));
-    else if (typeof value === "string") messages.push(value);
-  }
+  const messages = flattenErrorMessages(data);
   return messages.length ? messages.join(" ") : null;
 }
 
@@ -72,7 +84,21 @@ function refreshAccessToken() {
   return refreshPromise;
 }
 
-export function createApiClient({ baseURL, timeout = 10000, withCredentials = false }) {
+export function createApiClient({
+  baseURL,
+  timeout = 10000,
+  withCredentials = false,
+  // Public, unauthenticated clients (the applicant intake flow — see
+  // api/applyApi.js) set this false. They carry no staff access_token and
+  // have no refresh cookie, so a 401 there means "this session/token was
+  // rejected" — a screen to render, not a session to recover. Left true,
+  // the default 401 handling below would still try a silent refresh (which
+  // is guaranteed to fail and burns identity-service's throttle for
+  // nothing) and then hard-navigate to /login via window.location.href,
+  // wiping whatever an applicant had typed with no warning. See
+  // apiClient.test.jsx's "never navigates" test for the regression guard.
+  redirectOnAuthFailure = true,
+}) {
   const client = axios.create({ baseURL, timeout, withCredentials });
 
   client.interceptors.request.use((config) => {
@@ -85,7 +111,7 @@ export function createApiClient({ baseURL, timeout = 10000, withCredentials = fa
     (response) => response,
     async (error) => {
       const original = error.config;
-      if (error.response?.status === 401 && !original._retry) {
+      if (error.response?.status === 401 && !original._retry && redirectOnAuthFailure) {
         original._retry = true;
         try {
           const newToken = await refreshAccessToken();

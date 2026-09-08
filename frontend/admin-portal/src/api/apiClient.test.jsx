@@ -148,6 +148,21 @@ describe("refresh mutex", () => {
     await expect(client.onError(alreadyRetried)).rejects.toBe(alreadyRetried);
     expect(postMock).not.toHaveBeenCalled();
   });
+
+  it("never refreshes or navigates for a client created with redirectOnAuthFailure: false", async () => {
+    // The guard rail for the public applicant-intake client (api/applyApi.js):
+    // a 401 there must be a plain rejection the caller handles itself, never
+    // a silent refresh attempt (guaranteed to fail — no refresh cookie) and
+    // never window.location.href, which would wipe an in-progress form.
+    const { createApiClient } = await import("./apiClient");
+    const client = createApiClient({ baseURL: "http://localhost:8000/api", redirectOnAuthFailure: false });
+    const error = unauthorized();
+
+    await expect(client.onError(error)).rejects.toBe(error);
+
+    expect(postMock).not.toHaveBeenCalled();
+    expect(hrefAssignments).toEqual([]);
+  });
 });
 
 describe("error message rewriting", () => {
@@ -171,6 +186,29 @@ describe("error message rewriting", () => {
 
     await expect(client.onError(error)).rejects.toBe(error);
     expect(error.message).toBe("Must be 12 digits. Invalid.");
+  });
+
+  it("flattens nested DRF field errors from a serializer built of child serializers", async () => {
+    // intake's ApplicantSubmissionSerializer (student/household/guardians as
+    // nested serializers, not flat fields) is the first caller in the app to
+    // produce this shape — a flat-only flattener silently returned null for
+    // it, so the generic axios message showed instead of the real reason.
+    const [client] = await freshClients(1);
+    const error = {
+      response: {
+        status: 400,
+        data: {
+          student: { first_name: ["This field is required."] },
+          // many=True child serializers report one object per list item —
+          // must be handled too, not just a single nested object.
+          guardians: [{}, { full_name: ["This field is required."] }],
+        },
+      },
+      config: { headers: {} },
+    };
+
+    await expect(client.onError(error)).rejects.toBe(error);
+    expect(error.message).toBe("This field is required. This field is required.");
   });
 
   it("labels a 5xx as a server error, not a network problem", async () => {

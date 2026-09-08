@@ -146,8 +146,16 @@ class BaseAuditLogMiddleware:
             return f"{subject_text} {be_word} {past_tense} successfully."
         return f"{subject_text} could not be {base_verb}d. Please review the submitted information."
 
+    def identify_user(self, request):
+        """Who to attribute this request to. Default: decode the Bearer
+        token, same as always. Overridable per service — see
+        student_service/audit.py for the one override that exists today,
+        which falls back to an unauthenticated applicant-intake request's
+        issuing staff member instead of "Unknown user"."""
+        return user_from_token(request)
+
     def insert_audit_log(self, request, response):
-        user_id, user_name, user_role = user_from_token(request)
+        user_id, user_name, user_role = self.identify_user(request)
         status_value = "success" if response.status_code < 400 else "failed"
         metadata = {
             "method": request.method,

@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "accounts",
     "students",
+    "intake",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -118,6 +119,36 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# django-cors-headers' own default allowlist (accept, authorization,
+# content-type, user-agent, x-csrftoken, x-requested-with) doesn't include
+# X-Applicant-Token, the header the public /api/apply/... endpoints use to
+# carry the applicant's session token (see intake/invites.py). Without this,
+# the browser's CORS preflight for that header is rejected client-side with
+# no server-side log at all — the request never even reaches Django.
+from corsheaders.defaults import default_headers  # noqa: E402 — grouped with the CORS block it extends
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-applicant-token")
+
+# The applicant intake flow can be served remotely (a link opened on the
+# applicant's own phone, not just a front-desk device on localhost), so its
+# origin isn't necessarily one of the admin-portal origins above. Used to
+# build the /apply/<invite_id> link handed back when a staff member issues
+# an invite (see intake/views.py::_build_apply_url).
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:5173")
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+
+# How long an issued invite (link + access code) stays usable before a
+# registrar has to re-issue it. 3 days covers both a walk-in applicant
+# finishing the same visit and a remote applicant who needs a day or two.
+APPLICATION_INVITE_TTL_SECONDS = int(os.environ.get("APPLICATION_INVITE_TTL_SECONDS", 3 * 24 * 3600))
+
+# How long the token minted at the code gate (X-Applicant-Token) stays valid
+# without an autosave renewing it. Short enough that a token copied out of
+# one browser's storage is useless soon after; long enough that filling in
+# six steps of a form doesn't time a real applicant out mid-way.
+APPLICANT_SESSION_TTL_SECONDS = int(os.environ.get("APPLICANT_SESSION_TTL_SECONDS", 2 * 3600))
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "shared.authentication.SingleSessionJWTAuthentication",
@@ -133,6 +164,14 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "120/minute",
         "ocr":  "10/minute",
+        # Public applicant-facing endpoints (intake/throttles.py) — each is
+        # keyed per-invite, not per-IP, so these rates bound one applicant's
+        # own traffic rather than the whole building's. A real form takes
+        # several minutes; a bad-code brute force or an autosave loop gone
+        # wrong is what these are for.
+        "applicant_verify": "10/minute",
+        "applicant_draft":  "60/minute",
+        "applicant_submit": "5/minute",
     },
     "DEFAULT_PAGINATION_CLASS": "student_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,

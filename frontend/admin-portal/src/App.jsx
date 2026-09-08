@@ -60,6 +60,8 @@ const TeacherAdvisoriesPage = lazyRoute(() => import("./pages/TeacherAdvisoriesP
 const TeacherSectionsPage   = lazyRoute(() => import("./pages/TeacherSectionsPage"));
 const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
 const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
+const StudentApplicationsPage = lazyRoute(() => import("./pages/StudentApplicationsPage"));
+const ApplicantFormPage       = lazyRoute(() => import("./pages/apply/ApplicantFormPage"));
 
 // The print documents are the clearest case for splitting: eight chunks that
 // the vast majority of sessions never open, and the ones that do pull in
@@ -154,6 +156,7 @@ export default function App() {
           <Route path="/school-forms"           element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
           <Route path="/teacher-advisories"     element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
           <Route path="/my-sections"            element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
+          <Route path="/student-applications"   element={<P roles={ACADEMIC_STAFF}><StudentApplicationsPage /></P>} />
         </Route>
 
         {/* ── Focused full-page forms ──
@@ -164,6 +167,14 @@ export default function App() {
         <Route path="/students/:id/edit"      element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
         <Route path="/enrollments/new"        element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
         <Route path="/enrollments/:id/edit"   element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
+
+        {/* PUBLIC — no StaffShell, no <P>. An applicant reaches this from a
+            staff-issued invite link with no login of their own; access is
+            gated by the invite's own code, not by session auth (see
+            intake/views.py and pages/apply/ApplicantFormPage.jsx). Covered
+            by the outer <Suspense fullPage> above like the other
+            chrome-less routes in this block. */}
+        <Route path="/apply/:inviteId" element={<ApplicantFormPage />} />
 
         {/* Report card is backend-scoped: guardians may open only their own
             child's (403 otherwise), so it stays reachable to any authenticated

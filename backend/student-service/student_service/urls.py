@@ -27,5 +27,11 @@ from shared.health import health_check
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check, name='health-check'),
+    # Before students.urls: both mount under api/ via include(), and Django
+    # falls through to the next include() when nothing in the first one
+    # matches, so order here only matters for keeping intake's own
+    # DefaultRouter root away from students.urls' — listing intake first
+    # avoids any ambiguity between the two routers' API-root views.
+    path('api/', include('intake.urls')),
     path('api/', include('students.urls')),
 ]
