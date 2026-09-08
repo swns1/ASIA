@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 import {
   hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
@@ -10,6 +10,7 @@ import { useSchoolYear } from "../context/SchoolYearContext";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { ConfirmDialog } from "./ui/Modal";
 import { Select } from "./FormField";
+import { springTransition } from "../utils/motion";
 import logo from "../assets/logo.png";
 
 // ── Global school-year filter: sets the default year every year-scoped
@@ -43,20 +44,28 @@ function SchoolYearPicker() {
   );
 }
 
+// Sections are ordered by how often a typical staff user reaches for them,
+// not by domain area — "Frequently used" pulls the four highest-traffic
+// destinations out of what used to be one flat 11-item "Main" section.
 const NAV = [
   {
-    section: "Main",
+    section: "Frequently used",
     items: [
-      { label: "Dashboard",         icon: "ti-layout-dashboard",  path: "/dashboard"           },
-      { label: "Students",          icon: "ti-users",             path: "/students"            },
+      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"   },
+      { label: "Students",    icon: "ti-users",            path: "/students"    },
+      { label: "Enrollments", icon: "ti-clipboard-list",   path: "/enrollments" },
+      { label: "Grades",      icon: "ti-chart-bar",        path: "/grades",      allowedRoles: GRADE_ROLES },
+    ],
+  },
+  {
+    section: "Academics",
+    items: [
       { label: "Applications",      icon: "ti-user-plus",         path: "/student-applications", allowedRoles: ACADEMIC_STAFF },
-      { label: "Enrollments",       icon: "ti-clipboard-list",    path: "/enrollments"         },
       { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: GRADE_ROLES },
       { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },
-      { label: "Grades",            icon: "ti-chart-bar",         path: "/grades",             allowedRoles: GRADE_ROLES },
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
-      { label: "School Forms", icon: "ti-forms", path: "/school-forms" },
+      { label: "School Forms",      icon: "ti-forms",             path: "/school-forms"        },
       { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: GRADE_ROLES },
     ],
   },
@@ -70,12 +79,14 @@ const NAV = [
     ],
   },
   {
-    section: "Settings",
+    section: "Admin",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       { label: "Users",              icon: "ti-user-cog",         path: "/users",             allowedRoles: STAFF_ADMIN },
       { label: "Audit Trail",        icon: "ti-shield-check",     path: "/audit-trail",        allowedRoles: STAFF_ADMIN },
       { label: "Billing Settings",   icon: "ti-settings",         path: "/settings",           allowedRoles: BILLING_ROLES },
-      { label: "Grading Settings",   icon: "ti-report-analytics", path: "/grading-templates",  allowedRoles: GRADE_ROLES },
+      { label: "Grading Setup",      icon: "ti-report-analytics", path: "/grading-templates",  allowedRoles: GRADE_ROLES },
       { label: "Teacher Advisories", icon: "ti-user-check",       path: "/teacher-advisories", allowedRoles: ACADEMIC_STAFF },
     ],
   },
@@ -90,6 +101,20 @@ export default function Sidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const [showLogout, setShowLogout] = useState(false);
+  // Sections marked `defaultCollapsed` (currently just "Admin") start closed;
+  // this is the only per-section collapse state — independent of the
+  // whole-rail `collapsed` prop below.
+  const [collapsedSections, setCollapsedSections] = useState(
+    () => new Set(NAV.filter((g) => g.defaultCollapsed).map((g) => g.section))
+  );
+  function toggleSection(section) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }
 
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   // Inside the mobile drawer there's room for labels, so collapse only applies
@@ -159,31 +184,36 @@ export default function Sidebar({
             <aside> exposes a "complementary" role, so labelling it there left
             the navigation landmark unnamed. */}
         <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">
-          {navGroups.map((group) => (
-            <div key={group.section} className="mb-1.5">
-              {showLabels && (
-                <div className="px-2.5 pb-1 pt-2.5 text-xs font-bold uppercase tracking-[0.1em] text-neutral-500">
-                  {group.section}
-                </div>
-              )}
-              {group.items.map((item) => {
-                const active =
-                  location.pathname === item.path ||
-                  location.pathname.startsWith(item.path + "/");
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    aria-current={active ? "page" : undefined}
-                    title={showLabels ? undefined : item.label}
-                    className={[
-                      "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                      showLabels ? "" : "justify-center",
-                      active
-                        ? "bg-brand-100 font-semibold text-brand-600 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-brand-500"
-                        : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
-                    ].join(" ")}
-                  >
+          {navGroups.map((group) => {
+            // A collapsible section only ever collapses when labels are
+            // showing — in icon-only rail mode there's no header to click,
+            // so its items always render flat rather than disappearing.
+            const isOpen = !group.collapsible || !showLabels || !collapsedSections.has(group.section);
+
+            const items = group.items.map((item) => {
+              const active =
+                location.pathname === item.path ||
+                location.pathname.startsWith(item.path + "/");
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  aria-current={active ? "page" : undefined}
+                  title={showLabels ? undefined : item.label}
+                  className={[
+                    "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                    showLabels ? "" : "justify-center",
+                    active ? "font-semibold text-brand-600" : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
+                  ].join(" ")}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="sidebar-active-pill"
+                      transition={springTransition}
+                      className="absolute inset-0 rounded-md bg-brand-100"
+                    />
+                  )}
+                  <span className="relative flex items-center gap-2.5">
                     <i
                       className={`ti ${item.icon} w-5 shrink-0 text-center text-[16px]`}
                       aria-hidden="true"
@@ -191,11 +221,59 @@ export default function Sidebar({
                     {showLabels ? <span className="truncate">{item.label}</span> : (
                       <span className="sr-only">{item.label}</span>
                     )}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+                  </span>
+                  {active && (
+                    <span
+                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-brand-500"
+                      aria-hidden="true"
+                    />
+                  )}
+                </Link>
+              );
+            });
+
+            return (
+              <div key={group.section} className="mb-1.5">
+                {showLabels && (
+                  group.collapsible ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(group.section)}
+                      aria-expanded={isOpen}
+                      className="focus-ring flex w-full items-center justify-between rounded-md px-2.5 pb-1 pt-2.5 text-xs font-bold uppercase tracking-[0.1em] text-neutral-500 hover:text-brand-600"
+                    >
+                      <span>{group.section}</span>
+                      <i
+                        className="ti ti-chevron-right text-[12px] transition-transform duration-200"
+                        style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ) : (
+                    <div className="px-2.5 pb-1 pt-2.5 text-xs font-bold uppercase tracking-[0.1em] text-neutral-500">
+                      {group.section}
+                    </div>
+                  )
+                )}
+                {showLabels && group.collapsible ? (
+                  <motion.div
+                    initial={false}
+                    animate={isOpen ? "open" : "closed"}
+                    variants={{
+                      open: { height: "auto", opacity: 1 },
+                      closed: { height: 0, opacity: 0 },
+                    }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    {items}
+                  </motion.div>
+                ) : (
+                  items
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Collapse toggle — desktop only; the drawer closes instead. */}

@@ -47,63 +47,45 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="flex w-full overflow-hidden"
-      style={{ height: "100vh", fontFamily: "'DM Sans', sans-serif" }}
-    >
+    <div className="login-stage">
       <style>{`
+        .login-stage{display:flex;width:100%;min-height:100vh;overflow:hidden;font-family:'DM Sans',sans-serif;}
+        .login-brand{width:420px;flex-shrink:0;background:#180c0c;display:flex;flex-direction:column;justify-content:space-between;padding:48px;position:relative;overflow:hidden;}
+        .login-dotgrid{position:absolute;inset:0;background-image:radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);background-size:20px 20px;pointer-events:none;}
+        .login-glow-a{position:absolute;bottom:-90px;left:-70px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle, rgba(224,49,49,0.26) 0%, transparent 70%);pointer-events:none;animation:loginDriftA 9s ease-in-out infinite;}
+        .login-glow-b{position:absolute;top:-60px;right:-50px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle, rgba(224,49,49,0.09) 0%, transparent 70%);pointer-events:none;animation:loginDriftB 11s ease-in-out infinite;}
+        @keyframes loginDriftA{0%,100%{transform:translate(0,0) scale(1);opacity:.85}50%{transform:translate(14px,-10px) scale(1.06);opacity:1}}
+        @keyframes loginDriftB{0%,100%{transform:translate(0,0) scale(1);opacity:.7}50%{transform:translate(-10px,8px) scale(1.1);opacity:1}}
+        .login-headline-line{display:block;opacity:0;transform:translateY(10px);animation:loginLineIn .5s ease-out forwards;}
+        .login-headline-line:nth-child(1){animation-delay:.05s}
+        .login-headline-line:nth-child(2){animation-delay:.16s}
+        .login-headline-line:nth-child(3){animation-delay:.27s}
+        .login-headline-line:nth-child(4){animation-delay:.38s}
+        @keyframes loginLineIn{to{opacity:1;transform:translateY(0)}}
+        .login-status-dot{animation:loginDotPulse 2.2s ease-out infinite;}
+        @keyframes loginDotPulse{0%{box-shadow:0 0 0 0 rgba(76,175,80,.55)}70%{box-shadow:0 0 0 7px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
+        .login-submit{position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s;}
+        .login-submit:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(224,49,49,0.38);}
+        .login-submit::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(115deg,transparent,rgba(255,255,255,.35),transparent);animation:loginSweep 3.6s ease-in-out infinite;}
+        @keyframes loginSweep{0%{left:-60%}45%{left:130%}100%{left:130%}}
+        @media (max-width: 768px){
+          .login-stage{flex-direction:column;height:auto;}
+          .login-brand{width:100%;padding:28px 24px;}
+          .login-brand .login-sub{display:none;}
+          .login-brand h1{font-size:26px;margin-bottom:8px;}
+          .login-brand-bottom{margin-top:20px;}
+        }
+        @media (prefers-reduced-motion: reduce){
+          .login-glow-a,.login-glow-b,.login-headline-line,.login-status-dot,.login-submit::after{animation:none !important;}
+          .login-headline-line{opacity:1;transform:none;}
+        }
       `}</style>
 
       {/* Left: Brand panel */}
-      <div
-        style={{
-          width: 420,
-          flexShrink: 0,
-          background: "#180c0c",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          padding: 48,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: -90,
-            left: -70,
-            width: 300,
-            height: 300,
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(224,49,49,0.26) 0%, transparent 70%)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: -60,
-            right: -50,
-            width: 200,
-            height: 200,
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(224,49,49,0.09) 0%, transparent 70%)",
-            pointerEvents: "none",
-          }}
-        />
+      <div className="login-brand">
+        <div className="login-dotgrid" />
+        <div className="login-glow-a" />
+        <div className="login-glow-b" />
 
         <div style={{ position: "relative" }}>
           <div
@@ -159,15 +141,13 @@ export default function LoginPage() {
               letterSpacing: "-0.01em",
             }}
           >
-            Academic
-            <br />
-            System for
-            <br />
-            Integrated
-            <br />
-            Administration
+            <span className="login-headline-line">Academic</span>
+            <span className="login-headline-line">System for</span>
+            <span className="login-headline-line">Integrated</span>
+            <span className="login-headline-line">Administration</span>
           </h1>
           <p
+            className="login-sub"
             style={{
               fontSize: 14,
               // was 0.36 — measured 3.30:1, below the 4.5:1 minimum
@@ -181,7 +161,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div style={{ position: "relative" }}>
+        <div className="login-brand-bottom" style={{ position: "relative" }}>
           <div
             style={{
               display: "inline-flex",
@@ -194,6 +174,7 @@ export default function LoginPage() {
             }}
           >
             <span
+              className="login-status-dot"
               style={{
                 width: 7,
                 height: 7,
@@ -526,6 +507,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
+              className="login-submit"
               style={{
                 width: "100%",
                 background: loading
@@ -541,18 +523,6 @@ export default function LoginPage() {
                 cursor: loading ? "not-allowed" : "pointer",
                 letterSpacing: "0.02em",
                 boxShadow: "0 4px 20px rgba(224,49,49,0.28)",
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                if (loading) return;
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow =
-                  "0 8px 28px rgba(224,49,49,0.38)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 20px rgba(224,49,49,0.28)";
               }}
             >
               {loading ? "Signing in…" : "Sign in to your account"}

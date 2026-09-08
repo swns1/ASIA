@@ -11,5 +11,19 @@
       "Read(//tmp/**)",
       "Read(//c/Users/WINDOW~1/AppData/Local/Temp/claude/c--SLIS-Prototype/e3b63314-2346-4f59-8bf2-e5ff94c87297/scratchpad/**)"
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "semgrep@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "sentry@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true
   }
 }

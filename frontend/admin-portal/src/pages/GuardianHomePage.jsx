@@ -4,22 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getCurrentUser } from "../utils/auth";
-
-const LEVEL_LABELS = {
-  nursery: "Nursery", kindergarten: "Kindergarten", elementary: "Elementary",
-  junior_highschool: "Junior High School", senior_highschool: "Senior High School",
-};
-
-const STATUS_META = {
-  enrolled:  { label: "Enrolled",  color: "#2e6b0d", bg: "#e8f5e0" },
-  pending:   { label: "Pending",   color: "#854f0b", bg: "#faeeda" },
-  completed: { label: "Completed", color: "#1455a0", bg: "#e3f0fd" },
-  cancelled: { label: "Cancelled", color: "#5c5752", bg: "#f0ede8" },
-};
-
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-);
+import Card from "../components/ui/Card";
+import Skeleton from "../components/ui/Skeleton";
+import { StatusBadge } from "../components/ui/Badge";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { LEVEL_LABELS } from "../constants/schoolLevels";
 
 // Pick the enrollment to feature per child: prefer an active (enrolled/pending)
 // one, else the most recent by school year / id.
@@ -83,81 +72,89 @@ export default function GuardianHomePage() {
     <>
       <motion.div
         initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
-        style={{ marginBottom: 24 }}
+        className="mb-6"
       >
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#1a0a0a", letterSpacing: "-0.01em" }}>
+        <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
           Hello{user?.name ? `, ${user.name.split(" ")[0]}` : ""} 👋
         </h1>
-        <p style={{ fontSize: 14, color: "#8a6a6a", marginTop: 4 }}>
+        <p className="mt-1 text-sm text-neutral-500">
           Here are your children's academic records. Select a child to view grades, attendance, and billing.
         </p>
       </motion.div>
 
       {error && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
-          <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-error-500/30 bg-error-50 px-4 py-3 text-sm text-error-500">
+          <i className="ti ti-alert-circle text-base" aria-hidden="true" />{error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} style={{ background: "white", borderRadius: 16, padding: 22, border: "1px solid #f5eaea" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                <Sk w={48} h={48} r={12} />
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}><Sk w="70%" h={15} /><Sk w="40%" h={12} /></div>
+            <div key={i} className="rounded-2xl border border-neutral-200 bg-white p-5">
+              <div className="mb-4 flex items-center gap-3">
+                <Skeleton width={48} height={48} radius={12} />
+                <div className="flex-1 space-y-2">
+                  <Skeleton width="70%" height={15} />
+                  <Skeleton width="40%" height={12} />
+                </div>
               </div>
-              <Sk w="100%" h={40} r={10} />
+              <Skeleton width="100%" height={40} radius={10} />
             </div>
           ))}
         </div>
       ) : children.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "72px 16px", background: "white", borderRadius: 16, border: "1px solid #f5eaea" }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-            <i className="ti ti-users" style={{ fontSize: 24, color: "#8a6a6a" }} />
+        <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-16 text-center">
+          <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--color-brand-100),var(--color-brand-200))]">
+            <i className="ti ti-users text-2xl text-neutral-500" aria-hidden="true" />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#7a5050" }}>No linked students yet</div>
-          <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 6, maxWidth: 380, marginInline: "auto", lineHeight: 1.6 }}>
+          <div className="text-md font-semibold text-neutral-700">No linked students yet</div>
+          <div className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-neutral-500">
             Your account hasn't been linked to a student record yet. Please contact the school's registrar or administrator to complete the link.
           </div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {children.map((child, idx) => {
             const e = child.primary;
-            const st = STATUS_META[e.enrollment_status] || STATUS_META.enrolled;
             return (
               <motion.div
                 key={child.student_id}
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: 0.05 + idx * 0.05 }}
-                onClick={() => navigate(`/guardian/child/${e.enrollment_id}`)}
-                whileHover={{ y: -3, boxShadow: "0 10px 30px rgba(224,49,49,0.12)" }}
-                style={{ background: "white", borderRadius: 16, padding: 22, border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.06)", cursor: "pointer" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: "#c92a2a", flexShrink: 0 }}>
-                    {child.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                <Card
+                  interactive
+                  onClick={() => navigate(`/guardian/child/${e.enrollment_id}`)}
+                  className="w-full text-left transition-shadow hover:shadow-[0_10px_30px_rgba(224,49,49,0.12)]"
+                >
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-lg font-bold text-brand-600">
+                      {child.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-md font-bold text-neutral-900">{child.name}</div>
+                      {child.lrn && <div className="mt-0.5 font-mono text-xs text-neutral-500">LRN {child.lrn}</div>}
+                    </div>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.name}</div>
-                    {child.lrn && <div style={{ fontSize: 11.5, color: "#8a6a6a", fontFamily: "monospace", marginTop: 2 }}>LRN {child.lrn}</div>}
-                  </div>
-                </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10, padding: "10px 14px" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{e.grade_level} · {e.section}</div>
-                    <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</div>
+                  <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-900">{e.grade_level} · {e.section}</div>
+                      <div className="mt-0.5 text-xs text-neutral-500">{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</div>
+                    </div>
+                    <StatusBadge
+                      status={e.enrollment_status}
+                      map={ENROLLMENT_STATUS_MAP}
+                      dot
+                      className={e.enrollment_status === "pending" ? "animate-pulse" : undefined}
+                    />
                   </div>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 99, background: st.bg, color: st.color }}>
-                    {st.label}
-                  </span>
-                </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginTop: 14, fontSize: 12.5, fontWeight: 600, color: "#c92a2a" }}>
-                  View records <i className="ti ti-arrow-right" style={{ fontSize: 14 }} />
-                </div>
+                  <div className="mt-3.5 flex items-center justify-end gap-1.5 text-sm font-semibold text-brand-600">
+                    View records <i className="ti ti-arrow-right text-base" aria-hidden="true" />
+                  </div>
+                </Card>
               </motion.div>
             );
           })}

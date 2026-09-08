@@ -67,6 +67,83 @@ function fromPayload(payload) {
   };
 }
 
+// Fixed offsets rather than randomized on each mount — this is a one-time
+// celebratory burst, not a system that needs to look different every time.
+const CONFETTI = [
+  { w: 8, h: 8,  color: "#e03131", x: -70, y: -40, r: 120  },
+  { w: 6, h: 12, color: "#ff9800", x: 60,  y: -55, r: -80  },
+  { w: 7, h: 7,  color: "#7c3aed", x: -90, y: 20,  r: 200  },
+  { w: 6, h: 10, color: "#2196f3", x: 80,  y: 10,  r: -150 },
+  { w: 7, h: 7,  color: "#4caf50", x: -30, y: -80, r: 90   },
+  { w: 6, h: 11, color: "#e03131", x: 40,  y: -85, r: -100 },
+  { w: 6, h: 6,  color: "#2e6b0d", x: -15, y: 90,  r: 60   },
+  { w: 7, h: 11, color: "#ff9800", x: 20,  y: 95,  r: -60  },
+];
+
+// The kiosk's own success screen — the emotional payoff moment for a family
+// finishing an application — rather than the generic app-wide
+// FullPageMessage card, so it stays inside this page's cream/red identity
+// instead of switching to neutral chrome for one screen.
+function KioskSuccessScreen({ reference, mode, countdown, onDone }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="relative w-full max-w-md rounded-3xl border border-[#fde2de] bg-white p-9 text-center shadow-2xl">
+        <div className="pointer-events-none absolute left-1/2 top-16">
+          {CONFETTI.map((c, i) => (
+            <motion.span
+              key={i}
+              className="absolute rounded-sm"
+              style={{ width: c.w, height: c.h, background: c.color }}
+              initial={{ opacity: 0, x: 0, y: 0, rotate: 0 }}
+              animate={{ opacity: [0, 1, 0], x: c.x, y: c.y, rotate: c.r }}
+              transition={{ duration: 1.1, delay: 0.4, ease: "easeOut" }}
+            />
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 18 }}
+          className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-success-50"
+        >
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+            <motion.path
+              d="M4 12.5l5.5 5.5L20 6.5"
+              stroke="var(--color-success-500)"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.45, delay: 0.35, ease: "easeOut" }}
+            />
+          </svg>
+        </motion.div>
+
+        <h1 className="text-2xl font-bold text-[#1a0a0a]">Application submitted</h1>
+        <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
+          Reference <strong className="text-[#1a0a0a]">{reference}</strong>. Please hand the device back to a staff
+          member, who will review your application and follow up with next steps.
+        </p>
+
+        {mode === "walk_in" && (
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
+            <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
+              <div
+                className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
+                style={{ width: `${(countdown / SUCCESS_RETURN_SECONDS) * 100}%` }}
+              />
+            </div>
+            <Button variant="secondary" onClick={onDone} className="mt-3">Done</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ApplicantFormPage() {
   const { inviteId } = useParams();
   const navigate = useNavigate();
@@ -510,25 +587,7 @@ export default function ApplicantFormPage() {
       )}
 
       {phase === "success" && (
-        <FullPageMessage
-          icon="ti-circle-check"
-          tone="brand"
-          title="Application submitted"
-          message={
-            <>
-              Reference <strong>{reference}</strong>. Please hand the device back to a staff member,
-              who will review your application and follow up with next steps.
-              {mode === "walk_in" && (
-                <span className="mt-2 block text-xs text-[#7a5050]">
-                  Returning to the start in {countdown}s…
-                </span>
-              )}
-            </>
-          }
-          actions={mode === "walk_in" ? (
-            <Button variant="secondary" onClick={resetToGate}>Done</Button>
-          ) : undefined}
-        />
+        <KioskSuccessScreen reference={reference} mode={mode} countdown={countdown} onDone={resetToGate} />
       )}
 
       {phase === "expired" && (
