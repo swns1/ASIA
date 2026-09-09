@@ -1,7 +1,7 @@
 // grading.js
 //
 // Shared grading-period helpers, generalized from near-identical copies in
-// SF9PrintPage.jsx, SF10PrintPage.jsx, and GradeSlipPrintPage.jsx. Those files
+// SF9PrintPage.jsx and SF10PrintPage.jsx. Those files
 // each keyed their period config as Nursery/Kindergarten/Elementary/JHS/SHS,
 // which never matched the real Enrollment.school_level values
 // (nursery/kindergarten/elementary/junior_highschool/senior_highschool) — every

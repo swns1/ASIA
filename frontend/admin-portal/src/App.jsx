@@ -67,7 +67,6 @@ const ApplicantFormPage       = lazyRoute(() => import("./pages/apply/ApplicantF
 // the vast majority of sessions never open, and the ones that do pull in
 // html2pdf.js (already async) on top.
 const CORPrintPage       = lazyRoute(() => import("./pages/print/CORPrintPage"));
-const GradeSlipPrintPage = lazyRoute(() => import("./pages/print/GradeSlipPrintPage"));
 const ReceiptPrintPage   = lazyRoute(() => import("./pages/print/ReceiptPrintPage"));
 const InvoicePrintPage   = lazyRoute(() => import("./pages/print/InvoicePrintPage"));
 const SF1PrintPage       = lazyRoute(() => import("./pages/print/SF1PrintPage"));
@@ -183,7 +182,6 @@ export default function App() {
 
         {/* ── Print / PDF documents (no shell by design) ── */}
         <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
-        <Route path="/print/grade-slip/:enrollmentId" element={<P roles={STAFF_ALL}><GradeSlipPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
         <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />

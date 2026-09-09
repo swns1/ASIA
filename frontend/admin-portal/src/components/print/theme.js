@@ -1,8 +1,8 @@
 // theme.js
 //
 // Shared color/font/logo tokens for every printable document (SF1/SF2/SF9/SF10,
-// COR, Grade Slip, Invoice, Receipt, Report Card). Generalizes the "Family A"
-// maroon palette that CORPrintPage/GradeSlipPrintPage/InvoicePrintPage/
+// COR, Invoice, Receipt, Report Card). Generalizes the "Family A"
+// maroon palette that CORPrintPage/InvoicePrintPage/
 // ReceiptPrintPage/ReportCardPage already shared by copy-paste, and replaces
 // the unrelated navy (SF9) and purple (SF10) palettes those two files used to
 // have of their own.

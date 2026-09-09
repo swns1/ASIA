@@ -11,6 +11,8 @@ import { PrintShell, PrintLoading } from "../components/print/PrintShell";
 import { PrintLetterhead } from "../components/print/PrintLetterhead";
 import { InfoGrid, InfoItem } from "../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../components/print/SignatureBlock";
+import { StatusBadge } from "../components/print/StatusBadge";
+import { ENROLLMENT_STATUS_META } from "../components/print/statusMeta";
 
 const LEVEL_LABELS = {
   nursery: "Nursery", kindergarten: "Kindergarten", elementary: "Elementary",
@@ -120,6 +122,10 @@ export default function ReportCardPage() {
           <InfoItem label="School Level" value={LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} />
           {enrollment.strand && <InfoItem label="Strand" value={enrollment.strand} />}
           {enrollment.semester && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
+          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</span>
+            <StatusBadge status={enrollment.enrollment_status} meta={ENROLLMENT_STATUS_META} defaultKey="enrolled" />
+          </div>
         </InfoGrid>
 
         {subjects.length === 0 ? (
@@ -205,11 +211,28 @@ export default function ReportCardPage() {
           </table>
         )}
 
+        <div style={{ display: "flex", gap: 12, marginBottom: 28 }}>
+          {[
+            { label: "Subjects", value: subjects.length, color: C.dark,  bg: C.bg },
+            { label: "Passed",   value: subjects.filter((s) => s.overall_remarks === "passed").length, color: C.green, bg: C.greenBg },
+            { label: "Failed",   value: subjects.filter((s) => s.overall_remarks === "failed").length, color: C.red,   bg: C.redBg },
+            { label: "GWA",      value: overall_gpa != null ? overall_gpa.toFixed(2) : "—", color: overall_gpa != null ? gradeColor(overall_gpa) : C.muted, bg: C.redBg, bold: true },
+          ].map(({ label, value, color, bg, bold }) => (
+            <div key={label} style={{ flex: 1, background: bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: bold ? 20 : 18, fontWeight: 800, color }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
         <SignatureRow>
-          <GeneratedStamp />
+          <SignatureBlock role="Class Adviser" />
           <SignatureBlock role="Registrar's Signature over Printed Name" />
           <SignatureBlock role="School Principal's Signature" />
         </SignatureRow>
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <GeneratedStamp />
+        </div>
       </PrintShell>
     </>
   );

@@ -113,7 +113,7 @@ function RiskTrendChart({ points }) {
   if (!points?.length) return null;
 
   const W = 760;
-  const H = 240;
+  const H = 190;
   const PAD_L = 40;
   const PAD_R = 20;
   const PAD_T = 16;
@@ -134,7 +134,7 @@ function RiskTrendChart({ points }) {
   const labelStep = Math.max(1, Math.ceil(points.length / 8));
 
   return (
-    <div className="relative w-full">
+    <div className="relative mx-auto w-full max-w-5xl">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ background: "#fdfcfb", borderRadius: 10 }} role="img">
         {[25, 50, 75].map((mark) => (
           <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke="#f0e4e4" />
@@ -648,7 +648,7 @@ export default function AnalyticsPage() {
                         />
                       </div>
                     </div>
-                    <div className="p-5">
+                    <div className="mx-auto w-full max-w-5xl p-5">
                       {viewUsesBands(chartView) && <RiskLegend counts={counts} className="mb-4" />}
                       <RiskChart view={chartView} run={risk} onSelectStudent={openStudentFromChart} />
                       <p className="mt-3 text-xs text-neutral-500">

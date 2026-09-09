@@ -3,7 +3,7 @@
 // Shared DepEd-style letterhead, generalized from SF1PrintPage.jsx's 3-column
 // header (region/division left, centered logo+title, spacer right) for the
 // `deped` variant, and from the single-row logo+centered-text header shared
-// by CORPrintPage/GradeSlipPrintPage/InvoicePrintPage/ReceiptPrintPage/
+// by CORPrintPage/InvoicePrintPage/ReceiptPrintPage/
 // ReportCardPage for the `standard` variant. No official DepEd seal graphic
 // exists in this repo — both variants stay text-only ("Republic of the
 // Philippines / Department of Education"), paired with the school's own

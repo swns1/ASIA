@@ -79,9 +79,9 @@ function RiskMixChart({ summary, total }) {
   if (!total) return <NoData />;
 
   const W = 760;
-  const H = 150;
-  const BAR_Y = 26;
-  const BAR_H = 56;
+  const H = 120;
+  const BAR_Y = 18;
+  const BAR_H = 46;
 
   const segments = RISK_LEVELS.filter((level) => (counts[level] ?? 0) > 0).reduce((acc, level) => {
     const count = counts[level];
@@ -183,8 +183,8 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
   const visible = rows.slice(0, 12);
   const W = 760;
   const LABEL_W = 150;
-  const ROW_H = 30;
-  const BAR_H = 17;
+  const ROW_H = 24;
+  const BAR_H = 14;
   const H = visible.length * ROW_H + 30;
   const plotW = W - LABEL_W - 40;
   const maxTotal = Math.max(...visible.map((r) => r.total), 1);
@@ -260,8 +260,8 @@ function ReasonChart({ summary }) {
 
   const W = 760;
   const LABEL_W = 230;
-  const ROW_H = 32;
-  const BAR_H = 18;
+  const ROW_H = 26;
+  const BAR_H = 15;
   const H = rows.length * ROW_H + 24;
   const plotW = W - LABEL_W - 50;
   const max = Math.max(...rows.map((r) => r.count), 1);
@@ -341,7 +341,7 @@ function GradeDistributionChart({ scores }) {
   });
 
   const W = 760;
-  const H = 320;
+  const H = 256;
   const PAD_L = 46;
   const PAD_R = 16;
   const PAD_T = 18;
@@ -468,7 +468,7 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
   }
 
   const W = 760;
-  const H = 380;
+  const H = 300;
   const PAD_L = 44;
   const PAD_R = 20;
   const PAD_T = 18;

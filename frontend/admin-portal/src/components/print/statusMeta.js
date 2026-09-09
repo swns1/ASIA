@@ -2,7 +2,7 @@
 //
 // Status-pill lookup tables consumed by StatusBadge.jsx. Split into its own
 // file (rather than living alongside the component) because these objects
-// are the same ones copy-pasted across CORPrintPage/GradeSlipPrintPage/
+// are the same ones copy-pasted across CORPrintPage/
 // ReportCardPage/InvoicePrintPage — generalized here — and mixing constants
 // with component exports in one file breaks React Fast Refresh.
 import { PRINT_COLORS } from "./theme";
