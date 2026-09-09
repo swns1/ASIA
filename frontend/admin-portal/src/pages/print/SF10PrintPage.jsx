@@ -207,7 +207,7 @@ export default function SF10PrintPage() {
               ? parseFloat((allFinals.reduce((a,b) => a+b, 0) / allFinals.length).toFixed(2))
               : null;
 
-            const gwaLabelSpan = 1 + cfg.cols.length + (isAnnual ? 0 : 1);
+            const gwaLabelSpan = cfg.cols.length + (isAnnual ? 0 : 1);
             const totalPresent = pP.reduce((a,b) => a+b, 0);
             const totalAbsent  = pA.reduce((a,b) => a+b, 0);
 
@@ -301,11 +301,13 @@ export default function SF10PrintPage() {
         )}
 
         <SignatureRow>
-          <GeneratedStamp />
           <SignatureBlock heading="Prepared by:" role="Class Adviser" caption="Signature over Printed Name / Date" />
           <SignatureBlock heading="Certified by:" role="Registrar" caption="Signature over Printed Name / Date" />
           <SignatureBlock heading="Noted by:" role="School Head / Principal" caption="Signature over Printed Name / Date" />
         </SignatureRow>
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <GeneratedStamp />
+        </div>
       </PrintShell>
     </>
   );

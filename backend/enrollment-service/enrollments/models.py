@@ -29,6 +29,8 @@ class Student(models.Model):
 
     status = models.CharField(max_length=20, default="active")
 
+    current_address = models.TextField()
+
     # Nullable FK to households, carried as a plain id (this service doesn't
     # model the households table). Students sharing one are siblings -- that is
     # how this system records the relationship, rather than in the

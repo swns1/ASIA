@@ -69,6 +69,7 @@ class StudentSummarySerializer(serializers.ModelSerializer):
             "sex",
             "birth_date",
             "status",
+            "current_address",
         )
 
     def get_full_name(self, obj):

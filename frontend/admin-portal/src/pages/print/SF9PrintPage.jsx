@@ -216,7 +216,7 @@ export default function SF9PrintPage() {
           </tbody>
           <tfoot>
             <tr style={{ background: C.redBg }}>
-              <td colSpan={cfg.cols.length + (isAnnual ? 1 : 2)}
+              <td colSpan={cfg.cols.length + (isAnnual ? 0 : 1)}
                 style={TD({ textAlign: "right", fontWeight: 800, fontSize: 11 })}>
                 General Average (GWA)
               </td>
