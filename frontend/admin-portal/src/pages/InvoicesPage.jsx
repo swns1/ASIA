@@ -11,8 +11,9 @@ import { pageVariants, modalVariants, springTransition } from "../utils/motion";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
+import { StatCard } from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import ErrorState from "../components/ui/ErrorState";
 import Pagination from "../components/Pagination";
 import { StatusBadge } from "../components/ui/Badge";
@@ -55,11 +56,13 @@ const SORT_OPTIONS = [
   { value: "-balance",      label: "Balance ↓" },
 ];
 
+// `tone` names the shared palette entry; the bg/color literals stay for the
+// inline plan pill on each list row until that moves to a shared Badge.
 const PLAN_META = {
-  monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd" },
-  quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0" },
-  semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd" },
-  annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8" },
+  monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd", tone:"info" },
+  quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0", tone:"success" },
+  semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd", tone:"accent" },
+  annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
 };
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
@@ -744,8 +747,6 @@ export default function InvoicesPage() {
     fetchInvoices(1, statusFilter, planFilter, inputVal, ordering);
   };
 
-  const handleKeyDown = (e) => { if (e.key === "Enter") handleSearch(); };
-
   const handleOrdering = (val) => {
     setOrdering(val);
     fetchInvoices(1, statusFilter, planFilter, search, val);
@@ -771,17 +772,28 @@ export default function InvoicesPage() {
     { label: "Void",    statusKey: "void",           value: summary.void,           icon: "ti-ban",          tone: "muted" },
   ];
 
+  // Tones come from the shared status map, so a chip lights up in the same
+  // colour as the stat card and row badge for that status.
   const statusChipOptions = [
-    { value: "all", label: "All" },
+    { value: "all", label: "All", tone: "brand", count: loading ? null : summary.total },
     ...["unpaid", "partially_paid", "paid", "void"].map((v) => ({
       value: v,
       label: INVOICE_STATUS_MAP[v]?.label ?? v,
+      tone: INVOICE_STATUS_MAP[v]?.variant ?? "brand",
+      // The chip's own status total, not the filtered row count — the same
+      // number its stat card shows. The badge appearing is also what widens
+      // the chip, which is what the layout spring animates.
+      count: loading ? null : summary[v],
     })),
   ];
 
   const planChipOptions = [
-    { value: "all", label: "All" },
-    ...Object.entries(PLAN_META).map(([value, m]) => ({ value, label: m.label })),
+    { value: "all", label: "All", tone: "brand" },
+    ...Object.entries(PLAN_META).map(([value, m]) => ({
+      value,
+      label: m.label,
+      tone: m.tone,
+    })),
   ];
 
   return (
@@ -817,6 +829,7 @@ export default function InvoicesPage() {
               value={s.value}
               icon={s.icon}
               iconTone={s.tone}
+              layout="horizontal"
               loading={loading}
               active={statusFilter === s.statusKey}
               onClick={() => {
@@ -829,85 +842,50 @@ export default function InvoicesPage() {
         </div>
 
         {/* Filters */}
-        <Card>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative min-w-[220px] flex-1">
-              <label htmlFor="invoice-search" className="sr-only">Search by invoice number</label>
-              <i
-                className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
-                aria-hidden="true"
-              />
-              <input
-                id="invoice-search"
-                type="search"
-                placeholder="Search by invoice number…"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="focus-ring h-10 w-full rounded-lg border-[1.5px] border-neutral-300 bg-white pl-10 pr-9 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-500 hover:border-brand-300"
-              />
-              {inputVal && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
-                >
-                  <i className="ti ti-x text-[13px]" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-
+        <FilterBar
+          searchInputId="invoice-search"
+          searchLabel="Search by invoice number"
+          searchPlaceholder="Search by invoice number…"
+          searchValue={inputVal}
+          onSearchChange={setInputVal}
+          onSearch={handleSearch}
+          onClearSearch={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
+          hasFilters={Boolean(hasActiveFilters)}
+          onClearFilters={handleClearAll}
+          extraControls={
             <div className="shrink-0">
               <label htmlFor="invoice-sort" className="sr-only">Sort invoices</label>
               <Select
                 id="invoice-sort"
                 value={ordering}
                 onChange={(e) => handleOrdering(e.target.value)}
-                className="h-10 w-[170px] py-0 text-sm font-semibold"
+                className="h-[42px] w-[170px] rounded-lg border-neutral-300 bg-white py-0 text-[13px] font-semibold"
               >
                 {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </Select>
             </div>
+          }
+        >
+          <FilterRow label="Status">
+            <ChipGroup
+              label="Filter by status"
+              options={statusChipOptions}
+              value={statusFilter}
+              onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering); }}
+            />
+          </FilterRow>
 
-            <Button variant="secondary" icon="ti-search" onClick={handleSearch}>Search</Button>
-
-            {hasActiveFilters && (
-              <Button variant="ghost" icon="ti-filter-off" onClick={handleClearAll}>
-                Clear filters
-              </Button>
-            )}
-          </div>
-
-          <hr className="my-4 border-neutral-200" />
-
-          <div className="space-y-3">
-            <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
-                Status
-              </div>
-              <ChipGroup
-                label="Filter by status"
-                options={statusChipOptions}
-                value={statusFilter}
-                onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering); }}
-              />
-            </div>
-            <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
-                Payment Plan
-              </div>
-              <ChipGroup
-                label="Filter by payment plan"
-                options={planChipOptions}
-                value={planFilter}
-                onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering); }}
-              />
-            </div>
-          </div>
-        </Card>
+          <FilterRow label="Payment Plan">
+            <ChipGroup
+              label="Filter by payment plan"
+              options={planChipOptions}
+              value={planFilter}
+              onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering); }}
+            />
+          </FilterRow>
+        </FilterBar>
 
         {/* Master / detail — stacks below lg, where a 360px + detail split has
             no room to breathe. */}

@@ -7,6 +7,9 @@ import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ui/ErrorState";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import { StatCard } from "../components/ui/Card";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
 import { modalVariants, springTransition } from "../utils/motion";
 
 
@@ -1091,40 +1094,6 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
   );
 }
 
-// ── Stat card — matches StudentsPage / SubjectsPage exactly ──────────────────
-function StatCard({ label, value, icon, color, bg, loading, isActive, onClick }) {
-  return (
-    <motion.div
-      onClick={onClick}
-      whileHover={{ boxShadow: isActive ? `0 8px 24px ${color}28` : "0 8px 24px rgba(0,0,0,0.08)" }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.16 }}
-      style={{
-        background: isActive ? bg : "white", borderRadius: 14, padding: "16px 20px",
-        border: `1.5px solid ${isActive ? color : "#f5eaea"}`, width: "100%",
-        display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
-        boxShadow: "0 2px 12px rgba(224,49,49,0.06)",
-        transition: "border-color 0.15s ease, background-color 0.15s ease",
-      }}
-    >
-      <div style={{
-        width: 42, height: 42, borderRadius: 12, background: isActive ? "white" : bg,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        transition: "background 0.15s",
-      }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 18, color }} />
-      </div>
-      <div>
-        {loading
-          ? <Sk w={40} h={20} r={4} />
-          : <div style={{ fontSize: 22, fontWeight: 700, color: isActive ? color : (value > 0 ? "#1a0a0a" : "#8a6a6a"), lineHeight: 1 }}>{value?.toLocaleString() ?? "—"}</div>
-        }
-        <div style={{ fontSize: 11, color: isActive ? color : "#8a6a6a", marginTop: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      </div>
-    </motion.div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
@@ -1267,8 +1236,6 @@ export default function EnrollmentsPage() {
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
         .page-btn:disabled { opacity:.3; cursor:not-allowed; }
-
-        .search-wrap:focus-within { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; }
       `}</style>
 
 
@@ -1297,244 +1264,102 @@ export default function EnrollmentsPage() {
           <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:18 }}>
 
             {/* ── Stat cards ── */}
-            <div style={{ display:"flex", gap:12 }}>
+            <div className="flex gap-3">
               {[
-                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     color:"#c92a2a", bg:"#fff0f0", status:"" },
-                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  color:"#2e6b0d", bg:"#e8f5e0", status:"enrolled" },
-                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   color:"#7a4a08", bg:"#fef3e2", status:"pending" },
-                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, color:"#1455a0", bg:"#e3f0fd", status:"completed" },
-                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, color:"#9b2020", bg:"#fde8e8", status:"cancelled" },
+                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     tone:"brand",   status:"" },
+                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  tone:"success", status:"enrolled" },
+                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   tone:"warning", status:"pending" },
+                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, tone:"info",    status:"completed" },
+                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, tone:"error",   status:"cancelled" },
               ].map((card, i) => (
-                <motion.div
-                  key={card.label}
-                  initial={isFirstRender ? { y: 14, opacity: 0 } : false}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? i * 0.06 : 0 }}
-                  style={{ flex:1, minWidth:0 }}
-                >
+                <div key={card.label} className="min-w-0 flex-1">
                   <StatCard
-                    {...card}
+                    label={card.label}
+                    icon={card.icon}
+                    iconTone={card.tone}
+                    value={card.value?.toLocaleString() ?? "—"}
                     loading={countsLoading}
-                    isActive={statusFilter === card.status}
+                    active={statusFilter === card.status}
                     onClick={() => setStatusFilter(statusFilter === card.status ? "" : card.status)}
+                    animate={isFirstRender}
+                    animateDelay={isFirstRender ? i * 0.06 : 0}
                   />
-                </motion.div>
+                </div>
               ))}
             </div>
 
             {/* ── Search + filters ── */}
-            <motion.div
-              initial={isFirstRender ? { opacity: 0, y: 8 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
-              style={{
-                background: "white", border: "1px solid #f5eaea",
-                borderRadius: 14, padding: "18px 20px",
-                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
-                display: "flex", flexDirection: "column", gap: 0,
-              }}
+            <FilterBar
+              animate={isFirstRender}
+              animateDelay={isFirstRender ? 0.22 : 0}
+              searchInputId="enrollment-search"
+              searchLabel="Search students"
+              searchPlaceholder="Search student name or section…"
+              searchValue={searchInput}
+              onSearchChange={setSearchInput}
+              onSearch={handleSearch}
+              onClearSearch={() => { setSearchInput(""); setSearch(""); }}
+              hasFilters={Boolean(hasFilters)}
+              onClearFilters={clearFilters}
             >
+              <FilterRow label="School Year">
+                <ChipGroup
+                  label="Filter by school year"
+                  value={schoolYear}
+                  onChange={setSchoolYear}
+                  options={schoolYearOptions.map((o) => ({
+                    ...o,
+                    icon: "ti-calendar",
+                    count: o.value !== "" && !loading ? pageMeta.count : null,
+                  }))}
+                />
+              </FilterRow>
 
-              {/* Row 1: Search + Search btn + Clear */}
-              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                <div className="search-wrap"
-                  style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
-                  <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a", flexShrink:0 }} />
-                  <input
-                    placeholder="Search student name or section…" aria-label="Search students"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }}
-                  />
-                  {searchInput && (
-                    <button onClick={() => { setSearchInput(""); setSearch(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}>
-                      <i className="ti ti-x" style={{ fontSize:13 }} />
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={handleSearch}
-                  style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s", flexShrink:0 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#c92a2a"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
-                  Search
-                </button>
-                <AnimatePresence>
-                  {hasFilters && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.88 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.88 }}
-                      transition={{ duration: 0.14 }}
-                      whileTap={{ scale: 0.93 }}
-                      onClick={clearFilters}
-                      style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-                      <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
+              <FilterRow label="School Level">
+                <ChipGroup
+                  label="Filter by school level"
+                  value={schoolLevel}
+                  onChange={setSchoolLevel}
+                  options={[
+                    { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand" },
+                    { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery" },
+                    { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
+                    { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary" },
+                    { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh" },
+                    { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh" },
+                  ]}
+                />
+              </FilterRow>
 
-              {/* Divider */}
-              <div style={{ height:1, background:"#f5eaea", margin:"14px 0" }} />
+              <CollapsibleFilterRow open={schoolLevel !== ""} label="Grade Level">
+                <ChipGroup
+                  label="Filter by grade level"
+                  stagger
+                  generation={schoolLevel}
+                  value={gradeLevel}
+                  onChange={setGradeLevel}
+                  options={gradeOptions.map((g) => ({
+                    value: g === "All Grades" ? "" : g,
+                    label: g,
+                  }))}
+                />
+              </CollapsibleFilterRow>
 
-              {/* Chip rows */}
-              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-
-                {/* Row 2: School Year chips */}
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
-                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                    {schoolYearOptions.map((o) => {
-                      const active = schoolYear === o.value;
-                      return (
-                        <motion.button key={o.value}
-                          layout
-                          initial={false}
-                          animate={{
-                            backgroundColor: active ? "#fff0f0" : "#ffffff",
-                            color:           active ? "#c92a2a" : "#855c5c",
-                            borderColor:     active ? "#e03131" : "#f0e4e4",
-                          }}
-                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                          onClick={() => setSchoolYear(o.value)}
-                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                          <i className="ti ti-calendar" style={{ fontSize:12 }} />
-                          {o.label}
-                          {active && o.value !== "" && !loading && (
-                            <span style={{ display:"inline-block", background:"#e03131", color:"white", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", marginLeft:2, whiteSpace:"nowrap", flexShrink:0 }}>
-                              {pageMeta.count}
-                            </span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
-
-                {/* Row 3: School Level chips */}
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Level</div>
-                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                    {[
-                      { value:"",                  label:"All Levels",   icon:"ti-layout-grid",   bg:"#fff0f0", color:"#c92a2a" },
-                      { value:"nursery",           label:"Nursery",      icon:"ti-baby-carriage", bg:"#fdf5e8", color:"#854f0b" },
-                      { value:"kindergarten",      label:"Kindergarten", icon:"ti-star",          bg:"#f0e8fd", color:"#7c3aed" },
-                      { value:"elementary",        label:"Elementary",   icon:"ti-book",          bg:"#e8f0fd", color:"#2563eb" },
-                      { value:"junior_highschool", label:"Junior High",  icon:"ti-school",        bg:"#e8fdf0", color:"#2e6b0d" },
-                      { value:"senior_highschool", label:"Senior High",  icon:"ti-certificate",   bg:"#fde8f8", color:"#be185d" },
-                    ].map((lvl) => {
-                      const active = schoolLevel === lvl.value;
-                      return (
-                        <motion.button key={lvl.value}
-                          layout
-                          initial={false}
-                          animate={{
-                            backgroundColor: active ? lvl.bg    : "#ffffff",
-                            color:           active ? lvl.color : "#855c5c",
-                            borderColor:     active ? lvl.color : "#f0e4e4",
-                          }}
-                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                          onClick={() => setSchoolLevel(lvl.value)}
-                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                          <i className={`ti ${lvl.icon}`} style={{ fontSize:12 }} />
-                          {lvl.label}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
-
-                {/* Row 4: Grade Level chips — slides open/closed with CSS max-height, no reflow on siblings */}
-                <div style={{
-                  maxHeight: schoolLevel !== "" ? 200 : 0,
-                  overflow: "hidden",
-                  opacity: schoolLevel !== "" ? 1 : 0,
-                  marginTop: schoolLevel !== "" ? 0 : -12,
-                  transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
-                  pointerEvents: schoolLevel !== "" ? "auto" : "none",
-                }}>
-                  <div style={{ paddingTop: 0 }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grade Level</div>
-                    <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                      {gradeOptions.map((g, idx) => {
-                        const val = g === "All Grades" ? "" : g;
-                        const active = gradeLevel === val;
-                        return (
-                          <motion.button key={`${schoolLevel}-${g}`}
-                            layout
-                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
-                            animate={{
-                              opacity: 1, y: 0,
-                              backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#c92a2a" : "#855c5c",
-                              borderColor:     active ? "#e03131" : "#f0e4e4",
-                            }}
-                            transition={{
-                              opacity: { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                              y:       { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                              backgroundColor: { duration: 0.18, ease: "easeOut" },
-                              color:           { duration: 0.18, ease: "easeOut" },
-                              borderColor:     { duration: 0.18, ease: "easeOut" },
-                              layout:          { type: "spring", stiffness: 400, damping: 36 },
-                            }}
-                            onClick={() => setGradeLevel(val)}
-                            style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                            {g}
-                          </motion.button>
-                        );
-                      })}
-                    </motion.div>
-                  </div>
-                </div>
-
-                {/* Row 5: Status chips */}
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Status</div>
-                  <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                    {[
-                      { value:"",          label:"All",       bg:"#fff0f0", color:"#c92a2a", dot:null       },
-                      { value:"enrolled",  label:"Enrolled",  bg:"#e8f5e0", color:"#2e6b0d", dot:"#4caf50" },
-                      { value:"pending",   label:"Pending",   bg:"#fef3e2", color:"#7a4a08", dot:"#ff9800" },
-                      { value:"completed", label:"Completed", bg:"#e3f0fd", color:"#1455a0", dot:"#2196f3" },
-                      { value:"cancelled", label:"Cancelled", bg:"#fde8e8", color:"#9b2020", dot:"#f44336" },
-                    ].map((s) => {
-                      const active = statusFilter === s.value;
-                      return (
-                        <motion.button key={s.value}
-                          layout
-                          initial={false}
-                          animate={{
-                            backgroundColor: active ? s.bg    : "#ffffff",
-                            color:           active ? s.color : "#855c5c",
-                            borderColor:     active ? s.color : "#f0e4e4",
-                          }}
-                          transition={{ layout: { type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                          onClick={() => setStatusFilter(s.value)}
-                          style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                          {s.dot && (
-                            <motion.span
-                              animate={{ background: active ? s.dot : "#c0b0b0" }}
-                              transition={{ duration:0.18, ease:"easeOut" }}
-                              style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, display:"inline-block" }}
-                            />
-                          )}
-                          {s.label}
-                          {active && s.value !== "" && !loading && (
-                            <span style={{ display:"inline-block", background: s.dot ?? "#e03131", color:"white", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", marginLeft:2, whiteSpace:"nowrap", flexShrink:0 }}>
-                              {pageMeta.count}
-                            </span>
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
-
-              </div>
-
-            </motion.div>
+              <FilterRow label="Status">
+                <ChipGroup
+                  label="Filter by status"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: "",          label: "All",       tone: "brand" },
+                    { value: "enrolled",  label: "Enrolled",  tone: "success", dot: "#4caf50", count: !loading ? pageMeta.count : null },
+                    { value: "pending",   label: "Pending",   tone: "warning", dot: "#ff9800", count: !loading ? pageMeta.count : null },
+                    { value: "completed", label: "Completed", tone: "info",    dot: "#2196f3", count: !loading ? pageMeta.count : null },
+                    { value: "cancelled", label: "Cancelled", tone: "error",   dot: "#f44336", count: !loading ? pageMeta.count : null },
+                  ]}
+                />
+              </FilterRow>
+            </FilterBar>
 
             {/* ── Table ── */}
               <motion.div

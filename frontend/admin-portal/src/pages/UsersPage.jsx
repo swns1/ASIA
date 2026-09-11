@@ -9,6 +9,7 @@ import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card, { StatCard } from "../components/ui/Card";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import ChipGroup from "../components/ui/ChipGroup";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Badge from "../components/ui/Badge";
@@ -633,10 +634,14 @@ export default function UsersPage() {
   const clearFilters = () => { setRoleFilter("all"); setSearch(""); };
 
   const roleFilterOptions = [
-    { value: "all", label: "All", count: users.length },
+    { value: "all", label: "All", tone: "brand", count: users.length },
+    // Tone and icon come from the shared role map, so a chip lights up in the
+    // same colour as that role's badge in the table below.
     ...ROLES.map((r) => ({
       value: r,
       label: ROLE_MAP[r]?.label ?? r,
+      tone: ROLE_MAP[r]?.variant ?? "brand",
+      icon: ROLE_MAP[r]?.icon,
       count: users.filter((u) => u.role === r).length,
     })),
   ];
@@ -667,6 +672,7 @@ export default function UsersPage() {
             value={stats.total}
             icon="ti-users"
             iconTone="brand"
+            layout="horizontal"
             loading={loading}
             active={roleFilter === "all"}
             onClick={() => setRoleFilter("all")}
@@ -676,6 +682,7 @@ export default function UsersPage() {
             value={stats.admins}
             icon="ti-shield-check"
             iconTone="accent"
+            layout="horizontal"
             loading={loading}
             active={roleFilter === "admin"}
             onClick={() => setRoleFilter(roleFilter === "admin" ? "all" : "admin")}
@@ -685,6 +692,7 @@ export default function UsersPage() {
             value={stats.staff}
             icon="ti-user"
             iconTone="info"
+            layout="horizontal"
             loading={loading}
             active={roleFilter === "staff"}
             onClick={() => setRoleFilter(roleFilter === "staff" ? "all" : "staff")}
@@ -694,60 +702,34 @@ export default function UsersPage() {
             value={stats.guardians}
             icon="ti-users-group"
             iconTone="muted"
+            layout="horizontal"
             loading={loading}
             active={roleFilter === "guardian"}
             onClick={() => setRoleFilter(roleFilter === "guardian" ? "all" : "guardian")}
           />
         </div>
 
-        <Card>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative min-w-[220px] flex-1">
-              <label htmlFor="user-search" className="sr-only">Search users by name or email</label>
-              <i
-                className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
-                aria-hidden="true"
-              />
-              <input
-                id="user-search"
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or email…"
-                className="focus-ring h-10 w-full rounded-lg border-[1.5px] border-neutral-300 bg-white pl-10 pr-9 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-500 hover:border-brand-300"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
-                >
-                  <i className="ti ti-x text-[13px]" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" icon="ti-filter-off" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </div>
-
-          <hr className="my-4 border-neutral-200" />
-
-          <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
-              Role
-            </div>
+        {/* Search filters as you type — no Search button, so FilterBar omits
+            one rather than implying a submit step that doesn't exist. */}
+        <FilterBar
+          searchInputId="user-search"
+          searchLabel="Search users by name or email"
+          searchPlaceholder="Search by name or email…"
+          searchValue={search}
+          onSearchChange={setSearch}
+          onClearSearch={() => setSearch("")}
+          hasFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+        >
+          <FilterRow label="Role">
             <ChipGroup
               label="Filter by role"
               options={roleFilterOptions}
               value={roleFilter}
               onChange={setRoleFilter}
             />
-          </div>
-        </Card>
+          </FilterRow>
+        </FilterBar>
 
         <Card padding="none" className="overflow-hidden">
           <Table

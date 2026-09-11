@@ -10,9 +10,9 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card, { StatCard } from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
-import { Select } from "../components/FormField";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { deleteStudent, getStudents } from "../api/studentApi";
@@ -20,14 +20,11 @@ import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 const STATUS_FILTERS = ["all", "active", "inactive", "transferred", "graduated", "dropped"];
 
-const SORT_OPTIONS = [
-  { value: "-student_id", label: "Newest first" },
-  { value: "student_id",  label: "Oldest first" },
-  { value: "last_name",   label: "Name A → Z" },
-  { value: "-last_name",  label: "Name Z → A" },
-  { value: "birth_date",  label: "Youngest last" },
-  { value: "-birth_date", label: "Youngest first" },
-];
+// Sorting lives on the column headers rather than a dropdown beside the
+// search box, so the filter row matches every other list page. A column's
+// `key` doubles as the API's `ordering` field, prefixed with "-" for
+// descending — see DEFAULT_ORDERING below.
+const DEFAULT_ORDERING = "-student_id";
 
 const SEX_FILTERS = [
   { value: "",       label: "All" },
@@ -46,9 +43,11 @@ const STAT_CARDS = [
 ];
 
 const TABLE_COLUMNS = [
-  { key: "student", label: "Student",   width: "30%" },
-  { key: "lrn",     label: "LRN",       width: "15%" },
-  { key: "age",     label: "Age / DOB", width: "16%" },
+  // `key` is the API ordering field for sortable columns, so the header the
+  // user clicks and the value sent to the backend can't drift apart.
+  { key: "last_name",  label: "Student",   width: "30%", sortable: true },
+  { key: "lrn",        label: "LRN",       width: "15%" },
+  { key: "birth_date", label: "Age / DOB", width: "16%", sortable: true },
   { key: "sex",     label: "Sex",       width: "9%" },
   { key: "status",  label: "Status",    width: "11%" },
   { key: "contact", label: "Contact",   width: "13%" },
@@ -94,7 +93,7 @@ export default function StudentsPage() {
   const [deleteError, setDeleteError] = useState("");
   const [statusFilter, setStatus] = useState(() => searchParams.get("status") ?? "all");
   const [sexFilter, setSexFilter] = useState("");
-  const [ordering, setOrdering]   = useState("-student_id");
+  const [ordering, setOrdering]   = useState(DEFAULT_ORDERING);
   const [isRecents, setIsRecents] = useState(false);
   const [statusCounts, setStatusCounts] = useState({});
   const [deletingStudent, setDeletingStudent] = useState(false);
@@ -154,10 +153,8 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
-    fetchStudents(1, "", statusFilter, "", "-student_id");
+    fetchStudents(1, "", statusFilter, "", DEFAULT_ORDERING);
     fetchCounts();
-    // Focus the search box on arrival — searching is the dominant task here.
-    searchRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -179,10 +176,15 @@ export default function StudentsPage() {
     fetchStudents(1, inputVal, statusFilter, val, ordering);
   };
 
-  const handleOrdering = (val) => {
-    setOrdering(val);
+  // Clicking a column header sorts by it, and clicking the active one flips
+  // direction. `ordering` stays the single source of truth — sortKey/sortDir
+  // below are derived from it so the header carets can't drift out of sync
+  // with what the API was actually asked for.
+  const handleSort = (key) => {
+    const next = sortKey === key && sortDir === "asc" ? `-${key}` : key;
+    setOrdering(next);
     setIsRecents(false);
-    fetchStudents(1, inputVal, statusFilter, sexFilter, val);
+    fetchStudents(1, inputVal, statusFilter, sexFilter, next);
   };
 
   const handleRecents = () => {
@@ -190,15 +192,15 @@ export default function StudentsPage() {
     setIsRecents(next);
     if (next) {
       setInputVal(""); setSearch(""); setStatus("all");
-      setSexFilter(""); setOrdering("-student_id");
-      fetchStudents(1, "", "all", "", "-student_id");
+      setSexFilter(""); setOrdering(DEFAULT_ORDERING);
+      fetchStudents(1, "", "all", "", DEFAULT_ORDERING);
     }
   };
 
   const handleClearAll = () => {
     setInputVal(""); setSearch(""); setStatus("all");
-    setSexFilter(""); setOrdering("-student_id"); setIsRecents(false);
-    fetchStudents(1, "", "all", "", "-student_id");
+    setSexFilter(""); setOrdering(DEFAULT_ORDERING); setIsRecents(false);
+    fetchStudents(1, "", "all", "", DEFAULT_ORDERING);
     searchRef.current?.focus();
   };
 
@@ -229,15 +231,22 @@ export default function StudentsPage() {
   };
 
   const hasActiveFilters =
-    search || statusFilter !== "all" || sexFilter || ordering !== "-student_id";
+    search || statusFilter !== "all" || sexFilter || ordering !== DEFAULT_ORDERING;
+
+  // Derived so the header caret always reflects the ordering actually in use.
+  const sortKey = ordering.replace(/^-/, "");
+  const sortDir = ordering.startsWith("-") ? "desc" : "asc";
   const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
 
   const statusOptions = STATUS_FILTERS.map((v) => ({
     value: v,
-    // Counts on every chip, not just the selected one — you can compare
-    // segments without clicking through them.
     label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
-    count: statusCounts[v],
+    // "All" omits its badge: that number is already the page header's total.
+    count: v === "all" ? null : statusCounts[v],
+    // Same tone as the matching stat card, so clicking a card and seeing its
+    // chip light up reads as one connected action instead of two disagreeing
+    // colors.
+    tone: v === "all" ? "brand" : STUDENT_STATUS_MAP[v]?.variant ?? "brand",
   }));
 
   return (
@@ -268,6 +277,7 @@ export default function StudentsPage() {
               label={card.label}
               icon={card.icon}
               iconTone={card.tone}
+              layout="horizontal"
               loading={loading && statusCounts[card.status] === undefined}
               value={statusCounts[card.status]?.toLocaleString() ?? "—"}
               active={statusFilter === card.status}
@@ -279,109 +289,47 @@ export default function StudentsPage() {
         </div>
 
         {/* Filters */}
-        <Card>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative min-w-[220px] flex-1">
-              <label htmlFor="student-search" className="sr-only">
-                Search students by name, LRN, or email
-              </label>
-              <i
-                className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
-                aria-hidden="true"
-              />
-              <input
-                id="student-search"
-                ref={searchRef}
-                type="search"
-                placeholder="Search by name, LRN, or email…"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-                className="focus-ring h-10 w-full rounded-lg border-[1.5px] border-neutral-300 bg-white pl-10 pr-9 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-500 hover:border-brand-300"
-              />
-              {inputVal && (
-                <button
-                  type="button"
-                  onClick={handleClearSearch}
-                  aria-label="Clear search"
-                  className="focus-ring absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral-500 hover:text-brand-600"
-                >
-                  <i className="ti ti-x text-[13px]" aria-hidden="true" />
-                </button>
-              )}
-            </div>
+        <FilterBar
+          searchInputId="student-search"
+          searchLabel="Search students by name, LRN, or email"
+          searchPlaceholder="Search by name, LRN, or email…"
+          searchRef={searchRef}
+          searchValue={inputVal}
+          onSearchChange={setInputVal}
+          onSearch={handleSearch}
+          onClearSearch={handleClearSearch}
+          hasFilters={hasActiveFilters}
+          onClearFilters={handleClearAll}
+        >
+          <FilterRow label="Status">
+            <ChipGroup
+              label="Filter by status"
+              options={statusOptions}
+              value={statusFilter}
+              onChange={handleStatusFilter}
+            />
+          </FilterRow>
 
-            <div className="shrink-0">
-              <label htmlFor="student-sort" className="sr-only">Sort students</label>
-              <Select
-                id="student-sort"
-                value={ordering}
-                onChange={(e) => handleOrdering(e.target.value)}
-                className="h-10 w-[170px] py-0 text-sm font-semibold"
-              >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </Select>
-            </div>
-
-            <Button variant="secondary" icon="ti-search" onClick={handleSearch}>
-              Search
-            </Button>
-
-            {hasActiveFilters && (
-              <Button variant="ghost" icon="ti-filter-off" onClick={handleClearAll}>
-                Clear filters
-              </Button>
-            )}
-          </div>
-
-          <hr className="my-4 border-neutral-200" />
-
-          <div className="space-y-3">
-            <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
-                Status
-              </div>
+          <FilterRow label="Sex">
+            <div className="flex flex-wrap items-center gap-2">
               <ChipGroup
-                label="Filter by status"
-                options={statusOptions}
-                value={statusFilter}
-                onChange={handleStatusFilter}
+                label="Filter by sex"
+                options={SEX_FILTERS}
+                value={sexFilter}
+                onChange={handleSexFilter}
+              />
+              <span className="h-4 w-px bg-neutral-300" aria-hidden="true" />
+              {/* An independent toggle rather than one of the Sex options, but
+                  rendered through ChipGroup so it matches them exactly. */}
+              <ChipGroup
+                label="Show the most recently registered students"
+                options={[{ value: "recents", label: "Recents", icon: "ti-clock" }]}
+                value={isRecents ? "recents" : null}
+                onChange={handleRecents}
               />
             </div>
-
-            <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">
-                Sex
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <ChipGroup
-                  label="Filter by sex"
-                  options={SEX_FILTERS}
-                  value={sexFilter}
-                  onChange={handleSexFilter}
-                />
-                <span className="h-4 w-px bg-neutral-300" aria-hidden="true" />
-                <button
-                  type="button"
-                  onClick={handleRecents}
-                  aria-pressed={isRecents}
-                  title="Show the most recently registered students"
-                  className={[
-                    "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-xs font-semibold transition-colors",
-                    isRecents
-                      ? "border-brand-500 bg-brand-100 text-brand-600"
-                      : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600",
-                  ].join(" ")}
-                >
-                  <i className="ti ti-clock text-[13px]" aria-hidden="true" />
-                  Recents
-                </button>
-              </div>
-            </div>
-          </div>
-        </Card>
+          </FilterRow>
+        </FilterBar>
 
         {/* Results */}
         <motion.div
@@ -397,6 +345,9 @@ export default function StudentsPage() {
               onRetry={() => fetchStudents(page, search, statusFilter, sexFilter, ordering)}
               errorSubject="students"
               isEmpty={students.length === 0}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
               empty={{
                 icon: "ti-users-off",
                 title: hasActiveFilters ? "No students match these filters" : "No students yet",
