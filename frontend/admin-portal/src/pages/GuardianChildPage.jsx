@@ -234,8 +234,26 @@ function RequirementsTab({ requirements, loading }) {
 }
 
 // ── Report card tab ───────────────────────────────────────────────────────────
-function ReportCardTab({ data }) {
-  if (!data) return null;
+function ReportCardTab({ data, error }) {
+  // `return null` here left the default tab's body completely empty whenever
+  // the report card failed to load — the banner above said something went
+  // wrong, then the page showed nothing at all under it.
+  if (!data) {
+    return (
+      <Panel title="Report Card">
+        <div className="px-4 py-10 text-center">
+          <div className="text-sm font-semibold text-neutral-900">
+            {error ? "Grades couldn't be loaded" : "No report card yet"}
+          </div>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-neutral-500">
+            {error
+              ? "We couldn't reach the grading records for this child. Please try again in a moment."
+              : "Grades will appear here once the school has posted them for this enrolment."}
+          </p>
+        </div>
+      </Panel>
+    );
+  }
   const periods = data.grading_periods || [];
   return (
     <Panel
@@ -527,7 +545,7 @@ export default function GuardianChildPage() {
       <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-[18px]" />
 
       <TabPanel id={tab} direction={direction}>
-        {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} />)}
+        {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} error={error} />)}
         {tab === "attendance" && <AttendanceTab summary={attendance} loading={attLoading} />}
         {tab === "billing" && <BillingTab ledger={ledger} loading={ledgerLoading} />}
         {tab === "requirements" && <RequirementsTab requirements={requirements} loading={reqLoading} />}
