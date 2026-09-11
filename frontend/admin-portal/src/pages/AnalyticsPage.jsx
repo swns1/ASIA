@@ -325,10 +325,14 @@ function ClusterInsightPanel({ result }) {
   };
 
   return (
+    // Deliberately NOT autoFetch. With no AI provider configured the interpret
+    // endpoint returns 503, so auto-firing on mount painted a red "Analysis
+    // failed" box the moment the groups rendered, with nobody having asked for
+    // it. The groups themselves are complete without this panel -- the cluster
+    // endpoint falls back to rank-based names -- so this stays on a click.
     <AIInsightPanel
       title="What this means, and what to do"
       description="An AI summary of the groups above, with suggested next steps"
-      autoFetch
       onFetch={onFetch}
     />
   );
@@ -462,7 +466,10 @@ export default function AnalyticsPage() {
         ...(schoolLevel && { school_level: schoolLevel }),
         ...(gradeLevel && { grade_level: gradeLevel }),
         ...(subjectId && { subject_id: subjectId }),
-        ...(groupCount !== "auto" && { n_clusters: Number(groupCount) }),
+        // Send "auto" explicitly. Omitting the parameter used to fall through
+        // to the backend's hard-coded default of 3, so "Suggested" quietly
+        // meant "3 groups" no matter what the data said.
+        n_clusters: groupCount === "auto" ? "auto" : Number(groupCount),
       };
       setGroups(await _getAiCluster(params));
     } catch (e) {

@@ -69,11 +69,22 @@ class NarrativeCategory(models.Model):
 
 
 class NarrativeReport(models.Model):
+    # DepEd Order No. 8, s. 2015 marks the Report on Learner's Observed Values
+    # with AO / SO / RO / NO. The three generic ratings below them are the
+    # original prototype vocabulary, kept so existing rows still render and
+    # still feed the risk model (ai.services.NARRATIVE_SCORE maps both sets).
     RATING_CHOICES = [
+        ("AO", "Always Observed"),
+        ("SO", "Sometimes Observed"),
+        ("RO", "Rarely Observed"),
+        ("NO", "Not Observed"),
         ("outstanding",       "Outstanding"),
         ("satisfactory",      "Satisfactory"),
         ("needs_improvement", "Needs Improvement"),
     ]
+
+    # The DepEd marks, in the order they appear on the form.
+    OBSERVED_VALUE_MARKS = ("AO", "SO", "RO", "NO")
 
     report_id = models.BigAutoField(primary_key=True)
     enrollment = models.ForeignKey(

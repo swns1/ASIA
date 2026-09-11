@@ -74,11 +74,13 @@ export default function SF10PrintPage() {
                 .then(d => Array.isArray(d) ? d : d.results ?? []).catch(() => []),
             ]);
 
+            // GradeSerializer emits `numeric_grade` — reading `g.grade` here
+            // left the whole permanent record printing "—" for every subject.
             const gm = {};
             allGrades.forEach(g => {
               const key = g.subject ?? g.subject_id;
               if (!gm[key]) gm[key] = {};
-              if (g.grade != null) gm[key][g.grading_period] = parseFloat(g.grade);
+              if (g.numeric_grade != null) gm[key][g.grading_period] = parseFloat(g.numeric_grade);
             });
 
             const n  = cfg.periods.length;
@@ -265,10 +267,10 @@ export default function SF10PrintPage() {
                       <tr style={{ background: C.redBg }}>
                         <td colSpan={gwaLabelSpan}
                           style={TD({ textAlign: "right", fontWeight: 800, fontSize: 9.5 })}>
-                          General Weighted Average
+                          General Average
                         </td>
                         <td style={TD({ textAlign: "center", fontWeight: 900, fontSize: 11, color: gwa!=null?gradeColor(gwa):"#aaa" })}>
-                          {gwa != null ? gwa.toFixed(2) : "—"}
+                          {gwa != null ? Math.round(gwa) : "—"}
                         </td>
                         <td style={TD({ textAlign: "center", fontWeight: 700, fontSize: 9 })}>
                           {promotionRemark(enr, gwa)}

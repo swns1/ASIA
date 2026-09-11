@@ -356,6 +356,108 @@ OVERRIDING SYSTEM VALUE VALUES
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
+-- USERS
+-- Without these nobody can log in: the schema ships no rows and the README
+-- documented no createsuperuser step, so a clean install produced a system
+-- with no way in. Passwords are Django PBKDF2 hashes of 'SlisDemo2026!'.
+-- CHANGE THESE BEFORE ANY DEPLOYMENT -- they are demo credentials, published
+-- in the repo, and are only appropriate for a local evaluation copy.
+-- =====================================================
+INSERT INTO users (user_id, name, email, role, password)
+OVERRIDING SYSTEM VALUE VALUES
+  (1, 'System Administrator', 'superadmin@slis.test', 'super_admin', 'pbkdf2_sha256$1200000$Awywpt86nzezzKE544ZK9C$mdHq/AfP1gXjProkIbOlAVYAHW+ADNH7u0sEO3tKvVg='),
+  (2, 'School Administrator', 'admin@slis.test',      'admin',       'pbkdf2_sha256$1200000$w1YJBCM8WVKq1n76785DWT$V/pdvTFxf7nlNv9Rl4GIlQd6WezfMmVu6YqBjOIrjxI='),
+  (3, 'Registrar',            'registrar@slis.test',  'registrar',   'pbkdf2_sha256$1200000$yzMNi7tGSufZ8G9TQoyOHG$39stXhKajw8YaJVmm5vhpVfW0+zc/OiWwpXfr2OWrCU='),
+  (4, 'Class Adviser',        'teacher@slis.test',    'teacher',     'pbkdf2_sha256$1200000$e2gDvoQBb0sQL8sUJ68pg7$oqQ8Y16lISVfyr5jCDTHPkZ68sM3lK3C8aHDH1HHxUY='),
+  (5, 'Accounting Officer',   'accounting@slis.test', 'accounting',  'pbkdf2_sha256$1200000$MnheUmYtho5VXP0hnkOdnW$/u0WyEZKJ8zNlFThAK/HWFQNqFMXgOYX2jE8swmoeGc=')
+ON CONFLICT DO NOTHING;
+
+SELECT setval('users_user_id_seq', GREATEST((SELECT MAX(user_id) FROM users), 1));
+
+-- =====================================================
+-- GRADING TEMPLATES AND COMPONENTS
+-- The score-entry block below looks up templates 2 and 3 by id, and every
+-- subject points at one. Neither table was seeded, so the lookup returned
+-- NULL and the NOT NULL on score_entries.grading_component_id aborted the
+-- whole transaction.
+--
+-- Weights follow DepEd Order No. 8, s. 2015. Note this seed carries one
+-- template per school level, not the full per-learning-area matrix the Order
+-- defines (Languages/AP/EsP 30-50-20, Science and Math 40-40-20, MAPEH/TLE
+-- 20-60-20, and the separate SHS Core/Academic/TVL splits) -- GradingTemplate
+-- is keyed only on school_level, so that matrix cannot be expressed yet.
+-- =====================================================
+INSERT INTO grading_templates (grading_template_id, template_name, description, school_level, is_active)
+OVERRIDING SYSTEM VALUE VALUES
+  (1, 'Standard Kindergarten',     'Checkpoint-based, no quarterly assessment.',   'kindergarten',      TRUE),
+  (2, 'Standard Elementary',       'DepEd Order 8 s.2015 weighting, elementary.',  'elementary',        TRUE),
+  (3, 'Standard Junior High',      'DepEd Order 8 s.2015 weighting, junior high.', 'junior_highschool', TRUE),
+  (4, 'Standard Senior High Core', 'DepEd Order 8 s.2015 weighting, SHS core.',    'senior_highschool', TRUE)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('grading_templates_grading_template_id_seq', GREATEST((SELECT MAX(grading_template_id) FROM grading_templates), 1));
+
+INSERT INTO grading_components (grading_component_id, grading_template_id, component_name, weight, sort_order)
+OVERRIDING SYSTEM VALUE VALUES
+  -- Kindergarten: no quarterly assessment.
+  (1,  1, 'Written Works',        50.00, 1),
+  (2,  1, 'Performance Tasks',    50.00, 2),
+  -- Elementary: 30 / 50 / 20.
+  (3,  2, 'Written Works',        30.00, 1),
+  (4,  2, 'Performance Tasks',    50.00, 2),
+  (5,  2, 'Quarterly Assessment', 20.00, 3),
+  -- Junior high: 30 / 50 / 20.
+  (6,  3, 'Written Works',        30.00, 1),
+  (7,  3, 'Performance Tasks',    50.00, 2),
+  (8,  3, 'Quarterly Assessment', 20.00, 3),
+  -- Senior high core: 25 / 50 / 25.
+  (9,  4, 'Written Works',        25.00, 1),
+  (10, 4, 'Performance Tasks',    50.00, 2),
+  (11, 4, 'Quarterly Assessment', 25.00, 3)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('grading_components_grading_component_id_seq', GREATEST((SELECT MAX(grading_component_id) FROM grading_components), 1));
+
+-- =====================================================
+-- SUBJECTS
+-- The grades block below references subject_id 1-20 by FK. This table was
+-- never seeded, so the very first grades row violated
+-- grades_subject_id_fkey and rolled the entire seed back.
+-- =====================================================
+INSERT INTO subjects (subject_id, subject_code, subject_name, school_level, grade_level, strand, semester, grading_template_id)
+OVERRIDING SYSTEM VALUE VALUES
+  -- Elementary Grade 4
+  (1,  'FIL4',    'Filipino 4',             'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (2,  'ENG4',    'English 4',              'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (3,  'MATH4',   'Mathematics 4',          'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (4,  'SCI4',    'Science 4',              'elementary',        'Grade 4',  NULL,   NULL,  2),
+  -- Elementary Grade 6
+  (5,  'FIL6',    'Filipino 6',             'elementary',        'Grade 6',  NULL,   NULL,  2),
+  (6,  'MATH6',   'Mathematics 6',          'elementary',        'Grade 6',  NULL,   NULL,  2),
+  (7,  'SCI6',    'Science 6',              'elementary',        'Grade 6',  NULL,   NULL,  2),
+  -- Junior High Grade 7
+  (8,  'MATH7',   'Mathematics 7',          'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  (9,  'SCI7',    'Science 7',              'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  (10, 'ENG7',    'English 7',              'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  -- Junior High Grade 8
+  (11, 'MATH8',   'Mathematics 8',          'junior_highschool', 'Grade 8',  NULL,   NULL,  3),
+  (12, 'SCI8',    'Science 8',              'junior_highschool', 'Grade 8',  NULL,   NULL,  3),
+  -- Junior High Grade 10
+  (13, 'MATH10',  'Mathematics 10',         'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  (14, 'SCI10',   'Science 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  (15, 'ENG10',   'English 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  -- Senior High Grade 11 (STEM, 1st semester)
+  (16, 'GENMATH', 'General Mathematics',    'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  (17, 'EARTHLI', 'Earth and Life Science', 'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  (18, 'ORALCOM', 'Oral Communication',     'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  -- Senior High Grade 12 (STEM, 1st semester)
+  (19, 'BUSFIN',  'Business Finance',       'senior_highschool', 'Grade 12', 'STEM', '1st', 4),
+  (20, 'PR2',     'Practical Research 2',   'senior_highschool', 'Grade 12', 'STEM', '1st', 4)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('subjects_subject_id_seq', GREATEST((SELECT MAX(subject_id) FROM subjects), 1));
+
+-- =====================================================
 -- GRADES
 -- Existing subject IDs used:
 --   Elem Grade 4:  Filipino 4=1, English 4=2, Math 4=3, Science 4=4
@@ -830,39 +932,44 @@ SELECT setval(pg_get_serial_sequence('attendance_records', 'attendance_id'), (SE
 -- elementary/JHS, semesters for SHS) since the schema does not
 -- enforce this itself.
 -- =====================================================
+-- The four core values of the DepEd Order No. 8, s. 2015 Report on Learner's
+-- Observed Values. These are mandated categories, not a starter set: the
+-- previous seed invented 'Social Skills' / 'Work Habits' / 'Areas for Growth',
+-- which a registrar would not recognise on a report card.
 INSERT INTO narrative_categories (category_id, name, description, sort_order, is_active)
 OVERRIDING SYSTEM VALUE VALUES
-  (900, 'Social Skills',       'Peer interaction, cooperation, and classroom conduct.', 1, TRUE),
-  (901, 'Work Habits',         'Independence, task completion, and organization.',      2, TRUE),
-  (902, 'Areas for Growth',    'Skills or behaviors the student is still developing.',  3, TRUE)
+  (900, 'Maka-Diyos',      'Expresses spiritual beliefs while respecting the beliefs of others.',      1, TRUE),
+  (901, 'Makatao',         'Is sensitive to individual, social and cultural differences.',             2, TRUE),
+  (902, 'Makakalikasan',   'Cares for the environment and utilises resources wisely and responsibly.', 3, TRUE),
+  (903, 'Makabansa',       'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen.', 4, TRUE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO narrative_reports (report_id, enrollment_id, category_id, grading_period, rating, recorded_at)
 OVERRIDING SYSTEM VALUE VALUES
   -- Enrollment 215 (Elementary G4)
-  (900, 215, 900, '1st_quarter', 'outstanding',        NOW()),
-  (901, 215, 901, '1st_quarter', 'satisfactory',        NOW()),
+  (900, 215, 900, '1st_quarter', 'AO', NOW()),
+  (901, 215, 901, '1st_quarter', 'SO', NOW()),
   -- Enrollment 219 (Elementary G4, struggling profile)
-  (902, 219, 901, '1st_quarter', 'needs_improvement',   NOW()),
-  (903, 219, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  (902, 219, 901, '1st_quarter', 'RO', NOW()),
+  (903, 219, 902, '1st_quarter', 'RO', NOW()),
   -- Enrollment 227 (Elementary G6, top student)
-  (904, 227, 900, '1st_quarter', 'outstanding',        NOW()),
-  (905, 227, 901, '1st_quarter', 'outstanding',        NOW()),
+  (904, 227, 900, '1st_quarter', 'AO', NOW()),
+  (905, 227, 901, '1st_quarter', 'AO', NOW()),
   -- Enrollment 236 (JHS Grade 7)
-  (906, 236, 900, '1st_quarter', 'satisfactory',        NOW()),
-  (907, 236, 901, '1st_quarter', 'satisfactory',        NOW()),
+  (906, 236, 900, '1st_quarter', 'SO', NOW()),
+  (907, 236, 901, '1st_quarter', 'SO', NOW()),
   -- Enrollment 245 (JHS Grade 10, top student Natasha)
-  (908, 245, 900, '1st_quarter', 'outstanding',        NOW()),
-  (909, 245, 901, '1st_quarter', 'outstanding',        NOW()),
+  (908, 245, 900, '1st_quarter', 'AO', NOW()),
+  (909, 245, 901, '1st_quarter', 'AO', NOW()),
   -- Enrollment 249 (JHS Grade 10, struggling student Brandon)
-  (910, 249, 901, '1st_quarter', 'needs_improvement',   NOW()),
-  (911, 249, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  (910, 249, 901, '1st_quarter', 'RO', NOW()),
+  (911, 249, 902, '1st_quarter', 'RO', NOW()),
   -- Enrollment 257 (SHS Grade 11 — semester period, not quarter)
-  (912, 257, 900, '1st_semester', 'satisfactory',       NOW()),
-  (913, 257, 901, '1st_semester', 'satisfactory',       NOW()),
+  (912, 257, 900, '1st_semester', 'SO', NOW()),
+  (913, 257, 901, '1st_semester', 'SO', NOW()),
   -- Enrollment 262 (SHS Grade 12 — semester period, not quarter)
-  (914, 262, 900, '1st_semester', 'outstanding',        NOW()),
-  (915, 262, 901, '1st_semester', 'outstanding',        NOW())
+  (914, 262, 900, '1st_semester', 'AO', NOW()),
+  (915, 262, 901, '1st_semester', 'AO', NOW())
 ON CONFLICT (enrollment_id, category_id, grading_period) DO NOTHING;
 
 COMMIT;

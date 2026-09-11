@@ -30,6 +30,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
+def _env_int(name: str, default: int) -> int:
+    """Read a whole number from the environment, falling back on anything unparseable."""
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
 
 SECRET_KEY = _required_env("SECRET_KEY")
 
@@ -131,7 +138,18 @@ REST_FRAMEWORK = {
     # setting) — at 0, every client resolves to the proxy's IP, collapsing
     # AnonRateThrottle into one shared bucket and making the audit trail
     # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
-    "NUM_PROXIES": 1,
+    # How many reverse proxies sit in front of this service. Env-driven for
+    # the same reason DEBUG and the SECURE_* flags are: the right value is a
+    # property of the deployment, not of the code.
+    #
+    # Defaults to 0 -- the local/demo posture, where nothing proxies these
+    # services. That matters because DRF trusts the client-supplied
+    # X-Forwarded-For for exactly NUM_PROXIES hops: with a non-zero value and
+    # no real proxy, an attacker rotating that header gets an unlimited number
+    # of throttle buckets, and the audit log's recorded ip_address becomes
+    # attacker-controlled. Set NUM_PROXIES=1 in the environment when deploying
+    # behind a single load balancer.
+    "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
 
 # ✅ Token signed with this config
@@ -150,6 +168,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# Lock out on the (ip, username) pair, not the IP alone. Axes 8 defaults to
+# ip_address only, which fails both ways: password-spraying one account from
+# rotating IPs never trips the limit, and one bad actor on the school's shared
+# NAT locks out everyone else in the building.
+AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
 AXES_FAILURE_LIMIT = 5
 AXES_LOCK_OUT_AT_FAILURE = True
 AXES_COOLOFF_TIME = 1

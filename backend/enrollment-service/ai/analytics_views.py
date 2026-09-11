@@ -34,10 +34,11 @@ Design notes (methodological limitations, deliberate not accidental):
     the averaged score; `narrative_distribution` on each cluster exposes
     the raw category counts so the average doesn't hide the underlying
     spread.
-  - `n_clusters` is not auto-selected — it's a user-chosen (or default)
-    parameter, clamped to [2, 7]. `silhouette_score` / `k_search` /
-    `suggested_n_clusters` in `meta` give the chosen k a quality metric
-    and a data-driven alternative to compare against, without forcing it.
+  - `n_clusters` accepts a whole number (clamped to [2, 7] and to what the
+    cohort supports), or "auto" -- the default -- which selects k by best
+    silhouette across the swept range. `meta` always reports the k actually
+    used, its `silhouette_score`, the full `k_search`, and
+    `suggested_n_clusters`, so the choice is inspectable either way.
   - No PCA-projected coordinates are returned. Each student's own `grade`
     and `attendance_rate` (both already below) are directly plottable on a
     2D chart, so the frontend plots those instead of an abstract PCA
@@ -324,14 +325,28 @@ class ClusterAnalyticsView(APIView):
         subject_id     = request.query_params.get("subject_id")
         school_level   = request.query_params.get("school_level")
         grade_level    = request.query_params.get("grade_level")
-        n_clusters     = int(request.query_params.get("n_clusters", 3))
+        # "auto" (or omitting the parameter) means "pick k by best silhouette",
+        # which is what the UI's "Suggested" option has always claimed to do.
+        # It previously sent no n_clusters at all and silently got the
+        # hard-coded default of 3, so "Suggested" was never a suggestion.
+        raw_n_clusters = request.query_params.get("n_clusters", "auto")
+        auto_k = str(raw_n_clusters).strip().lower() in ("", "auto", "none")
+        if auto_k:
+            n_clusters = None
+        else:
+            try:
+                n_clusters = int(raw_n_clusters)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "n_clusters must be a whole number, or 'auto'."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            n_clusters = max(2, min(n_clusters, 7))
 
         if not school_year:
             return Response({"error": "school_year is required."}, status=status.HTTP_400_BAD_REQUEST)
         if not grading_period:
             return Response({"error": "grading_period is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        n_clusters = max(2, min(n_clusters, 7))
         is_overall_period = grading_period == "overall"
 
         # ── Build per-student features (grades, attendance, narrative) ────
@@ -348,12 +363,19 @@ class ClusterAnalyticsView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if len(student_data) < n_clusters:
+        # silhouette_score requires 2 <= n_labels <= n_samples - 1, so k clusters
+        # need k + 1 students. The old guard allowed n == k, which raised an
+        # unhandled ValueError (a 500) -- reachable just by filtering to a small
+        # section. The smallest workable cohort is 3 students at k = 2.
+        n_students = len(student_data)
+        min_students = 3 if auto_k else n_clusters + 1
+        if n_students < min_students:
+            wanted = "grouping" if auto_k else f"{n_clusters} groups"
             return Response(
                 {
                     "error": (
-                        f"Not enough students ({len(student_data)}) for {n_clusters} clusters. "
-                        f"Need at least {n_clusters} students with grades."
+                        f"Not enough students ({n_students}) for {wanted}. "
+                        f"Need at least {min_students} students with grades."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -390,30 +412,31 @@ class ClusterAnalyticsView(APIView):
         scaler = StandardScaler()
         features_scaled = scaler.fit_transform(features)
 
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(features_scaled)
-
-        # ── Cluster quality (silhouette) ────────────────────────────────
-        # Reported for the chosen k, plus a cheap search across nearby k
-        # values, so the choice of k has a defensible quality metric
-        # attached instead of being an arbitrary default. Does not change
-        # n_clusters itself — purely informational for the UI/response.
-        chosen_silhouette = float(silhouette_score(features_scaled, labels))
-
-        k_search = []
+        # ── Cluster quality (silhouette) and choice of k ──────────────────
+        # Sweep k first, so the quality metric can actually drive the choice
+        # when the caller asked for "auto" rather than only describing a
+        # choice already made.
         max_k = min(7, len(features_scaled) - 1)
+        k_search = []
+        fits = {}
         for k in range(2, max_k + 1):
-            if k == n_clusters:
-                k_search.append({"n_clusters": k, "silhouette_score": round(chosen_silhouette, 4)})
-                continue
             km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(features_scaled)
-            k_search.append({
-                "n_clusters": k,
-                "silhouette_score": round(float(silhouette_score(features_scaled, km.labels_)), 4),
-            })
+            score = float(silhouette_score(features_scaled, km.labels_))
+            fits[k] = (km, score)
+            k_search.append({"n_clusters": k, "silhouette_score": round(score, 4)})
+
         suggested_k = (
             max(k_search, key=lambda r: r["silhouette_score"])["n_clusters"] if k_search else None
         )
+
+        if auto_k:
+            n_clusters = suggested_k or 2
+        else:
+            # A caller-supplied k can exceed what this cohort supports.
+            n_clusters = max(2, min(n_clusters, max_k))
+
+        kmeans, chosen_silhouette = fits[n_clusters]
+        labels = kmeans.labels_
 
         # ── Build cluster response ────────────────────────────────────────
         # No PCA projection — the chart plots grade vs. attendance directly
@@ -504,6 +527,7 @@ class ClusterAnalyticsView(APIView):
             "grade_level":    grade_level or "All Levels",
             "subject":        subject_name,
             "n_clusters":     n_clusters,
+            "n_clusters_source": "auto" if auto_k else "requested",
             "silhouette_score":     round(chosen_silhouette, 4),
             "k_search":             k_search,
             "suggested_n_clusters": suggested_k,

@@ -1156,6 +1156,42 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         for g in ["Grade 7","Grade 8","Grade 9","Grade 10"]:               LEVEL_MAP[g] = "junior_highschool"
         for g in ["Grade 11","Grade 12"]:                                  LEVEL_MAP[g] = "senior_highschool"
         to_school_level = LEVEL_MAP.get(to_grade_level, "junior_highschool")
+        from_school_level = LEVEL_MAP.get(from_grade_level)
+
+        # Crossing a school level is a registrar decision, not a batch
+        # operation: the section names don't carry over, and Grade 10 -> 11
+        # additionally needs a semester and a per-learner strand, which cannot
+        # be assigned section-wide.
+        #
+        # This used to be attempted anyway. The enrollments CHECK constraint
+        # requires semester IN ('1st','2nd') for senior_highschool, so every
+        # Grade 10 learner hit an IntegrityError that the commit loop swallowed
+        # into a "failed" list with a raw Postgres error string attached.
+        # Refusing up front — in the preview as well as the commit — turns that
+        # into a clear instruction.
+        if from_school_level and from_school_level != to_school_level:
+            detail = (
+                f"'{from_grade_level}' to '{to_grade_level}' moves a learner from "
+                f"{from_school_level.replace('_', ' ')} to "
+                f"{to_school_level.replace('_', ' ')}, which has to be done per learner "
+                f"rather than by section."
+            )
+            if to_school_level == "senior_highschool":
+                detail += (
+                    " Senior high school enrollment requires a semester and a strand, "
+                    "and each learner chooses their own strand."
+                )
+            return Response(
+                {
+                    "detail": detail,
+                    "reason": "level_transition",
+                    "from_school_level": from_school_level,
+                    "to_school_level":   to_school_level,
+                    "from_grade_level":  from_grade_level,
+                    "to_grade_level":    to_grade_level,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Source: all completed enrollments in the from-section
         source_qs = Enrollment.objects.filter(

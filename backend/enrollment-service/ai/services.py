@@ -39,6 +39,14 @@ NARRATIVE_SCORE = {
     "outstanding":       3.0,
     "satisfactory":      2.0,
     "needs_improvement": 1.0,
+    # DepEd Order 8 s.2015 marks Observed Values AO/SO/RO/NO. They are mapped
+    # onto the same 1-3 scale rather than widening it to four points, so the
+    # risk component's calibration (and its test suite) is unchanged: AO and NO
+    # sit on the existing endpoints, and the two middle marks divide the range.
+    "AO": 3.0,
+    "SO": 2.0,
+    "RO": 1.5,
+    "NO": 1.0,
 }
 
 # DepEd passing mark. The most load-bearing constant in this module — it's

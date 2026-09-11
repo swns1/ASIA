@@ -32,6 +32,31 @@ psql -U postgres -d "SLIS THESIS FINAL" -f schema.sql
 psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
 ```
 
+#### Demo accounts
+
+`seed_data.sql` creates five accounts, one per role, all with the password
+**`SlisDemo2026!`**:
+
+| Email | Role |
+|---|---|
+| `superadmin@slis.test` | super_admin |
+| `admin@slis.test` | admin |
+| `registrar@slis.test` | registrar |
+| `teacher@slis.test` | teacher |
+| `accounting@slis.test` | accounting |
+
+> These are evaluation credentials committed to a public repo. Change or delete
+> them before the system is deployed anywhere real.
+
+The seed also populates `subjects`, `grading_templates`, `grading_components`
+and `users` — without those, the `grades` rows violate their subject foreign
+key, the opening `BEGIN;` rolls the whole file back, and there is no account to
+log in with.
+
+**Demo data lives in SY 2025-2026, 1st Quarter.** Analytics and the class lists
+default to the current school year, which has no seeded data; select
+2025-2026 / 1st Quarter to see populated results.
+
 `schema.sql` is a `pg_dump --schema-only` snapshot of the schema, which was built up via pgAdmin over time with no other tracked source — it's the only artifact that captures the whole thing, including two validation triggers (`trg_billing_item_parent_category_match`, `trg_validate_grading_period`) and a view (`student_invoice_balances`) that Django's models/migrations layer can't see at all. Most Django models still declare `managed = False` and point at these tables rather than owning them via migrations (see "Known in-progress work" below), so `schema.sql`, not `manage.py migrate`, is the source of truth for table structure. Regenerate it after a real schema change made via pgAdmin:
 
 ```sh
@@ -132,7 +157,7 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 ## Known in-progress work
 
 - **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. `HasRole` (both the shared copy used by billing/enrollment/student and identity-service's own) now fails closed if a view omits `required_roles` — it used to silently allow any authenticated user, guardians included; a view that genuinely wants that must set `ALLOW_ANY_AUTHENTICATED_ROLE = True` explicitly. `backend/shared/` now also holds `authentication.py` (`SingleSessionJWTAuthentication`, de-duplicated from three per-service copies) and `health.py`; `user_stub.py` remains unused dead code (see git history/audit notes for why).
-- **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
+- **Clustering analytics** (`enrollment-service/ai/`): K-means clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
 
 - **Flipping the remaining `managed = False` models to `managed = True` needs the `accounts` app-label collision resolved first — not a decision to make in passing.** All four services independently define a local app named `accounts` (their own `User` stub, hand-copied per service — see `backend/shared/`'s notes above), but Django's migration bookkeeping (`django_migrations`) is keyed by `(app_label, migration_name)` in the **one shared database**, not per-service. Checked directly against the real DB: `accounts.0001_initial` is recorded **once**, even though all four services carry a file by that name with different `CreateModel` contents — whichever service happened to migrate first "claimed" that row, and the other three's `0001_initial.py` has never actually executed. Harmless today only because every current `accounts` migration is `managed = False` (a no-op either way). It stops being harmless the moment any service's `accounts` app gets a real, executed migration: a same-named migration in a *different* service would read as "already applied" and silently skip its own `CREATE TABLE`, even against a genuinely empty database. Fix first (e.g. a distinct `AppConfig.label` per service), independently of and before any `managed = True` conversion work.
 - **`schema.sql`** (repo root) is a `pg_dump --schema-only` snapshot of the real schema — see the Database setup section above. Verified by loading it into a throwaway database from scratch (0 errors, exact table/view count match). It's a complete, working substitute for `manage.py migrate` today, but doesn't by itself fix `pytest-django`'s automatic test-database creation, which still drives Django's own migration executor and hits the `django.contrib.admin` → `AUTH_USER_MODEL` wall documented in `enrollment-service/ai/test_risk_assessment.py`'s module docstring (that FK requires `users` to exist, and no *migration* creates it in student-service, billing-service, or enrollment-service). Closing that gap for real integration testing — without re-triggering the collision above — most likely means point pytest-django's `django_db_setup` fixture at `schema.sql` directly instead of at `manage.py migrate`, rather than converting all 55 tables to `managed = True`.

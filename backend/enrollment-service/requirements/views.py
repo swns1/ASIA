@@ -13,6 +13,7 @@ from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
     IsStaffOrOwnerGuardianReadOnly,
     guardian_student_ids,
+    teacher_student_ids,
 )
 from shared.uploads import download_url, file_kind_for, resolve_stored_path, verify_download_token
 
@@ -42,6 +43,24 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = StudentRequirementSubmission.objects.select_related("requirement_type")
+
+        # IsAdminRegistrarOrReadOnly grants read to every authenticated
+        # non-guardian, so without this scoping any teacher or accounting token
+        # could list submissions for an arbitrary ?student_id= -- and the
+        # serializer hands back a working signed download URL for each file
+        # (PSA birth certificates, Form 137s) for any student in the school.
+        #
+        # The student-service twin of this viewset has always been scoped
+        # (students.views._scope_to_teacher_roster), as has this viewset's own
+        # `summary` action below; only this list path was missed.
+        role = getattr(self.request.user, "role", None)
+        if role == "teacher":
+            qs = qs.filter(student_id__in=teacher_student_ids(self.request.user))
+        elif role == "accounting":
+            # Document-submission status isn't billing-relevant, matching the
+            # student-service default.
+            return qs.none()
+
         student_id = self.request.query_params.get("student_id")
         if student_id:
             qs = qs.filter(student_id=student_id)

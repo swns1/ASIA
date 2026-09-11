@@ -86,8 +86,8 @@ class TestComputeGradeWeightedAverage:
         response = _run_compute(
             [written, performance],
             {
-                1: _entries_queryset([_entry(80, 100), _entry(90, 100)]),  # avg 85%
-                2: _entries_queryset([_entry(70, 100)]),                   # avg 70%
+                1: _entries_queryset([_entry(80, 100), _entry(90, 100)]),  # 170/200
+                2: _entries_queryset([_entry(70, 100)]),                   # 70/100
             },
         )
 
@@ -97,49 +97,102 @@ class TestComputeGradeWeightedAverage:
         assert comps["Written Works"]["weighted_score"] == 34.0   # 85 * 40 / 100
         assert comps["Performance Tasks"]["average_percentage"] == 70.0
         assert comps["Performance Tasks"]["weighted_score"] == 42.0  # 70 * 60 / 100
-        # 34 + 42
-        assert response.data["final_grade"] == 76.0
+
+        # Initial Grade is the sum of the weighted scores...
+        assert response.data["initial_grade"] == 76.0
+        # ...and the reported grade is that Initial Grade transmuted per DO 8.
+        assert response.data["transmuted_grade"] == 85
+        assert response.data["final_grade"] == 85
+        assert response.data["is_complete"] is True
+
+    def test_percentage_score_is_weighted_by_assessment_size(self):
+        """
+        DO 8 sums raw scores over summed highest-possible scores. The old
+        implementation took the mean of per-assessment percentages, so a
+        perfect 5-point seatwork offset a failed 50-point test.
+        """
+        only = _component(1, "Written Works", 100, sort_order=1)
+        response = _run_compute(
+            [only],
+            {1: _entries_queryset([_entry(5, 5), _entry(5, 50)])},
+        )
+
+        # 10/55 = 18.18%, not the 50% an unweighted mean would report.
+        assert response.data["components"][0]["average_percentage"] == 18.18
+        assert response.data["initial_grade"] == 18.18
 
 
-class TestComputeGradeZeroEntriesComponent:
-    def test_component_with_no_entries_contributes_zero_without_erroring(self):
+class TestComputeGradeUnencodedComponent:
+    def test_a_component_with_no_entries_is_pending_not_zero(self):
+        """
+        Scoring an unencoded component 0 and weighting it in made every learner
+        read as failing until the last column was encoded. It is now excluded,
+        and the remaining weights are renormalised.
+        """
         scored = _component(1, "Written Works", 50, sort_order=1)
         unscored = _component(2, "Performance Tasks", 50, sort_order=2)
         response = _run_compute(
             [scored, unscored],
             {
-                1: _entries_queryset([_entry(80, 100)]),  # avg 80%
-                2: _entries_queryset([]),                  # no entries -> 0%
+                1: _entries_queryset([_entry(80, 100)]),
+                2: _entries_queryset([]),
             },
         )
 
         comps = {c["component_name"]: c for c in response.data["components"]}
         assert comps["Performance Tasks"]["entries_count"] == 0
-        assert comps["Performance Tasks"]["average_percentage"] == 0.0
-        # 80*0.5 + 0*0.5
-        assert response.data["final_grade"] == 40.0
+        assert comps["Performance Tasks"]["is_encoded"] is False
+        assert comps["Performance Tasks"]["average_percentage"] is None
+        assert comps["Performance Tasks"]["weighted_score"] is None
+
+        # Renormalised over the encoded 50% rather than halved to 40.
+        assert response.data["initial_grade"] == 80.0
+        assert response.data["is_complete"] is False
+        assert response.data["pending_components"] == ["Performance Tasks"]
+        # No pass/fail determination on an unfinished quarter.
+        assert response.data["remarks"] is None
 
 
 class TestComputeGradePassFailBoundary:
+    """
+    Pass/fail is determined on the TRANSMUTED grade. Applying the 75 line to
+    the raw Initial Grade, as this used to, got the determination wrong across
+    the whole 60-99 initial-grade band.
+    """
+
     def _single_component_result(self, entries):
         comp = _component(1, "Only", 100, sort_order=1)
         response = _run_compute([comp], {1: _entries_queryset(entries)})
         return response.data
 
-    def test_exactly_75_is_passed(self):
+    def test_an_initial_grade_of_75_transmutes_well_clear_of_the_line(self):
         data = self._single_component_result([_entry(75, 100)])
-        assert data["final_grade"] == 75.0
+        assert data["initial_grade"] == 75.0
+        assert data["final_grade"] == 84
         assert data["remarks"] == "passed"
 
-    def test_just_under_75_is_failed(self):
+    def test_an_initial_grade_just_under_75_is_a_pass_not_a_failure(self):
         data = self._single_component_result([_entry(7499, 10000)])  # 74.99%
-        assert data["final_grade"] == 74.99
+        assert data["initial_grade"] == 74.99
+        assert data["final_grade"] == 84
+        assert data["remarks"] == "passed"
+
+    def test_the_real_failing_line_is_an_initial_grade_below_60(self):
+        data = self._single_component_result([_entry(5999, 10000)])  # 59.99%
+        assert data["final_grade"] == 74
         assert data["remarks"] == "failed"
 
-    def test_no_entries_at_all_has_no_remarks(self):
+    def test_a_very_low_initial_grade_still_floors_at_60(self):
+        data = self._single_component_result([_entry(10, 100)])
+        assert data["final_grade"] == 62
+        assert data["remarks"] == "failed"
+
+    def test_no_entries_at_all_stays_uncomputed(self):
         data = self._single_component_result([])
-        assert data["final_grade"] == 0.0
+        assert data["initial_grade"] is None
+        assert data["final_grade"] is None
         assert data["remarks"] is None
+        assert data["is_complete"] is False
 
 
 class TestComputeGradeAccessCheck:
