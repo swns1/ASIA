@@ -85,6 +85,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "student_service.audit.AuditLogMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -176,13 +177,14 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "student_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 0 (never trust X-Forwarded-For) until a real reverse proxy sits in
-    # front of this service and is configured to strip/set it correctly --
-    # there isn't one today (see README), so this header is currently
-    # attacker-controlled end to end. Governs both DRF throttling's client
-    # identification (SimpleRateThrottle.get_ident) and the audit log's
-    # recorded IP (shared.audit.client_ip reads this same setting).
-    "NUM_PROXIES": 0,
+    # 1: exactly one reverse proxy sits in front of this service in every
+    # deployed environment (Render's load balancer). Governs both DRF
+    # throttling's client identification (SimpleRateThrottle.get_ident) and
+    # the audit log's recorded IP (shared.audit.client_ip reads this same
+    # setting) — at 0, every client resolves to the proxy's IP, collapsing
+    # AnonRateThrottle into one shared bucket and making the audit trail
+    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    "NUM_PROXIES": 1,
 }
 
 SIMPLE_JWT = {
@@ -197,6 +199,15 @@ DATABASES = {
         "PASSWORD": _required_env("DB_PASSWORD"),
         "HOST":     os.environ.get("DB_HOST",     "localhost"),
         "PORT":     os.environ.get("DB_PORT",     "5432"),
+        # Both required against Supabase's Supavisor pooler in transaction
+        # mode (port 6543): it multiplexes many clients over few real
+        # backend connections and doesn't hold one open per session, so a
+        # server-side cursor opened on one logical connection can vanish
+        # before a later query on the "same" connection tries to read it.
+        # CONN_MAX_AGE also matters even without a pooler — this app makes a
+        # fresh Postgres connection per request otherwise, ×4 services.
+        "CONN_MAX_AGE": 600,
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 }
 
@@ -216,6 +227,8 @@ TIME_ZONE = 'Asia/Manila'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
