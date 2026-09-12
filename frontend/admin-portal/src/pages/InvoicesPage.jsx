@@ -1,6 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
@@ -19,6 +19,7 @@ import Pagination from "../components/Pagination";
 import { StatusBadge } from "../components/ui/Badge";
 import { Select } from "../components/FormField";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -687,6 +688,13 @@ export default function InvoicesPage() {
     const p = searchParams.get("selected");
     return p ? parseInt(p) : null;
   });
+  // Invoices default to the app-wide school year, so this page and the
+  // dashboard can't disagree about which year "now" is. "" is the explicit
+  // all-years view — the escape hatch for chasing an older balance without
+  // changing the global year for every other page.
+  const { schoolYear } = useSchoolYear();
+  const [yearFilter,   setYearFilter]   = useState(() => searchParams.get("school_year") ?? "");
+
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "all");
   const [planFilter,   setPlanFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
@@ -697,7 +705,7 @@ export default function InvoicesPage() {
   const [showGenModal,      setShowGenModal]      = useState(false);
   const [payModalInvoiceId, setPayModalInvoiceId] = useState(null);
   const [refreshKey,        setRefreshKey]        = useState(0);
-  const [summary,           setSummary]           = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0 });
+  const [summary,           setSummary]           = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0, school_years:[] });
 
   const fetchInvoices = useCallback(async (
     p = 1,
@@ -705,6 +713,7 @@ export default function InvoicesPage() {
     plan = planFilter,
     term = search,
     ord = ordering,
+    year = yearFilter,
   ) => {
     setLoading(true);
     try {
@@ -712,9 +721,14 @@ export default function InvoicesPage() {
       if (status !== "all") params.status = status;
       if (plan   !== "all") params.payment_plan = plan;
       if (term.trim())      params.search = term.trim();
+      if (year)             params.school_year = year;
 
+      // The stat tiles read from /summary/, so it must carry the same year and
+      // plan scoping as the list — otherwise the tiles would total a different
+      // set of invoices than the rows beneath them.
       const summaryParams = {};
       if (plan !== "all") summaryParams.payment_plan = plan;
+      if (year)           summaryParams.school_year = year;
 
       const [data, summaryData] = await Promise.all([
         getInvoices(params),
@@ -733,33 +747,58 @@ export default function InvoicesPage() {
       setPageMeta({ count: 0, next: null, previous: null });
     }
     finally { setLoading(false); }
-  }, [statusFilter, planFilter, search, ordering]);
+  }, [statusFilter, planFilter, search, ordering, yearFilter]);
+
+  // The context resolves its year asynchronously (it may fetch school settings),
+  // so the first load waits for it rather than firing an unscoped request that
+  // would flash all-years data before correcting itself. A `school_year` in the
+  // URL wins, so a deep link keeps pointing at the year it named.
+  const urlYear = searchParams.get("school_year");
+  const seededYear = useRef(Boolean(urlYear));
+
+  useEffect(() => {
+    if (seededYear.current || !schoolYear) return;
+    seededYear.current = true;
+    setYearFilter(schoolYear);
+  }, [schoolYear]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
     if (!token) { navigate("/"); return; }
-    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id");
+    if (!seededYear.current) return; // still waiting on the default year
+    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id", yearFilter);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [refreshKey, yearFilter]);
 
   const handleSearch = () => {
     setSearch(inputVal);
-    fetchInvoices(1, statusFilter, planFilter, inputVal, ordering);
+    fetchInvoices(1, statusFilter, planFilter, inputVal, ordering, yearFilter);
   };
 
   const handleOrdering = (val) => {
     setOrdering(val);
-    fetchInvoices(1, statusFilter, planFilter, search, val);
+    fetchInvoices(1, statusFilter, planFilter, search, val, yearFilter);
+  };
+
+  const handleYear = (val) => {
+    setYearFilter(val);
+    fetchInvoices(1, statusFilter, planFilter, search, ordering, val);
   };
 
   const handleClearAll = () => {
     setInputVal(""); setSearch("");
     setStatusFilter("all"); setPlanFilter("all");
     setOrdering("-invoice_id");
-    fetchInvoices(1, "all", "all", "", "-invoice_id");
+    // Clearing returns to the current school year, not to all-years: falling
+    // back to every year would resurrect the mixed-year view this filter exists
+    // to prevent.
+    setYearFilter(schoolYear ?? "");
+    fetchInvoices(1, "all", "all", "", "-invoice_id", schoolYear ?? "");
   };
 
-  const hasActiveFilters = search || statusFilter !== "all" || planFilter !== "all" || ordering !== "-invoice_id";
+  const hasActiveFilters =
+    search || statusFilter !== "all" || planFilter !== "all" ||
+    ordering !== "-invoice_id" || (schoolYear ? yearFilter !== schoolYear : Boolean(yearFilter));
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
@@ -785,6 +824,17 @@ export default function InvoicesPage() {
       // the chip, which is what the layout spring animates.
       count: loading ? null : summary[v],
     })),
+  ];
+
+  // Years that actually have invoices, from /summary/. "All years" last, so the
+  // default (a real year) reads as the primary choice rather than an opt-in.
+  const yearChipOptions = [
+    ...(summary.school_years ?? []).map((y) => ({
+      value: y,
+      label: y === schoolYear ? `${y} (current)` : y,
+      tone: y === schoolYear ? "brand" : "muted",
+    })),
+    { value: "", label: "All years", tone: "muted" },
   ];
 
   const planChipOptions = [
@@ -849,7 +899,7 @@ export default function InvoicesPage() {
           searchValue={inputVal}
           onSearchChange={setInputVal}
           onSearch={handleSearch}
-          onClearSearch={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering); }}
+          onClearSearch={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering, yearFilter); }}
           hasFilters={Boolean(hasActiveFilters)}
           onClearFilters={handleClearAll}
           extraControls={
@@ -868,12 +918,21 @@ export default function InvoicesPage() {
             </div>
           }
         >
+          <FilterRow label="School Year">
+            <ChipGroup
+              label="Filter by school year"
+              options={yearChipOptions}
+              value={yearFilter}
+              onChange={handleYear}
+            />
+          </FilterRow>
+
           <FilterRow label="Status">
             <ChipGroup
               label="Filter by status"
               options={statusChipOptions}
               value={statusFilter}
-              onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering); }}
+              onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering, yearFilter); }}
             />
           </FilterRow>
 
@@ -882,7 +941,7 @@ export default function InvoicesPage() {
               label="Filter by payment plan"
               options={planChipOptions}
               value={planFilter}
-              onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering); }}
+              onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering, yearFilter); }}
             />
           </FilterRow>
         </FilterBar>
@@ -911,12 +970,27 @@ export default function InvoicesPage() {
               ) : invoices.length === 0 ? (
                 <EmptyState
                   icon="ti-receipt-off"
-                  title={hasActiveFilters ? "No invoices match these filters" : "No invoices yet"}
-                  subtitle={hasActiveFilters ? "Try a different search or clear the filters." : "Generate the first invoice to get started."}
+                  // A year with no invoices isn't "no invoices yet" — that
+                  // reads as the school having none at all. Name the year, and
+                  // offer the all-years view as the way out.
+                  title={
+                    hasActiveFilters ? "No invoices match these filters"
+                      : yearFilter ? `No invoices for S.Y. ${yearFilter}`
+                      : "No invoices yet"
+                  }
+                  subtitle={
+                    hasActiveFilters ? "Try a different search or clear the filters."
+                      : yearFilter ? "Generate one for this year, or view all years."
+                      : "Generate the first invoice to get started."
+                  }
                   action={
                     hasActiveFilters ? (
                       <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
                         Clear filters
+                      </Button>
+                    ) : yearFilter ? (
+                      <Button variant="secondary" size="sm" icon="ti-calendar" onClick={() => handleYear("")}>
+                        View all years
                       </Button>
                     ) : (
                       <Button size="sm" icon="ti-receipt" onClick={() => setShowGenModal(true)}>

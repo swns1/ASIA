@@ -100,6 +100,17 @@ const HOVER_GLOW_REST = "0 8px 24px rgba(0,0,0,0.08)";
  *
  * `animate` opts into the entrance stagger + hover glow (EnrollmentsPage used
  * a page-level motion.div per card for this); pass `animateDelay` for stagger.
+ *
+ * Two ways to make the tile navigable, and they are not interchangeable:
+ *   `onClick`      — the whole card becomes a <button>. Use for tiles whose
+ *                    only job is to navigate or toggle a filter.
+ *   `onValueClick` — only the value becomes a button; the card stays a <div>.
+ *                    Use whenever the tile also contains its own controls
+ *                    (filter buttons, selects). Nesting those inside a button
+ *                    is invalid HTML and makes them keyboard-unreachable, so a
+ *                    tile with controls must take this path, not `onClick`.
+ * Pass `trailing` for controls pinned to the card's right edge; it renders
+ * outside the text column so long labels can't push it out of alignment.
  */
 export function StatCard({
   label,
@@ -110,6 +121,9 @@ export function StatCard({
   loading = false,
   active = false,
   onClick,
+  onValueClick,
+  valueLabel,
+  trailing,
   layout = "horizontal",
   animate = false,
   animateDelay = 0,
@@ -141,14 +155,30 @@ export function StatCard({
     </div>
   );
 
+  // The value, optionally wrapped so it alone is clickable. `onClick` already
+  // makes the whole card a button, so wrapping again there would nest buttons.
+  const valueNode =
+    onValueClick && !isInteractive ? (
+      <button
+        type="button"
+        onClick={onValueClick}
+        aria-label={valueLabel}
+        className="focus-ring rounded-sm text-left transition-colors hover:text-brand-600"
+      >
+        {value}
+      </button>
+    ) : (
+      value
+    );
+
   const body = loading ? (
     <SkeletonCard />
   ) : layout === "horizontal" ? (
     <>
       {iconChip}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className={`text-xl font-bold leading-none ${active ? activeTextClass : "text-neutral-900"}`}>
-          {value}
+          {valueNode}
         </div>
         <div
           className={`mt-1 truncate text-xs font-medium uppercase tracking-[0.06em] ${
@@ -160,6 +190,7 @@ export function StatCard({
         {hint && <div className="mt-1 text-xs text-neutral-500">{hint}</div>}
         {children}
       </div>
+      {trailing && <div className="shrink-0 self-start">{trailing}</div>}
     </>
   ) : (
     <>
@@ -173,10 +204,10 @@ export function StatCard({
             {label}
           </div>
           <div className={`mt-1.5 text-xl font-bold ${active ? activeTextClass : "text-neutral-900"}`}>
-            {value}
+            {valueNode}
           </div>
         </div>
-        {iconChip}
+        {trailing ?? iconChip}
       </div>
       {hint && <div className="mt-2 text-xs text-neutral-500">{hint}</div>}
       {children}

@@ -108,6 +108,54 @@ class DiscountTypeViewSet(viewsets.ModelViewSet):
 
 # ── Invoices ─────────────────────────────────────────────────────────────────
 
+def scope_invoices_to_school_year(queryset, school_year):
+    """
+    Narrow an invoice queryset to one school year.
+
+    An invoice has no school year of its own — only `enrollment_id`. The year
+    lives on enrollments, which this service reads through EnrollmentMirror
+    (managed=False). Both the list view and /summary/ must scope identically or
+    the page's stat tiles would report different totals than the rows beneath
+    them, so the join lives here once rather than in each caller.
+
+    A blank or missing `school_year` returns the queryset untouched, which is
+    what renders the "All years" view.
+    """
+    year = (school_year or "").strip()
+    if not year:
+        return queryset
+
+    from .enrollment_mirror import EnrollmentMirror
+
+    return queryset.filter(
+        enrollment_id__in=(
+            EnrollmentMirror.objects
+            .filter(school_year=year)
+            .values_list("enrollment_id", flat=True)
+        )
+    )
+
+
+def school_years_with_invoices():
+    """
+    The school years that actually have at least one invoice, newest first.
+
+    Deliberately not scoped by the caller's active year filter: this feeds the
+    page's year picker, so narrowing it to the selected year would collapse the
+    picker to a single option and strand the user there.
+    """
+    from .enrollment_mirror import EnrollmentMirror
+
+    enrollment_ids = StudentInvoice.objects.values_list("enrollment_id", flat=True)
+    years = (
+        EnrollmentMirror.objects
+        .filter(enrollment_id__in=enrollment_ids)
+        .values_list("school_year", flat=True)
+        .distinct()
+    )
+    return sorted({y for y in years if y}, reverse=True)
+
+
 class StudentInvoiceViewSet(viewsets.ModelViewSet):
     """
     /api/invoices/                            GET, POST
@@ -140,6 +188,14 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
+
+        # school_year can't go in `filterset_fields`: it isn't a column on
+        # StudentInvoice. It lives on enrollments, which billing reads through
+        # EnrollmentMirror — the same cross-service hop financial_summary makes.
+        queryset = scope_invoices_to_school_year(
+            queryset, self.request.query_params.get("school_year")
+        )
+
         term = self.request.query_params.get("search", "").strip()
         if term:
             from django.db.models import Q
@@ -224,9 +280,16 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         """
-        GET /api/invoices/summary/
+        GET /api/invoices/summary/?school_year=2025-2026
+
         Returns real aggregate counts across ALL invoices (not just the current page).
-        Accepts the same status/payment_plan/enrollment_id filter params as the list view.
+        Accepts the same status/payment_plan/enrollment_id/school_year filter params
+        as the list view — these counts drive the page's stat tiles, so they must be
+        scoped exactly as the list is or the tiles would contradict the rows below.
+
+        `school_years` lists every year that has invoices, for the year picker. It
+        is intentionally not scoped by the active filter: narrowing it would leave
+        the picker showing only the year already selected.
         """
         if getattr(request.user, "role", None) == "guardian":
             return Response({"detail": "You do not have access to this record."}, status=403)
@@ -237,6 +300,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             qs = qs.filter(enrollment_id=enrollment_id)
         if payment_plan:
             qs = qs.filter(payment_plan=payment_plan)
+        qs = scope_invoices_to_school_year(qs, request.query_params.get("school_year"))
 
         from django.db.models import Count
         counts = qs.values("status").annotate(n=Count("invoice_id"))
@@ -246,6 +310,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             if s in result:
                 result[s] = row["n"]
             result["total"] += row["n"]
+        result["school_years"] = school_years_with_invoices()
         return Response(result)
 
     @action(detail=False, methods=["get"], url_path="financial-summary")
