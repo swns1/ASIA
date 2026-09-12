@@ -163,7 +163,7 @@ def _invite(pk=None):
     invite = ApplicationInvite(
         invite_id=pk or uuid.uuid4(),
         applicant_first_name="Juan", applicant_last_name="Dela Cruz",
-        mode=ApplicationInvite.REMOTE, issued_by_user_id=1,
+        issued_by_user_id=1,
         expires_at=timezone.now() + timedelta(days=1),
     )
     return invite
@@ -259,3 +259,50 @@ class TestApplySubmitView:
                          "display_name": "x", "student_number": "y"}])
         assert clean.keys() == flagged.keys()
         assert set(clean) == {"reference", "status", "submitted_at"}
+
+
+# ── applying_for — the one enrollment-shaped key in payload_json ──────────
+#
+# The kiosk asks what grade a family is enrolling into so the registrar
+# isn't guessing at approval time. It rides in payload_json and must stay
+# advisory: it is not student data, and an applicant must not be able to
+# name their own section (that is the registrar's decision, and the
+# `enrollments` table is read-only from this service —
+# see accounts/enrollment_mirror.py).
+
+class TestApplyingFor:
+    def test_section_and_status_are_dropped(self):
+        from .serializers import ALLOWED_APPLYING_FOR_FIELDS, whitelist
+
+        cleaned = whitelist(
+            {
+                "grade_level": "Grade 11",
+                "school_level": "senior_highschool",
+                "strand": "STEM",
+                "section": "Sampaguita",      # registrar's call, never the applicant's
+                "enrollment_status": "enrolled",  # would skip the review it exists for
+                "school_year": "2099-2100",
+            },
+            ALLOWED_APPLYING_FOR_FIELDS,
+        )
+
+        assert cleaned == {
+            "grade_level": "Grade 11",
+            "school_level": "senior_highschool",
+            "strand": "STEM",
+        }
+
+    def test_never_reaches_the_student_bundle(self):
+        from .services import _whitelisted_bundle
+
+        student, household, guardians, siblings, schools = _whitelisted_bundle({
+            "student": {"first_name": "Juan", "last_name": "Dela Cruz"},
+            "applying_for": {"grade_level": "Grade 7", "school_level": "junior_highschool"},
+        })
+
+        # approve_application builds the real Student from this bundle, so
+        # anything applying_for leaked into here would become student data.
+        assert "grade_level" not in student
+        assert "school_level" not in student
+        assert student == {"first_name": "Juan", "last_name": "Dela Cruz"}
+        assert (household, guardians, siblings, schools) == (None, [], [], [])

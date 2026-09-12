@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Idle-timeout for the applicant kiosk flow (walk-in mode only — see
+ * Idle-timeout for the applicant kiosk flow (see
  * pages/apply/ApplicantFormPage.jsx). A parent reading a field or asking
  * their spouse a question easily pauses 60-90s; this fires a dismissible
  * warning at `timeoutMs - warnMs` and, absent any activity by then, calls

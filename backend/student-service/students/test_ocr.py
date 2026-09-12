@@ -64,22 +64,36 @@ def lines(*texts):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Policy — which documents earn a full extraction
+# Policy — every document is confirmed, none are mined
 # ─────────────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("code,expected", [
-    ("psa_birth_certificate", EXTRACT),
-    ("birth_certificate", EXTRACT),
-    ("form_137_or_138", EXTRACT),
-    # Form 138 is the report card: its payload is term grades, and the
-    # enrollment form has no field for them.
-    ("form_138", VERIFY),
-    ("certificate_good_moral", VERIFY),
-    ("ncae_result", VERIFY),
-    ("health_record", VERIFY),
+@pytest.mark.parametrize("code", [
+    # The two families that used to be extracted. The applicant kiosk has the
+    # family type these fields themselves, from these very documents, so
+    # there is nothing left for an anchor set to add — see ocr/policy.py.
+    "psa_birth_certificate",
+    "birth_certificate",
+    "form_137_or_138",
+    "form_138",
+    "certificate_good_moral",
+    "ncae_result",
+    "health_record",
 ])
-def test_policy_for_requirement_code(code, expected):
-    assert policy_for(code)[0] == expected
+def test_every_requirement_code_verifies(code):
+    assert policy_for(code)[0] == VERIFY
+
+
+def test_no_requirement_code_extracts():
+    """
+    The product decision, pinned. EXTRACT is still implemented and still
+    reachable by editing _POLICY — this asserts that nothing reaches it
+    today, so re-enabling extraction has to be deliberate rather than
+    accidental.
+    """
+    from students.ocr.policy import _POLICY
+
+    assert all(policy == VERIFY for policy, _ in _POLICY.values())
+    assert EXTRACT not in {policy for policy, _ in _POLICY.values()}
 
 
 def test_unknown_requirement_code_verifies_rather_than_extracts():
@@ -89,16 +103,34 @@ def test_unknown_requirement_code_verifies_rather_than_extracts():
     assert policy_for(None)[0] == VERIFY
 
 
-def test_form_137_slot_routes_by_what_the_page_actually_says():
+def test_form_137_slot_verifies_whichever_document_arrives():
     """
-    `form_137_or_138` is one requirement slot accepting either document, so
-    the code alone cannot decide the policy.
+    `form_137_or_138` is one requirement slot accepting either document.
+    Which one turned up no longer changes the policy — both are confirmed,
+    neither is mined — but resolve_policy is still the thing that would
+    demote a Form 138 if extraction were switched back on.
     """
     f137 = lines("DepEd Form 137", "LEARNER PERMANENT RECORD", "LRN: 136789012345")
-    assert resolve_policy("form_137_or_138", f137) == (EXTRACT, FAMILY_FORM_137)
+    assert resolve_policy("form_137_or_138", f137) == (VERIFY, None)
 
     f138 = lines("DepEd Form 138", "REPORT CARD", "First Quarter 88")
     assert resolve_policy("form_137_or_138", f138) == (VERIFY, None)
+
+
+@pytest.mark.parametrize("code,text,expected", [
+    # Demoting these three to VERIFY would have silently reduced them to a
+    # name match, because verify.py only checks a document *type* for codes
+    # it has markers for. These assert the markers came across with them.
+    ("psa_birth_certificate", ("CERTIFICATE OF LIVE BIRTH", "CIVIL REGISTRAR"), True),
+    ("psa_birth_certificate", ("CERTIFICATE OF GOOD MORAL CHARACTER",), False),
+    ("birth_certificate", ("CERTIFICATE OF LIVE BIRTH",), True),
+    ("form_137_or_138", ("LEARNER PERMANENT RECORD", "SF10"), True),
+    ("form_137_or_138", ("DepEd Form 138", "REPORT CARD"), True),
+    ("form_137_or_138", ("a holiday photo",), False),
+])
+def test_demoted_codes_still_check_the_document_type(code, text, expected):
+    result = verify_document(lines(*text), code, first_name="Ana", last_name="Dela Cruz")
+    assert result["is_expected_document"] is expected
 
 
 def test_form_137_slot_demotes_when_neither_marker_is_present():
@@ -115,7 +147,7 @@ def test_looks_like_family_flags_a_mismatched_document():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Verify — the nine attestation documents, no model call
+# Verify — all thirteen requirement types, no model call
 # ─────────────────────────────────────────────────────────────────────────
 
 GOOD_MORAL = ("CERTIFICATE OF GOOD MORAL CHARACTER",
@@ -642,6 +674,54 @@ class TestScanPermissions:
         request = factory.post("/")
         request.user = SimpleNamespace(is_authenticated=False)
         assert self.perm.has_permission(request, view_cls) is False
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# The fallback when the local reader is unavailable
+# ─────────────────────────────────────────────────────────────────────────
+#
+# This path used to escalate to the paid vision model and return its fields.
+# There is nowhere to put fields now that every document is VERIFY, and the
+# check is string work over text this service failed to produce — so there is
+# nothing to escalate to. It fires exactly when something is already wrong,
+# which is the worst time to discover the response shape is off.
+
+class TestReaderUnavailable:
+    def _response(self):
+        from unittest.mock import patch
+
+        from students.ocr.views import OCRScanView
+
+        request = factory.post("/")
+        request.user = _user("registrar")
+        with patch("students.ocr.views.DocumentExtraction.objects.create") as create,              patch("students.ocr.views._ledger_for", return_value={}):
+            create.return_value = SimpleNamespace(document_extraction_id=7)
+            return OCRScanView()._unreadable(
+                request, "psa_birth_certificate", None,
+            )
+
+    def test_reports_a_verify_result_with_no_fields(self):
+        data = self._response().data
+        assert data["policy"] == VERIFY
+        assert data["extracted"] == {}
+        assert data["field_confidence"] == {}
+
+    def test_makes_no_claim_about_the_document(self):
+        """
+        None is "couldn't check", not "failed". Rendering it as a failure
+        would tell a registrar their valid document was wrong.
+        """
+        check = self._response().data["check"]
+        assert check["is_expected_document"] is None
+        assert check["names_student"] is None
+        assert "could not be read" in check["notes"][0]
+
+    def test_does_not_call_the_paid_reader(self):
+        from unittest.mock import patch
+
+        with patch("students.ocr.views.groq_vision.call") as groq:
+            self._response()
+        groq.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────────────────

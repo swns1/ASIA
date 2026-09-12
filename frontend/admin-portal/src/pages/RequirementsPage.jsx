@@ -14,6 +14,7 @@ import {
   resolveMediaUrl,
   uploadRequirement,
 } from "../api/requirementApi";
+import { scanDocument } from "../api/ocrApi";
 
 
 
@@ -124,37 +125,137 @@ function RemoveModal({ req, onConfirm, onCancel, removing }) {
   );
 }
 
+// ── Document check ────────────────────────────────────────────────────────────
+// Every requirement type is VERIFY now (see backend ocr/policy.py): the reader
+// confirms this is the paper the slot asked for, and that it names this
+// learner. It does not extract anything and it never blocks an upload — a
+// registrar holding a valid but unusual document has to be able to proceed, so
+// this reports and gets out of the way. `null` on either answer means "no
+// claim", which is not a failure and must not be drawn as one.
+function CheckStrip({ state, check, requirementName, studentName }) {
+  if (state === "idle") return null;
+  // "done" with nothing to show means the reader returned no verdict. That is
+  // not a pass — drawing it green would vouch for a document nobody checked.
+  const unchecked = state === "error" || (state === "done" && !check);
+
+  if (state === "scanning") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.muted,
+                    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+        <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
+        Checking this document…
+      </div>
+    );
+  }
+
+  if (unchecked) {
+    return (
+      <div style={{ fontSize: 12, color: C.muted, background: C.bg, border: `1px solid ${C.border}`,
+                    borderRadius: 10, padding: "10px 12px" }}>
+        <i className="ti ti-alert-circle" style={{ fontSize: 14, marginRight: 6 }} />
+        Couldn&apos;t check this document — you can still upload it.
+      </div>
+    );
+  }
+
+  const problems = [];
+  if (check?.is_expected_document === false) {
+    problems.push(`This does not look like a ${requirementName}.`);
+  }
+  if (check?.names_student === false) {
+    problems.push(`This document does not name ${studentName || "this student"}.`);
+  }
+  (check?.notes || []).forEach((n) => {
+    if (n.startsWith("No readable text")) problems.push(n);
+  });
+
+  const ok = problems.length === 0;
+  return (
+    <div style={{
+      fontSize: 12, borderRadius: 10, padding: "10px 12px",
+      color: ok ? C.green : C.redDark,
+      background: ok ? C.greenLight : C.redLight,
+      border: `1px solid ${ok ? C.greenBorder : C.redBorder}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
+        <i className={`ti ${ok ? "ti-circle-check" : "ti-alert-triangle"}`} style={{ fontSize: 14 }} />
+        {ok ? "Looks right" : "Worth a second look"}
+      </div>
+      {problems.map((msg) => (
+        <div key={msg} style={{ marginTop: 4, paddingLeft: 20 }}>{msg}</div>
+      ))}
+      {!ok && (
+        <div style={{ marginTop: 6, paddingLeft: 20, color: C.muted }}>
+          You can still upload it if you know it&apos;s correct.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Upload / Replace modal ────────────────────────────────────────────────────
-function UploadModal({ requirement, studentId, onClose, onSuccess }) {
+function UploadModal({ requirement, studentId, student, onClose, onSuccess }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [remarks, setRemarks] = useState(requirement?.remarks || "");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [checkState, setCheckState] = useState("idle"); // idle | scanning | done | error
+  const [check, setCheck] = useState(null);
+  // A scan runs for tens of seconds (see ocrApi.js's timeout). Someone who
+  // picks the wrong file and corrects it would otherwise have the first
+  // scan land second and label the new file with the old file's verdict.
+  const scanSeq = useRef(0);
   const fileInputRef = useRef(null);
   const isReplace = !!requirement?.submission_id;
 
-  function handleFileChange(e) {
-    const f = e.target.files?.[0];
+  function acceptFile(f) {
     if (!f) return;
     setFile(f); setError("");
-    if (f.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setPreview(ev.target.result);
-      reader.readAsDataURL(f);
-    } else { setPreview(null); }
+    setCheck(null);
+
+    if (!f.type.startsWith("image/")) {
+      // A PDF has no page for the recogniser to read, so there is nothing to
+      // check — say nothing rather than showing a failed check. Still bump
+      // the sequence, so an image picked a moment ago cannot resolve and
+      // show its verdict against this PDF.
+      scanSeq.current += 1;
+      setPreview(null);
+      setCheckState("idle");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => setPreview(ev.target.result);
+    reader.readAsDataURL(f);
+
+    const seq = (scanSeq.current += 1);
+    setCheckState("scanning");
+    scanDocument(f, {
+      requirementCode: requirement?.requirement_code,
+      studentId,
+      firstName: student?.first_name,
+      lastName: student?.last_name,
+    })
+      .then((data) => {
+        if (seq !== scanSeq.current) return; // superseded by a newer file
+        if (!data?.success) { setCheckState("error"); return; }
+        setCheck(data.check || null);
+        setCheckState("done");
+      })
+      .catch(() => {
+        if (seq !== scanSeq.current) return;
+        setCheckState("error");
+      });
+  }
+
+  function handleFileChange(e) {
+    acceptFile(e.target.files?.[0]);
   }
 
   function handleDrop(e) {
     e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    setFile(f); setError("");
-    if (f.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setPreview(ev.target.result);
-      reader.readAsDataURL(f);
-    } else { setPreview(null); }
+    acceptFile(e.dataTransfer.files?.[0]);
   }
 
   async function handleSubmit() {
@@ -225,6 +326,13 @@ function UploadModal({ requirement, studentId, onClose, onSuccess }) {
               </div>
             )}
           </div>
+
+          <CheckStrip
+            state={checkState}
+            check={check}
+            requirementName={requirement?.requirement_name}
+            studentName={student ? `${student.first_name} ${student.last_name}` : ""}
+          />
 
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
@@ -1108,6 +1216,7 @@ export default function RequirementsPage() {
         <UploadModal
           requirement={uploadModal}
           studentId={selectedStudent?.student_id}
+          student={selectedStudent}
           onClose={() => setUploadModal(null)}
           onSuccess={() => { setUploadModal(null); reloadRequirements(); }}
         />

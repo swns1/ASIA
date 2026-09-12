@@ -14,8 +14,8 @@ const applicationClient = createApiClient({
 
 // ── Invites ──────────────────────────────────────────────────────────────
 
-// { applicant_first_name, applicant_last_name, contact_email?, contact_mobile?, mode }
-// -> { invite_id, ..., access_code, apply_url, email_sent }
+// { applicant_first_name, applicant_last_name, contact_email?, contact_mobile? }
+// -> { invite_id, ..., access_code, apply_url }
 // access_code is shown exactly once in this response — the backend never
 // stores or re-derives the plaintext, so there is no "look it up later".
 export async function createApplicationInvite(payload) {

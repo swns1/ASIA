@@ -31,7 +31,7 @@ from student_service.throttles import StatelessUserRateThrottle
 from ..models import DocumentExtraction, Student
 from . import groq_vision
 from .anchors import extract_fields, required_fields
-from .policy import EXTRACT, looks_like_family, resolve_policy
+from .policy import EXTRACT, VERIFY, looks_like_family, resolve_policy
 from .reader import PaddleReader
 from .reconcile import claims_from_extractions, ledger_to_json, reconcile
 from .verify import verify_document
@@ -99,7 +99,7 @@ class OCRScanView(APIView):
 
         try:
             if parsed is None:
-                return self._cloud_only(request, raw, requirement_code, student_id)
+                return self._unreadable(request, requirement_code, student_id)
 
             policy, family = resolve_policy(requirement_code, parsed)
             expected = looks_like_family(family, parsed)
@@ -202,28 +202,45 @@ class OCRScanView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _cloud_only(self, request, raw, requirement_code, student_id):
-        """Local reader unavailable — the previous behaviour, unchanged."""
-        cloud_data, engine = groq_vision.call(raw, None)
-        fields, confidence = groq_vision.sanitize(cloud_data)
+    def _unreadable(self, request, requirement_code, student_id):
+        """
+        Local reader unavailable.
+
+        This used to fall through to the cloud reader and return its fields.
+        There is nowhere to put them now that every document is VERIFY (see
+        ocr/policy.py), and the check itself is string work over text this
+        service failed to produce — so there is nothing to escalate *to*.
+        Paying a vision model to extract fields no caller will apply is worse
+        than saying plainly that the document could not be checked.
+
+        Still recorded: that a scan was attempted and read nothing is exactly
+        what a registrar re-uploading a blurred photo needs to see.
+        """
         extraction = DocumentExtraction.objects.create(
             student_id=int(student_id) if student_id else None,
             requirement_code=requirement_code or "unknown",
             source_label=_label_for(requirement_code, None),
-            extracted_json=fields,
-            field_confidence_json=confidence,
-            source_engine=engine,
+            source_engine="paddle",
             scanned_by=getattr(request.user, "user_id", None),
         )
         return Response({
             "success": True,
-            "policy": EXTRACT,
+            "policy": VERIFY,
             "family": None,
-            "source_engine": engine,
-            "extracted": fields,
-            "field_confidence": confidence,
-            "check": None,
-            "warnings": ["The local reader was unavailable; used the backup reader."],
+            "source_engine": "paddle",
+            "extracted": {},
+            "field_confidence": {},
+            "check": {
+                "document_type_seen": None,
+                # No text was read, so neither question can be answered. None
+                # is "no claim", which the UI must not render as a failure.
+                "is_expected_document": None,
+                "names_student": None,
+                "matched_name": None,
+                "notes": ["This document could not be read, so it was not checked."],
+                "mean_confidence": 0.0,
+            },
+            "warnings": ["The document reader was unavailable — this upload was not checked."],
             "extraction_id": extraction.document_extraction_id,
             "ledger": _ledger_for(student_id),
         })

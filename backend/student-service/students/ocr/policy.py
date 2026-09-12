@@ -1,18 +1,28 @@
 """
 Which documents deserve a full extraction, and which only need confirming.
 
-The enrollment form holds a student's identity, their parents and their
-previous school. Of the thirteen requirement types the school collects, only
-two document *families* actually carry that information. The other eleven are
-attestations ("this student is of good moral character") or academic records
-whose payload — term grades — the form has no field for.
+Today the answer is "none" and "all thirteen" — every requirement type is
+VERIFY. This table is still the switch, and both policies are still
+implemented; what changed is the premise, not the machinery.
 
-Running the full extraction on all thirteen is what produced the defect this
-package exists to fix: every document also carries the student's *name*, so
-thirteen scans meant thirteen competing opinions on it, and the last one
-applied silently overwrote the rest. Confirming that a good-moral certificate
-names the right student is both cheaper and the job that document is actually
-for.
+Extraction existed to spare *staff* from keying a student's identity, parents
+and previous school off a birth certificate or a Form 137. The applicant kiosk
+moved that typing to the family, who fill the form themselves while holding
+the same documents — and a parent reading their child's LRN off a PSA copy
+beats an OCR pass someone then has to correct, since a twelve-digit number is
+exactly where a recogniser is weakest. Note also what the Form 137 anchor set
+actually pulls (see anchors.py): identity fields, not term grades. There was
+never anything in it the kiosk form does not already ask for.
+
+What survives is the job the other eleven documents always had, and the one
+the kiosk cannot do: confirming that the paper handed over is the right
+document, for the right student. That was already cheaper — pure string work,
+no model call — and it is now the whole of it.
+
+To re-enable extraction for a document family (for example, to cross-check a
+typed LRN against the birth certificate rather than to prefill anything),
+change that code's entry back to EXTRACT here. anchors.py, groq_vision.py and
+reconcile.py are retained and unchanged for exactly that reason.
 """
 
 from .types import ParsedDocument
@@ -26,11 +36,15 @@ FAMILY_BIRTH_CERTIFICATE = "birth_certificate"
 FAMILY_FORM_137 = "form_137"
 
 _POLICY: dict[str, tuple[str, str | None]] = {
-    # ── extract: the two families the form actually needs ────────────────
-    "psa_birth_certificate": (EXTRACT, FAMILY_BIRTH_CERTIFICATE),
-    "birth_certificate":     (EXTRACT, FAMILY_BIRTH_CERTIFICATE),
-    # One slot accepting either document — resolved at runtime, see below.
-    "form_137_or_138":       (EXTRACT, FAMILY_FORM_137),
+    # ── the two families that used to be mined for fields ────────────────
+    # Verified, not extracted: the family types these fields at the kiosk
+    # from these very documents (see the module docstring). Their printed
+    # markers live in FAMILY_MARKERS below and verify.py reads them from
+    # there, so demoting them kept the document-type check rather than
+    # silently reducing these three to a name match.
+    "psa_birth_certificate": (VERIFY, None),
+    "birth_certificate":     (VERIFY, None),
+    "form_137_or_138":       (VERIFY, None),
 
     # ── verify: confirm the paper, don't mine it ─────────────────────────
     # Form 138 is the report card. Its payload is term grades and the
@@ -83,6 +97,12 @@ def resolve_policy(requirement_code: str | None,
                    parsed: ParsedDocument) -> tuple[str, str | None]:
     """
     The policy for this document, now that its text has been read.
+
+    Currently a pass-through: no code in _POLICY resolves to EXTRACT, so the
+    branch below is unreachable and every document returns (VERIFY, None).
+    It is kept because it is what makes re-enabling extraction safe, and
+    because it is only correct in one direction — it can demote, never
+    promote.
 
     Only `form_137_or_138` can change here: it is a single requirement slot
     that accepts either a permanent record or a report card, so the code alone

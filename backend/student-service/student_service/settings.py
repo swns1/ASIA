@@ -137,18 +137,15 @@ from corsheaders.defaults import default_headers  # noqa: E402 — grouped with 
 
 CORS_ALLOW_HEADERS = (*default_headers, "x-applicant-token")
 
-# The applicant intake flow can be served remotely (a link opened on the
-# applicant's own phone, not just a front-desk device on localhost), so its
-# origin isn't necessarily one of the admin-portal origins above. Used to
-# build the /apply/<invite_id> link handed back when a staff member issues
-# an invite (see intake/views.py::_build_apply_url).
+# Used to build the /apply/<invite_id> link handed back when a staff member
+# issues an invite (see intake/views.py::_build_apply_url). The kiosk device
+# won't always be the host the SPA is served from, so this can't be assumed
+# to be one of the admin-portal origins above.
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:5173")
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-
 # How long an issued invite (link + access code) stays usable before a
-# registrar has to re-issue it. 3 days covers both a walk-in applicant
-# finishing the same visit and a remote applicant who needs a day or two.
+# registrar has to re-issue it. 3 days covers an applicant finishing during
+# the same visit and one who has to come back to the school another day.
 APPLICATION_INVITE_TTL_SECONDS = int(os.environ.get("APPLICATION_INVITE_TTL_SECONDS", 3 * 24 * 3600))
 
 # How long the token minted at the code gate (X-Applicant-Token) stays valid

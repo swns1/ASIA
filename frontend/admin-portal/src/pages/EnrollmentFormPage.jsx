@@ -22,6 +22,7 @@ import {
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 import { generateInvoice as _generateInvoice } from "../api/billingApi";
 import { createPreviousSchool as _createPreviousSchool } from "../api/previousSchoolApi";
+import { GRADE_LEVELS_BY_LEVEL, SHS_STRANDS, schoolLevelForGrade } from "../constants/schoolLevels";
 
 const getStudents                 = (p = {}) => _getStudents(p);
 const getStudent                  = (id)     => _getStudent(id);
@@ -51,14 +52,6 @@ const SCHOOL_LEVELS = [
   { value: "senior_highschool", label: "Senior High School", icon: "ti-certificate"   },
 ];
 
-const GRADE_LEVELS_BY_LEVEL = {
-  nursery:           ["Nursery"],
-  kindergarten:      ["Kindergarten"],
-  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
-  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
-  senior_highschool: ["Grade 11","Grade 12"],
-};
-
 // Flat ordered list of all grade levels for progression lookup
 const ALL_GRADE_LEVELS_ORDERED = [
   "Nursery","Kindergarten",
@@ -74,15 +67,8 @@ function getNextGradeLevel(currentGrade) {
 }
 
 function getSchoolLevelForGrade(grade) {
-  for (const [level, grades] of Object.entries(GRADE_LEVELS_BY_LEVEL)) {
-    if (grades.includes(grade)) return level;
-  }
-  return null;
+  return schoolLevelForGrade(grade);
 }
-
-const SHS_STRANDS = [
-  "STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports",
-];
 
 const SEMESTERS = [
   { value: "1st", label: "1st Semester" },
@@ -593,6 +579,11 @@ export default function EnrollmentFormPage() {
   // Deep link from the student's profile (e.g. "New Enrollment" on
   // StudentDetailPage) — preselect that student instead of leaving the
   // picker empty. Only applies when creating a new enrollment.
+  //
+  // The applicant-intake hand-off (StudentApplicationsPage, on approve) uses
+  // the same link and additionally passes what the family said they were
+  // enrolling into, so the registrar isn't retyping it off the application.
+  // Section is never passed — that is the registrar's decision here.
   useEffect(() => {
     if (isEdit) return;
     const preselectId = searchParams.get("student");
@@ -600,6 +591,21 @@ export default function EnrollmentFormPage() {
     (async () => {
       const st = await getStudent(preselectId).catch(() => null);
       if (!st) return;
+
+      const appliedGrade = searchParams.get("grade_level");
+      const appliedLevel = searchParams.get("school_level") || schoolLevelForGrade(appliedGrade || "");
+      if (appliedGrade && appliedLevel) {
+        setForm((f) => ({
+          ...f,
+          school_level: appliedLevel,
+          grade_level: appliedGrade,
+          strand: searchParams.get("strand") || "",
+          // The schema's CHECK constraint requires a semester for senior
+          // high and forbids one anywhere else.
+          semester: appliedLevel === "senior_highschool" ? (f.semester || "1st") : "",
+        }));
+      }
+
       let lastGrade = null;
       try {
         const enData = await getStudentEnrollments(st.student_id);

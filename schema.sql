@@ -143,7 +143,6 @@ CREATE TABLE public.application_invites (
     applicant_last_name character varying(50) NOT NULL,
     contact_email character varying(150),
     contact_mobile character varying(20),
-    mode character varying(10) NOT NULL,
     issued_by_user_id bigint NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,

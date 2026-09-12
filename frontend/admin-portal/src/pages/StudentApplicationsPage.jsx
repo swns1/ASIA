@@ -16,7 +16,7 @@ import { StatusBadge } from "../components/ui/Badge";
 import Alert from "../components/ui/Alert";
 import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
-import { Field, Input, Select, Textarea } from "../components/FormField";
+import { Field, Input, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
@@ -56,12 +56,12 @@ function fmtDate(value) {
 function IssueInviteModal({ onClose, onIssued }) {
   const [form, setForm] = useState({
     applicant_first_name: "", applicant_last_name: "",
-    contact_email: "", contact_mobile: "", mode: "remote",
+    contact_email: "", contact_mobile: "",
   });
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState("");
-  const [issued, setIssued] = useState(null); // { access_code, apply_url, email_sent, ... }
+  const [issued, setIssued] = useState(null); // { access_code, apply_url, ... }
   const [copied, setCopied] = useState("");
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -105,9 +105,6 @@ function IssueInviteModal({ onClose, onIssued }) {
       <Modal onClose={onClose} size="md" icon="ti-link" title="Invite issued" showClose>
         <Alert variant="warning" className="mb-4">
           The access code is shown once and cannot be retrieved later — re-issue if it's lost.
-          {issued.email_sent === false && issued.contact_email && (
-            <div className="mt-1">The invite email could not be sent — please share the link and code directly.</div>
-          )}
         </Alert>
 
         <Field label="Applicant">
@@ -154,17 +151,11 @@ function IssueInviteModal({ onClose, onIssued }) {
           </Field>
         </div>
 
-        <Field label="Contact Email" hint="Used to email the form link — never the access code.">
+        <Field label="Contact Email" hint="For following up on this application — no email is sent from here.">
           <Input type="email" value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} placeholder="Optional" />
         </Field>
         <Field label="Contact Mobile">
           <Input value={form.contact_mobile} onChange={(e) => set("contact_mobile", e.target.value)} placeholder="Optional" />
-        </Field>
-        <Field label="Mode" hint="Walk-in: hand a device over. Remote: applicant opens the link on their own device.">
-          <Select value={form.mode} onChange={(e) => set("mode", e.target.value)}>
-            <option value="remote">Remote</option>
-            <option value="walk_in">Walk-in</option>
-          </Select>
         </Field>
 
         <Button type="submit" fullWidth loading={saving} className="mt-2">Issue invite</Button>
@@ -204,6 +195,11 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
     return () => { cancelled = true; };
   }, [applicationId]);
 
+  // What the family said they were enrolling into. Advisory only — it never
+  // became student data (see intake/serializers.py) and the real Enrollment
+  // is still created by hand in enrollment-service, which owns that table.
+  const applyingFor = application?.payload_json?.applying_for || {};
+
   const handleApprove = async () => {
     if (!lrn.trim()) {
       setActionError("LRN is required to approve — the student record cannot be saved without one.");
@@ -213,10 +209,24 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
     setActionError("");
     try {
       const result = await approveStudentApplication(applicationId, { student: { lrn: lrn.trim() } });
-      toast.success("Application approved — student record created.");
       onDecided?.();
       onClose();
-      if (result.created_student_id) navigate(`/students/${result.created_student_id}`);
+      if (!result.created_student_id) {
+        toast.success("Application approved — student record created.");
+        return;
+      }
+      // Approving only creates the student record. Until an Enrollment
+      // exists the learner has no section, so they appear in no SF1, no
+      // SF2 and can receive no grades — and nothing else in the app would
+      // tell the registrar that. Carry them straight into the enrolment
+      // form with what the family said they were applying for; the section
+      // is the registrar's call, so the form still asks for it.
+      toast.success("Student record created — now enrol them for this school year.");
+      const params = new URLSearchParams({ student: String(result.created_student_id) });
+      if (applyingFor.grade_level) params.set("grade_level", applyingFor.grade_level);
+      if (applyingFor.school_level) params.set("school_level", applyingFor.school_level);
+      if (applyingFor.strand) params.set("strand", applyingFor.strand);
+      navigate(`/enrollments/new?${params.toString()}`);
     } catch (err) {
       setActionError(err.message || "Could not approve this application.");
     } finally {
@@ -293,7 +303,13 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
 
           <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
             <span>Submitted {fmtDate(application.submitted_at)}</span>
-            <span>Mode: {application.invite_mode}</span>
+            <span>
+              Applying for:{" "}
+              <strong className="text-neutral-700">
+                {applyingFor.grade_level || "not stated"}
+                {applyingFor.strand ? ` — ${applyingFor.strand}` : ""}
+              </strong>
+            </span>
             <StatusBadge status={application.status} map={STUDENT_APPLICATION_STATUS_MAP} />
           </div>
 

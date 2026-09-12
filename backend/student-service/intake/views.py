@@ -45,7 +45,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import HasRole
 
-from . import duplicates, emails, invites, services
+from . import duplicates, invites, services
 from .invites import InvalidApplicantToken
 from .models import ApplicationInvite, StudentApplication
 from .serializers import (
@@ -101,7 +101,6 @@ class ApplicationInviteViewSet(
             applicant_last_name=data["applicant_last_name"],
             contact_email=data.get("contact_email") or None,
             contact_mobile=data.get("contact_mobile") or None,
-            mode=data["mode"],
             issued_by_user_id=actor_id,
             expires_at=timezone.now() + timezone.timedelta(seconds=_invite_ttl_seconds()),
         )
@@ -109,23 +108,12 @@ class ApplicationInviteViewSet(
         invite.save()
 
         apply_url = _build_apply_url(invite.pk)
-        email_sent = False
-        if invite.contact_email:
-            # Best-effort. See intake/emails.py's module docstring: a failed
-            # send must never fail issuing — the code (and link) are already
-            # in the response below for the registrar to relay by hand.
-            email_sent = emails.send_invite_email(
-                to_email=invite.contact_email,
-                applicant_name=invite.applicant_full_name,
-                apply_url=apply_url,
-            )
 
         return Response(
             {
                 **ApplicationInviteSerializer(invite).data,
                 "access_code": raw_code,  # shown exactly once — never stored or re-derivable
                 "apply_url": apply_url,
-                "email_sent": email_sent,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -167,7 +155,6 @@ class ApplicationInviteViewSet(
             applicant_last_name=old.applicant_last_name,
             contact_email=old.contact_email,
             contact_mobile=old.contact_mobile,
-            mode=old.mode,
             issued_by_user_id=actor_id,
             expires_at=timezone.now() + timezone.timedelta(seconds=_invite_ttl_seconds()),
         )
@@ -175,20 +162,12 @@ class ApplicationInviteViewSet(
         new_invite.save()
 
         apply_url = _build_apply_url(new_invite.pk)
-        email_sent = False
-        if new_invite.contact_email:
-            email_sent = emails.send_invite_email(
-                to_email=new_invite.contact_email,
-                applicant_name=new_invite.applicant_full_name,
-                apply_url=apply_url,
-            )
 
         return Response(
             {
                 **ApplicationInviteSerializer(new_invite).data,
                 "access_code": raw_code,
                 "apply_url": apply_url,
-                "email_sent": email_sent,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -307,11 +286,6 @@ class ApplyVerifyView(APIView):
         return Response({
             "token": token,
             "applicant_full_name": invite.applicant_full_name,
-            # Lets the frontend tell a front-desk device from an applicant's
-            # own: the hand-over interstitial and idle-reset only apply to
-            # "walk_in" (see ApplicantFormPage.jsx) — timing someone out on
-            # their own sofa in "remote" mode would just be data loss.
-            "mode": invite.mode,
             "payload": application.payload_json,
             "revision": application.revision,
         })
@@ -340,9 +314,9 @@ class ApplyDraftView(APIView):
             return _token_error_response(exc)
 
         from .serializers import (
-            ALLOWED_GUARDIAN_FIELDS, ALLOWED_HOUSEHOLD_FIELDS,
-            ALLOWED_PREVIOUS_SCHOOL_FIELDS, ALLOWED_SIBLING_FIELDS,
-            ALLOWED_STUDENT_FIELDS, whitelist,
+            ALLOWED_APPLYING_FOR_FIELDS, ALLOWED_GUARDIAN_FIELDS,
+            ALLOWED_HOUSEHOLD_FIELDS, ALLOWED_PREVIOUS_SCHOOL_FIELDS,
+            ALLOWED_SIBLING_FIELDS, ALLOWED_STUDENT_FIELDS, whitelist,
         )
 
         client_revision = request.data.get("revision")
@@ -365,6 +339,7 @@ class ApplyDraftView(APIView):
             "previous_schools": [
                 whitelist(p, ALLOWED_PREVIOUS_SCHOOL_FIELDS) for p in raw_payload.get("previous_schools", [])
             ],
+            "applying_for": whitelist(raw_payload.get("applying_for"), ALLOWED_APPLYING_FOR_FIELDS),
         }
 
         updated = StudentApplication.objects.filter(
