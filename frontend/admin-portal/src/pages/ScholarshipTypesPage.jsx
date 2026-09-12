@@ -5,6 +5,8 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
@@ -380,6 +382,46 @@ export default function ScholarshipTypesPage() {
 
   const hasFilters = statusFilter !== "all" || typeFilter !== "all" || search.trim() !== "";
 
+  // Counts are taken against the *other* facet plus the search, never against
+  // the facet the chip belongs to — so picking "Active" doesn't rewrite the
+  // Percentage/Fixed numbers to match it. Same rule the awards summary follows.
+  const matchesSearch = useCallback((s) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      s.scholarship_name.toLowerCase().includes(q) ||
+      s.scholarship_code.toLowerCase().includes(q) ||
+      (s.description || "").toLowerCase().includes(q)
+    );
+  }, [search]);
+
+  const statusOptions = useMemo(() => {
+    const pool = scholarships.filter(
+      (s) => matchesSearch(s) &&
+        (typeFilter === "all" || s.discount_mode === typeFilter)
+    );
+    return [
+      { value: "all",      label: "All",      count: pool.length },
+      { value: "active",   label: "Active",   tone: "success", count: pool.filter((s) => s.is_active).length },
+      { value: "inactive", label: "Inactive", tone: "muted",   count: pool.filter((s) => !s.is_active).length },
+    ];
+  }, [scholarships, typeFilter, matchesSearch]);
+
+  const typeOptions = useMemo(() => {
+    const pool = scholarships.filter(
+      (s) => matchesSearch(s) &&
+        (statusFilter === "all" ||
+          (statusFilter === "active" ? s.is_active : !s.is_active))
+    );
+    return [
+      { value: "all",          label: "All",          count: pool.length },
+      { value: "percentage",   label: "Percentage",   tone: "info",   icon: "ti-percentage",
+        count: pool.filter((s) => s.discount_mode === "percentage").length },
+      { value: "fixed_amount", label: "Fixed Amount", tone: "accent", icon: "ti-currency-peso",
+        count: pool.filter((s) => s.discount_mode === "fixed_amount").length },
+    ];
+  }, [scholarships, statusFilter, matchesSearch]);
+
   const handleDelete = async () => {
     if (!toDelete) return;
     setDeleting(true);
@@ -418,118 +460,36 @@ export default function ScholarshipTypesPage() {
       {/* ── Content ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* Filter panel */}
-        <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.18, ease: "easeOut" }}
-          style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
+        <FilterBar
+          animate={isFirstRender}
+          animateDelay={0.18}
+          searchValue={search}
+          onSearchChange={setSearch}
+          onClearSearch={() => setSearch("")}
+          searchPlaceholder="Search by name, code, or description…"
+          searchLabel="Search scholarship types"
+          searchInputId="scholarship-types-search"
+          hasFilters={hasFilters}
+          onClearFilters={() => { setStatusFilter("all"); setTypeFilter("all"); setSearch(""); }}
         >
-          {/* Search — full width */}
-          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, code, or description…"
-              style={{ border: "none", outline: "none", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "transparent", width: "100%" }}
+          <FilterRow label="Status">
+            <ChipGroup
+              options={statusOptions}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              label="Filter by status"
             />
-            <AnimatePresence>
-              {search && (
-                <motion.button
-                  initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
-                  onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
-                  <i className="ti ti-x" style={{ fontSize: 12 }} />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+          </FilterRow>
 
-          {/* Chips row */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-
-            {/* Status chips */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
-              {[
-                { value: "all",      label: "All",      color: "#c92a2a", bg: "#fff0f0" },
-                { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
-                { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
-              ].map((f) => {
-                const active = statusFilter === f.value;
-                return (
-                  <motion.button
-                    key={f.value}
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18 }}
-                    onClick={() => setStatusFilter(f.value)}
-                    style={{
-                      height: 32, padding: "0 14px", borderRadius: 99,
-                      border: `1.5px solid ${active ? f.color : "#f0e4e4"}`,
-                      background: active ? f.bg : "white",
-                      color: active ? f.color : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {f.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Divider */}
-            <div style={{ width: 1, height: 24, background: "#f0e4e4" }} />
-
-            {/* Discount type chips */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Type</span>
-              {[
-                { value: "all",          label: "All",          color: "#c92a2a", bg: "#fff0f0",  icon: null },
-                { value: "percentage",   label: "Percentage",   color: "#1455a0", bg: "#e3f0fd",  icon: "ti-percentage" },
-                { value: "fixed_amount", label: "Fixed Amount", color: "#7c3aed", bg: "#f0e8fd",  icon: "ti-currency-peso" },
-              ].map((f) => {
-                const active = typeFilter === f.value;
-                return (
-                  <motion.button
-                    key={f.value}
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18 }}
-                    onClick={() => setTypeFilter(f.value)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      height: 32, padding: "0 14px", borderRadius: 99,
-                      border: `1.5px solid ${active ? f.color : "#f0e4e4"}`,
-                      background: active ? f.bg : "white",
-                      color: active ? f.color : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {f.icon && <i className={`ti ${f.icon}`} style={{ fontSize: 11 }} />}
-                    {f.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Clear */}
-            <AnimatePresence>
-              {hasFilters && (
-                <motion.button
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setSearch(""); }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                  <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
+          <FilterRow label="Discount Type">
+            <ChipGroup
+              options={typeOptions}
+              value={typeFilter}
+              onChange={setTypeFilter}
+              label="Filter by discount type"
+            />
+          </FilterRow>
+        </FilterBar>
 
         {/* Table */}
         <motion.div

@@ -1,12 +1,15 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
+import Pagination from "../components/Pagination";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
-import { fetchAuditLogs } from "../api/auditTrailApi";
+import { fetchAuditLogs, fetchAuditFacets } from "../api/auditTrailApi";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -29,6 +32,15 @@ const STATUS_META = {
   failed:  { label: "Failed",  bg: "#fde8e8", color: "#9b2020", border: "#fca5a5", icon: "ti-circle-x"    },
   warning: { label: "Warning", bg: "#fef3e2", color: "#7a4a08", border: "#fcd34d", icon: "ti-alert-triangle" },
   pending: { label: "Pending", bg: "#e3f0fd", color: "#1455a0", border: "#93c5fd", icon: "ti-clock"       },
+};
+
+// The shared ChipGroup takes a semantic tone name rather than raw hex; these
+// map onto the same colours STATUS_META already used for the row badges.
+const STATUS_TONES = {
+  success: "success",
+  failed:  "error",
+  warning: "warning",
+  pending: "info",
 };
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
@@ -175,8 +187,6 @@ function normalizeLog(row, index) {
   };
 }
 
-function dateValue(log) { return log.invalidDate ? "" : log.date.toISOString().slice(0, 10); }
-function timeValue(log) { return log.invalidDate ? "" : log.date.toTimeString().slice(0, 5); }
 function formatDate(log) {
   if (log.invalidDate) return "Missing";
   return log.date.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" });
@@ -185,40 +195,11 @@ function formatTime(log) {
   if (log.invalidDate) return "Missing";
   return log.date.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 }
-function compareValues(a, b, direction) {
-  if (a < b) return direction === "asc" ? -1 : 1;
-  if (a > b) return direction === "asc" ? 1 : -1;
-  return 0;
-}
-
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function Sk({ w = "100%", h = 14, r = 6 }) {
   return (
     <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-  );
-}
-
-// ── Chip ──────────────────────────────────────────────────────────────────────
-
-function Chip({ label, active, activeBg, activeColor, activeBorder, onClick, delay = 0 }) {
-  return (
-    <motion.button
-      onClick={onClick}
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut", delay }}
-      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-      style={{
-        height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
-        backgroundColor: active ? activeBg     : C.white,
-        color:           active ? activeColor  : "#855c5c",
-        borderColor:     active ? activeBorder : "#f0e4e4",
-        transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease",
-      }}
-    >
-      {label}
-    </motion.button>
   );
 }
 
@@ -329,71 +310,109 @@ export default function AuditTrailPage() {
   const [dateFilter, setDateFilter] = useState("");
   const [timeFrom, setTimeFrom] = useState("");
   const [timeTo, setTimeTo] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "date", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const roles = useMemo(() => {
-    const unique = Array.from(new Set(logs.map(l => l.userRole).filter(Boolean)));
-    return unique.sort((a, b) => normalizeRole(a).localeCompare(normalizeRole(b)));
-  }, [logs]);
+  // Filter options come from the whole log, not the page on screen — with
+  // server-side paging there's no complete set in the browser to derive from.
+  const [facets, setFacets] = useState({ roles: [], modules: [], statusCounts: {} });
 
-  const modules = useMemo(() => {
-    const unique = Array.from(new Set(logs.map(l => l.module).filter(Boolean)));
-    return unique.sort((a, b) => a.localeCompare(b));
-  }, [logs]);
+  const roles = facets.roles;
+  const modules = facets.modules;
 
-  const filteredLogs = useMemo(() => {
-    return logs
-      .filter(l => statusFilter === "all" || l.status === statusFilter)
-      .filter(l => roleFilter === "all" || l.userRole === roleFilter)
-      .filter(l => moduleFilter === "all" || l.module === moduleFilter)
-      .filter(l => !dateFilter || dateValue(l) === dateFilter)
-      .filter(l => !timeFrom || (timeValue(l) && timeValue(l) >= timeFrom))
-      .filter(l => !timeTo || (timeValue(l) && timeValue(l) <= timeTo))
-      .sort((a, b) => {
-        if (sort.key === "role") return compareValues(normalizeRole(a.userRole), normalizeRole(b.userRole), sort.direction);
-        if (sort.key === "time") return compareValues(timeValue(a), timeValue(b), sort.direction);
-        return compareValues(a.invalidDate ? 0 : a.date.getTime(), b.invalidDate ? 0 : b.date.getTime(), sort.direction);
-      });
-  }, [logs, statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
-  const pageLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const invalidCount = logs.filter(l => l.invalidDate).length;
 
-  const hasActiveFilters = statusFilter !== "all" || roleFilter !== "all" || moduleFilter !== "all" || dateFilter || timeFrom || timeTo;
+  const hasActiveFilters = statusFilter !== "all" || roleFilter !== "all" || moduleFilter !== "all"
+    || dateFilter || timeFrom || timeTo || search;
 
-  useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
-    if (!allowed) { setLoading(false); return; }
-    loadLogs();
-  }, [allowed, navigate]);
+  // The table's sortable headers map onto the orderings the API accepts.
+  // "time" has no separate column server-side — occurred_at carries both, and
+  // ordering by it sorts by time within a day anyway.
+  const orderingParam = useMemo(() => {
+    const prefix = sort.direction === "desc" ? "-" : "";
+    if (sort.key === "role") return `${prefix}user_role`;
+    return `${prefix}occurred_at`;
+  }, [sort]);
 
-  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, pageSize]);
-
-  async function loadLogs() {
+  const loadLogs = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const data = await fetchAuditLogs();
+      const data = await fetchAuditLogs({
+        page,
+        page_size: pageSize,
+        ordering: orderingParam,
+        ...(statusFilter !== "all" ? { status: statusFilter } : null),
+        ...(roleFilter !== "all" ? { role: roleFilter } : null),
+        ...(moduleFilter !== "all" ? { module: moduleFilter } : null),
+        ...(dateFilter ? { date: dateFilter } : null),
+        ...(timeFrom ? { time_from: timeFrom } : null),
+        ...(timeTo ? { time_to: timeTo } : null),
+        ...(search.trim() ? { search: search.trim() } : null),
+      });
       setLogs((data.results || []).map(normalizeLog));
+      setTotalCount(data.count ?? 0);
       setSource(data.source);
     } catch (e) {
       setError(e.message || "Failed to load log records.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, pageSize, orderingParam, statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, search]);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("access_token");
+    if (!token) { navigate("/"); return; }
+    if (!allowed) { setLoading(false); return; }
+    loadLogs();
+  }, [allowed, navigate, loadLogs]);
+
+  // Facets describe the whole log, so they're fetched once rather than with
+  // every filter change. A failure here is non-fatal: the chip rows just fall
+  // back to empty and the list still works.
+  useEffect(() => {
+    if (!allowed) return;
+    fetchAuditFacets().then(setFacets).catch(() => {});
+  }, [allowed]);
 
   function toggleSort(key) {
     setSort(cur => ({ key, direction: cur.key === key && cur.direction === "asc" ? "desc" : "asc" }));
+    setPage(1);
   }
+
+  // Every facet change returns to page 1 — staying on page 12 of a narrower
+  // result set would land on an empty table.
+  const applyFilter = (setter) => (v) => { setter(v); setPage(1); };
 
   function clearFilters() {
     setStatusFilter("all"); setRoleFilter("all"); setModuleFilter("all");
     setDateFilter(""); setTimeFrom(""); setTimeTo("");
+    setSearch(""); setSearchInput("");
+    setPage(1);
   }
+
+  const statusOptions = useMemo(() => {
+    const counts = facets.statusCounts || {};
+    return [
+      { value: "all", label: "All", count: counts.total ?? null },
+      ...Object.entries(STATUS_META).map(([key, meta]) => ({
+        value: key,
+        label: meta.label,
+        tone: STATUS_TONES[key],
+        icon: meta.icon,
+        count: counts[key] ?? 0,
+      })),
+    ];
+  }, [facets.statusCounts]);
+
+  const roleOptions = useMemo(() => ([
+    { value: "all", label: "All" },
+    ...roles.map(r => ({ value: r, label: normalizeRole(r), tone: "muted" })),
+  ]), [roles]);
 
   const isFirstRender = useIsFirstRender();
 
@@ -441,86 +460,81 @@ export default function AuditTrailPage() {
           )}
         </AnimatePresence>
 
-        {/* Filter panel */}
-        <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.14, ease: "easeOut" }}
-          style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 16 }}
-        >
-          {/* Status chips */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              <Chip label="All" active={statusFilter === "all"} activeBg={C.redLight} activeColor={C.redDark} activeBorder={C.redBorder} onClick={() => setStatusFilter("all")} />
-              {Object.entries(STATUS_META).map(([key, meta], idx) => (
-                <Chip key={key} label={meta.label} active={statusFilter === key}
-                  activeBg={meta.bg} activeColor={meta.color} activeBorder={meta.border}
-                  onClick={() => setStatusFilter(key)} delay={idx * 0.03} />
-              ))}
-            </div>
-          </div>
-
-          {/* Role chips */}
-          {roles.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Role</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                <Chip label="All" active={roleFilter === "all"} activeBg={C.redLight} activeColor={C.redDark} activeBorder={C.redBorder} onClick={() => setRoleFilter("all")} />
-                {roles.map((role, idx) => (
-                  <Chip key={role} label={normalizeRole(role)} active={roleFilter === role}
-                    activeBg="#f7eeee" activeColor={C.muted} activeBorder={C.border}
-                    onClick={() => setRoleFilter(role)} delay={idx * 0.03} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Module + Date + time row */}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
-            {modules.length > 0 && (
+        <FilterBar
+          animate={isFirstRender}
+          animateDelay={0.14}
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
+          onSearch={() => { setSearch(searchInput); setPage(1); }}
+          onClearSearch={() => { setSearchInput(""); setSearch(""); setPage(1); }}
+          searchPlaceholder="Search by user, action, or details…"
+          searchLabel="Search audit records"
+          searchInputId="audit-search"
+          hasFilters={Boolean(hasActiveFilters)}
+          onClearFilters={clearFilters}
+          advancedLabel="Date & time"
+          advancedIcon="ti-calendar-clock"
+          advancedActive={Boolean(dateFilter || timeFrom || timeTo)}
+          advanced={
+            <>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Module</div>
-                <select
-                  aria-label="Filter by module"
-                  value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
-                  style={{ height: 36, border: `1.5px solid ${moduleFilter !== "all" ? "#93c5fd" : "#f0e4e4"}`, borderRadius: 10, padding: "0 12px", background: moduleFilter !== "all" ? "#e3f0fd" : C.white, color: moduleFilter !== "all" ? "#1455a0" : C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", fontWeight: moduleFilter !== "all" ? 600 : 400, minWidth: 160 }}
-                >
-                  <option value="all">All modules</option>
-                  {modules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
-                </select>
+                <label htmlFor="audit-date" className={fieldLabelCls}>Date</label>
+                <input id="audit-date" type="date" value={dateFilter}
+                  onChange={e => { setDateFilter(e.target.value); setPage(1); }}
+                  className={fieldInputCls} />
               </div>
-            )}
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Date</div>
-              <input type="date" aria-label="Filter from date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>From</div>
-              <input type="time" aria-label="From time" value={timeFrom} onChange={e => setTimeFrom(e.target.value)}
-                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>To</div>
-              <input type="time" aria-label="To time" value={timeTo} onChange={e => setTimeTo(e.target.value)}
-                style={{ height: 36, border: `1.5px solid #f0e4e4`, borderRadius: 10, padding: "0 12px", background: C.white, color: C.text, fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
-            </div>
+              <div>
+                <label htmlFor="audit-time-from" className={fieldLabelCls}>From time</label>
+                <input id="audit-time-from" type="time" value={timeFrom}
+                  onChange={e => { setTimeFrom(e.target.value); setPage(1); }}
+                  className={fieldInputCls} />
+              </div>
+              <div>
+                <label htmlFor="audit-time-to" className={fieldLabelCls}>To time</label>
+                <input id="audit-time-to" type="time" value={timeTo}
+                  onChange={e => { setTimeTo(e.target.value); setPage(1); }}
+                  className={fieldInputCls} />
+              </div>
+            </>
+          }
+          extraControls={
+            modules.length > 0 && (
+              <select
+                aria-label="Filter by module"
+                value={moduleFilter}
+                onChange={e => { setModuleFilter(e.target.value); setPage(1); }}
+                className={`focus-ring h-[42px] shrink-0 rounded-lg border-[1.5px] px-3 text-[13px] outline-none ${
+                  moduleFilter !== "all"
+                    ? "border-brand-500 bg-brand-100 font-semibold text-brand-600"
+                    : "border-neutral-300 bg-white text-neutral-700"
+                }`}
+              >
+                <option value="all">All modules</option>
+                {modules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
+              </select>
+            )
+          }
+        >
+          <FilterRow label="Status">
+            <ChipGroup
+              options={statusOptions}
+              value={statusFilter}
+              onChange={applyFilter(setStatusFilter)}
+              label="Filter by status"
+            />
+          </FilterRow>
 
-            <AnimatePresence>
-              {hasActiveFilters && (
-                <motion.button
-                  initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }}
-                  onClick={clearFilters}
-                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ height: 36, padding: "0 14px", borderRadius: 99, border: `1.5px solid ${C.redBorder}`, background: C.redLight, color: C.redDark, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}
-                >
-                  <i className="ti ti-x" style={{ fontSize: 12 }} /> Clear filters
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
+          {roleOptions.length > 1 && (
+            <FilterRow label="Role">
+              <ChipGroup
+                options={roleOptions}
+                value={roleFilter}
+                onChange={applyFilter(setRoleFilter)}
+                label="Filter by role"
+              />
+            </FilterRow>
+          )}
+        </FilterBar>
 
         {/* Table panel */}
         <motion.div
@@ -557,7 +571,7 @@ export default function AuditTrailPage() {
                         ))}
                       </tr>
                     ))
-                  : pageLogs.length === 0
+                  : logs.length === 0
                   ? (
                       <tr>
                         <td colSpan={8}>
@@ -577,7 +591,7 @@ export default function AuditTrailPage() {
                         </td>
                       </tr>
                     )
-                  : pageLogs.map(log => <LogRow key={log.id} log={log} />)
+                  : logs.map(log => <LogRow key={log.id} log={log} />)
                 }
               </motion.tbody>
             </table>
@@ -585,54 +599,30 @@ export default function AuditTrailPage() {
 
         </motion.div>
 
-        {/* Pagination — outside the card, matching Students page layout */}
-        {!loading && filteredLogs.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: "#8a6a6a" }}>
-              Page <strong style={{ color: "#7a5050" }}>{page}</strong> of{" "}
-              <strong style={{ color: "#7a5050" }}>{totalPages || 1}</strong>
-              &nbsp;·&nbsp;{filteredLogs.length.toLocaleString()} total records
-            </span>
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        {!loading && totalCount > 0 && (
+          <div className="flex items-center justify-between gap-3">
+            {/* Rows-per-page isn't part of the shared Pagination component, so
+                it sits beside it rather than being folded in. */}
+            <label className="flex items-center gap-2 text-[12px] text-neutral-500">
+              <span>Rows</span>
               <select
                 aria-label="Rows per page"
                 value={pageSize}
-                onChange={e => setPageSize(Number(e.target.value))}
-                style={{ height: 32, border: "1px solid #f0e4e4", borderRadius: 8, padding: "0 8px", fontSize: 12, color: "#855c5c", background: "white", fontFamily: "'DM Sans',sans-serif", outline: "none", cursor: "pointer", marginRight: 4 }}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="focus-ring h-8 rounded-lg border border-neutral-300 bg-white px-2 text-[12px] text-neutral-700 outline-none"
               >
-                {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
+                {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
-              <motion.button
-                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                style={pgBtn} disabled={page === 1} aria-label="Previous page"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-              </motion.button>
-              {(() => {
-                const windowSize = Math.min(totalPages, 5);
-                const start = Math.min(Math.max(1, page - 2), Math.max(1, totalPages - windowSize + 1));
-                return Array.from({ length: windowSize }, (_, i) => start + i);
-              })().map(n => (
-                <motion.button
-                  key={n}
-                  whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                  style={{ ...pgBtn, ...(n === page ? pgBtnActive : {}) }}
-                  aria-label={`Page ${n}`}
-                  aria-current={n === page ? "page" : undefined}
-                  onClick={() => setPage(n)}
-                >
-                  {n}
-                </motion.button>
-              ))}
-              <motion.button
-                whileTap={{ scale: 0.92 }} transition={{ duration: 0.1 }}
-                style={pgBtn} disabled={page === totalPages} aria-label="Next page"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              >
-                <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-              </motion.button>
-            </div>
+            </label>
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              count={totalCount}
+              hasPrevious={page > 1}
+              hasNext={page < totalPages}
+              onPageChange={setPage}
+            />
           </div>
         )}
 
@@ -641,13 +631,5 @@ export default function AuditTrailPage() {
   );
 }
 
-const pgBtn = {
-  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
-  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#855c5c",
-  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
-};
-
-const pgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#c92a2a", fontWeight: 700,
-};
+const fieldLabelCls = "mb-2 block text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500";
+const fieldInputCls = "h-[34px] rounded-lg border-[1.5px] border-neutral-300 bg-white px-2.5 text-[12px] text-neutral-900 outline-none focus:border-brand-500";
