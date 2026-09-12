@@ -7,18 +7,26 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import { StatCard } from "../components/ui/Card";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 
-import { getPayments as _getPayments } from "../api/billingApi";
+import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
 const getPayments = (p = {}) => _getPayments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+// `tone` names the shared palette entry each method already used — every one
+// of these colours was an exact match for an existing token, so the tiles and
+// chips now theme from tokens.css instead of per-page literals. The bg/color
+// literals stay for the inline method pill on each table row until that moves
+// to a shared Badge.
 const PAYMENT_METHODS = [
-  { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0" },
-  { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd" },
-  { value:"bank_transfer", label:"Bank Transfer", icon:"ti-building-bank", color:"#7c3aed", bg:"#f0e8fd" },
-  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#854f0b", bg:"#fdf5e8" },
-  { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda" },
-  { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8" },
+  { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0", tone:"success" },
+  { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd", tone:"info"    },
+  { value:"bank_transfer", label:"Bank Transfer", icon:"ti-building-bank", color:"#7c3aed", bg:"#f0e8fd", tone:"accent"  },
+  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
+  { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda", tone:"warning" },
+  { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8", tone:"muted"   },
 ];
 const PM = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m]));
 
@@ -78,7 +86,6 @@ export default function PaymentsPage() {
   const [amountMin,    setAmountMin]    = useState("");
   const [amountMax,    setAmountMax]    = useState("");
   const [sortField,    setSortField]    = useState("-payment_date");
-  const [filtersOpen,  setFiltersOpen]  = useState(false);
 
   const hasDateOrAmount  = dateFrom || dateTo || amountMin || amountMax;
   const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount || sortField !== "-payment_date";
@@ -103,19 +110,40 @@ export default function PaymentsPage() {
     return params;
   };
 
+  // The tiles report per-method totals, so their request carries the date and
+  // amount filters but drops page, ordering and the method itself — scoping it
+  // to one method would zero out the other five tiles.
+  const buildSummaryParams = (overrides = {}) => {
+    const params = buildParams(1, overrides);
+    delete params.page;
+    delete params.ordering;
+    delete params.payment_method;
+    return params;
+  };
+
   // A failed load must be distinguishable from an empty result — this used to
   // swallow the error and fall through to "No payments found · Record the
   // first payment", which during an outage reads as a fresh install.
   const [loadError, setLoadError] = useState(null);
+  // Separate from `loading` so the method tiles only skeleton on the very
+  // first load. Sharing the list's flag made them blank on every chip click
+  // and page change, jittering the layout each time.
+  const [tilesLoading, setTilesLoading] = useState(true);
+  const [methodTotals, setMethodTotals] = useState({});
 
   const fetchPayments = useCallback(async (p = 1, overrides = {}) => {
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await getPayments(buildParams(p, overrides));
+      const [data, summary] = await Promise.all([
+        getPayments(buildParams(p, overrides)),
+        getPaymentSummary(buildSummaryParams(overrides)),
+      ]);
       setPayments(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
+      setMethodTotals(summary ?? {});
+      setTilesLoading(false);
     } catch (e) {
       console.error(e);
       setLoadError(e);
@@ -133,12 +161,6 @@ export default function PaymentsPage() {
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
-  const methodTotals = Object.fromEntries(
-    PAYMENT_METHODS.map((pm) => [
-      pm.value,
-      payments.filter((p) => p.payment_method === pm.value).reduce((s, p) => s + parseFloat(p.amount_paid), 0),
-    ])
-  );
 
   const filterLabel = {
     fontSize:10, fontWeight:700, color:"#8a6a6a",
@@ -175,38 +197,25 @@ export default function PaymentsPage() {
       <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", display:"flex", flexDirection:"column", gap:14 }}>
 
         {/* ── Method stat cards ──────────────────────────────────────────── */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10 }}>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
           {PAYMENT_METHODS.map((pm) => {
             const isActive = methodFilter === pm.value;
-            const total    = methodTotals[pm.value];
             return (
-              <motion.div
+              <StatCard
                 key={pm.value}
+                label={pm.label}
+                value={fmt(methodTotals[pm.value])}
+                icon={pm.icon}
+                iconTone={pm.tone}
+                layout="horizontal"
+                loading={tilesLoading}
+                active={isActive}
                 onClick={() => {
                   const next = isActive ? "all" : pm.value;
                   setMethodFilter(next);
                   fetchPayments(1, { methodFilter: next });
                 }}
-                whileHover={{ boxShadow: isActive ? `0 6px 20px ${pm.color}28` : "0 6px 20px rgba(0,0,0,0.08)" }}
-                whileTap={{ scale:0.97 }}
-                style={{
-                  borderRadius:14, padding:"14px 16px", border:`1.5px solid ${isActive ? pm.color : "#f5eaea"}`,
-                  cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,0.04)",
-                  background: isActive ? pm.bg : "#ffffff",
-                  transition:"border-color 0.15s ease, background-color 0.15s ease",
-                }}
-              >
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                  <div style={{ width:30, height:30, borderRadius:8, background: isActive ? "white" : pm.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background 0.15s" }}>
-                    <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:pm.color }} />
-                  </div>
-                  <span style={{ fontSize:11.5, fontWeight:600, color: isActive ? pm.color : "#7a5050" }}>{pm.label}</span>
-                </div>
-                {loading
-                  ? <Sk w="80%" h={14} />
-                  : <div style={{ fontSize:15, fontWeight:700, color: isActive ? pm.color : (total > 0 ? "#1a0a0a" : "#8a6a6a"), letterSpacing:"-0.01em" }}>{fmt(total)}</div>
-                }
-              </motion.div>
+              />
             );
           })}
         </div>
@@ -228,175 +237,96 @@ export default function PaymentsPage() {
         </div> */}
 
         {/* ── Filter panel ───────────────────────────────────────────────── */}
-        <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"16px 20px", boxShadow:"0 2px 8px rgba(224,49,49,0.04)", display:"flex", flexDirection:"column", gap:0 }}>
-          {/* Method chips */}
-          <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Payment Method</div>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-              {[{ value:"all", label:"All", color:"#c92a2a", bg:"#fff0f0" }, ...PAYMENT_METHODS.map((m) => ({ value:m.value, label:m.label, color:m.color, bg:m.bg, icon:m.icon }))].map((m) => {
-                const active = methodFilter === m.value;
-                return (
-                  <motion.button key={m.value}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => { setMethodFilter(m.value); fetchPayments(1, { methodFilter:m.value }); }}
-                    style={{
-                      display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99,
-                      fontSize:12, fontWeight:600, border:`1.5px solid ${active ? m.color : "#f0e4e4"}`,
-                      cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                      background: active ? m.bg : "#ffffff",
-                      color: active ? m.color : "#855c5c",
-                      transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {m.icon && <i className={`ti ${m.icon}`} style={{ fontSize:11 }} />}
-                    {m.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div style={{ height:1, background:"#f5eaea", margin:"4px 0 12px" }} />
-
-          {/* Sort chips + date toggle + clear */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginRight:2 }}>Sort</div>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-              {SORT_OPTIONS.map((opt) => {
-                const active = sortField === opt.value;
-                return (
-                  <motion.button key={opt.value}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => { setSortField(opt.value); fetchPayments(1, { sortField:opt.value }); }}
-                    style={{
-                      display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99,
-                      fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                      cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                      background: active ? "#fff0f0" : "#ffffff",
-                      color: active ? "#c92a2a" : "#855c5c",
-                      transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {opt.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
-              {/* Date/amount toggle */}
-              <motion.button
-                onClick={() => setFiltersOpen((v) => !v)}
-                whileTap={{ scale:0.96 }}
-                style={{
-                  display:"inline-flex", alignItems:"center", gap:5, height:32, padding:"0 12px",
-                  border:`1.5px solid ${filtersOpen || hasDateOrAmount ? "#e03131" : "#f0e4e4"}`,
-                  borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap",
-                  background: filtersOpen || hasDateOrAmount ? "#fff0f0" : "#ffffff",
-                  color: filtersOpen || hasDateOrAmount ? "#c92a2a" : "#7a5050",
-                  transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                }}
-              >
-                <i className="ti ti-calendar-search" style={{ fontSize:12 }} />
-                Date / Amount{hasDateOrAmount ? " •" : ""}
-                <motion.i
-                  className={`ti ti-chevron-${filtersOpen ? "up" : "down"}`}
-                  animate={{ rotate: filtersOpen ? 180 : 0 }}
-                  transition={{ duration:0.18 }}
-                  style={{ fontSize:11 }}
-                />
-              </motion.button>
-
-              {/* Clear all */}
-              <AnimatePresence>
-                {hasActiveFilters && (
-                  <motion.button
-                    initial={{ opacity:0, scale:0.88 }}
-                    animate={{ opacity:1, scale:1 }}
-                    exit={{ opacity:0, scale:0.88 }}
-                    transition={{ duration:0.14 }}
-                    whileTap={{ scale:0.93 }}
-                    onClick={() => { clearFilters(); fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date" }); }}
-                    style={{ height:32, padding:"0 14px", border:"1.5px solid #fca5a5", borderRadius:99, background:"white", color:"#b91c1c", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:5 }}
-                  >
-                    <i className="ti ti-filter-off" style={{ fontSize:12 }} />Clear
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          {/* Expanded date/amount panel */}
-          <AnimatePresence initial={false}>
-            {filtersOpen && (
-              <motion.div
-                key="date-amount-panel"
-                initial={{ height:0, opacity:0, marginTop:0 }}
-                animate={{ height:"auto", opacity:1, marginTop:14 }}
-                exit={{ height:0, opacity:0, marginTop:0 }}
-                transition={{ duration:0.22, ease:"easeInOut" }}
-                style={{ overflow:"hidden" }}
-              >
-                <div style={{ paddingTop:14, borderTop:"1px solid #f5eaea", display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
-                  <div>
-                    <label style={filterLabel}>Date from</label>
-                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
-                  </div>
-                  <div>
-                    <label style={filterLabel}>Date to</label>
-                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
-                  </div>
-                  <div>
-                    <label style={filterLabel}>Min amount</label>
-                    <div style={{ position:"relative" }}>
-                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                      <input type="number" min="0" step="0.01" value={amountMin} onChange={(e) => setAmountMin(e.target.value)}
-                        placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
-                    </div>
-                  </div>
-                  <div>
-                    <label style={filterLabel}>Max amount</label>
-                    <div style={{ position:"relative" }}>
-                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                      <input type="number" min="0" step="0.01" value={amountMax} onChange={(e) => setAmountMax(e.target.value)}
-                        placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
-                    </div>
-                  </div>
-                  {/* Quick date presets */}
-                  <div>
-                    <label style={filterLabel}>Quick</label>
-                    <div style={{ display:"flex", gap:6 }}>
-                      {[
-                        { label:"Today",      fn:() => { const d=new Date().toISOString().slice(0,10); setDateFrom(d); setDateTo(d); } },
-                        { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
-                        { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
-                      ].map((q) => (
-                        <motion.button key={q.label} type="button" onClick={q.fn}
-                          whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
-                          whileTap={{ scale:0.96 }}
-                          transition={{ duration:0.12 }}
-                          style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                        >
-                          {q.label}
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                  <motion.button
-                    onClick={() => fetchPayments(1)}
-                    whileHover={{ scale:1.02, boxShadow:"0 6px 16px rgba(224,49,49,0.30)" }}
-                    whileTap={{ scale:0.97 }}
-                    transition={{ duration:0.12 }}
-                    style={{ height:34, padding:"0 18px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#e03131,#c01a1a)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginLeft:"auto", boxShadow:"0 3px 10px rgba(224,49,49,0.22)" }}
-                  >
-                    Apply
-                  </motion.button>
+        <FilterBar
+          hasFilters={hasActiveFilters}
+          onClearFilters={() => {
+            clearFilters();
+            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date" });
+          }}
+          advanced={
+            <>
+              <div>
+                <label htmlFor="pay-date-from" style={filterLabel}>Date from</label>
+                <input id="pay-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
+              </div>
+              <div>
+                <label htmlFor="pay-date-to" style={filterLabel}>Date to</label>
+                <input id="pay-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
+              </div>
+              <div>
+                <label htmlFor="pay-amount-min" style={filterLabel}>Min amount</label>
+                <div style={{ position:"relative" }}>
+                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
+                  <input id="pay-amount-min" type="number" min="0" step="0.01" value={amountMin} onChange={(e) => setAmountMin(e.target.value)}
+                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+              </div>
+              <div>
+                <label htmlFor="pay-amount-max" style={filterLabel}>Max amount</label>
+                <div style={{ position:"relative" }}>
+                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
+                  <input id="pay-amount-max" type="number" min="0" step="0.01" value={amountMax} onChange={(e) => setAmountMax(e.target.value)}
+                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
+                </div>
+              </div>
+              <div>
+                <span style={filterLabel}>Quick</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  {[
+                    { label:"Today",      fn:() => { const d=new Date().toISOString().slice(0,10); setDateFrom(d); setDateTo(d); } },
+                    { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
+                    { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
+                  ].map((q) => (
+                    <motion.button key={q.label} type="button" onClick={q.fn}
+                      whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
+                      whileTap={{ scale:0.96 }}
+                      transition={{ duration:0.12 }}
+                      style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                    >
+                      {q.label}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+              {/* Date and amount are the one group that isn't applied on
+                  change — typing a partial range would refetch on every
+                  keystroke, so they commit together. */}
+              <motion.button
+                onClick={() => fetchPayments(1)}
+                whileHover={{ scale:1.02, boxShadow:"0 6px 16px rgba(224,49,49,0.30)" }}
+                whileTap={{ scale:0.97 }}
+                transition={{ duration:0.12 }}
+                style={{ height:34, padding:"0 18px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#e03131,#c01a1a)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginLeft:"auto", boxShadow:"0 3px 10px rgba(224,49,49,0.22)" }}
+              >
+                Apply
+              </motion.button>
+            </>
+          }
+          advancedLabel="Date / Amount"
+          advancedIcon="ti-calendar-search"
+          advancedActive={hasDateOrAmount}
+        >
+          <FilterRow label="Payment Method">
+            <ChipGroup
+              label="Filter by payment method"
+              value={methodFilter}
+              onChange={(v) => { setMethodFilter(v); fetchPayments(1, { methodFilter:v }); }}
+              options={[
+                { value:"all", label:"All", tone:"brand" },
+                ...PAYMENT_METHODS.map((m) => ({ value:m.value, label:m.label, icon:m.icon, tone:m.tone })),
+              ]}
+            />
+          </FilterRow>
+
+          <FilterRow label="Sort">
+            <ChipGroup
+              label="Sort payments"
+              value={sortField}
+              onChange={(v) => { setSortField(v); fetchPayments(1, { sortField:v }); }}
+              options={SORT_OPTIONS.map((o) => ({ value:o.value, label:o.label, tone:"brand" }))}
+            />
+          </FilterRow>
+        </FilterBar>
 
         {/* ── Payments table ──────────────────────────────────────────────── */}
         <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>

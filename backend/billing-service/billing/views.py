@@ -575,10 +575,13 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
     ordering_fields = ("payment_date", "amount_paid", "payment_id")
     ordering = ("-payment_id",)
 
-    def get_queryset(self):
-        qs = StudentPayment.objects.all().order_by("-payment_id")
-        params = self.request.query_params
+    def _apply_filters(self, qs, params):
+        """Date/amount/student filtering shared by the list and the summary.
 
+        Kept in one place so the per-method totals can never be scoped
+        differently from the rows they sit above — the summary deliberately
+        skips `payment_method`, since each tile reports its own method.
+        """
         date_from  = params.get("date_from")
         date_to    = params.get("date_to")
         amount_min = params.get("amount_min")
@@ -606,6 +609,36 @@ class StudentPaymentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(invoice__invoice_no__icontains=student)
 
         return qs
+
+    def get_queryset(self):
+        qs = StudentPayment.objects.all().order_by("-payment_id")
+        return self._apply_filters(qs, self.request.query_params)
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        GET /api/payments/summary/
+
+        Per-method totals across ALL matching payments, not just the current
+        page. Honours the same date/amount/student filters as the list, but
+        ignores `payment_method` — the tiles show what each method collected,
+        so selecting one must not zero out the others.
+        """
+        from django.db.models import Sum
+
+        qs = self._apply_filters(StudentPayment.objects.all(), request.query_params)
+        rows = qs.values("payment_method").annotate(total=Sum("amount_paid"))
+
+        result = {m: 0 for m, _ in StudentPayment.PAYMENT_METHOD_CHOICES}
+        grand = 0
+        for row in rows:
+            amount = float(row["total"] or 0)
+            if row["payment_method"] in result:
+                result[row["payment_method"]] = amount
+            grand += amount
+
+        result["total"] = grand
+        return Response(result)
 
     @transaction.atomic
     def perform_create(self, serializer):

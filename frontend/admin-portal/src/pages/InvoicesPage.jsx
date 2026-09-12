@@ -706,6 +706,10 @@ export default function InvoicesPage() {
   const [payModalInvoiceId, setPayModalInvoiceId] = useState(null);
   const [refreshKey,        setRefreshKey]        = useState(0);
   const [summary,           setSummary]           = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0, school_years:[] });
+  // Separate from `loading` so the stat tiles only skeleton on the very first
+  // load. Sharing the list's flag made every chip click and page change blank
+  // the tiles and jitter the layout, even though their numbers rarely change.
+  const [countsLoading,     setCountsLoading]     = useState(true);
 
   const fetchInvoices = useCallback(async (
     p = 1,
@@ -738,6 +742,7 @@ export default function InvoicesPage() {
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
       setSummary(summaryData);
+      setCountsLoading(false);
       setLoadError(null);
     } catch (e) {
       console.error(e);
@@ -814,7 +819,7 @@ export default function InvoicesPage() {
   // Tones come from the shared status map, so a chip lights up in the same
   // colour as the stat card and row badge for that status.
   const statusChipOptions = [
-    { value: "all", label: "All", tone: "brand", count: loading ? null : summary.total },
+    { value: "all", label: "All", tone: "brand", count: countsLoading ? null : summary.total },
     ...["unpaid", "partially_paid", "paid", "void"].map((v) => ({
       value: v,
       label: INVOICE_STATUS_MAP[v]?.label ?? v,
@@ -822,7 +827,7 @@ export default function InvoicesPage() {
       // The chip's own status total, not the filtered row count — the same
       // number its stat card shows. The badge appearing is also what widens
       // the chip, which is what the layout spring animates.
-      count: loading ? null : summary[v],
+      count: countsLoading ? null : summary[v],
     })),
   ];
 
@@ -880,7 +885,7 @@ export default function InvoicesPage() {
               icon={s.icon}
               iconTone={s.tone}
               layout="horizontal"
-              loading={loading}
+              loading={countsLoading}
               active={statusFilter === s.statusKey}
               onClick={() => {
                 const next = statusFilter === s.statusKey ? "all" : s.statusKey;

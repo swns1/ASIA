@@ -171,8 +171,22 @@ export function StatCard({
       value
     );
 
+  // The skeleton mirrors the layout it stands in for — same icon chip, same
+  // two text lines at the same sizes — so the card doesn't change height or
+  // width when the real values arrive. A generic vertical skeleton under a
+  // horizontal card made every tile jump as data loaded.
   const body = loading ? (
-    <SkeletonCard />
+    layout === "horizontal" ? (
+      <>
+        <div className="h-9 w-9 shrink-0 animate-pulse rounded-md bg-brand-200" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="h-5 w-16 animate-pulse rounded bg-brand-200" aria-hidden="true" />
+          <div className="mt-1 h-4 w-24 animate-pulse rounded bg-brand-200" aria-hidden="true" />
+        </div>
+      </>
+    ) : (
+      <SkeletonCard />
+    )
   ) : layout === "horizontal" ? (
     <>
       {iconChip}

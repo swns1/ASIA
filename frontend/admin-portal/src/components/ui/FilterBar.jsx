@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // FilterBar — the search + chip-row filter panel that sits above every list
@@ -78,12 +79,21 @@ export default function FilterBar({
   extraControls,
   hasFilters = false,
   onClearFilters,
+  // An optional drawer of secondary filters (date ranges, amount bounds) kept
+  // behind a toggle so they don't crowd the facets people reach for first.
+  // `advancedActive` keeps the toggle highlighted while those filters are set
+  // but collapsed, so they can't be silently narrowing the results.
+  advanced,
+  advancedLabel = "More filters",
+  advancedIcon = "ti-adjustments-horizontal",
+  advancedActive = false,
   animate = false,
   animateDelay = 0,
   children,
   className = "",
 }) {
   const showSearch = Boolean(onSearchChange);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const content = (
     <div
@@ -134,6 +144,31 @@ export default function FilterBar({
           </button>
         )}
 
+        {advanced && (
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            aria-expanded={advancedOpen}
+            className={`focus-ring flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border-[1.5px] px-3.5 text-[13px] font-semibold transition-colors duration-150 ${
+              advancedOpen || advancedActive
+                ? "border-brand-500 bg-brand-100 text-brand-600"
+                : "border-neutral-300 bg-white text-neutral-700 hover:border-brand-500 hover:text-brand-600"
+            }`}
+          >
+            <i className={`ti ${advancedIcon} text-[13px]`} aria-hidden="true" />
+            {advancedLabel}
+            {/* A dot rather than a count: the drawer's filters are ranges, so
+                "set / not set" is the only honest summary at this size. */}
+            {advancedActive && <span aria-hidden="true">•</span>}
+            <motion.i
+              className="ti ti-chevron-down text-[11px]"
+              animate={{ rotate: advancedOpen ? 180 : 0 }}
+              transition={{ duration: 0.18 }}
+              aria-hidden="true"
+            />
+          </button>
+        )}
+
         <AnimatePresence>
           {hasFilters && onClearFilters && (
             <motion.button
@@ -159,6 +194,23 @@ export default function FilterBar({
           <div className="flex flex-col gap-3">{children}</div>
         </>
       )}
+
+      <AnimatePresence initial={false}>
+        {advanced && advancedOpen && (
+          <motion.div
+            key="advanced"
+            initial={{ height: 0, opacity: 0, marginTop: 0 }}
+            animate={{ height: "auto", opacity: 1, marginTop: 14 }}
+            exit={{ height: 0, opacity: 0, marginTop: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3.5">
+              {advanced}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 
