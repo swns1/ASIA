@@ -195,9 +195,7 @@ function GenerateModal({ onClose, onGenerated }) {
                       {enrollments.length === 0 && !loading && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No enrolled students found.</div>}
                       {enrollments.map((en) => (
                         <div key={en.enrollment_id} onClick={() => { setSelected(en); setOpen(false); setSearch(""); }}
-                          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                          onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
+                          className="flex cursor-pointer items-center gap-2.5 border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
                           <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#c92a2a" }} />
                           <div>
                             <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en.student_name ?? `Enrollment #${en.enrollment_id}`}</div>

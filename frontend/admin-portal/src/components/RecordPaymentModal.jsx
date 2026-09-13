@@ -6,6 +6,7 @@ import Button from "./ui/Button";
 import Alert from "./ui/Alert";
 import Skeleton from "./ui/Skeleton";
 import { StatusBadge } from "./ui/Badge";
+import { Field, Input, Textarea } from "./FormField";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
 import { PAYMENT_METHODS } from "../constants/paymentMethods";
 
@@ -102,8 +103,6 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
     finally     { setSaving(false); }
   };
 
-  const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
-  const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
 
   const balance    = invoice ? parseFloat(invoice.balance ?? 0) : 0;
   const en         = invoice?.enrollment_detail;
@@ -135,7 +134,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
           {/* Invoice selector */}
           <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Invoice *</label>
+            <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Invoice <span className="text-brand-600">*</span></div>
             {loadingInvoice ? <Skeleton height={52} /> : invoice ? (
               <div style={{ padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"#fff8f6" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -180,9 +179,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                       const en = inv.enrollment_detail;
                       return (
                         <div key={inv.invoice_id} onClick={() => { setInvoice(inv); setDropdownOpen(false); setInvoiceSearch(""); }}
-                          style={{ padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                          onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
+                          className="cursor-pointer border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
                           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                             <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
                             <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
@@ -199,7 +196,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
           {/* Payment method */}
           <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Payment Method *</label>
+            <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Payment Method <span className="text-brand-600">*</span></div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
               {PAYMENT_METHODS.map((pm) => {
                 const active = form.payment_method === pm.value;
@@ -216,14 +213,13 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
           {/* Amount + date */}
           <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:12, marginBottom:14 }}>
-            <div>
-              <label style={lbl}>Amount Paid *</label>
+            <Field label="Amount Paid" required>
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                <input type="number" min="0.01" step="0.01"
+                <Input type="number" min="0.01" step="0.01"
                   max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
                   value={form.amount_paid} onChange={(e) => setF("amount_paid", e.target.value)}
-                  placeholder="0.00" style={{ ...inp, paddingLeft:26, textAlign:"right" }} />
+                  placeholder="0.00" className="pl-[26px] text-right" />
               </div>
               {invoice && balance > 0 && (
                 <div style={{ marginTop:5, display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -244,22 +240,19 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                   })()}
                 </div>
               )}
-            </div>
-            <div>
-              <label style={lbl}>Payment Date *</label>
-              <input type="date" value={form.payment_date} onChange={(e) => setF("payment_date", e.target.value)} style={inp} />
-            </div>
+            </Field>
+            <Field label="Payment Date" required>
+              <Input type="date" value={form.payment_date} onChange={(e) => setF("payment_date", e.target.value)} />
+            </Field>
           </div>
 
           {/* Reference + notes */}
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Reference Number</label>
-            <input value={form.reference_number} onChange={(e) => setF("reference_number", e.target.value)} placeholder="Transaction ID, check no., etc." style={inp} />
-          </div>
-          <div>
-            <label style={lbl}>Notes</label>
-            <textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} placeholder="Optional remarks…" rows={2} style={{ ...inp, resize:"vertical" }} />
-          </div>
+          <Field label="Reference Number">
+            <Input value={form.reference_number} onChange={(e) => setF("reference_number", e.target.value)} placeholder="Transaction ID, check no., etc." />
+          </Field>
+          <Field label="Notes">
+            <Textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} placeholder="Optional remarks…" rows={2} />
+          </Field>
       </div>
     </Modal>
   );

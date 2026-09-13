@@ -6,9 +6,13 @@ import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import ChipGroup from "../components/ui/ChipGroup";
+import Card from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Modal from "../components/ui/Modal";
+import Badge from "../components/ui/Badge";
+import { Field, Input, Textarea } from "../components/FormField";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import { useNavigate } from "react-router-dom";
-import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 import {
   getScholarshipTypes as _getScholarshipTypes,
@@ -22,10 +26,15 @@ const createScholarshipType = (p)      => _createScholarshipType(p);
 const updateScholarshipType = (id, p)  => _updateScholarshipType(id, p);
 const deleteScholarshipType = (id)     => _deleteScholarshipType(id);
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-);
+
+const TABLE_COLUMNS = [
+  { key: "name",   label: "Scholarship",    width: "30%" },
+  { key: "code",   label: "Code",           width: "14%" },
+  { key: "mode",   label: "Discount Type",  width: "16%" },
+  { key: "value",  label: "Discount Value", width: "14%" },
+  { key: "status", label: "Status",         width: "13%" },
+  { key: "actions", label: "",              width: "5%"  },
+];
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 const formatDiscount = (s) =>
@@ -81,51 +90,31 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
     }
   };
 
-  const inp = {
-    width: "100%", border: "1.5px solid #fde2de", borderRadius: 10,
-    padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif",
-    color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box",
-  };
 
-  const lbl = {
-    display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050",
-    letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6,
-  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-    >
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ background: "white", borderRadius: 20, width: 520, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
-      >
-        {/* Header */}
-        <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-discount" style={{ fontSize: 20, color: "#c92a2a" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
-                {isEdit ? "Edit Scholarship" : "New Scholarship Type"}
-              </div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>
-                {isEdit ? "Update scholarship details" : "Create a new scholarship type"}
-              </div>
-            </div>
-          </div>
-          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
-            <i className="ti ti-x" />
-          </motion.button>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-discount"
+      title={isEdit ? "Edit Scholarship" : "New Scholarship Type"}
+      description={isEdit ? "Update scholarship details" : "Create a new scholarship type"}
+      // A part-filled form shouldn't be lost to a stray backdrop click.
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button icon="ti-check" loading={saving} onClick={handleSave}>
+            {saving ? "Saving…" : isEdit ? "Update" : "Create Scholarship"}
+          </Button>
         </div>
-
-        {/* Body */}
-        <div style={{ padding: "22px 28px" }}>
+      }
+    >
+        <div>
           <AnimatePresence>
             {error && (
               <motion.div
@@ -139,30 +128,35 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
           </AnimatePresence>
 
           {/* Code + Name */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Scholarship Code *</label>
-              <input value={form.scholarship_code} onChange={(e) => setF("scholarship_code", e.target.value)}
-                placeholder="e.g. ACADEMIC_EXCEL" style={inp} />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Scholarship Name *</label>
-              <input value={form.scholarship_name} onChange={(e) => setF("scholarship_name", e.target.value)}
-                placeholder="e.g. Academic Excellence Award" style={inp} />
-            </div>
+          <div className="grid gap-x-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+            <Field label="Scholarship Code" required>
+              <Input
+                value={form.scholarship_code}
+                onChange={(e) => setF("scholarship_code", e.target.value)}
+                placeholder="e.g. ACADEMIC_EXCEL"
+              />
+            </Field>
+            <Field label="Scholarship Name" required>
+              <Input
+                value={form.scholarship_name}
+                onChange={(e) => setF("scholarship_name", e.target.value)}
+                placeholder="e.g. Academic Excellence Award"
+              />
+            </Field>
           </div>
 
-          {/* Description */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Description</label>
-            <textarea value={form.description} onChange={(e) => setF("description", e.target.value)}
-              placeholder="Optional description…" rows={2}
-              style={{ ...inp, resize: "vertical" }} />
-          </div>
+          <Field label="Description">
+            <Textarea
+              value={form.description}
+              onChange={(e) => setF("description", e.target.value)}
+              placeholder="Optional description…"
+              rows={2}
+            />
+          </Field>
 
-          {/* Discount mode */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Discount Type *</label>
+          {/* Discount mode — a two-up choice of cards rather than a select, so
+              it stays bespoke; only the label goes through Field. */}
+          <Field label="Discount Type" required>
             <div style={{ display: "flex", gap: 10 }}>
               {[
                 { value: "percentage",   label: "Percentage (%)",   icon: "ti-percentage",    color: "#1455a0", bg: "#e3f0fd" },
@@ -186,23 +180,24 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
                 );
               })}
             </div>
-          </div>
+          </Field>
 
           {/* Discount value */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Discount Value *</label>
+          <Field label="Discount Value" required>
             <div style={{ position: "relative" }}>
-              <input type="number" min="0" max={form.discount_mode === "percentage" ? 100 : undefined}
+              <Input type="number" min="0" max={form.discount_mode === "percentage" ? 100 : undefined}
                 step="0.01" value={form.discount_value}
                 onChange={(e) => setF("discount_value", e.target.value)}
                 placeholder={form.discount_mode === "percentage" ? "e.g. 50" : "e.g. 5000"}
-                style={{ ...inp, paddingRight: 50 }} />
+                className="pr-12" />
               <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 13, fontWeight: 700, color: "#8a6a6a" }}>
                 {form.discount_mode === "percentage" ? "%" : "₱"}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 5, fontStyle: "italic", visibility: form.discount_mode === "percentage" ? "visible" : "hidden" }}>Must be between 0 and 100%</div>
-          </div>
+            <div className="mt-1.5 text-xs italic text-neutral-500" style={{ visibility: form.discount_mode === "percentage" ? "visible" : "hidden" }}>
+              Must be between 0 and 100%
+            </div>
+          </Field>
 
           {/* Active toggle */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10 }}>
@@ -214,26 +209,7 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
             </label>
           </div>
         </div>
-
-        {/* Footer */}
-        <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
-          <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
-            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={handleSave} disabled={saving}
-            whileHover={!saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
-            whileTap={!saving ? { scale: 0.96 } : {}}
-            style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Saving…</>
-              : <><i className="ti ti-check" style={{ fontSize: 13 }} />{isEdit ? "Update" : "Create Scholarship"}</>
-            }
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
+    </Modal>
   );
 }
 
@@ -256,70 +232,58 @@ function DeleteModal({ item, onConfirm, onCancel, deleting, deleteError }) {
 function ScholarshipRow({ sch, onEdit, onDelete }) {
   const isPct    = sch.discount_mode === "percentage";
   const isActive = sch.is_active;
+  // Percentage vs fixed-amount is a category, not a status, so the two get
+  // their own tones rather than borrowing the status palette.
+  const modeTone = isPct ? "info" : "success";
 
   return (
-    <motion.tr
-      variants={listVariants.item}
-      onHoverStart={(e) => { if (e.target?.closest) e.target.closest("tr") && (e.target.closest("tr").style.background = "#fff8f6"); }}
-      onHoverEnd={(e)   => { if (e.target?.closest) e.target.closest("tr") && (e.target.closest("tr").style.background = ""); }}
-      style={{ cursor: "default" }}
-    >
-      {/* Name */}
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: isPct ? "#e3f0fd" : "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className={`ti ${isPct ? "ti-percentage" : "ti-currency-peso"}`} style={{ fontSize: 15, color: isPct ? "#1455a0" : "#2e6b0d" }} />
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${isPct ? "bg-info-50" : "bg-success-50"}`}>
+            <i
+              className={`ti ${isPct ? "ti-percentage" : "ti-currency-peso"} text-[15px] ${isPct ? "text-info-600" : "text-success-600"}`}
+              aria-hidden="true"
+            />
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{sch.scholarship_name}</div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-neutral-900">{sch.scholarship_name}</div>
             {sch.description && (
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sch.description}</div>
+              <div className="max-w-[240px] truncate text-xs text-neutral-500">{sch.description}</div>
             )}
           </div>
         </div>
-      </td>
-      {/* Code */}
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{sch.scholarship_code}</span>
-      </td>
-      {/* Discount type */}
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: isPct ? "#e3f0fd" : "#e8f5e0", color: isPct ? "#1455a0" : "#2e6b0d" }}>
-          <i className={`ti ${isPct ? "ti-percentage" : "ti-currency-peso"}`} style={{ fontSize: 11 }} />
+      </TableCell>
+
+      <TableCell>
+        <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">
+          {sch.scholarship_code}
+        </span>
+      </TableCell>
+
+      <TableCell>
+        <Badge variant={modeTone} icon={isPct ? "ti-percentage" : "ti-currency-peso"} size="sm">
           {isPct ? "Percentage" : "Fixed Amount"}
-        </span>
-      </td>
-      {/* Discount value */}
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: isPct ? "#1455a0" : "#2e6b0d" }}>
-          {formatDiscount(sch)}
-        </span>
-      </td>
-      {/* Status */}
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: isActive ? "#e8f5e0" : "#f0ede8", color: isActive ? "#2e6b0d" : "#5c5752" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#4caf50" : "#9e9e9e" }} />
+        </Badge>
+      </TableCell>
+
+      <TableCell className={`text-[15px] font-bold ${isPct ? "text-info-600" : "text-success-600"}`}>
+        {formatDiscount(sch)}
+      </TableCell>
+
+      <TableCell>
+        <Badge variant={isActive ? "success" : "muted"} dot size="sm">
           {isActive ? "Active" : "Inactive"}
-        </span>
-      </td>
-      {/* Actions */}
-      <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", gap: 4 }}>
-          <motion.button title="Edit" onClick={() => onEdit(sch)}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-            whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
-            <i className="ti ti-pencil" style={{ fontSize: 13 }} />
-          </motion.button>
-          <motion.button title="Delete" onClick={() => onDelete(sch)}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-            whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
-            <i className="ti ti-trash" style={{ fontSize: 13 }} />
-          </motion.button>
+        </Badge>
+      </TableCell>
+
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" icon="ti-pencil" aria-label={`Edit ${sch.scholarship_name}`} onClick={() => onEdit(sch)} />
+          <Button variant="ghost" size="sm" icon="ti-trash" aria-label={`Delete ${sch.scholarship_name}`} onClick={() => onDelete(sch)} />
         </div>
-      </td>
-    </motion.tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -496,84 +460,36 @@ export default function ScholarshipTypesPage() {
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
-          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#fdfafa" }}>
-                {[
-                  { label: "Scholarship",    w: "30%" },
-                  { label: "Code",           w: "14%" },
-                  { label: "Discount Type",  w: "16%" },
-                  { label: "Discount Value", w: "14%" },
-                  { label: "Status",         w: "13%" },
-                  { label: "",               w: "5%"  },
-                ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <motion.tbody
-              variants={listVariants.container}
-              initial={isFirstRender ? "hidden" : false}
-              animate="visible"
+          <Card padding="none" className="overflow-hidden">
+            <Table
+              columns={TABLE_COLUMNS}
+              loading={loading}
+              isEmpty={filtered.length === 0}
+              skeletonRows={6}
+              empty={{
+                icon: "ti-discount-off",
+                title: hasFilters ? "No scholarships match your filters" : "No scholarship types found",
+                subtitle: hasFilters
+                  ? "Try adjusting your search or filters"
+                  : "Create your first scholarship type to get started",
+                action: !hasFilters && (
+                  <Button size="sm" icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+                    New Scholarship
+                  </Button>
+                ),
+              }}
             >
-              {loading
-                ? Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Sk w={36} h={36} r={10} />
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <Sk w={140} h={13} /><Sk w={90} h={11} />
-                          </div>
-                        </div>
-                      </td>
-                      {[80, 100, 80, 60, 60].map((w, j) => (
-                        <td key={j} style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}><Sk w={w} h={13} /></td>
-                      ))}
-                    </tr>
-                  ))
-                : filtered.length === 0
-                  ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "64px 16px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className="ti ti-discount-off" style={{ fontSize: 22, color: "#8a6a6a" }} />
-                          </div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
-                            {hasFilters ? "No scholarships match your filters" : "No scholarship types found"}
-                          </div>
-                          <div style={{ fontSize: 12, color: "#8a6a6a" }}>
-                            {hasFilters ? "Try adjusting your search or filters" : "Create your first scholarship type to get started"}
-                          </div>
-                          {!hasFilters && (
-                            <motion.button
-                              whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-                              whileTap={{ scale: 0.96 }}
-                              onClick={() => setModal({ mode: "create" })}
-                              style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-                              <i className="ti ti-plus" style={{ fontSize: 14 }} />New Scholarship
-                            </motion.button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                  : filtered.map((sch) => (
-                      <ScholarshipRow
-                        key={sch.scholarship_type_id}
-                        sch={sch}
-                        onEdit={(s) => setModal({ mode: "edit", scholarshipType: s })}
-                        onDelete={(s) => { setToDelete(s); setDeleteError(""); }}
-                      />
-                    ))
-              }
-            </motion.tbody>
-          </table>
+              {filtered.map((sch) => (
+                <ScholarshipRow
+                  key={sch.scholarship_type_id}
+                  sch={sch}
+                  onEdit={(s) => setModal({ mode: "edit", scholarshipType: s })}
+                  onDelete={(s) => { setToDelete(s); setDeleteError(""); }}
+                />
+              ))}
+            </Table>
+          </Card>
         </motion.div>
       </div>
 

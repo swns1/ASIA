@@ -7,10 +7,15 @@ import Button from "../components/ui/Button";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import Pagination from "../components/Pagination";
+import Card from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Alert from "../components/ui/Alert";
+import { StatusBadge } from "../components/ui/Badge";
+import { AUDIT_STATUS_MAP, ROLE_MAP } from "../constants/statusMaps";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs, fetchAuditFacets } from "../api/auditTrailApi";
-import { listVariants, modalVariants, springTransition } from "../utils/motion";
+import { modalVariants, springTransition } from "../utils/motion";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -20,30 +25,20 @@ const C = {
   muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
 };
 
-const baseCss = `
-  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  @keyframes spin    { to{transform:rotate(360deg)} }
-  ::-webkit-scrollbar { width:5px; height:5px; }
-  ::-webkit-scrollbar-thumb { background:#f0dada; border-radius:99px; }
-`;
-
-const STATUS_META = {
-  success: { label: "Success", bg: "#e8f5e0", color: "#2e6b0d", border: "#86efac", icon: "ti-circle-check" },
-  failed:  { label: "Failed",  bg: "#fde8e8", color: "#9b2020", border: "#fca5a5", icon: "ti-circle-x"    },
-  warning: { label: "Warning", bg: "#fef3e2", color: "#7a4a08", border: "#fcd34d", icon: "ti-alert-triangle" },
-  pending: { label: "Pending", bg: "#e3f0fd", color: "#1455a0", border: "#93c5fd", icon: "ti-clock"       },
-};
-
-// The shared ChipGroup takes a semantic tone name rather than raw hex; these
-// map onto the same colours STATUS_META already used for the row badges.
-const STATUS_TONES = {
-  success: "success",
-  failed:  "error",
-  warning: "warning",
-  pending: "info",
-};
-
 // ── Data helpers ──────────────────────────────────────────────────────────────
+
+// `key` doubles as the sort key for sortable columns — toggleSort maps
+// role/date/time onto the API's `ordering` values.
+const TABLE_COLUMNS = [
+  { key: "user",    label: "User" },
+  { key: "role",    label: "Role",    sortable: true },
+  { key: "action",  label: "Action" },
+  { key: "module",  label: "Module" },
+  { key: "date",    label: "Date",    sortable: true },
+  { key: "time",    label: "Time",    sortable: true },
+  { key: "status",  label: "Status" },
+  { key: "details", label: "Details" },
+];
 
 function normalizeRole(role) {
   return String(role || "unknown").replaceAll("_", " ").replace(/\b\w/g, m => m.toUpperCase());
@@ -197,69 +192,46 @@ function formatTime(log) {
 }
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function Sk({ w = "100%", h = 14, r = 6 }) {
-  return (
-    <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-  );
-}
-
-// ── Sortable Th ───────────────────────────────────────────────────────────────
-
-function Th({ children, sortable, active, direction, onClick, align = "left", sticky = false }) {
-  const thStyle = { textAlign: align, fontSize: 10.5, fontWeight: 600, color: C.micro, padding: "12px 18px", borderBottom: `1px solid ${C.border}`, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap", background: "#fdfafa", ...(sticky ? { position: "sticky", top: 0, zIndex: 1 } : {}) };
-  if (!sortable) return <th style={thStyle}>{children}</th>;
-  return (
-    <th style={thStyle}>
-      <button onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", color: "inherit", font: "inherit", textTransform: "inherit", letterSpacing: "inherit", cursor: "pointer", padding: 0 }}>
-        {children}
-        <i className={`ti ${active && direction === "asc" ? "ti-sort-ascending" : "ti-sort-descending"}`} style={{ fontSize: 12, color: active ? C.redDark : C.micro }} />
-      </button>
-    </th>
-  );
-}
-
 // ── Log Row ───────────────────────────────────────────────────────────────────
 
 function LogRow({ log }) {
-  const [hovered, setHovered] = useState(false);
-  const status = STATUS_META[log.status] || STATUS_META.pending;
-
   return (
-    <motion.tr
-      variants={listVariants.item}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      animate={{ backgroundColor: hovered ? "#fff8f6" : C.white }}
-      transition={{ duration: 0.12 }}
-      style={{ borderBottom: `1px solid ${C.softBorder}` }}
-    >
-      <td style={{ padding: "11px 18px" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap" }}>{log.userName}</div>
-      </td>
-      <td style={{ padding: "11px 18px" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 99, padding: "3px 10px", background: "#f7eeee", color: C.muted, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {normalizeRole(log.userRole)}
+    <TableRow>
+      <TableCell className="whitespace-nowrap text-sm font-bold text-neutral-900">
+        {log.userName}
+      </TableCell>
+
+      <TableCell>
+        <StatusBadge status={log.userRole} map={ROLE_MAP} size="sm" />
+      </TableCell>
+
+      <TableCell className="max-w-[240px] text-sm text-neutral-900">{log.action}</TableCell>
+
+      <TableCell>
+        <span className="inline-flex items-center gap-1.5 text-xs text-neutral-700">
+          <i className="ti ti-folder text-[13px] text-brand-500" aria-hidden="true" />
+          {log.module}
         </span>
-      </td>
-      <td style={{ padding: "11px 18px", fontSize: 13, color: C.text, maxWidth: 240 }}>{log.action}</td>
-      <td style={{ padding: "11px 18px" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.muted }}>
-          <i className="ti ti-folder" style={{ fontSize: 13, color: C.red }} />{log.module}
-        </span>
-      </td>
-      <td style={{ padding: "11px 18px", fontSize: 13, color: log.invalidDate ? "#b91c1c" : C.text, fontWeight: log.invalidDate ? 700 : 400, whiteSpace: "nowrap" }}>
+      </TableCell>
+
+      {/* A missing or unparseable timestamp is called out in red — an audit
+          record without a reliable time is the one thing worth noticing here. */}
+      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-900"}`}>
         {formatDate(log)}
-      </td>
-      <td style={{ padding: "11px 18px", fontSize: 13, color: log.invalidDate ? "#b91c1c" : C.text, fontWeight: log.invalidDate ? 700 : 400, whiteSpace: "nowrap" }}>
+      </TableCell>
+
+      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-900"}`}>
         {formatTime(log)}
-      </td>
-      <td style={{ padding: "11px 18px" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 99, padding: "3px 10px", fontSize: 11, fontWeight: 700, background: status.bg, color: status.color, whiteSpace: "nowrap" }}>
-          <i className={`ti ${status.icon}`} style={{ fontSize: 12 }} />{status.label}
-        </span>
-      </td>
-      <td style={{ padding: "11px 18px", fontSize: 12, color: C.muted, maxWidth: 260 }}>{log.details || "No remarks"}</td>
-    </motion.tr>
+      </TableCell>
+
+      <TableCell>
+        <StatusBadge status={log.status} map={AUDIT_STATUS_MAP} size="sm" />
+      </TableCell>
+
+      <TableCell className="max-w-[260px] text-xs text-neutral-700">
+        {log.details || "No remarks"}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -399,10 +371,10 @@ export default function AuditTrailPage() {
     const counts = facets.statusCounts || {};
     return [
       { value: "all", label: "All", count: counts.total ?? null },
-      ...Object.entries(STATUS_META).map(([key, meta]) => ({
+      ...Object.entries(AUDIT_STATUS_MAP).map(([key, meta]) => ({
         value: key,
         label: meta.label,
-        tone: STATUS_TONES[key],
+        tone: meta.variant,
         icon: meta.icon,
         count: counts[key] ?? 0,
       })),
@@ -411,7 +383,11 @@ export default function AuditTrailPage() {
 
   const roleOptions = useMemo(() => ([
     { value: "all", label: "All" },
-    ...roles.map(r => ({ value: r, label: normalizeRole(r), tone: "muted" })),
+    ...roles.map(r => ({
+      value: r,
+      label: ROLE_MAP[r]?.label ?? normalizeRole(r),
+      tone: ROLE_MAP[r]?.variant ?? "muted",
+    })),
   ]), [roles]);
 
   const isFirstRender = useIsFirstRender();
@@ -420,8 +396,6 @@ export default function AuditTrailPage() {
 
   return (
     <>
-      <style>{baseCss}</style>
-
       <PageHeader
         title="Audit Trail"
         icon="ti-shield-check"
@@ -439,24 +413,17 @@ export default function AuditTrailPage() {
         {/* Banners */}
         <AnimatePresence>
           {source === "sample" && (
-            <motion.div key="info" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              style={{ background: "#e3f0fd", border: "1px solid #a7c7ed", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#1455a0", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-info-circle" style={{ fontSize: 15 }} />
+            <Alert key="info" variant="info" icon="ti-info-circle">
               Showing local sample records until the audit API endpoint is connected.
-            </motion.div>
+            </Alert>
           )}
           {error && (
-            <motion.div key="error" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
-            </motion.div>
+            <Alert key="error" variant="error" icon="ti-alert-circle">{error}</Alert>
           )}
           {invalidCount > 0 && (
-            <motion.div key="warn" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              style={{ background: "#fef3e2", border: "1px solid #f4c27a", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#7a4a08", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-triangle" style={{ fontSize: 15 }} />
+            <Alert key="warn" variant="warning" icon="ti-alert-triangle">
               {invalidCount} log record{invalidCount === 1 ? "" : "s"} contain missing or invalid date/time values.
-            </motion.div>
+            </Alert>
           )}
         </AnimatePresence>
 
@@ -541,62 +508,31 @@ export default function AuditTrailPage() {
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.28, delay: 0.2, ease: "easeOut" }}
-          style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: "0 2px 16px rgba(224,49,49,0.06)", display: "flex", flexDirection: "column" }}
         >
-          {/* Table */}
-          <div style={{ overflowX: "auto", overflowY: "auto", borderRadius: "0 0 16px 16px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 1040 }}>
-              <thead>
-                <tr>
-                  <Th sticky>User</Th>
-                  <Th sticky sortable active={sort.key === "role"} direction={sort.direction} onClick={() => toggleSort("role")}>Role</Th>
-                  <Th sticky>Action</Th>
-                  <Th sticky>Module</Th>
-                  <Th sticky sortable active={sort.key === "date"} direction={sort.direction} onClick={() => toggleSort("date")}>Date</Th>
-                  <Th sticky sortable active={sort.key === "time"} direction={sort.direction} onClick={() => toggleSort("time")}>Time</Th>
-                  <Th sticky>Status</Th>
-                  <Th sticky>Details</Th>
-                </tr>
-              </thead>
-              <motion.tbody
-                variants={listVariants.container}
-                initial={isFirstRender ? "hidden" : false}
-                animate="visible"
-              >
-                {loading
-                  ? Array.from({ length: pageSize }).map((_, i) => (
-                      <tr key={i} style={{ borderBottom: `1px solid ${C.softBorder}` }}>
-                        {[140, 80, 200, 90, 80, 60, 70, 180].map((w, c) => (
-                          <td key={c} style={{ padding: "11px 18px" }}><Sk w={w} h={13} /></td>
-                        ))}
-                      </tr>
-                    ))
-                  : logs.length === 0
-                  ? (
-                      <tr>
-                        <td colSpan={8}>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "56px 24px", textAlign: "center" }}>
-                            <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <i className="ti ti-file-search" style={{ fontSize: 24, color: "#8a6a6a" }} />
-                            </div>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>No log records found</div>
-                            <div style={{ fontSize: 13, color: C.pale }}>Try adjusting your status, role, module, or date filters.</div>
-                            {hasActiveFilters && (
-                              <motion.button onClick={clearFilters} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                                style={{ fontSize: 12, color: C.redDark, background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
-                                Clear filters
-                              </motion.button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  : logs.map(log => <LogRow key={log.id} log={log} />)
-                }
-              </motion.tbody>
-            </table>
-          </div>
-
+          <Card padding="none" className="overflow-hidden">
+            <Table
+              columns={TABLE_COLUMNS}
+              loading={loading}
+              isEmpty={logs.length === 0}
+              skeletonRows={pageSize}
+              sortKey={sort.key}
+              sortDir={sort.direction}
+              onSort={toggleSort}
+              empty={{
+                icon: "ti-file-search",
+                title: "No log records found",
+                subtitle: "Try adjusting your status, role, module, or date filters.",
+                withAvatar: false,
+                action: hasActiveFilters && (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ),
+              }}
+            >
+              {logs.map(log => <LogRow key={log.id} log={log} />)}
+            </Table>
+          </Card>
         </motion.div>
 
         {!loading && totalCount > 0 && (

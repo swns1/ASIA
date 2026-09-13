@@ -446,9 +446,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.15, ease: "easeOut", delay: Math.min(idx * 0.018, 0.22) }}
                           onClick={() => toggleSelect(st.student_id)}
-                          style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", cursor:"pointer", background: isSelected ? "#fff8f6" : "white", borderBottom:"1px solid #f9f0f0" }}
-                          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background="#fff8f6"; }}
-                          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background="white"; }}>
+                          className={`flex cursor-pointer items-center gap-2.5 border-b border-neutral-200/70 px-[18px] py-2.5 transition-colors ${
+                            isSelected ? "bg-brand-50" : "bg-white hover:bg-brand-50"
+                          }`}>
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(st.student_id)}
                             onClick={(e) => e.stopPropagation()}
                             style={{ width:15, height:15, accentColor:"#e03131", cursor:"pointer", flexShrink:0 }} />
