@@ -14,13 +14,13 @@ import { updateStudentStatus } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { todayISO, fmtDate } from "../utils/format";
 
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
   dark: "#1a0a0a", muted: "#7a5050", bg: "#fff8f6", white: "#ffffff",
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const INVOICE_STATUS_META = {
   unpaid:         { label: "Unpaid",   color: "#a32d2d", bg: "#fde8e8" },
@@ -34,8 +34,6 @@ const GRADE_LABELS = {
   "1st_semester": "Sem 1", "2nd_semester": "Sem 2",
 };
 
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
 function Badge({ label, color, bg }) {
   return (

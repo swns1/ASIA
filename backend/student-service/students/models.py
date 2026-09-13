@@ -146,10 +146,13 @@ class Guardian(models.Model):
     # Links this contact record to a `role=guardian` login account
     # (identity-service `users` table). NOT unique — one guardian/parent can
     # be linked across multiple Guardian rows (siblings), each pointing at
-    # the same user_id. Null until an admin links the account (see
-    # GuardianViewSet). This table is managed=False; the column was added
-    # via raw SQL directly against the DB, not a Django migration — see the
-    # README's database setup section for the ALTER TABLE statement.
+    # the same user_id. Null until the account is linked, either by an admin
+    # through GuardianViewSet or automatically by
+    # enrollment-service's accounts/guardian_provisioning.py on enrollment
+    # save. This table is managed=False and the column was originally added
+    # by raw SQL rather than a migration, but it is part of the committed
+    # schema now — see `guardians` in schema.sql, which is the source of
+    # truth for table structure (there is no ALTER TABLE to run).
     user_id = models.BigIntegerField(null=True, blank=True, db_index=True)
 
     class Meta:

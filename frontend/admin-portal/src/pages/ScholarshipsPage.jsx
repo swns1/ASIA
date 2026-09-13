@@ -1060,8 +1060,6 @@ export default function ScholarshipsPage() {
   const [refreshKey,       setRefreshKey]       = useState(0);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     getScholarshipTypes()
       .then((d) => setScholarshipTypes(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => {});

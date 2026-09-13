@@ -365,8 +365,6 @@ export default function AuditTrailPage() {
   const hasActiveFilters = statusFilter !== "all" || roleFilter !== "all" || moduleFilter !== "all" || dateFilter || timeFrom || timeTo;
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     if (!allowed) { setLoading(false); return; }
     loadLogs();
   }, [allowed, navigate]);

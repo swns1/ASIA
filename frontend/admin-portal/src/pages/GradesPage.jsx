@@ -33,6 +33,7 @@ import {
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 
 const getStudents            = (p = {}) => _getStudents(p);
 const getStudent              = (id)     => _getStudent(id);
@@ -682,9 +683,9 @@ function gradeStyle(g) {
 }
 
 function gradeColor(g) {
-  if (g >= 90) return { color:"#1455a0", bg:"#e3f0fd" };
-  if (g >= 75) return { color:"#2e6b0d", bg:"#e8f5e0" };
-  if (g >  0)  return { color:"#9b2020", bg:"#fde8e8" };
+  if (g >= GRADE_OUTSTANDING) return { color:"#1455a0", bg:"#e3f0fd" };
+  if (g >= GRADE_PASSING)     return { color:"#2e6b0d", bg:"#e8f5e0" };
+  if (g >  0)                 return { color:"#9b2020", bg:"#fde8e8" };
   return { color:"#7a5050", bg:"#f9f4f4" };
 }
 

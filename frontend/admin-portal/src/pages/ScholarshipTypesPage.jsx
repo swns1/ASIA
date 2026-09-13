@@ -5,7 +5,6 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 import {
@@ -326,7 +325,6 @@ function ScholarshipRow({ sch, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function ScholarshipTypesPage() {
   usePageTitle("Scholarship Types");
-  const navigate = useNavigate();
 
   const [scholarships,  setScholarships]  = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -351,8 +349,6 @@ export default function ScholarshipTypesPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchScholarships(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -78,6 +78,76 @@ class TestHasRole:
         view = SimpleNamespace(required_roles=self.BILLING_ROLES)
         assert HasRole().has_permission(request, view) is True
 
+    def test_read_roles_absent_leaves_reads_on_required_roles(self):
+        """The widening opt-in must not change any view that doesn't set it."""
+        request = factory.get("/")
+        request.user = _user("registrar")
+        view = SimpleNamespace(required_roles=self.BILLING_ROLES)
+        assert HasRole().has_permission(request, view) is False
+
+
+class TestHasRoleReadRoles:
+    """
+    `read_roles` widens reads only. This is what school settings needs: the
+    registrar and teacher print the DepEd forms whose letterhead comes from
+    that row, and every role reads `current_school_year`, but only
+    admin/accounting may change it.
+    """
+
+    WRITE = {"super_admin", "admin", "accounting"}
+    READ = WRITE | {"registrar", "teacher", "guardian"}
+
+    def _view(self):
+        return SimpleNamespace(required_roles=self.WRITE, read_roles=self.READ)
+
+    def test_unauthenticated_denied_even_for_reads(self):
+        request = factory.get("/")
+        request.user = _anon()
+        assert HasRole().has_permission(request, self._view()) is False
+
+    def test_registrar_can_read(self):
+        request = factory.get("/")
+        request.user = _user("registrar")
+        assert HasRole().has_permission(request, self._view()) is True
+
+    def test_teacher_can_read(self):
+        request = factory.get("/")
+        request.user = _user("teacher")
+        assert HasRole().has_permission(request, self._view()) is True
+
+    def test_guardian_can_read(self):
+        request = factory.get("/")
+        request.user = _user("guardian")
+        assert HasRole().has_permission(request, self._view()) is True
+
+    def test_registrar_cannot_write(self):
+        for method in ("post", "patch", "put", "delete"):
+            request = getattr(factory, method)("/")
+            request.user = _user("registrar")
+            assert HasRole().has_permission(request, self._view()) is False, method
+
+    def test_guardian_cannot_write(self):
+        request = factory.patch("/")
+        request.user = _user("guardian")
+        assert HasRole().has_permission(request, self._view()) is False
+
+    def test_accounting_can_still_write(self):
+        request = factory.patch("/")
+        request.user = _user("accounting")
+        assert HasRole().has_permission(request, self._view()) is True
+
+    def test_role_outside_read_roles_denied(self):
+        request = factory.get("/")
+        request.user = _user("something_else")
+        assert HasRole().has_permission(request, self._view()) is False
+
+    def test_head_and_options_follow_read_roles(self):
+        """SAFE_METHODS is the gate, not just GET."""
+        for method in ("head", "options"):
+            request = getattr(factory, method)("/")
+            request.user = _user("teacher")
+            assert HasRole().has_permission(request, self._view()) is True, method
+
 
 def _mirror_returning(values):
     m = MagicMock()

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { modalVariants, springTransition } from "../utils/motion";
+import { mobileNumber, birthDate, email as emailCheck } from "../utils/validation";
 import { getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
@@ -1121,6 +1122,9 @@ export default function StudentFormPage() {
     const s = student;
 
     // Step 1 — Student
+    // Kept granular rather than folded into validation.js's `lrn` helper:
+    // staff typing at the counter get told which part is wrong. Same rule as
+    // LRN_RE there and as students/validators.py server-side.
     if (!s.lrn?.trim())
       return { step: 1, message: "LRN is required." };
     if (!/^\d+$/.test(s.lrn.trim()))
@@ -1133,18 +1137,19 @@ export default function StudentFormPage() {
       return { step: 1, message: "Last name is required." };
     if (!s.birth_date)
       return { step: 1, message: "Birth date is required." };
-    if (new Date(s.birth_date) > new Date())
-      return { step: 1, message: "Birth date cannot be in the future." };
-    if (new Date(s.birth_date).getFullYear() < 1970)
-      return { step: 1, message: "Please enter a valid birth date." };
     if (!s.current_address?.trim())
       return { step: 1, message: "Current address is required." };
     if (!s.permanent_address?.trim())
       return { step: 1, message: "Permanent address is required." };
-    if (s.mobile_number?.trim() && !/^09\d{9}$/.test(s.mobile_number.trim()))
-      return { step: 1, message: "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX)." };
-    if (s.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email.trim()))
-      return { step: 1, message: "Please enter a valid email address." };
+
+    // Shared with the public ApplicantFormPage — both write the same
+    // `students` row, and the LRN rule in particular used to exist only on
+    // that side, so a staff member at the counter could save a malformed
+    // national learner identifier that a self-filling parent could not.
+    const shapeError = birthDate(s.birth_date)
+      || mobileNumber(s.mobile_number)
+      || emailCheck(s.email);
+    if (shapeError) return { step: 1, message: shapeError };
 
     // Step 2 — Household
     if (household.is_4ps_beneficiary && !household.four_ps_id?.trim())

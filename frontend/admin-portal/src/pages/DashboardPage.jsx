@@ -25,6 +25,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { peso } from "../utils/format";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
@@ -68,9 +69,6 @@ function useClock() {
   }, []);
   return now;
 }
-
-const peso = (n) =>
-  `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * Dashboard stat tile.
@@ -355,8 +353,6 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     if (!schoolYear) return; // global school year still resolving
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps

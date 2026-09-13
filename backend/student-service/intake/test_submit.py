@@ -101,6 +101,26 @@ class TestWhitelisting:
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
+    def test_lrn_is_optional_when_null(self):
+        payload = {"student": _valid_student_payload(lrn=None)}
+        serializer = ApplicantSubmissionSerializer(data=payload)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_twelve_digit_lrn_is_accepted(self):
+        payload = {"student": _valid_student_payload(lrn="136789012345")}
+        serializer = ApplicantSubmissionSerializer(data=payload)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_malformed_lrn_is_rejected(self):
+        """Optional is not the same as unvalidated. The 12-digit rule was
+        enforced only in the browser, so a direct POST to this public
+        endpoint could store a malformed national learner identifier."""
+        for bad in ("13678", "1367890123456", "1367-8901-2345", "13678901234X"):
+            payload = {"student": _valid_student_payload(lrn=bad)}
+            serializer = ApplicantSubmissionSerializer(data=payload)
+            assert not serializer.is_valid(), bad
+            assert "lrn" in serializer.errors["student"], bad
+
     def test_duplicate_email_does_not_block_submission(self):
         """A UniqueValidator here would 400 on a duplicate email — turning
         this public endpoint into an oracle for "does this email already

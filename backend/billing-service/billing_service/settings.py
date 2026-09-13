@@ -221,9 +221,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # (the only deployment shape this project currently has — see README) with
 # no extra infrastructure (no Redis, no DB migration). It is not suitable
 # across multiple machines; revisit if this ever runs load-balanced.
+#
+# The backend is shared.cache.ResilientFileBasedCache, not Django's own
+# FileBasedCache: Django's set() has no atomic overwrite on Windows, so it
+# truncates and re-streams the live cache file in place. A worker reading
+# that file mid-write gets a half-written pickle, and the exception escapes
+# the cache layer and 500s the request from inside DRF's throttle check.
+# See shared/cache.py.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "BACKEND": "shared.cache.ResilientFileBasedCache",
         "LOCATION": str(BASE_DIR / "cache"),
     }
 }

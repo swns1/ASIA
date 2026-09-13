@@ -36,6 +36,18 @@ cache/
 # request paths/metadata that shouldn't be committed.
 logs/
 
+# Machine-local tool state, committed by accident. `.semgrep/guardian.yml` is
+# semgrep's own CLI settings file (an anonymous install id and a login expiry),
+# not a rule file -- nothing in the project reads it and semgrep isn't wired
+# into CI. It differs per machine, so tracking it just produces conflicts.
+.semgrep/
+
+# Claude Code's per-machine settings. This holds API keys and local DB
+# passwords. It was only ever kept out of commits by a global ~/.config/git
+# ignore rule, which nobody else cloning this repo has -- so ignore it here,
+# where the protection travels with the project.
+.claude/settings.local.json
+
 # Scanned documents used for OCR development. These are real civil-registry
 # records of named individuals -- sensitive personal information under RA
 # 10173 -- and nothing in the codebase reads them, so they must never be

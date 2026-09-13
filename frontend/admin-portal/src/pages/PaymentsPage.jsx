@@ -9,6 +9,7 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 
 import { getPayments as _getPayments } from "../api/billingApi";
+import { fmtDate } from "../utils/format";
 const getPayments = (p = {}) => _getPayments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -30,7 +31,6 @@ const SORT_OPTIONS = [
 ];
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
 const Sk = ({ w="100%", h=14, r=6 }) => (
   <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
@@ -126,8 +126,6 @@ export default function PaymentsPage() {
   }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchPayments();
   }, [refreshKey]);
 

@@ -5,7 +5,6 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { useNavigate } from "react-router-dom";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 import {
@@ -316,7 +315,6 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function TeacherAdvisoriesPage() {
   usePageTitle("Teacher Advisories");
-  const navigate = useNavigate();
 
   const [advisories, setAdvisories]         = useState([]);
   const [teachers,   setTeachers]           = useState([]);
@@ -370,8 +368,6 @@ export default function TeacherAdvisoriesPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchData(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

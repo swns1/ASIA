@@ -42,10 +42,12 @@ export function SchoolYearProvider({ children }) {
     if (fetchedDefault.current || schoolYear || !isTokenValid()) return;
     fetchedDefault.current = true;
 
-    // Guardians never see the school-year picker (their portal is scoped to
-    // their own children's enrollments, not filtered by a year), and
-    // /api/school-settings/ is admin/accounting-only, so skip straight to
-    // the computed fallback instead of firing a request that will 403.
+    // Guardians never see the school-year picker — their portal is scoped to
+    // their own children's enrollments, not filtered by a year — so there is
+    // nothing here for them to seed and no reason to spend a request on it.
+    // (Reads of /api/school-settings/ are no longer admin/accounting-only;
+    // they were, which is why every other role quietly ended up on the
+    // computed fallback below instead of the configured school year.)
     if (getCurrentUser()?.role === "guardian") {
       const fallback = computeDefaultSchoolYear();
       setSchoolYearState((prev) => prev || fallback);

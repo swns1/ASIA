@@ -445,11 +445,6 @@ export default function RequirementsPage() {
   const [removeModal, setRemoveModal] = useState(null);
   const [removing,    setRemoving]    = useState(false);
 
-  // Auth guard
-  useEffect(() => {
-    if (!sessionStorage.getItem("access_token")) navigate("/");
-  }, [navigate]);
-
   // Load recent students — re-fetches when filters or page change
   const fetchRecentStudents = useCallback((page = 1) => {
     setRecentStudentsLoading(true);

@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from shared.uploads import download_url, file_kind_for, safe_save
+from .validators import LrnFormatMixin
 from .models import (
     Student,
     Household,
@@ -36,7 +37,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class StudentSerializer(serializers.ModelSerializer):
+class StudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
@@ -231,7 +232,7 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class BulkStudentSerializer(serializers.ModelSerializer):
+class BulkStudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
     """Used only inside bulk-create — student_id, household FK, and updated_at are managed server-side."""
     class Meta:
         model = Student

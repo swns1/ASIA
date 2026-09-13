@@ -1205,7 +1205,7 @@ export default function EnrollmentsPage() {
   const [loadError, setLoadError] = useState(null);
 
   const fetchEnrollments = useCallback(async (pg = 1) => {
-    if (!token) { navigate("/"); return; }
+    if (!token) return;
     setLoading(true);
     setLoadError(null);
     try {

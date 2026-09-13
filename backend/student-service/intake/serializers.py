@@ -22,6 +22,7 @@ these bounds by construction alone.
 from rest_framework import serializers
 
 from students.models import Guardian, Household, Sibling, PreviousSchool, Student
+from students.validators import validate_lrn_format
 
 
 # ── Re-derivable allowlists (used again in intake/services.py at approve time) ──
@@ -82,7 +83,10 @@ class ApplicantStudentSerializer(serializers.ModelSerializer):
     # Duplicate emails are surfaced to the registrar via intake/duplicates.py
     # instead, and only become a real, correctly-blocking uniqueness check
     # at approval time through BulkStudentSerializer (staff-only).
-    lrn = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    lrn = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True,
+        validators=[validate_lrn_format],
+    )
     email = serializers.EmailField(max_length=150, required=False, allow_blank=True, allow_null=True)
 
     class Meta:

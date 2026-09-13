@@ -24,6 +24,7 @@ import {
 import { verifyApplicantCode, saveApplicationDraft, submitApplication } from "../../api/applyApi";
 import useIdleReset from "../../hooks/useIdleReset";
 import { clearAuthSession } from "../../utils/auth";
+import { lrn as lrnCheck, mobileNumber, birthDate } from "../../utils/validation";
 
 // Deliberately its own list, NOT StudentFormSteps.jsx's exported STEPS —
 // that one includes "documents", and there is no document upload here in
@@ -415,13 +416,12 @@ export default function ApplicantFormPage() {
     if (!student.last_name?.trim()) return "Last name is required.";
     if (!student.sex) return "Sex is required.";
     if (!student.birth_date) return "Birth date is required.";
-    if (new Date(student.birth_date) > new Date()) return "Birth date cannot be in the future.";
-    if (student.lrn?.trim() && !/^\d{12}$/.test(student.lrn.trim())) {
-      return "LRN must be exactly 12 digits — leave it blank if one hasn't been assigned yet.";
-    }
-    if (student.mobile_number?.trim() && !/^09\d{9}$/.test(student.mobile_number.trim())) {
-      return "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX).";
-    }
+    // Shared with StudentFormPage — the two paths write the same `students`
+    // row and had drifted apart on which of these they each checked.
+    const shapeError = birthDate(student.birth_date)
+      || lrnCheck(student.lrn)
+      || mobileNumber(student.mobile_number);
+    if (shapeError) return shapeError;
     if (!student.current_address?.trim()) return "Current address is required.";
     if (!student.permanent_address?.trim()) return "Permanent address is required.";
     return null;

@@ -153,7 +153,7 @@ export default function StudentsPage() {
   };
 
   useEffect(() => {
-    if (!token) { navigate("/login"); return; }
+    if (!token) return;
     fetchStudents(1, "", statusFilter, "", "-student_id");
     fetchCounts();
     // Focus the search box on arrival — searching is the dominant task here.

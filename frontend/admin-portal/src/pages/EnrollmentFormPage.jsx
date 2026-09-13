@@ -23,6 +23,7 @@ import { getStudents as _getStudents, getStudent as _getStudent } from "../api/s
 import { generateInvoice as _generateInvoice } from "../api/billingApi";
 import { createPreviousSchool as _createPreviousSchool } from "../api/previousSchoolApi";
 import { GRADE_LEVELS_BY_LEVEL, SHS_STRANDS, schoolLevelForGrade } from "../constants/schoolLevels";
+import { todayISO } from "../utils/format";
 
 const getStudents                 = (p = {}) => _getStudents(p);
 const getStudent                  = (id)     => _getStudent(id);
@@ -99,7 +100,6 @@ function buildSchoolYearOptions() {
   return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const PALETTES = [
   { bg: "#fde8e8", color: "#c0392b" }, { bg: "#e8f0fd", color: "#2563eb" },

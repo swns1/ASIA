@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { pageVariants, modalVariants, springTransition } from "../utils/motion";
 
@@ -28,6 +28,7 @@ import {
   voidInvoice as _voidInvoice,
 } from "../api/billingApi";
 import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
+import { fmtDate } from "../utils/format";
 
 const getInvoices       = (p = {}) => _getInvoices(p);
 const getInvoice        = (id)     => _getInvoice(id);
@@ -63,7 +64,6 @@ const PLAN_META = {
 };
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
 const Sk = ({ w="100%", h=14, r=6 }) => (
   <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
@@ -674,7 +674,6 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function InvoicesPage() {
   usePageTitle("Invoices");
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [invoices,     setInvoices]     = useState([]);
@@ -733,8 +732,6 @@ export default function InvoicesPage() {
   }, [statusFilter, planFilter, search, ordering]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
