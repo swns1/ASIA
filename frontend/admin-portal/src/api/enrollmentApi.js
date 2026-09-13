@@ -139,6 +139,13 @@ export const deleteScholarshipType = (id) =>
 export const getEnrollmentScholarships = (params = {}) =>
   enrollmentClient.get("/enrollment-scholarships/", { params }).then((r) => r.data);
 
+// Per-scholarship-type award counts across every matching award, not just the
+// page being shown. Takes the same year/level/grade/date filters as the list;
+// deliberately ignores scholarship_type so selecting one chip doesn't zero out
+// the counts on the rest.
+export const getEnrollmentScholarshipSummary = (params = {}) =>
+  enrollmentClient.get("/enrollment-scholarships/summary/", { params }).then((r) => r.data);
+
 export const createEnrollmentScholarship = (payload) =>
   enrollmentClient.post("/enrollment-scholarships/", payload).then((r) => r.data);
 

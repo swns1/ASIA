@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import { StatCard } from "../components/ui/Card";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getStudents } from "../api/studentApi";
@@ -279,19 +280,6 @@ function ViewModal({ imageUrl, name, onClose }) {
   );
 }
 
-
-// ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, color, loading }) {
-  return (
-    <div style={s.statCard}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={s.statLabel}>{label}</span>
-        <div style={s.statIcon}><i className={`ti ${icon}`} style={{ fontSize: 15, color: color || C.red }} /></div>
-      </div>
-      {loading ? <Sk h={28} w="50%" /> : <div style={{ ...s.statValue, color: color || C.text }}>{value}</div>}
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -650,8 +638,8 @@ export default function RequirementsPage() {
             {selectedStudent && (() => {
               const selAp = getAvatarPalette(selectedStudent.last_name ?? "X");
               return (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-                <div style={{ ...s.statCard, flexDirection: "row", alignItems: "center", gap: 14 }}>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="flex items-center gap-3.5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                   <div style={{ width: 48, height: 48, borderRadius: "50%", background: selAp.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: selAp.color, flexShrink: 0 }}>
                     {selectedStudent.first_name?.[0]}{selectedStudent.last_name?.[0]}
                   </div>
@@ -669,9 +657,9 @@ export default function RequirementsPage() {
                     </button>
                   </div>
                 </div>
-                <StatCard label="Total Requirements" value={requirements.length} icon="ti-list"          loading={reqLoading} />
-                <StatCard label="Submitted"          value={submitted}           icon="ti-circle-check" color={C.green} loading={reqLoading} />
-                <StatCard label="Pending"            value={pending}             icon="ti-clock"        loading={reqLoading} />
+                <StatCard label="Total Requirements" value={requirements.length} icon="ti-list" iconTone="brand" loading={reqLoading} />
+                <StatCard label="Submitted" value={submitted} icon="ti-circle-check" iconTone="success" loading={reqLoading} />
+                <StatCard label="Pending" value={pending} icon="ti-clock" iconTone="warning" loading={reqLoading} />
               </div>
               );
             })()}
@@ -1161,10 +1149,6 @@ const s = {
   panel:       { background: C.white, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "visible", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" },
   panelHeader: { padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" },
   panelTitle:  { fontSize: 14, fontWeight: 700, color: C.text},
-  statCard:    { background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" },
-  statLabel:   { fontSize: 11, color: "#8a6a6a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" },
-  statIcon:    { width: 30, height: 30, borderRadius: 8, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" },
-  statValue:   { fontSize: 26, fontWeight: 700, lineHeight: 1 },
   primaryBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: `linear-gradient(135deg,#e03131,#c92a2a)`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)" },
   secondaryBtn:{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" },
   dangerBtn:   { flex: 1, height: 42, border: "none", borderRadius: 10, background: `linear-gradient(135deg,#e03131,#c92a2a)`, fontSize: 13, color: C.white, cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif" },

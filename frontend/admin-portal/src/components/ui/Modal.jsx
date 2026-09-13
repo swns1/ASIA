@@ -19,6 +19,10 @@ const SIZES = {
   sm: "max-w-[400px]",
   md: "max-w-[540px]",
   lg: "max-w-[720px]",
+  // For dialogs that are workspaces rather than forms — a roster to tick
+  // through, a side-by-side preview — where 720px would force a cramped
+  // two-column reflow of content that reads better wide.
+  xl: "max-w-[960px]",
 };
 
 export default function Modal({

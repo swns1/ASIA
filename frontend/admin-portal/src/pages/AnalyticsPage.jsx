@@ -626,6 +626,7 @@ export default function AnalyticsPage() {
                                   ? "info"
                                   : "success"
                           }
+                          layout="horizontal"
                           hint={meta.blurb}
                         />
                       );
