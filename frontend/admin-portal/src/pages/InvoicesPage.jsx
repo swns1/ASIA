@@ -7,18 +7,23 @@ import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { pageVariants, modalVariants, springTransition } from "../utils/motion";
+import { pageVariants } from "../utils/motion";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import { StatCard } from "../components/ui/Card";
+import Card, { StatCard, Panel } from "../components/ui/Card";
+import Tabs from "../components/ui/Tabs";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import ErrorState from "../components/ui/ErrorState";
 import Pagination from "../components/Pagination";
-import { StatusBadge } from "../components/ui/Badge";
+import Badge, { StatusBadge } from "../components/ui/Badge";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Modal from "../components/ui/Modal";
+import Skeleton from "../components/ui/Skeleton";
 import { Select } from "../components/FormField";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
+import { paymentMethodMeta } from "../constants/paymentMethods";
 import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -39,13 +44,6 @@ const voidInvoice       = (id)     => _voidInvoice(id);
 const getEnrollments    = (p = {}) => _getEnrollments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const STATUS_META = {
-  unpaid:         { label:"Unpaid",         color:"#a32d2d", bg:"#fde8e8" },
-  partially_paid: { label:"Partial",        color:"#854f0b", bg:"#faeeda" },
-  paid:           { label:"Paid",           color:"#2e6b0d", bg:"#e8f5e0" },
-  void:           { label:"Void",           color:"#5c5752", bg:"#f0ede8" },
-};
-
 const SORT_OPTIONS = [
   { value: "-invoice_id",   label: "Newest first" },
   { value: "invoice_id",    label: "Oldest first" },
@@ -66,12 +64,29 @@ const PLAN_META = {
   annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
 };
 
+// Detail-panel tables. Neither is sortable — both render a short, already
+// ordered list (installments by sequence, payments by date).
+const INSTALLMENT_COLUMNS = [
+  { key: "sequence", label: "#" },
+  { key: "due_date", label: "Due Date" },
+  { key: "amount",   label: "Amount" },
+  { key: "paid",     label: "Paid" },
+  { key: "balance",  label: "Balance" },
+  { key: "status",   label: "Status" },
+];
+
+const PAYMENT_COLUMNS = [
+  { key: "date",      label: "Date" },
+  { key: "amount",    label: "Amount" },
+  { key: "method",    label: "Method" },
+  { key: "receipt",   label: "" },
+  { key: "reference", label: "Reference" },
+  { key: "notes",     label: "Notes" },
+];
+
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
-const Sk = ({ w="100%", h=14, r=6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
 
 // ── Generate Invoice Modal ────────────────────────────────────────────────────
 function GenerateModal({ onClose, onGenerated }) {
@@ -109,45 +124,27 @@ function GenerateModal({ onClose, onGenerated }) {
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity:0 }}
-        animate={{ opacity:1 }}
-        exit={{ opacity:0 }}
-        transition={{ duration:0.18 }}
-        onClick={onClose}
-        style={{ position:"absolute", inset:0, background:"rgba(26,10,10,0.4)", backdropFilter:"blur(4px)" }}
-      />
-      {/* Dialog */}
-      <motion.div
-        variants={modalVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={springTransition}
-        style={{ position:"relative", background:"white", borderRadius:20, width:500, maxHeight:"88vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(224,49,49,0.18)" }}
-      >
-        <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:38, height:38, borderRadius:10, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-receipt" style={{ fontSize:18, color:"#c92a2a" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Generate Invoice</div>
-              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Auto-creates invoice from fee schedule + scholarships</div>
-            </div>
-          </div>
-          <motion.button
-            onClick={onClose}
-            whileHover={{ scale:1.1, color:"#c92a2a" }}
-            whileTap={{ scale:0.9 }}
-            transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}
-          >
-            <i className="ti ti-x" />
-          </motion.button>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-receipt"
+      title="Generate Invoice"
+      description="Auto-creates invoice from fee schedule + scholarships"
+      // A picked enrollment and plan shouldn't be lost to a stray backdrop click.
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button icon="ti-receipt" loading={saving} onClick={handleGenerate}>
+            {saving ? "Generating…" : "Generate Invoice"}
+          </Button>
         </div>
+      }
+    >
 
         <div style={{ padding:"22px 28px" }}>
           {error && (
@@ -244,27 +241,7 @@ function GenerateModal({ onClose, onGenerated }) {
           </div>
         </div>
 
-        <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
-          <motion.button
-            onClick={onClose}
-            whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
-            whileTap={{ scale:0.97 }}
-            transition={{ duration:0.12 }}
-            style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}
-          >Cancel</motion.button>
-          <motion.button
-            onClick={handleGenerate}
-            disabled={saving}
-            whileHover={saving ? {} : { scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }}
-            whileTap={saving ? {} : { scale:0.97 }}
-            transition={{ duration:0.12 }}
-            style={{ background:saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:saving ? "not-allowed" : "pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
-          >
-            {saving ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Generating…</> : <><i className="ti ti-receipt" style={{ fontSize:13 }} />Generate Invoice</>}
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
+    </Modal>
   );
 }
 
@@ -298,7 +275,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 
   if (loading) return (
     <div style={{ padding:"24px", display:"flex", flexDirection:"column", gap:14 }}>
-      <Sk h={60} /><Sk h={200} /><Sk h={120} />
+      <Skeleton height={60} /><Skeleton height={200} /><Skeleton height={120} />
     </div>
   );
 
@@ -307,7 +284,6 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
   );
 
   const en         = invoice.enrollment_detail;
-  const statusMeta = STATUS_META[invoice.status] ?? STATUS_META.unpaid;
   const planMeta   = PLAN_META[invoice.payment_plan] ?? PLAN_META.monthly;
   const totalPaid  = parseFloat(invoice.total_paid ?? 0);
   const balance    = parseFloat(invoice.balance ?? 0);
@@ -332,12 +308,13 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
       style={{ display:"flex", flexDirection:"column", gap:14 }}
     >
       {/* Header */}
-      <motion.div variants={pageVariants.item} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"18px 22px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
+      <motion.div variants={pageVariants.item}>
+        <Card padding="md">
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
               <span style={{ fontSize:18, fontWeight:700, color:"#1a0a0a" }}>{invoice.invoice_no}</span>
-              <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:statusMeta.bg, color:statusMeta.color }}>{statusMeta.label}</span>
+              <StatusBadge status={invoice.status} map={INVOICE_STATUS_MAP} size="sm" />
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:planMeta.bg, color:planMeta.color }}>{planMeta.label}</span>
               {invoice.recalculated_at && <span style={{ fontSize:10, color:"#8a6a6a", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
             </div>
@@ -351,33 +328,25 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
           </div>
           {invoice.status !== "void" && (
             <div style={{ display:"flex", gap:8 }}>
-              <motion.button
-                onClick={() => onRecordPayment(invoiceId)}
-                whileHover={{ scale:1.02, boxShadow:"0 6px 18px rgba(224,49,49,0.32)" }}
-                whileTap={{ scale:0.96 }}
-                transition={{ duration:0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"8px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 14px rgba(224,49,49,0.26)" }}
+              <Button size="sm" icon="ti-cash" onClick={() => onRecordPayment(invoiceId)}>
+                Record Payment
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="ti-printer"
+                onClick={() => window.open(`/print/invoice/${invoiceId}`, "_blank")}
               >
-                <i className="ti ti-cash" style={{ fontSize:13 }} />Record Payment
-              </motion.button>
-              <motion.button
-                onClick={() => window.open(`/print/invoice/${invoiceId}`, '_blank')}
-                whileHover={{ borderColor: "#1e3a5f", color: "#1e3a5f" }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#855c5c", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-              >
-                <i className="ti ti-printer" style={{ fontSize: 13 }} />Print
-              </motion.button>
-              <motion.button
+                Print
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="ti-ban"
                 onClick={() => setShowVoidConfirm(true)}
-                whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
-                whileTap={{ scale:0.96 }}
-                transition={{ duration:0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#855c5c", border:"1px solid #f0e4e4", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
               >
-                <i className="ti ti-ban" style={{ fontSize:13 }} />Void
-              </motion.button>
+                Void
+              </Button>
             </div>
           )}
         </div>
@@ -404,38 +373,21 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
             />
           </div>
         </div>
+        </Card>
       </motion.div>
 
       {/* Tabs */}
-      <motion.div variants={pageVariants.item} style={{ display:"flex", gap:2, background:"white", borderRadius:12, border:"1px solid #f5eaea", padding:5, alignSelf:"flex-start", position:"relative" }}>
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          return (
-            <motion.button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              whileHover={active ? {} : { color:"#c92a2a" }}
-              whileTap={{ scale:0.97 }}
-              transition={{ duration:0.12 }}
-              style={{ display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", borderRadius:8, border:"none", background:"transparent", color:active ? "white" : "#855c5c", fontSize:12, fontWeight:active ? 700 : 500, fontFamily:"'DM Sans',sans-serif", cursor:"pointer", position:"relative", zIndex:1, whiteSpace:"nowrap" }}
-            >
-              {active && (
-                <motion.div
-                  layoutId="invoice-tab-pill"
-                  transition={{ type:"spring", stiffness:380, damping:34 }}
-                  style={{ position:"absolute", inset:0, borderRadius:8, background:"linear-gradient(135deg,#e03131,#c92a2a)", zIndex:-1 }}
-                />
-              )}
-              <i className={`ti ${t.icon}`} style={{ fontSize:13, position:"relative" }} />
-              <span style={{ position:"relative" }}>{t.label}</span>
-              {t.id === "payments" && (invoice.payments?.length ?? 0) > 0 && (
-                <span style={{ fontSize:10, fontWeight:700, background:active ? "rgba(255,255,255,0.3)" : "#f0e8e8", color:active ? "white" : "#c92a2a", borderRadius:99, padding:"1px 6px", position:"relative" }}>
-                  {invoice.payments.length}
-                </span>
-              )}
-            </motion.button>
-          );
-        })}
+      <motion.div variants={pageVariants.item}>
+        <Tabs
+          variant="pill"
+          tabs={TABS.map((t) => (
+            t.id === "payments"
+              ? { ...t, count: invoice.payments?.length || undefined }
+              : t
+          ))}
+          value={tab}
+          onChange={setTab}
+        />
       </motion.div>
 
       {/* Tab content */}
@@ -454,8 +406,11 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               { key:"misc",    items:miscItems,    label:"Miscellaneous Fees",   color:"#1455a0", bg:"#e3f0fd", note:"No discount" },
               { key:"other",   items:otherItems,   label:"Other Fees",           color:"#2e6b0d", bg:"#e8f5e0", note:"No discount" },
             ].filter((g) => g.items.length > 0).map((group) => (
-              <div key={group.key} style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}>
-                <div style={{ padding:"12px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", justifyContent:"space-between", background:group.bg }}>
+              <Card key={group.key} padding="none" className="overflow-hidden">
+                {/* Header stays inline: the tint encodes the fee category
+                    (tuition / misc / other), which Panel's neutral header
+                    doesn't model. The chrome around it comes from Card. */}
+                <div style={{ background:group.bg }} className="flex items-center justify-between border-b border-neutral-200/70 px-[18px] py-3">
                   <span style={{ fontSize:13, fontWeight:700, color:group.color }}>{group.label}</span>
                   <span style={{ fontSize:11, color:group.color, opacity:0.7, fontStyle:"italic" }}>{group.note}</span>
                 </div>
@@ -469,13 +424,13 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                   <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Subtotal</span>
                   <span style={{ fontSize:13, fontWeight:700, color:group.color }}>{fmt(group.items.reduce((s, i) => s + parseFloat(i.amount), 0))}</span>
                 </div>
-              </div>
+              </Card>
             ))}
 
             {(invoice.discounts ?? []).length > 0 && (
-              <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}>
-                <div style={{ padding:"12px 18px", borderBottom:"1px solid #f9f0f0", background:"#fdf5e8" }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#854f0b" }}>Discounts Applied to Tuition</span>
+              <Card padding="none" className="overflow-hidden">
+                <div className="border-b border-neutral-200/70 bg-warning-50 px-[18px] py-3">
+                  <span className="text-[13px] font-bold text-warning-700">Discounts Applied to Tuition</span>
                 </div>
                 {invoice.discounts.map((d) => (
                   <div key={d.invoice_discount_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", borderBottom:"1px solid #f9f0f0", fontSize:13 }}>
@@ -490,7 +445,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                   <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Total Discounts</span>
                   <span style={{ fontSize:13, fontWeight:700, color:"#854f0b" }}>− {fmt(invoice.total_discounts ?? 0)}</span>
                 </div>
-              </div>
+              </Card>
             )}
 
             <div style={{ background:"linear-gradient(135deg,#e03131,#c92a2a)", borderRadius:14, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -510,53 +465,43 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
             animate={{ opacity:1, y:0 }}
             exit={{ opacity:0, y:-8 }}
             transition={{ duration:0.18, ease:"easeOut" }}
-            style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}
           >
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-              <thead>
-                <tr style={{ background:"#fdfafa" }}>
-                  {["#","Due Date","Amount","Paid","Balance","Status"].map((h) => (
-                    <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <Card padding="none" className="overflow-hidden">
+              <Table
+                columns={INSTALLMENT_COLUMNS}
+                isEmpty={(invoice.installments ?? []).length === 0}
+                empty={{
+                  icon: "ti-calendar-off",
+                  title: "No installments",
+                  subtitle: "This invoice has no installment schedule.",
+                  withAvatar: false,
+                }}
+              >
                 {(invoice.installments ?? []).map((inst) => {
-                  const stMeta = { pending:STATUS_META.unpaid, partially_paid:STATUS_META.partially_paid, paid:STATUS_META.paid, overdue:{ label:"Overdue", color:"#7c3aed", bg:"#f0e8fd" }, voided:{ label:"Voided", color:"#5c5752", bg:"#f0ede8" } }[inst.status] ?? STATUS_META.unpaid;
                   const bal = parseFloat(inst.amount) - parseFloat(inst.amount_paid);
                   return (
-                    <tr key={inst.installment_id} style={{ borderBottom:"1px solid #f9f0f0" }}
-                      onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
-                      onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background=""); }}>
-                      <td style={{ padding:"11px 18px", color:"#8a6a6a" }}>{inst.sequence}</td>
-                      <td style={{ padding:"11px 18px", fontWeight:600, color:"#1a0a0a" }}>{fmtDate(inst.due_date)}</td>
-                      <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmt(inst.amount)}</td>
-                      <td style={{ padding:"11px 18px", color:"#2e6b0d", fontWeight:600 }}>{fmt(inst.amount_paid)}</td>
-                      <td style={{ padding:"11px 18px", color: bal > 0 ? "#a32d2d" : "#2e6b0d", fontWeight:600 }}>{fmt(bal)}</td>
-                      <td style={{ padding:"11px 18px" }}>
-                        <span style={{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:99, background:stMeta.bg, color:stMeta.color }}>{stMeta.label}</span>
-                      </td>
-                    </tr>
+                    <TableRow key={inst.installment_id}>
+                      <TableCell className="text-neutral-500">{inst.sequence}</TableCell>
+                      <TableCell className="font-semibold text-neutral-900">{fmtDate(inst.due_date)}</TableCell>
+                      <TableCell className="text-neutral-900">{fmt(inst.amount)}</TableCell>
+                      <TableCell className="font-semibold text-success-600">{fmt(inst.amount_paid)}</TableCell>
+                      <TableCell className={`font-semibold ${bal > 0 ? "text-error-600" : "text-success-600"}`}>
+                        {fmt(bal)}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={inst.status} map={INVOICE_STATUS_MAP} size="sm" />
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </Table>
+            </Card>
           </motion.div>
         )}
 
         {tab === "payments" && (() => {
           const payments     = invoice.payments ?? [];
           const totalPaidAmt = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
-          const pmColors     = Object.fromEntries(
-            [
-              { value:"cash",          color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-cash"          },
-              { value:"gcash",         color:"#1455a0", bg:"#e3f0fd", icon:"ti-device-mobile"  },
-              { value:"bank_transfer", color:"#7c3aed", bg:"#f0e8fd", icon:"ti-building-bank"  },
-              { value:"card",          color:"#854f0b", bg:"#fdf5e8", icon:"ti-credit-card"    },
-              { value:"check",         color:"#854f0b", bg:"#faeeda", icon:"ti-file-text"      },
-              { value:"others",        color:"#5c5752", bg:"#f0ede8", icon:"ti-dots"           },
-            ].map((m) => [m.value, m])
-          );
           return (
             <motion.div
               key="payments"
@@ -564,29 +509,23 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               animate={{ opacity:1, y:0 }}
               exit={{ opacity:0, y:-8 }}
               transition={{ duration:0.18, ease:"easeOut" }}
-              style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}
             >
-              <div style={{ padding:"12px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
-                <span style={{ fontSize:12, fontWeight:600, color:"#7a5050" }}>
-                  {payments.length} payment{payments.length !== 1 ? "s" : ""} · {fmt(totalPaidAmt)} collected
-                </span>
-                {invoice.status !== "void" && balance > 0 && (
-                  <motion.button
-                    onClick={() => onRecordPayment(invoiceId)}
-                    whileHover={{ scale:1.03, boxShadow:"0 4px 12px rgba(46,107,13,0.28)" }}
-                    whileTap={{ scale:0.96 }}
-                    transition={{ duration:0.12 }}
-                    style={{ display:"inline-flex", alignItems:"center", gap:6, height:30, padding:"0 12px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 3px 10px rgba(46,107,13,0.22)" }}
-                  >
-                    <i className="ti ti-plus" style={{ fontSize:11 }} />Record Payment
-                  </motion.button>
-                )}
-                {invoice.status !== "void" && balance <= 0 && (
-                  <span style={{ fontSize:11, fontWeight:700, color:"#2e6b0d", display:"inline-flex", alignItems:"center", gap:4 }}>
-                    <i className="ti ti-circle-check" style={{ fontSize:12 }} />Fully paid
-                  </span>
-                )}
-              </div>
+              <Panel
+                padding="none"
+                className="overflow-hidden"
+                title={`${payments.length} payment${payments.length !== 1 ? "s" : ""} · ${fmt(totalPaidAmt)} collected`}
+                action={
+                  invoice.status !== "void" && balance > 0 ? (
+                    <Button size="sm" icon="ti-plus" onClick={() => onRecordPayment(invoiceId)}>
+                      Record Payment
+                    </Button>
+                  ) : invoice.status !== "void" ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-success-600">
+                      <i className="ti ti-circle-check text-xs" aria-hidden="true" />Fully paid
+                    </span>
+                  ) : null
+                }
+              >
 
               {payments.length === 0 ? (
                 <div style={{ padding:"40px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
@@ -608,50 +547,43 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                 </div>
               ) : (
                 <>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                    <thead>
-                      <tr style={{ background:"#fdfafa" }}>
-                        {["Date","Amount","Method","Reference","Notes",""].map((h) => (
-                          <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payments.map((p) => {
-                        const mc = pmColors[p.payment_method] ?? pmColors.others;
-                        return (
-                          <tr key={p.payment_id} style={{ borderBottom:"1px solid #f9f0f0" }}
-                            onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
-                            onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background=""); }}>
-                            <td style={{ padding:"11px 18px", color:"#1a0a0a" }}>{fmtDate(p.payment_date)}</td>
-                            <td style={{ padding:"11px 18px", fontWeight:700, color:"#2e6b0d" }}>{fmt(p.amount_paid)}</td>
-                            <td style={{ padding:"11px 18px" }}>
-                              <span style={{ fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:99, background:mc.bg, color:mc.color, display:"inline-flex", alignItems:"center", gap:4 }}>
-                                <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />
-                                {p.payment_method.replace("_", " ")}
-                              </span>
-                            </td>
-                            <td style={{ padding:"8px 18px" }}>
-                              <button
-                                onClick={() => window.open(`/print/receipt/${p.payment_id}`, '_blank')}
-                                title="Print Receipt"
-                                style={{ background:"none", border:"1px solid #e0d0d0", borderRadius:6, padding:"4px 8px", cursor:"pointer", color:"#7a5050", fontSize:11 }}>
-                                <i className="ti ti-receipt" style={{ fontSize: 12 }} /> Receipt
-                              </button>
-                            </td>
-                            <td style={{ padding:"11px 18px", color:"#5a4a4a", fontFamily:"monospace", fontSize:12 }}>{p.reference_number || "—"}</td>
-                            <td style={{ padding:"11px 18px", color:"#7a5050", fontSize:12 }}>{p.notes || "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div style={{ padding:"10px 18px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", justifyContent:"flex-end", gap:20 }}>
-                    <span style={{ fontSize:12, color:"#8a6a6a" }}>Total collected</span>
-                    <span style={{ fontSize:13, fontWeight:700, color:"#2e6b0d" }}>{fmt(totalPaidAmt)}</span>
+                  <Table columns={PAYMENT_COLUMNS}>
+                    {payments.map((p) => {
+                      const mc = paymentMethodMeta(p.payment_method);
+                      return (
+                        <TableRow key={p.payment_id}>
+                          <TableCell className="text-neutral-900">{fmtDate(p.payment_date)}</TableCell>
+                          <TableCell className="font-bold text-success-600">{fmt(p.amount_paid)}</TableCell>
+                          <TableCell>
+                            <Badge variant={mc.tone} icon={mc.icon} size="sm">
+                              {mc.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon="ti-receipt"
+                              onClick={() => window.open(`/print/receipt/${p.payment_id}`, "_blank")}
+                            >
+                              Receipt
+                            </Button>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-neutral-700">
+                            {p.reference_number || "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-neutral-700">{p.notes || "—"}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </Table>
+                  <div className="flex justify-end gap-5 border-t border-neutral-200 bg-neutral-50 px-[18px] py-2.5">
+                    <span className="text-xs text-neutral-500">Total collected</span>
+                    <span className="text-[13px] font-bold text-success-600">{fmt(totalPaidAmt)}</span>
                   </div>
                 </>
               )}
+              </Panel>
             </motion.div>
           );
         })()}
@@ -963,7 +895,7 @@ export default function InvoicesPage() {
               {loading ? (
                 Array.from({ length:8 }).map((_, i) => (
                   <div key={i} style={{ padding:"14px 16px", borderBottom:"1px solid #f9f0f0", display:"flex", flexDirection:"column", gap:8 }}>
-                    <Sk w={140} h={14} /><Sk w={100} h={11} /><Sk w={80} h={11} />
+                    <Skeleton width={140} height={14} /><Skeleton width={100} height={11} /><Skeleton width={80} height={11} />
                   </div>
                 ))
               ) : loadError ? (
@@ -1109,13 +1041,14 @@ export default function InvoicesPage() {
                 animate={{ opacity:1 }}
                 exit={{ opacity:0 }}
                 transition={{ duration:0.18 }}
-                style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"56px 24px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:"#8a6a6a", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
               >
-                <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <i className="ti ti-receipt" style={{ fontSize:22, color:"#8a6a6a" }} />
-                </div>
-                <div style={{ fontSize:14, fontWeight:600, color:"#7a5050" }}>Select an invoice</div>
-                <div style={{ fontSize:13 }}>Click an invoice on the left to view its details</div>
+                <Card padding="none" className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-neutral-500">
+                  <div className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-brand-100">
+                    <i className="ti ti-receipt text-[22px] text-neutral-500" aria-hidden="true" />
+                  </div>
+                  <div className="text-sm font-semibold text-neutral-700">Select an invoice</div>
+                  <div className="text-[13px]">Click an invoice on the left to view its details</div>
+                </Card>
               </motion.div>
             ) : null}
           </AnimatePresence>

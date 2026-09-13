@@ -16,7 +16,7 @@ import Badge from "../components/ui/Badge";
 import Alert from "../components/ui/Alert";
 import { Field, Input } from "../components/FormField";
 import { ROLE_MAP } from "../constants/statusMaps";
-import { getAvatarPalette } from "../utils/avatarPalette";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { fieldErrorsFrom, firstMessageFrom } from "../utils/apiError";
 import { collect, required, email as emailCheck, minLength, hasErrors, focusFirstError } from "../utils/validation";
 import { getCurrentUser, isAdminRole } from "../utils/auth";
@@ -38,13 +38,6 @@ const TABLE_COLUMNS = [
 ];
 
 const MAX_PIC_BYTES = 2 * 1024 * 1024;
-
-function initials(name = "") {
-  const parts = name.trim().split(/\s+/);
-  return parts.length >= 2
-    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    : name.slice(0, 2).toUpperCase() || "??";
-}
 
 function Avatar({ user, size = 36 }) {
   const palette = getAvatarPalette(user.name);
@@ -68,7 +61,7 @@ function Avatar({ user, size = 36 }) {
       }}
       aria-hidden="true"
     >
-      {initials(user.name)}
+      {initialsFrom(user.name)}
     </div>
   );
 }
@@ -409,7 +402,7 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
                 style={{ background: palette.bg, color: palette.color }}
                 aria-hidden="true"
               >
-                {initials(values.name)}
+                {initialsFrom(values.name)}
               </div>
             )}
           </div>

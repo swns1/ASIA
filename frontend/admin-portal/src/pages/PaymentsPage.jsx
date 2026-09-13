@@ -1,17 +1,20 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import RecordPaymentModal from "../components/RecordPaymentModal";
-import EmptyState from "../components/EmptyState";
-import ErrorState from "../components/ui/ErrorState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import { StatCard } from "../components/ui/Card";
+import Card, { StatCard } from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Pagination from "../components/Pagination";
+import Badge from "../components/ui/Badge";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 
 import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
+import { PAYMENT_METHODS, PAYMENT_METHOD_MAP as PM } from "../constants/paymentMethods";
 const getPayments = (p = {}) => _getPayments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -20,15 +23,6 @@ const getPayments = (p = {}) => _getPayments(p);
 // chips now theme from tokens.css instead of per-page literals. The bg/color
 // literals stay for the inline method pill on each table row until that moves
 // to a shared Badge.
-const PAYMENT_METHODS = [
-  { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0", tone:"success" },
-  { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd", tone:"info"    },
-  { value:"bank_transfer", label:"Bank Transfer", icon:"ti-building-bank", color:"#7c3aed", bg:"#f0e8fd", tone:"accent"  },
-  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
-  { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda", tone:"warning" },
-  { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8", tone:"muted"   },
-];
-const PM = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m]));
 
 const SORT_OPTIONS = [
   { value:"-payment_date", label:"Date ↓" },
@@ -40,30 +34,17 @@ const SORT_OPTIONS = [
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
-const Sk = ({ w="100%", h=14, r=6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
-
-function initials(name) {
-  if (!name) return "?";
-  const parts = name.trim().split(" ").filter(Boolean);
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const AVATAR_PALETTES = [
-  { bg:"#fde8e8", color:"#a32d2d" },
-  { bg:"#e3f0fd", color:"#1455a0" },
-  { bg:"#e8f5e0", color:"#2e6b0d" },
-  { bg:"#f0e8fd", color:"#7c3aed" },
-  { bg:"#faeeda", color:"#854f0b" },
-  { bg:"#fdf5e8", color:"#854f0b" },
+// Columns for the payments table. Not sortable here — ordering is driven by
+// the Sort chip row in the filter bar, which maps to the API's `ordering`.
+const TABLE_COLUMNS = [
+  { key: "student",   label: "Student" },
+  { key: "invoice",   label: "Invoice" },
+  { key: "date",      label: "Date" },
+  { key: "amount",    label: "Amount" },
+  { key: "method",    label: "Method" },
+  { key: "reference", label: "Reference" },
+  { key: "notes",     label: "Notes" },
 ];
-function avatarPalette(name) {
-  if (!name) return AVATAR_PALETTES[0];
-  const code = name.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
-  return AVATAR_PALETTES[code % AVATAR_PALETTES.length];
-}
 
 // ════════════════════════════════════════════════════════════════════════════════
 export default function PaymentsPage() {
@@ -220,22 +201,6 @@ export default function PaymentsPage() {
           })}
         </div>
 
-        {/* ── Total collected card ───────────────────────────────────────── */}
-        {/* <div style={{ background:"linear-gradient(135deg,#2e6b0d,#256009)", borderRadius:14, padding:"16px 22px", display:"flex", alignItems:"center", justifyContent:"space-between", boxShadow:"0 4px 20px rgba(46,107,13,0.22)" }}>
-          <div>
-            <div style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.65)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:3 }}>
-              {methodFilter !== "all" ? `${PM[methodFilter]?.label ?? ""} · This Page` : "Total Collected · This Page"}
-            </div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>
-              {loading ? "Loading…" : `${pageMeta.count} transaction${pageMeta.count !== 1 ? "s" : ""}`}
-            </div>
-          </div>
-          {loading
-            ? <Sk w={120} h={28} r={6} />
-            : <div style={{ fontSize:28, fontWeight:800, color:"white", letterSpacing:"-0.02em" }}>{fmt(totalCollected)}</div>
-          }
-        </div> */}
-
         {/* ── Filter panel ───────────────────────────────────────────────── */}
         <FilterBar
           hasFilters={hasActiveFilters}
@@ -329,168 +294,99 @@ export default function PaymentsPage() {
         </FilterBar>
 
         {/* ── Payments table ──────────────────────────────────────────────── */}
-        <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead>
-              <tr style={{ background:"#fdfafa" }}>
-                {["Student","Invoice","Date","Amount","Method","Reference","Notes"].map((h) => (
-                  <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 16px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length:8 }).map((_, i) => (
-                  <tr key={i}>
-                    {[160, 90, 90, 80, 90, 100, 110].map((w, j) => (
-                      <td key={j} style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0" }}>
-                        {j === 0
-                          ? <div style={{ display:"flex", alignItems:"center", gap:10 }}><div style={{ width:34, height:34, borderRadius:9, background:"#f5eaea", flexShrink:0 }} /><div style={{ display:"flex", flexDirection:"column", gap:6 }}><Sk w={120} h={12} /><Sk w={70} h={10} /></div></div>
-                          : <Sk w={w} h={12} />}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : loadError ? (
-                <tr>
-                  <td colSpan={7}>
-                    <ErrorState
-                      error={loadError}
-                      subject="payments"
-                      onRetry={() => fetchPayments(page)}
-                    />
-                  </td>
-                </tr>
-              ) : payments.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      icon="ti-cash"
-                      iconBg="#e8f5e0"
-                      iconColor="#2e6b0d"
-                      title="No payments found"
-                      subtitle={hasActiveFilters ? "Try adjusting your filters." : "Record the first payment to get started."}
-                      action={!hasActiveFilters && (
-                        <motion.button
-                          onClick={() => setShowModal(true)}
-                          whileHover={{ scale:1.02, boxShadow:"0 6px 16px rgba(46,107,13,0.30)" }}
-                          whileTap={{ scale:0.97 }}
-                          transition={{ duration:0.12 }}
-                          style={{ marginTop:4, display:"inline-flex", alignItems:"center", gap:7, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:10, padding:"10px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}
-                        >
-                          <i className="ti ti-cash" style={{ fontSize:14 }} />Record Payment
-                        </motion.button>
-                      )}
-                    />
-                  </td>
-                </tr>
-              ) : (
-                <AnimatePresence mode="popLayout" initial={false}>
-                  {payments.map((p) => {
-                    const name  = p.invoice_detail?.student_name || null;
-                    const invNo = p.invoice_detail?.invoice_no   || `#${p.invoice}`;
-                    const mc    = PM[p.payment_method] ?? PM.others;
-                    const pal   = avatarPalette(name);
-                    return (
-                      <motion.tr
-                        key={p.payment_id}
-                        initial={{ opacity:0, x:-10 }}
-                        animate={{ opacity:1, x:0 }}
-                        exit={{ opacity:0, x:-10 }}
-                        transition={{ duration:0.18, ease:"easeOut" }}
-                        style={{ borderBottom:"1px solid #f9f0f0", backgroundColor:"white", transition:"background-color 0.12s ease" }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor="#fffbfb"}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor="white"}
+        <Card padding="none" className="overflow-hidden">
+          <Table
+            columns={TABLE_COLUMNS}
+            loading={loading}
+            error={loadError}
+            onRetry={() => fetchPayments(page)}
+            errorSubject="payments"
+            isEmpty={payments.length === 0}
+            empty={{
+              icon: "ti-cash",
+              title: "No payments found",
+              subtitle: hasActiveFilters
+                ? "Try adjusting your filters."
+                : "Record the first payment to get started.",
+              action: !hasActiveFilters && (
+                <Button size="sm" icon="ti-cash" onClick={() => setShowModal(true)}>
+                  Record Payment
+                </Button>
+              ),
+            }}
+          >
+            {payments.map((p) => {
+              const name  = p.invoice_detail?.student_name || null;
+              const invNo = p.invoice_detail?.invoice_no   || `#${p.invoice}`;
+              const mc    = PM[p.payment_method] ?? PM.others;
+              const pal   = getAvatarPalette(name ?? "");
+              return (
+                <TableRow key={p.payment_id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-xs font-bold"
+                        style={{ background: pal.bg, color: pal.color }}
+                        aria-hidden="true"
                       >
-                        {/* Student */}
-                        <td style={{ padding:"11px 16px" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                            <div style={{ width:34, height:34, borderRadius:9, background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
-                              {name ? initials(name) : <i className="ti ti-user" style={{ fontSize:15 }} />}
-                            </div>
-                            <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a", whiteSpace:"nowrap" }}>
-                              {name ?? <span style={{ color:"#8a6a6a", fontStyle:"italic", fontWeight:400 }}>Unknown</span>}
-                            </span>
-                          </div>
-                        </td>
+                        {name ? initialsFrom(name) : <i className="ti ti-user text-[15px]" />}
+                      </div>
+                      <span className="whitespace-nowrap text-sm font-semibold text-neutral-900">
+                        {name ?? <span className="font-normal italic text-neutral-500">Unknown</span>}
+                      </span>
+                    </div>
+                  </TableCell>
 
-                        {/* Invoice */}
-                        <td style={{ padding:"11px 16px" }}>
-                          <motion.button
-                            onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
-                            whileHover={{ color:"#c01a1a" }}
-                            transition={{ duration:0.12 }}
-                            style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"monospace", fontSize:11.5, color:"#c92a2a", fontWeight:700, textDecoration:"underline", padding:0, whiteSpace:"nowrap" }}
-                          >
-                            {invNo}
-                          </motion.button>
-                        </td>
+                  <TableCell>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
+                      className="focus-ring whitespace-nowrap rounded-sm font-mono text-xs font-bold text-brand-600 underline transition-colors hover:text-brand-700"
+                    >
+                      {invNo}
+                    </button>
+                  </TableCell>
 
-                        {/* Date */}
-                        <td style={{ padding:"11px 16px", color:"#5a4a4a", whiteSpace:"nowrap" }}>
-                          {fmtDate(p.payment_date)}
-                        </td>
+                  <TableCell className="whitespace-nowrap text-neutral-700">
+                    {fmtDate(p.payment_date)}
+                  </TableCell>
 
-                        {/* Amount */}
-                        <td style={{ padding:"11px 16px", fontWeight:700, color:"#2e6b0d", whiteSpace:"nowrap" }}>
-                          {fmt(p.amount_paid)}
-                        </td>
+                  <TableCell className="whitespace-nowrap font-bold text-success-600">
+                    {fmt(p.amount_paid)}
+                  </TableCell>
 
-                        {/* Method */}
-                        <td style={{ padding:"11px 16px" }}>
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:600, padding:"3px 9px", borderRadius:99, background:mc.bg, color:mc.color, whiteSpace:"nowrap" }}>
-                            <i className={`ti ${mc.icon}`} style={{ fontSize:11 }} />{mc.label}
-                          </span>
-                        </td>
+                  <TableCell>
+                    <Badge variant={mc.tone} icon={mc.icon} size="sm">
+                      {mc.label}
+                    </Badge>
+                  </TableCell>
 
-                        {/* Reference */}
-                        <td style={{ padding:"11px 16px", color:"#5a4a4a", fontFamily:"monospace", fontSize:11.5 }}>
-                          {p.reference_number || <span style={{ color:"#8a6a6a" }}>—</span>}
-                        </td>
+                  <TableCell className="font-mono text-xs text-neutral-700">
+                    {p.reference_number || <span className="text-neutral-500">—</span>}
+                  </TableCell>
 
-                        {/* Notes */}
-                        <td style={{ padding:"11px 16px", color:"#7a5050", fontSize:12, maxWidth:180 }}>
-                          {p.notes
-                            ? <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.notes}</span>
-                            : <span style={{ color:"#8a6a6a" }}>—</span>}
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </AnimatePresence>
-              )}
-            </tbody>
-          </table>
+                  <TableCell className="max-w-[180px] text-xs text-neutral-700">
+                    {p.notes
+                      ? <span className="block truncate">{p.notes}</span>
+                      : <span className="text-neutral-500">—</span>}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </Table>
+        </Card>
 
-          {/* Pagination */}
-          {!loading && pageMeta.count > 20 && (
-            <div style={{ padding:"12px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, color:"#8a6a6a" }}>Page {page} of {totalPages} · {pageMeta.count} total</span>
-              <div style={{ display:"flex", gap:6 }}>
-                <motion.button
-                  disabled={!pageMeta.previous}
-                  onClick={() => fetchPayments(page - 1)}
-                  whileHover={pageMeta.previous ? { borderColor:"#e03131", color:"#c92a2a" } : {}}
-                  whileTap={pageMeta.previous ? { scale:0.93 } : {}}
-                  transition={{ duration:0.12 }}
-                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.previous ? "pointer" : "not-allowed", color:pageMeta.previous ? "#5a4a4a" : "#8a6a6a", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.previous ? 1 : 0.5 }}
-                >
-                  <i className="ti ti-chevron-left" style={{ fontSize:13 }} />Prev
-                </motion.button>
-                <motion.button
-                  disabled={!pageMeta.next}
-                  onClick={() => fetchPayments(page + 1)}
-                  whileHover={pageMeta.next ? { borderColor:"#e03131", color:"#c92a2a" } : {}}
-                  whileTap={pageMeta.next ? { scale:0.93 } : {}}
-                  transition={{ duration:0.12 }}
-                  style={{ height:32, padding:"0 14px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", display:"inline-flex", alignItems:"center", gap:5, cursor:pageMeta.next ? "pointer" : "not-allowed", color:pageMeta.next ? "#5a4a4a" : "#8a6a6a", fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity:pageMeta.next ? 1 : 0.5 }}
-                >
-                  Next<i className="ti ti-chevron-right" style={{ fontSize:13 }} />
-                </motion.button>
-              </div>
-            </div>
-          )}
-        </div>
+        {!loading && !loadError && pageMeta.count > 0 && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            count={pageMeta.count}
+            hasPrevious={Boolean(pageMeta.previous)}
+            hasNext={Boolean(pageMeta.next)}
+            onPageChange={(p) => fetchPayments(p)}
+          />
+        )}
+
 
       </div>
 
