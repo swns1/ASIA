@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
+import { StatCard } from "../components/ui/Card";
 import { Select } from "../components/FormField";
 import {
   getMySections,
@@ -903,16 +904,6 @@ function AttendanceTab({ advisory, onTodayChange }) {
 }
 
 // ── Stats tab: grade metrics + semester/daily/per-student attendance ────────
-function StatTile({ label, value, sub, color }) {
-  return (
-    <div style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 2px 12px rgba(224,49,49,0.06)" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || "#1a0a0a", lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "#8a6a6a" }}>{sub}</div>}
-    </div>
-  );
-}
-
 function GradeDistribution({ distribution, gradedCount }) {
   const bands = [
     { key: "90_100", label: "90-100", color: "#1455a0" },
@@ -1151,10 +1142,10 @@ function StatsTab({ advisory }) {
           >
             {/* Grade + attendance headline tiles */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, padding: "18px 26px 4px" }}>
-              <StatTile label="Average Grade" value={gradeSummary?.average ?? "—"} sub={`${gradeSummary?.graded_count ?? 0} grades recorded`} />
-              <StatTile label="Pass Rate" value={gradeSummary?.pass_rate !== null && gradeSummary?.pass_rate !== undefined ? `${gradeSummary.pass_rate}%` : "—"} color={gradeSummary?.pass_rate >= 75 ? "#2e6b0d" : "#9b2020"} />
-              <StatTile label="Attendance Rate" value={sectionRate !== null ? `${sectionRate}%` : "—"} sub={`${stats?.total_school_days ?? 0} school days`} color={sectionRate >= 90 ? "#2e6b0d" : sectionRate >= 75 ? "#b45309" : "#9b2020"} />
-              <StatTile label="Absent" value={totals?.absent ?? 0} sub={`of ${totals?.total_marks ?? 0} total marks`} color="#9b2020" />
+              <StatCard label="Average Grade" value={gradeSummary?.average ?? "—"} hint={`${gradeSummary?.graded_count ?? 0} grades recorded`} icon="ti-report-analytics" iconTone="brand" layout="horizontal" />
+              <StatCard label="Pass Rate" value={gradeSummary?.pass_rate !== null && gradeSummary?.pass_rate !== undefined ? `${gradeSummary.pass_rate}%` : "—"} icon="ti-checkbox" iconTone={gradeSummary?.pass_rate >= 75 ? "success" : "error"} layout="horizontal" />
+              <StatCard label="Attendance Rate" value={sectionRate !== null ? `${sectionRate}%` : "—"} hint={`${stats?.total_school_days ?? 0} school days`} icon="ti-calendar-stats" iconTone={sectionRate >= 90 ? "success" : sectionRate >= 75 ? "warning" : "error"} layout="horizontal" />
+              <StatCard label="Absent" value={totals?.absent ?? 0} hint={`of ${totals?.total_marks ?? 0} total marks`} icon="ti-user-x" iconTone="error" layout="horizontal" />
             </div>
 
             {/* Grade distribution */}

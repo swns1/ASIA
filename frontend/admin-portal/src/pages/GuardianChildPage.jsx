@@ -175,6 +175,7 @@ function StatusStrip({ report, attendance, ledger, requirements, reportLoading, 
         value={period || "None posted yet"}
         icon="ti-chart-bar"
         iconTone={period ? "info" : "muted"}
+        layout="horizontal"
         loading={reportLoading}
       />
       <AttendanceRingTile rate={rate} loading={attLoading} />
@@ -183,6 +184,7 @@ function StatusStrip({ report, attendance, ledger, requirements, reportLoading, 
         value={due.next ? `${peso(due.next.balance)} · ${fmtDate(due.next.due_date, null)}` : balance > 0 ? peso(balance) : "Nothing due"}
         icon="ti-receipt"
         iconTone={due.overdueCount ? "error" : due.next ? "warning" : "success"}
+        layout="horizontal"
         loading={ledgerLoading}
       />
       <StatCard
@@ -194,6 +196,7 @@ function StatusStrip({ report, attendance, ledger, requirements, reportLoading, 
         }
         icon="ti-file-text"
         iconTone={missing == null ? "muted" : missing === 0 ? "success" : "warning"}
+        layout="horizontal"
         loading={reqLoading}
       />
     </div>
@@ -370,7 +373,7 @@ function AttendanceTab({ summary, loading, failed, onRetry }) {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {ATTENDANCE_CATEGORIES.map((c) => (
-            <StatCard key={c.key} label={c.label} value={totals[c.key] || 0} icon={c.icon} iconTone={c.iconTone} />
+            <StatCard key={c.key} label={c.label} value={totals[c.key] || 0} icon={c.icon} iconTone={c.iconTone} layout="horizontal" />
           ))}
         </div>
       )}
@@ -402,7 +405,7 @@ function BillingTab({ ledger, loading, failed, onRetry }) {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {summaryTiles.map((t) => (
-          <StatCard key={t.label} label={t.label} value={t.value} icon={t.icon} iconTone={t.iconTone} />
+          <StatCard key={t.label} label={t.label} value={t.value} icon={t.icon} iconTone={t.iconTone} layout="horizontal" />
         ))}
       </div>
 

@@ -93,6 +93,24 @@
   --color-accent-500:  #7c3aed;
   --color-accent-dot:  #a855f7;
 
+  /* ── School levels ─────────────────────────────────────────────────────
+     One colour per level, so a level reads the same wherever it appears
+     (filter chips today; badges and headers as those migrate). These are
+     categorical, not semantic: the hues distinguish levels from each other
+     and carry no good/bad meaning, which is why they sit apart from the
+     status scales above. Values are the ones EnrollmentsPage's level chips
+     already used, promoted here from per-page literals. */
+  --color-nursery-50:      #fdf5e8;
+  --color-nursery-500:     #854f0b;
+  --color-kindergarten-50:  #f0e8fd;
+  --color-kindergarten-500: #7c3aed;
+  --color-elementary-50:    #e8f0fd;
+  --color-elementary-500:   #2563eb;
+  --color-juniorhigh-50:    #e8fdf0;
+  --color-juniorhigh-500:   #2e6b0d;
+  --color-seniorhigh-50:    #fde8f8;
+  --color-seniorhigh-500:   #be185d;
+
   /* ── Typography ────────────────────────────────────────────────────────
      11px is a hard floor: the old 9.5px/10.5px labels were unreadable. */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;

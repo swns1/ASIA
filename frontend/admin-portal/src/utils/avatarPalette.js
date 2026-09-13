@@ -27,8 +27,22 @@ export function getAvatarPalette(name = "") {
   return PALETTES[sum % PALETTES.length];
 }
 
-/** "Dela Cruz, Ana" -> "DC"-style initials for the avatar bubble. */
+/**
+ * Initials for the avatar bubble.
+ *
+ * Takes either split name parts — initialsFrom("Ana", "Dela Cruz") -> "AD" —
+ * or a single full name, which several pages hold instead of separate fields:
+ * initialsFrom("Ana Dela Cruz") -> "AD". Without the single-argument case a
+ * full name yields just its first letter, since everything after the first
+ * space would be ignored.
+ */
 export function initialsFrom(first = "", last = "") {
+  if (!last) {
+    const parts = String(first).trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
   const a = String(first).trim()[0] ?? "";
   const b = String(last).trim()[0] ?? "";
   return (a + b).toUpperCase() || "?";

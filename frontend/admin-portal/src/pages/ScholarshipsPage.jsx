@@ -6,11 +6,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Tabs from "../components/ui/Tabs";
-import { modalVariants, springTransition } from "../utils/motion";
+import ChipGroup from "../components/ui/ChipGroup";
+import Pagination from "../components/Pagination";
+import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import Card, { Panel } from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Modal from "../components/ui/Modal";
+import Badge from "../components/ui/Badge";
+import { Field, Select, Textarea } from "../components/FormField";
+import ConfirmModal from "../components/ConfirmModal";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
   getEnrollmentScholarships as _getEnrollmentScholarships,
+  getEnrollmentScholarshipSummary,
   getScholarshipTypes as _getScholarshipTypes,
   getEnrollments as _getEnrollments,
   getGrades as _getGrades,
@@ -28,14 +38,44 @@ const deleteEnrollmentScholarship = (id)     => _deleteEnrollmentScholarship(id)
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ELIGIBILITY_THRESHOLD = 95;
+const PAGE_SIZE = 20;
 
-const PALETTES = [
-  { bg:"#fde8e8", color:"#c0392b" }, { bg:"#e8f0fd", color:"#2563eb" },
-  { bg:"#e8fdf0", color:"#2e6b0d" }, { bg:"#fdf5e8", color:"#854f0b" },
-  { bg:"#f0e8fd", color:"#7c3aed" }, { bg:"#fde8f8", color:"#be185d" },
-  { bg:"#e8fdfd", color:"#1455a0" },
+// Mirrors EnrollmentsPage — awards are filtered through their enrollment, so
+// the level/grade vocabulary has to match the one enrollments are recorded with.
+const SCHOOL_LEVELS = [
+  { value: "nursery",           label: "Nursery",            tone: "nursery"      },
+  { value: "kindergarten",      label: "Kindergarten",       tone: "kindergarten" },
+  { value: "elementary",        label: "Elementary",         tone: "elementary"   },
+  { value: "junior_highschool", label: "Junior High School", tone: "juniorhigh"   },
+  { value: "senior_highschool", label: "Senior High School", tone: "seniorhigh"   },
 ];
-const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
+
+const GRADE_LEVELS_BY_LEVEL = {
+  "":                [],
+  nursery:           ["Nursery"],
+  kindergarten:      ["Kindergarten"],
+  elementary:        ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
+  junior_highschool: ["Grade 7", "Grade 8", "Grade 9", "Grade 10"],
+  senior_highschool: ["Grade 11", "Grade 12"],
+};
+
+const AWARD_COLUMNS = [
+  { key: "student",     label: "Student / Enrollment" },
+  { key: "scholarship", label: "Scholarship" },
+  { key: "discount",    label: "Discount" },
+  { key: "awarded_on",  label: "Awarded On" },
+  { key: "notes",       label: "Notes" },
+  { key: "actions",     label: "" },
+];
+
+const ELIGIBLE_COLUMNS = [
+  { key: "student",  label: "Student" },
+  { key: "sy",       label: "School Year" },
+  { key: "grade",    label: "Grade / Section" },
+  { key: "subjects", label: "Subjects Graded" },
+  { key: "average",  label: "General Average" },
+  { key: "status",   label: "" },
+];
 
 const PERIOD_OPTIONS = [
   { value:"1st_quarter",  label:"1st Quarter"  },
@@ -47,35 +87,6 @@ const PERIOD_OPTIONS = [
 ];
 const PERIOD_LABELS = Object.fromEntries(PERIOD_OPTIONS.map((p) => [p.value, p.label]));
 
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
-
-// ── Shared modal shell ────────────────────────────────────────────────────────
-function ModalShell({ onClose, children }) {
-  return (
-    <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-      <motion.div
-        initial={{ opacity:0 }}
-        animate={{ opacity:1 }}
-        exit={{ opacity:0 }}
-        transition={{ duration:0.18 }}
-        onClick={onClose}
-        style={{ position:"absolute", inset:0, background:"rgba(26,10,10,0.4)", backdropFilter:"blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={springTransition}
-        style={{ position:"relative" }}
-      >
-        {children}
-      </motion.div>
-    </div>
-  );
-}
 
 // ── Award Modal ───────────────────────────────────────────────────────────────
 function AwardModal({ scholarshipTypes, onClose, onSaved }) {
@@ -137,29 +148,28 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
     finally { setSaving(false); }
   };
 
-  const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
-  const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
-
   return (
-    <ModalShell onClose={onClose}>
-      <div style={{ background:"white", borderRadius:20, width:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(224,49,49,0.18)" }}>
-        <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:38, height:38, borderRadius:10, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-award" style={{ fontSize:18, color:"#c92a2a" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Award Scholarship</div>
-              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Manually assign a scholarship to an enrollment</div>
-            </div>
-          </div>
-          <motion.button onClick={onClose} whileHover={{ scale:1.1, color:"#c92a2a" }} whileTap={{ scale:0.9 }} transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}>
-            <i className="ti ti-x" />
-          </motion.button>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-award"
+      title="Award Scholarship"
+      description="Manually assign a scholarship to an enrollment"
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button icon="ti-award" loading={saving} onClick={handleSave}>
+            {saving ? "Saving…" : "Award Scholarship"}
+          </Button>
         </div>
-
-        <div style={{ padding:"22px 28px" }}>
+      }
+    >
+        <div>
           <AnimatePresence>
             {error && (
               <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
@@ -169,12 +179,14 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
             )}
           </AnimatePresence>
 
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Student *</label>
+          {/* A search-driven autocomplete rather than a plain control, so the
+              body stays bespoke — but the label still goes through Field so it
+              matches the others and gets a real htmlFor/aria wiring. */}
+          <Field label="Student" required htmlFor="award-student-search">
             {student ? (
               <motion.div initial={{ opacity:0, scale:0.97 }} animate={{ opacity:1, scale:1 }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid #fde2de", borderRadius:10, background:"#fff8f6" }}>
-                <div style={{ width:36, height:36, borderRadius:"50%", background:getPalette(student.last_name).bg, color:getPalette(student.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13, flexShrink:0 }}>
+                <div style={{ width:36, height:36, borderRadius:"50%", background:getAvatarPalette(student.last_name).bg, color:getAvatarPalette(student.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13, flexShrink:0 }}>
                   {`${student.first_name?.[0]??""}${student.last_name?.[0]??""}`.toUpperCase()}
                 </div>
                 <div style={{ flex:1 }}>
@@ -188,7 +200,7 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
               <div style={{ position:"relative" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
                   <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
-                  <input placeholder="Search student by name or LRN…" value={search}
+                  <input id="award-student-search" placeholder="Search student by name or LRN…" value={search}
                     onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
                     style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
@@ -201,10 +213,8 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
                       {students.length === 0 && !loadingSt && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No students found.</div>}
                       {students.map((st) => (
                         <div key={st.student_id} onClick={() => { setStudent(st); setOpen(false); setSearch(""); }}
-                          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0", transition:"background 0.1s" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                          onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
-                          <div style={{ width:30, height:30, borderRadius:"50%", background:getPalette(st.last_name).bg, color:getPalette(st.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>
+                          className="flex cursor-pointer items-center gap-2.5 border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
+                          <div style={{ width:30, height:30, borderRadius:"50%", background:getAvatarPalette(st.last_name).bg, color:getAvatarPalette(st.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>
                             {`${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase()}
                           </div>
                           <div>
@@ -218,89 +228,50 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
                 </AnimatePresence>
               </div>
             )}
-          </div>
+          </Field>
 
           {student && (
-            <div style={{ marginBottom:14 }}>
-              <label style={lbl}>Enrollment *</label>
-              {enrollments.length === 0
-                ? <div style={{ fontSize:13, color:"#8a6a6a", padding:"12px 14px", background:"#fdfafa", borderRadius:10, border:"1px solid #f5eaea", fontStyle:"italic" }}>No active enrollments found for this student.</div>
-                : <select value={enrollment?.enrollment_id ?? ""} onChange={(e) => setEnrollment(enrollments.find((en) => en.enrollment_id === parseInt(e.target.value)) ?? null)} style={{ ...inp, cursor:"pointer" }}>
-                    <option value="">— Select enrollment —</option>
-                    {enrollments.map((en) => (
-                      <option key={en.enrollment_id} value={en.enrollment_id}>S.Y. {en.school_year} · {en.grade_level} · {en.section}</option>
-                    ))}
-                  </select>
-              }
-            </div>
+            <Field label="Enrollment" required>
+              {enrollments.length === 0 ? (
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3 text-sm italic text-neutral-500">
+                  No active enrollments found for this student.
+                </div>
+              ) : (
+                <Select
+                  value={enrollment?.enrollment_id ?? ""}
+                  onChange={(e) => setEnrollment(enrollments.find((en) => en.enrollment_id === parseInt(e.target.value)) ?? null)}
+                >
+                  <option value="">— Select enrollment —</option>
+                  {enrollments.map((en) => (
+                    <option key={en.enrollment_id} value={en.enrollment_id}>
+                      S.Y. {en.school_year} · {en.grade_level} · {en.section}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           )}
 
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Scholarship Type *</label>
-            <select value={schTypeId} onChange={(e) => setSchTypeId(e.target.value)} style={{ ...inp, cursor:"pointer" }}>
+          <Field label="Scholarship Type" required>
+            <Select value={schTypeId} onChange={(e) => setSchTypeId(e.target.value)}>
               <option value="">— Select scholarship —</option>
               {scholarshipTypes.map((sc) => (
                 <option key={sc.scholarship_type_id} value={sc.scholarship_type_id}>
                   {sc.scholarship_name} ({sc.discount_mode === "percentage" ? `${parseFloat(sc.discount_value)}%` : `₱${parseFloat(sc.discount_value).toLocaleString()}`} off)
                 </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </Field>
 
-          <div style={{ marginBottom:6 }}>
-            <label style={lbl}>Notes</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks…" rows={2} style={{ ...inp, resize:"vertical" }} />
-          </div>
+          <Field label="Notes">
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional remarks…" rows={2} />
+          </Field>
         </div>
-
-        <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
-          <motion.button onClick={onClose} whileHover={{ borderColor:"#e03131", color:"#c92a2a" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-            style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={handleSave} disabled={saving}
-            whileHover={saving ? {} : { scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }}
-            whileTap={saving ? {} : { scale:0.97 }}
-            transition={{ duration:0.12 }}
-            style={{ background:saving?"#e87474":"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:saving?"not-allowed":"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
-            {saving ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Saving…</> : <><i className="ti ti-award" style={{ fontSize:13 }} />Award Scholarship</>}
-          </motion.button>
-        </div>
-      </div>
-    </ModalShell>
+    </Modal>
   );
 }
 
 // ── Revoke Modal ──────────────────────────────────────────────────────────────
-function RevokeModal({ onConfirm, onCancel }) {
-  return (
-    <ModalShell onClose={onCancel}>
-      <div style={{ background:"white", borderRadius:20, padding:"32px 36px", width:400, boxShadow:"0 24px 64px rgba(224,49,49,0.18)", display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}>
-        <div style={{ width:56, height:56, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <i className="ti ti-award-off" style={{ fontSize:24, color:"#c92a2a" }} />
-        </div>
-        <div style={{ fontSize:17, fontWeight:700, color:"#1a0a0a" }}>Revoke Scholarship?</div>
-        <div style={{ fontSize:13, color:"#7a5050", textAlign:"center", lineHeight:1.7 }}>
-          This will remove the scholarship award from this enrollment. The student may need to reapply.
-        </div>
-        <div style={{ display:"flex", gap:10, width:"100%", marginTop:4 }}>
-          <motion.button onClick={onCancel} whileHover={{ borderColor:"#e03131", color:"#c92a2a" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-            style={{ flex:1, height:42, border:"1.5px solid #f0e0e0", borderRadius:10, background:"white", fontSize:13, color:"#7a5050", cursor:"pointer", fontWeight:600, fontFamily:"'DM Sans',sans-serif" }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={onConfirm}
-            whileHover={{ scale:1.02, boxShadow:"0 6px 18px rgba(224,49,49,0.32)" }}
-            whileTap={{ scale:0.97 }}
-            transition={{ duration:0.12 }}
-            style={{ flex:1, height:42, border:"none", borderRadius:10, background:"linear-gradient(135deg,#e03131,#c92a2a)", fontSize:13, color:"white", cursor:"pointer", fontWeight:700, fontFamily:"'DM Sans',sans-serif" }}>
-            Yes, revoke
-          </motion.button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
 // ── Apply Eligibility Modal ───────────────────────────────────────────────────
 function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved }) {
   const [schTypeId, setSchTypeId] = useState("");
@@ -308,9 +279,6 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
   const [applying,  setApplying]  = useState(false);
   const [results,   setResults]   = useState(null);
   const [error,     setError]     = useState("");
-
-  const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
-  const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
 
   const handleApply = async () => {
     if (!schTypeId) { setError("Please select a scholarship type."); return; }
@@ -329,25 +297,34 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
   };
 
   return (
-    <ModalShell onClose={onClose}>
-      <div style={{ background:"white", borderRadius:20, width:560, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(224,49,49,0.18)" }}>
-        <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:38, height:38, borderRadius:10, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-award" style={{ fontSize:18, color:"#2e6b0d" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:16, fontWeight:700, color:"#1a0a0a" }}>Apply Grade-Based Scholarship</div>
-              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>{eligible.length} eligible student{eligible.length !== 1 ? "s" : ""} with avg ≥ {ELIGIBILITY_THRESHOLD}%</div>
-            </div>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={applying}
+      icon="ti-award"
+      iconTone="brand"
+      title="Apply Grade-Based Scholarship"
+      description={`${eligible.length} eligible student${eligible.length !== 1 ? "s" : ""} with avg ≥ ${ELIGIBILITY_THRESHOLD}%`}
+      closeOnBackdrop={false}
+      footer={
+        results ? (
+          <div className="flex justify-end">
+            <Button onClick={onClose}>Done</Button>
           </div>
-          <motion.button onClick={onClose} whileHover={{ scale:1.1, color:"#c92a2a" }} whileTap={{ scale:0.9 }} transition={{ duration:0.12 }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20, display:"flex", alignItems:"center" }}>
-            <i className="ti ti-x" />
-          </motion.button>
-        </div>
-
-        <div style={{ padding:"22px 28px" }}>
+        ) : (
+          <div className="flex justify-end gap-2.5">
+            <Button variant="secondary" onClick={onClose} disabled={applying}>
+              Cancel
+            </Button>
+            <Button icon="ti-award" loading={applying} onClick={handleApply}>
+              {applying ? "Applying…" : `Award to All (${eligible.length})`}
+            </Button>
+          </div>
+        )
+      }
+    >
+        <div>
           {results ? (
             <div>
               {results.success.length > 0 && (
@@ -370,12 +347,6 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                   {results.failed.map((n, i) => <div key={i} style={{ fontSize:12, color:"#b91c1c", marginLeft:20 }}>• {n}</div>)}
                 </motion.div>
               )}
-              <div style={{ display:"flex", justifyContent:"flex-end", marginTop:16 }}>
-                <motion.button onClick={onClose} whileHover={{ scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-                  style={{ background:"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                  Done
-                </motion.button>
-              </div>
             </div>
           ) : (
             <>
@@ -387,27 +358,29 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                   </motion.div>
                 )}
               </AnimatePresence>
-              <div style={{ marginBottom:14 }}>
-                <label style={lbl}>Scholarship Type *</label>
-                <select value={schTypeId} onChange={(e) => setSchTypeId(e.target.value)} style={{ ...inp, cursor:"pointer" }}>
+              <Field label="Scholarship Type" required>
+                <Select value={schTypeId} onChange={(e) => setSchTypeId(e.target.value)}>
                   <option value="">— Select scholarship to award —</option>
                   {scholarshipTypes.map((sc) => (
                     <option key={sc.scholarship_type_id} value={sc.scholarship_type_id}>
                       {sc.scholarship_name} ({sc.discount_mode === "percentage" ? `${parseFloat(sc.discount_value)}%` : `₱${parseFloat(sc.discount_value).toLocaleString()}`} off)
                     </option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
+              <Field label="Notes">
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+              </Field>
               <div style={{ marginBottom:14 }}>
-                <label style={lbl}>Notes</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} style={{ ...inp, resize:"vertical" }} />
-              </div>
-              <div style={{ marginBottom:14 }}>
-                <label style={{ ...lbl, marginBottom:8 }}>Eligible Students ({eligible.length})</label>
+                {/* Not a Field: this is a read-only roster, not a labelled
+                    form control, so there's no input for a label to point at. */}
+                <div className="mb-2 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">
+                  Eligible Students ({eligible.length})
+                </div>
                 <div style={{ maxHeight:240, overflowY:"auto", border:"1px solid #f5eaea", borderRadius:10, overflow:"hidden" }}>
                   {eligible.map((elig, i) => (
                     <div key={elig.enrollment_id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderBottom:i < eligible.length - 1 ? "1px solid #f9f0f0" : "none", background:"white" }}>
-                      <div style={{ width:34, height:34, borderRadius:"50%", background:getPalette(elig.last_name ?? "X").bg, color:getPalette(elig.last_name ?? "X").color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
+                      <div style={{ width:34, height:34, borderRadius:"50%", background:getAvatarPalette(elig.last_name ?? "X").bg, color:getAvatarPalette(elig.last_name ?? "X").color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
                         {elig.initials}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
@@ -419,59 +392,95 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                   ))}
                 </div>
               </div>
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-                <motion.button onClick={onClose} whileHover={{ borderColor:"#e03131", color:"#c92a2a" }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-                  style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                  Cancel
-                </motion.button>
-                <motion.button onClick={handleApply} disabled={applying}
-                  whileHover={applying ? {} : { scale:1.02, boxShadow:"0 6px 20px rgba(46,107,13,0.32)" }}
-                  whileTap={applying ? {} : { scale:0.97 }}
-                  transition={{ duration:0.12 }}
-                  style={{ background:applying?"#a3c98a":"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:applying?"not-allowed":"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(46,107,13,0.26)" }}>
-                  {applying ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Applying…</> : <><i className="ti ti-award" style={{ fontSize:13 }} />Award to All ({eligible.length})</>}
-                </motion.button>
-              </div>
             </>
           )}
         </div>
-      </div>
-    </ModalShell>
+    </Modal>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 // TAB 1: MANUAL AWARDS
 // ════════════════════════════════════════════════════════════════════════════
-function ManualAwardsTab() {
+function ManualAwardsTab({ scholarshipTypes }) {
   const [awards,      setAwards]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [toRevoke,    setToRevoke]    = useState(null);
   const [search,      setSearch]      = useState("");
   const [inputVal,    setInputVal]    = useState("");
   const [schFilter,   setSchFilter]   = useState("");   // scholarship_type_id string
+  const [schoolLevel, setSchoolLevel] = useState("");
+  const [gradeLevel,  setGradeLevel]  = useState("");
   const [dateFrom,    setDateFrom]    = useState("");
   const [dateTo,      setDateTo]      = useState("");
-  const [dateOpen,    setDateOpen]    = useState(false);
-  const [rowsAnimated, setRowsAnimated] = useState(false);
+  const [page,        setPage]        = useState(1);
+  const [pageMeta,    setPageMeta]    = useState({ count: 0, next: null, previous: null });
+  const [counts,      setCounts]      = useState({});
+  // Separate from `loading` so the chip counts hold their last value while a
+  // refetch is in flight, instead of blanking on every keystroke.
+  const [countsLoading, setCountsLoading] = useState(true);
 
-  const hasFilters = search || schFilter || dateFrom || dateTo;
+  const { schoolYear } = useSchoolYear();
+
+  const hasFilters = search || schFilter || schoolLevel || gradeLevel || dateFrom || dateTo;
 
   const clearFilters = () => {
     setSearch(""); setInputVal(""); setSchFilter("");
+    setSchoolLevel(""); setGradeLevel("");
     setDateFrom(""); setDateTo("");
+    setPage(1);
+  };
+
+  // Awards are scoped to the sidebar's school year, matching every other list
+  // page. Without it the list spans every year at once, which the old 100-row
+  // cap silently truncated.
+  const buildParams = (p = page, overrides = {}) => {
+    const params = { page: p, page_size: PAGE_SIZE, school_year: schoolYear };
+    if (search.trim()) params.search           = search.trim();
+    if (schFilter)     params.scholarship_type = schFilter;
+    if (schoolLevel)   params.school_level     = schoolLevel;
+    if (gradeLevel)    params.grade_level      = gradeLevel;
+    if (dateFrom)      params.approved_after   = dateFrom;
+    if (dateTo)        params.approved_before  = dateTo;
+    return { ...params, ...overrides };
   };
 
   const fetchAwards = useCallback(async () => {
     setLoading(true);
+    const listParams = buildParams(page);
+    // The summary deliberately keeps every facet except the scholarship type,
+    // so each chip's count says how many it *would* show.
+    const summaryParams = { ...listParams };
+    delete summaryParams.page;
+    delete summaryParams.page_size;
+    delete summaryParams.scholarship_type;
     try {
-      const data = await getEnrollmentScholarships({ page_size:100 });
+      const [data, summary] = await Promise.all([
+        getEnrollmentScholarships(listParams),
+        getEnrollmentScholarshipSummary(summaryParams),
+      ]);
       setAwards(Array.isArray(data) ? data : data?.results ?? []);
+      setPageMeta({
+        count:    data?.count ?? (Array.isArray(data) ? data.length : 0),
+        next:     data?.next ?? null,
+        previous: data?.previous ?? null,
+      });
+      setCounts(summary ?? {});
     } catch (e) { console.error(e); }
-    finally { setLoading(false); setRowsAnimated(true); }
-  }, []);
+    finally { setLoading(false); setCountsLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search, schFilter, schoolLevel, gradeLevel, dateFrom, dateTo, schoolYear]);
 
-  useEffect(() => { fetchAwards(); }, []);
+  // One effect drives every fetch: `page` is a dependency alongside the facets,
+  // so paging and filtering go through the same path. Facet setters reset the
+  // page to 1 themselves (see `applyFilter`) rather than this effect doing it —
+  // setting state from an effect would render twice and briefly disagree about
+  // which page is loaded.
+  useEffect(() => { fetchAwards(); }, [fetchAwards]);
+
+  // Every facet change resets to page 1: staying on page 5 of a narrower result
+  // set would show an empty table.
+  const applyFilter = (setter) => (v) => { setter(v); setPage(1); };
 
   const handleRevoke = async () => {
     if (!toRevoke) return;
@@ -480,45 +489,24 @@ function ManualAwardsTab() {
     fetchAwards();
   };
 
-  // Unique scholarship types present in loaded data
-  const presentSchTypes = useMemo(() => {
-    const seen = new Map();
-    awards.forEach((a) => {
-      const sc = a.scholarship_type_detail;
-      if (sc && !seen.has(String(sc.scholarship_type_id))) {
-        seen.set(String(sc.scholarship_type_id), sc);
-      }
-    });
-    return Array.from(seen.values());
-  }, [awards]);
+  // Options come from the full scholarship-type list rather than what's present
+  // in the current page, so a chip never disappears mid-filter — only its count
+  // moves. A type with no awards this year still shows, reading 0.
+  const schOptions = useMemo(() => {
+    const total = Object.entries(counts)
+      .filter(([k]) => k !== "total")
+      .reduce((s, [, v]) => s + v, 0);
+    return [
+      { value: "", label: "All", count: countsLoading ? null : (counts.total ?? total) },
+      ...scholarshipTypes.map((sc) => ({
+        value: String(sc.scholarship_type_id),
+        label: sc.scholarship_name,
+        count: countsLoading ? null : (counts[String(sc.scholarship_type_id)] ?? 0),
+      })),
+    ];
+  }, [scholarshipTypes, counts, countsLoading]);
 
-  const filtered = useMemo(() => {
-    return awards.filter((a) => {
-      const sc   = a.scholarship_type_detail;
-      const en   = a.enrollment_detail;
-      const name = en?.student_name ?? "";
-
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchesText =
-          sc?.scholarship_name?.toLowerCase().includes(q) ||
-          name.toLowerCase().includes(q) ||
-          String(a.enrollment_id).includes(q);
-        if (!matchesText) return false;
-      }
-
-      if (schFilter && String(sc?.scholarship_type_id) !== schFilter) return false;
-
-      if (dateFrom || dateTo) {
-        const awarded = a.approved_at ? new Date(a.approved_at) : null;
-        if (!awarded) return false;
-        if (dateFrom && awarded < new Date(dateFrom)) return false;
-        if (dateTo   && awarded > new Date(dateTo + "T23:59:59")) return false;
-      }
-
-      return true;
-    });
-  }, [awards, search, schFilter, dateFrom, dateTo]);
+  const gradeOptions = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? [];
 
   const formatDiscount = (sc) => sc
     ? sc.discount_mode === "percentage"
@@ -526,272 +514,227 @@ function ManualAwardsTab() {
       : `₱${parseFloat(sc.discount_value).toLocaleString()} off`
     : "—";
 
-  const filterLabel = { fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8, display:"block" };
-  const filterInput = { border:"1.5px solid #f0e4e4", borderRadius:8, padding:"6px 10px", fontSize:12, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box" };
+  // Presets for the date drawer. Each sets both bounds at once — the common
+  // case is a whole month or year, not a hand-picked pair of dates.
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const datePresets = [
+    {
+      label: "This Month",
+      fn: () => {
+        const n = new Date();
+        setDateFrom(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`);
+        setDateTo(iso(new Date()));
+      },
+    },
+    {
+      label: "Last Month",
+      fn: () => {
+        const n = new Date();
+        const y = n.getMonth() === 0 ? n.getFullYear() - 1 : n.getFullYear();
+        const m = n.getMonth() === 0 ? 12 : n.getMonth();
+        const last = new Date(n.getFullYear(), n.getMonth(), 0).getDate();
+        setDateFrom(`${y}-${String(m).padStart(2, "0")}-01`);
+        setDateTo(`${y}-${String(m).padStart(2, "0")}-${last}`);
+      },
+    },
+    {
+      label: "This Year",
+      fn: () => {
+        const n = new Date();
+        setDateFrom(`${n.getFullYear()}-01-01`);
+        setDateTo(iso(new Date()));
+      },
+    },
+  ];
+
+  const dateFieldLabel = "mb-2 block text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500";
+  const dateInput = "h-[34px] min-w-[150px] rounded-lg border-[1.5px] border-neutral-300 bg-white px-2.5 text-[12px] text-neutral-900 outline-none focus:border-brand-500";
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      {/* Filter panel */}
-      <div style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"18px 20px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", display:"flex", flexDirection:"column", gap:0 }}>
-
-        {/* Search row */}
-        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-          <div className="search-wrap" style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, padding:"0 16px", height:42, transition:"border .15s,box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a" }} />
-            <input placeholder="Search by student name or scholarship…" value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => { if (e.key==="Enter") setSearch(inputVal); }}
-              style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
-            {inputVal && (
-              <button
-                style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:2, borderRadius:4 }}
-                onClick={() => { setInputVal(""); setSearch(""); }}>
-                <i className="ti ti-x" style={{ fontSize:13 }} />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => setSearch(inputVal)}
-            style={{ height:42, padding:"0 20px", background:"white", border:"1.5px solid #f0e4e4", borderRadius:12, fontSize:13, fontWeight:600, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.14s", flexShrink:0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor="#e03131"; e.currentTarget.style.color="#c92a2a"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor="#f0e4e4"; e.currentTarget.style.color="#7a5050"; }}>
-            Search
-          </button>
-          <AnimatePresence>
-            {hasFilters && (
-              <motion.button
-                initial={{ opacity:0, scale:0.88 }}
-                animate={{ opacity:1, scale:1 }}
-                exit={{ opacity:0, scale:0.88 }}
-                transition={{ duration:0.14 }}
-                whileTap={{ scale:0.93 }}
-                onClick={clearFilters}
-                style={{ height:42, padding:"0 14px", background:"white", border:"1.5px solid #fca5a5", borderRadius:12, fontSize:12, fontWeight:600, color:"#b91c1c", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-                <i className="ti ti-filter-off" style={{ fontSize:13 }} />Clear
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Divider */}
-        <div style={{ height:1, background:"#f5eaea", margin:"14px 0" }} />
-
-        {/* Chip rows */}
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-
-          {/* Scholarship chips */}
-          {presentSchTypes.length > 0 && (
+      <FilterBar
+        searchValue={inputVal}
+        onSearchChange={setInputVal}
+        onSearch={() => { setSearch(inputVal); setPage(1); }}
+        onClearSearch={() => { setInputVal(""); setSearch(""); setPage(1); }}
+        searchPlaceholder="Search by student name or scholarship…"
+        searchLabel="Search awards"
+        searchInputId="scholarships-search"
+        hasFilters={Boolean(hasFilters)}
+        onClearFilters={clearFilters}
+        advancedLabel="Award date"
+        advancedIcon="ti-calendar-search"
+        advancedActive={Boolean(dateFrom || dateTo)}
+        advanced={
+          <>
             <div>
-              <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Scholarship</div>
-              <motion.div layout style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {[{ scholarship_type_id:"", scholarship_name:"All" }, ...presentSchTypes].map((sc) => {
-                  const val    = String(sc.scholarship_type_id);
-                  const active = schFilter === val;
-                  return (
-                    <motion.button key={val}
-                      layout
-                      initial={false}
-                      animate={{
-                        backgroundColor: active ? "#fff0f0" : "#ffffff",
-                        color:           active ? "#c92a2a" : "#855c5c",
-                        borderColor:     active ? "#e03131" : "#f0e4e4",
-                      }}
-                      transition={{ layout:{ type:"spring", stiffness:400, damping:36 }, duration:0.18, ease:"easeOut" }}
-                      whileTap={{ scale:0.96 }}
-                      onClick={() => setSchFilter(active ? "" : val)}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                      {sc.scholarship_name}
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
+              <label htmlFor="award-date-from" className={dateFieldLabel}>Awarded from</label>
+              <input id="award-date-from" type="date" value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className={dateInput} />
             </div>
-          )}
-
-          {/* Award Date row */}
-          <div>
-            <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Award Date</div>
-            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-              <motion.button
-                onClick={() => setDateOpen((v) => !v)}
-                whileTap={{ scale:0.96 }}
-                style={{
-                  display:"inline-flex", alignItems:"center", gap:5, height:32, padding:"0 12px",
-                  border:`1.5px solid ${dateOpen || dateFrom || dateTo ? "#e03131" : "#f0e4e4"}`,
-                  borderRadius:99, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                  background: dateOpen || dateFrom || dateTo ? "#fff0f0" : "#ffffff",
-                  color: dateOpen || dateFrom || dateTo ? "#c92a2a" : "#7a5050",
-                  transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                  whiteSpace:"nowrap",
-                }}>
-                <i className="ti ti-calendar-search" style={{ fontSize:12 }} />
-                {(dateFrom || dateTo) ? `${dateFrom || "…"} → ${dateTo || "…"}` : "All time"}
-                <motion.i
-                  className="ti ti-chevron-down"
-                  animate={{ rotate: dateOpen ? 180 : 0 }}
-                  transition={{ duration:0.18 }}
-                  style={{ fontSize:11 }}
-                />
-              </motion.button>
-
-              {!loading && (
-                <span style={{ marginLeft:"auto", fontSize:12, color:"#8a6a6a" }}>
-                  <strong style={{ color:"#1a0a0a" }}>{filtered.length}</strong> of {awards.length} award{awards.length !== 1 ? "s" : ""}
-                </span>
-              )}
+            <div>
+              <label htmlFor="award-date-to" className={dateFieldLabel}>Awarded to</label>
+              <input id="award-date-to" type="date" value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className={dateInput} />
             </div>
+            <div>
+              <span className={dateFieldLabel}>Quick</span>
+              <div className="flex gap-1.5">
+                {datePresets.map((q) => (
+                  <button key={q.label} type="button" onClick={q.fn}
+                    className="focus-ring h-[34px] rounded-lg border border-neutral-300 bg-white px-2.5 text-[12px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600">
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        }
+      >
+        {schOptions.length > 1 && (
+          <FilterRow label="Scholarship">
+            <ChipGroup
+              options={schOptions}
+              value={schFilter}
+              onChange={applyFilter((v) => setSchFilter(v === schFilter ? "" : v))}
+              label="Filter by scholarship"
+            />
+          </FilterRow>
+        )}
 
-            {/* Expandable date inputs */}
-            <AnimatePresence initial={false}>
-              {dateOpen && (
-                <motion.div
-                  key="date-panel"
-                  initial={{ height:0, opacity:0, marginTop:0 }}
-                  animate={{ height:"auto", opacity:1, marginTop:12 }}
-                  exit={{ height:0, opacity:0, marginTop:0 }}
-                  transition={{ duration:0.22, ease:"easeInOut" }}
-                  style={{ overflow:"hidden" }}
-                >
-                  <div style={{ paddingTop:12, borderTop:"1px solid #f5eaea", display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
-                    <div>
-                      <label style={filterLabel}>Awarded from</label>
-                      <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
+        <FilterRow label="School Level">
+          <ChipGroup
+            options={[{ value: "", label: "All Levels" }, ...SCHOOL_LEVELS]}
+            value={schoolLevel}
+            onChange={applyFilter((v) => {
+              setSchoolLevel(v);
+              // A grade from the previous level can't apply to the new one.
+              setGradeLevel("");
+            })}
+            label="Filter by school level"
+          />
+        </FilterRow>
+
+        {/* Stays mounted and animates open so picking a level slides the grades
+            in rather than shoving the rows below it down. */}
+        <CollapsibleFilterRow open={gradeOptions.length > 0} label="Grade Level">
+          <ChipGroup
+            options={[{ value: "", label: "All Grades" }, ...gradeOptions.map((g) => ({ value: g, label: g }))]}
+            value={gradeLevel}
+            onChange={applyFilter(setGradeLevel)}
+            label="Filter by grade level"
+            stagger
+            generation={schoolLevel}
+          />
+        </CollapsibleFilterRow>
+      </FilterBar>
+
+      {/* Awards table */}
+      <Card padding="none" className="overflow-hidden">
+        <Table
+          columns={AWARD_COLUMNS}
+          loading={loading}
+          isEmpty={awards.length === 0}
+          skeletonRows={5}
+          empty={{
+            icon: "ti-award-off",
+            // With filters on, an empty table means the filters are too
+            // narrow — not that nothing has ever been awarded.
+            title: hasFilters
+              ? "No awards match these filters"
+              : `No scholarships awarded for S.Y. ${schoolYear}`,
+            subtitle: hasFilters
+              ? "Try widening the search or clearing a filter"
+              : 'Click "Award Scholarship" to manually assign one',
+          }}
+        >
+          {awards.map((award) => {
+            const sc   = award.scholarship_type_detail;
+            const en   = award.enrollment_detail;
+            const name = en?.student_name ?? `Enrollment #${award.enrollment_id}`;
+            const pal  = getAvatarPalette(name);
+            const awardedOn = award.approved_at
+              ? new Date(award.approved_at).toLocaleDateString("en-PH", { year:"numeric", month:"short", day:"numeric" })
+              : "—";
+            return (
+              <TableRow key={award.enrollment_scholarship_id}>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      style={{ background: pal.bg, color: pal.color }}
+                      aria-hidden="true"
+                    >
+                      {initialsFrom(name)}
                     </div>
-                    <div>
-                      <label style={filterLabel}>Awarded to</label>
-                      <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:150 }} />
-                    </div>
-                    <div>
-                      <label style={filterLabel}>Quick</label>
-                      <div style={{ display:"flex", gap:6 }}>
-                        {[
-                          { label:"This Month", fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
-                          { label:"Last Month", fn:() => { const n=new Date(); const y=n.getMonth()===0?n.getFullYear()-1:n.getFullYear(); const m=n.getMonth()===0?12:n.getMonth(); const last=new Date(n.getFullYear(),n.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
-                          { label:"This Year",  fn:() => { const n=new Date(); setDateFrom(`${n.getFullYear()}-01-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
-                        ].map((q) => (
-                          <motion.button key={q.label} type="button" onClick={q.fn}
-                            whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
-                            whileTap={{ scale:0.96 }}
-                            transition={{ duration:0.12 }}
-                            style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-                            {q.label}
-                          </motion.button>
-                        ))}
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-neutral-900">{name}</div>
+                      <div className="text-xs text-neutral-500">
+                        {en ? `S.Y. ${en.school_year} · ${en.grade_level} · ${en.section}` : `Enrollment #${award.enrollment_id}`}
                       </div>
                     </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                </TableCell>
 
-        </div>
-      </div>
-
-      {/* Awards table */}
-      <div style={{ background:"white", border:"1px solid #f5eaea", borderRadius:16, overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-          <thead>
-            <tr style={{ background:"#fdfafa" }}>
-              {["Student / Enrollment","Scholarship","Discount","Awarded On","Notes",""].map((h) => (
-                <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"13px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length:5 }).map((_, i) => (
-                <tr key={i}>
-                  {[1,2,3,4,5,6].map((j) => (
-                    <td key={j} style={{ padding:"13px 18px", borderBottom:"1px solid #f9f0f0" }}><Sk w={j===1?140:90} h={13} /></td>
-                  ))}
-                </tr>
-              ))
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ textAlign:"center", padding:"56px 16px" }}>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                    <div style={{ width:52, height:52, borderRadius:14, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <i className="ti ti-award-off" style={{ fontSize:22, color:"#8a6a6a" }} />
+                <TableCell>
+                  {sc ? (
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-neutral-900">{sc.scholarship_name}</div>
+                      <div className="font-mono text-xs text-neutral-500">{sc.scholarship_code}</div>
                     </div>
-                    <div style={{ fontSize:14, color:"#7a5050", fontWeight:600 }}>No scholarships awarded yet</div>
-                    <div style={{ fontSize:12, color:"#8a6a6a" }}>Click "Award Scholarship" to manually assign one</div>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              <>
-                {filtered.map((award, idx) => {
-                  const sc   = award.scholarship_type_detail;
-                  const en   = award.enrollment_detail;
-                  const name = en?.student_name ?? `Enrollment #${award.enrollment_id}`;
-                  const pal  = getPalette(name);
-                  const initials = name.split(" ").map((w) => w[0]).join("").slice(0,2).toUpperCase();
-                  const awardedOn = award.approved_at
-                    ? new Date(award.approved_at).toLocaleDateString("en-PH", { year:"numeric", month:"short", day:"numeric" })
-                    : "—";
-                  const isFirst = !rowsAnimated;
-                  return (
-                    <motion.tr
-                      key={award.enrollment_scholarship_id}
-                      initial={isFirst ? { opacity:0, x:-6 } : false}
-                      animate={{ opacity:1, x:0 }}
-                      transition={{ duration:0.18, ease:"easeOut", delay: isFirst ? Math.min(idx * 0.025, 0.3) : 0 }}
-                      style={{ borderBottom:"1px solid #f9f0f0", backgroundColor:"white", transition:"background-color 0.12s ease" }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor="#fffbfb"}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor="white"}
-                    >
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <div style={{ width:34, height:34, borderRadius:"50%", background:pal.bg, color:pal.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{initials}</div>
-                          <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{name}</div>
-                            <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>
-                              {en ? `S.Y. ${en.school_year} · ${en.grade_level} · ${en.section}` : `Enrollment #${award.enrollment_id}`}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
-                        {sc ? <div>
-                          <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{sc.scholarship_name}</div>
-                          <div style={{ fontSize:11, color:"#8a6a6a", fontFamily:"monospace", marginTop:1 }}>{sc.scholarship_code}</div>
-                        </div> : <span style={{ color:"#8a6a6a", fontStyle:"italic", fontSize:12 }}>—</span>}
-                      </td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
-                        <span style={{ fontSize:13, fontWeight:700, color:sc?.discount_mode==="percentage" ? "#1455a0" : "#2e6b0d" }}>
-                          {formatDiscount(sc)}
-                        </span>
-                      </td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle", fontSize:12, color:"#855c5c" }}>{awardedOn}</td>
-                      <td style={{ padding:"13px 18px", verticalAlign:"middle" }}>
-                        {award.notes
-                          ? <span style={{ fontSize:12, color:"#855c5c" }}>{award.notes}</span>
-                          : <span style={{ color:"#8a6a6a", fontStyle:"italic", fontSize:12 }}>—</span>}
-                      </td>
-                      <td style={{ padding:"13px 14px", verticalAlign:"middle" }}>
-                        <motion.button
-                          title="Revoke"
-                          onClick={() => setToRevoke(award)}
-                          whileHover={{ color:"#c92a2a", scale:1.1 }}
-                          whileTap={{ scale:0.9 }}
-                          transition={{ duration:0.12 }}
-                          style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", display:"flex", alignItems:"center", padding:4, borderRadius:6 }}>
-                          <i className="ti ti-award-off" style={{ fontSize:14 }} />
-                        </motion.button>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  ) : (
+                    <span className="text-xs italic text-neutral-500">—</span>
+                  )}
+                </TableCell>
+
+                <TableCell className={`text-sm font-bold ${sc?.discount_mode === "percentage" ? "text-info-600" : "text-success-600"}`}>
+                  {formatDiscount(sc)}
+                </TableCell>
+
+                <TableCell className="text-xs text-neutral-700">{awardedOn}</TableCell>
+
+                <TableCell>
+                  {award.notes
+                    ? <span className="text-xs text-neutral-700">{award.notes}</span>
+                    : <span className="text-xs italic text-neutral-500">—</span>}
+                </TableCell>
+
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="ti-award-off"
+                    aria-label={`Revoke scholarship from ${name}`}
+                    onClick={() => setToRevoke(award)}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </Table>
+      </Card>
+
+      {!loading && pageMeta.count > 0 && (
+        <Pagination
+          page={page}
+          totalPages={Math.max(1, Math.ceil(pageMeta.count / PAGE_SIZE))}
+          count={pageMeta.count}
+          hasPrevious={Boolean(pageMeta.previous)}
+          hasNext={Boolean(pageMeta.next)}
+          onPageChange={setPage}
+        />
+      )}
 
       <AnimatePresence>
         {toRevoke && (
-          <RevokeModal award={toRevoke} onConfirm={handleRevoke} onCancel={() => setToRevoke(null)} />
+          <ConfirmModal
+            icon="ti-award-off"
+            title="Revoke Scholarship?"
+            message="This will remove the scholarship award from this enrollment. The student may need to reapply."
+            confirmLabel="Yes, revoke"
+            onConfirm={handleRevoke}
+            onCancel={() => setToRevoke(null)}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -804,7 +747,6 @@ function ManualAwardsTab() {
 function EligibilityTab({ scholarshipTypes }) {
   const [eligible,      setEligible]      = useState([]);
   const [loading,       setLoading]       = useState(false);
-  const [rowsAnimated, setRowsAnimated] = useState(false);
   const [schoolYear,    setSchoolYear]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [scanned,       setScanned]       = useState(false);
@@ -852,7 +794,7 @@ function EligibilityTab({ scholarshipTypes }) {
       setEligible(eligibleList);
       setScanned(true);
     } catch (e) { console.error(e); }
-    finally { setLoading(false); setRowsAnimated(true); }
+    finally { setLoading(false); }
   };
 
   return (
@@ -872,67 +814,32 @@ function EligibilityTab({ scholarshipTypes }) {
       </div>
 
       {/* Scan params card */}
-      <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-        <div style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", marginBottom:14 }}>Scan Parameters</div>
+      <Panel title="Scan Parameters" padding="md">
 
-        {/* School Year chips */}
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>School Year</div>
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {syOptions.map((sy) => {
-              const active = schoolYear === sy;
-              return (
-                <motion.button key={sy}
-                  whileTap={{ scale:0.96 }}
-                  onClick={() => setSchoolYear(sy)}
-                  style={{
-                    display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99,
-                    fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                    cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                    background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#c92a2a" : "#855c5c",
-                    transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                  }}>
-                  <i className="ti ti-calendar" style={{ fontSize:11 }} />{sy}
-                </motion.button>
-              );
-            })}
-          </div>
+        <FilterRow label="School Year">
+          <ChipGroup
+            options={syOptions.map((sy) => ({ value: sy, label: sy, icon: "ti-calendar" }))}
+            value={schoolYear}
+            onChange={setSchoolYear}
+            label="School year to scan"
+          />
+        </FilterRow>
+
+        <div className="mt-3 mb-4">
+          <FilterRow label="Grading Period">
+            <ChipGroup
+              options={PERIOD_OPTIONS}
+              value={gradingPeriod}
+              onChange={setGradingPeriod}
+              label="Grading period to scan"
+            />
+          </FilterRow>
         </div>
 
-        {/* Grading Period chips */}
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Grading Period</div>
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {PERIOD_OPTIONS.map((p) => {
-              const active = gradingPeriod === p.value;
-              return (
-                <motion.button key={p.value}
-                  whileTap={{ scale:0.96 }}
-                  onClick={() => setGradingPeriod(p.value)}
-                  style={{
-                    display:"inline-flex", alignItems:"center", height:32, padding:"0 14px", borderRadius:99,
-                    fontSize:12, fontWeight:600, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                    cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
-                    background: active ? "#fff0f0" : "#ffffff",
-                    color: active ? "#c92a2a" : "#855c5c",
-                    transition:"border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease",
-                  }}>
-                  {p.label}
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-
-        <motion.button onClick={handleScan} disabled={loading}
-          whileHover={loading ? {} : { scale:1.02, boxShadow:"0 6px 20px rgba(224,49,49,0.35)" }}
-          whileTap={loading ? {} : { scale:0.97 }}
-          transition={{ duration:0.12 }}
-          style={{ height:42, padding:"0 28px", background:loading?"#e87474":"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}>
-          {loading ? <><i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} />Scanning…</> : <><i className="ti ti-scan" style={{ fontSize:14 }} />Scan Now</>}
-        </motion.button>
-      </div>
+        <Button icon="ti-scan" loading={loading} onClick={handleScan}>
+          {loading ? "Scanning…" : "Scan Now"}
+        </Button>
+      </Panel>
 
       {/* Results */}
       <AnimatePresence>
@@ -943,8 +850,8 @@ function EligibilityTab({ scholarshipTypes }) {
             animate={{ opacity:1, y:0 }}
             exit={{ opacity:0, y:12 }}
             transition={{ duration:0.24, ease:"easeOut" }}
-            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
           >
+            <Card padding="none" className="overflow-hidden">
             <div style={{ padding:"16px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>
@@ -979,56 +886,47 @@ function EligibilityTab({ scholarshipTypes }) {
                 </div>
               </div>
             ) : (
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:"#fdfafa" }}>
-                    {["Student","School Year","Grade / Section","Subjects Graded","General Average",""].map((h) => (
-                      <th key={h} style={{ textAlign:"left", fontSize:10.5, fontWeight:600, color:"#8a6a6a", padding:"12px 18px", borderBottom:"1px solid #f5eaea", textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <>
-                    {eligible.map((elig, idx) => {
-                      const isFirst = !rowsAnimated;
-                      return (
-                      <motion.tr
-                        key={elig.enrollment_id}
-                        initial={isFirst ? { opacity:0, x:-6 } : false}
-                        animate={{ opacity:1, x:0 }}
-                        transition={{ duration:0.18, ease:"easeOut", delay: isFirst ? Math.min(idx * 0.025, 0.3) : 0 }}
-                        style={{ borderBottom:"1px solid #f9f0f0", backgroundColor:"white", transition:"background-color 0.12s ease" }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor="#fffbfb"}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor="white"}
-                      >
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                            <div style={{ width:34, height:34, borderRadius:"50%", background:getPalette(elig.last_name).bg, color:getPalette(elig.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{elig.initials}</div>
-                            <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{elig.student_name}</span>
+              <Table columns={ELIGIBLE_COLUMNS}>
+                {eligible.map((elig) => {
+                  const pal = getAvatarPalette(elig.last_name ?? "X");
+                  return (
+                    <TableRow key={elig.enrollment_id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                            style={{ background: pal.bg, color: pal.color }}
+                            aria-hidden="true"
+                          >
+                            {elig.initials}
                           </div>
-                        </td>
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle", fontSize:13, color:"#5a4a4a" }}>{elig.school_year}</td>
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle", fontSize:13, color:"#5a4a4a" }}>{elig.grade_level} · {elig.section}</td>
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{elig.grades_count}</span>
-                          <span style={{ fontSize:11, color:"#8a6a6a", marginLeft:4 }}>subject{elig.grades_count !== 1 ? "s" : ""}</span>
-                        </td>
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
-                          <span style={{ fontSize:15, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d" }}>
-                            {elig.avg.toFixed(2)}
-                          </span>
-                        </td>
-                        <td style={{ padding:"12px 18px", verticalAlign:"middle" }}>
-                          <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d", display:"inline-flex", alignItems:"center", gap:4 }}>
-                            <i className="ti ti-check" style={{ fontSize:11 }} />Eligible
-                          </span>
-                        </td>
-                      </motion.tr>
-                    ); })}
-                  </>
-                </tbody>
-              </table>
+                          <span className="text-sm font-semibold text-neutral-900">{elig.student_name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-neutral-700">{elig.school_year}</TableCell>
+                      <TableCell className="text-sm text-neutral-700">
+                        {elig.grade_level} · {elig.section}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm font-semibold text-neutral-900">{elig.grades_count}</span>
+                        <span className="ml-1 text-xs text-neutral-500">
+                          subject{elig.grades_count !== 1 ? "s" : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="rounded-full bg-success-50 px-3 py-0.5 text-[15px] font-bold text-success-600">
+                          {elig.avg.toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="success" icon="ti-check" size="sm">Eligible</Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </Table>
             )}
+            </Card>
           </motion.div>
         )}
       </AnimatePresence>

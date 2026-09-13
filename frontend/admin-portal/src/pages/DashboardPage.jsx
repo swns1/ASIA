@@ -5,15 +5,14 @@ import { useNavigate } from "react-router-dom";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { Panel } from "../components/ui/Card";
+import { Panel, StatCard } from "../components/ui/Card";
+import BillingPanel from "../components/ui/BillingPanel";
 import Alert from "../components/ui/Alert";
-import Skeleton from "../components/ui/Skeleton";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { describeApiError } from "../utils/apiError";
 import { pageVariants } from "../utils/motion";
-import Sparkline from "../components/charts/Sparkline";
 import { AttendanceBand, PipelineBand, RiskBand } from "./dashboard/DashboardBands";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -25,7 +24,6 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { peso } from "../utils/format";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
@@ -71,79 +69,56 @@ function useClock() {
 }
 
 /**
- * Dashboard stat tile.
+ * Dashboard stat tile — the shared StatCard plus this page's extras: an
+ * animated count, a status chip, and an expandable per-card filter drawer.
  *
- * The card itself is a plain container and the metric is a button, rather than
- * the whole card being clickable — the previous version nested filter buttons
- * and selects inside a clickable div, which is invalid and unreachable by
- * keyboard.
+ * It takes StatCard's `onValueClick` rather than `onClick`, so the card stays
+ * a <div> and the filter controls below stay real, keyboard-reachable buttons.
+ * Making the whole card a button would nest them, which is invalid HTML and
+ * unreachable by keyboard — the bug this tile was rewritten to fix once.
+ *
+ * `iconTone` is per-metric, not decorative: it is what makes a pending queue
+ * read as pending at a glance. The previous version hardcoded brand red on all
+ * four tiles, so "needs action" looked exactly as calm as a headcount.
  */
 function DashboardStat({
-  label, icon, value, loading, chipText, chipTone = "neutral",
+  label, icon, iconTone = "brand", value, loading, chipText, chipTone = "neutral",
   onOpen, openLabel, filters, filterValues, onFilterChange,
 }) {
   const [showFilters, setShowFilters] = useState(false);
   const hasActiveFilter = filters?.some((f) => filterValues?.[f.key]);
 
   return (
-    <Card className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-bold uppercase tracking-[0.07em] text-neutral-500">
-          {label}
-        </span>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-100">
-          <i className={`ti ${icon} text-[15px] text-brand-600`} aria-hidden="true" />
-        </div>
-      </div>
-
-      <div className="text-2xl font-bold leading-none text-neutral-900">
-        {loading ? (
-          <Skeleton height={28} width="60%" variant="pulse" />
-        ) : onOpen ? (
-          <button
-            type="button"
-            onClick={onOpen}
-            aria-label={openLabel}
-            className="focus-ring rounded-sm transition-colors hover:text-brand-600"
-          >
-            <AnimatedCount target={value ?? 0} loading={loading} />
-          </button>
-        ) : (
-          <AnimatedCount target={value ?? 0} loading={loading} />
-        )}
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        {loading ? (
-          <Skeleton height={16} width="60%" variant="pulse" />
-        ) : (
+    <StatCard
+      label={label}
+      icon={icon}
+      iconTone={iconTone}
+      loading={loading}
+      value={<AnimatedCount target={value ?? 0} loading={loading} />}
+      onValueClick={onOpen}
+      valueLabel={openLabel}
+      trailing={
+        filters?.length > 0 && (
+          <Button
+            variant={hasActiveFilter ? "secondary" : "ghost"}
+            size="sm"
+            iconOnly
+            icon="ti-adjustments-horizontal"
+            title={hasActiveFilter ? "Filtered — change or clear" : `Filter ${label.toLowerCase()}`}
+            aria-label={hasActiveFilter ? `Filtered ${label.toLowerCase()}, change or clear` : `Filter ${label.toLowerCase()}`}
+            aria-expanded={showFilters}
+            onClick={() => setShowFilters((v) => !v)}
+          />
+        )
+      }
+    >
+      {!loading && chipText && (
+        <div className="mt-2">
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP_TONES[chipTone]}`}>
             {chipText}
           </span>
-        )}
-
-        {filters?.length > 0 && (
-          <div className="flex shrink-0 gap-1">
-            {hasActiveFilter && (
-              <Button
-                variant="ghost" size="sm" icon="ti-x"
-                onClick={() => filters.forEach((f) => onFilterChange(f.key, null))}
-              >
-                Clear
-              </Button>
-            )}
-            <Button
-              variant={hasActiveFilter ? "secondary" : "ghost"}
-              size="sm"
-              icon="ti-adjustments-horizontal"
-              aria-expanded={showFilters}
-              onClick={() => setShowFilters((v) => !v)}
-            >
-              {hasActiveFilter ? "Filtered" : "Filter"}
-            </Button>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <AnimatePresence initial={false}>
         {showFilters && filters?.length > 0 && (
@@ -152,9 +127,12 @@ function DashboardStat({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
+            // A zero explicit height plus overflow-hidden can collapse the
+            // measured content to nothing and silently clip the selects, so
+            // the inner wrapper keeps its own min-height.
             className="overflow-hidden"
           >
-            <div className="flex gap-1.5 border-t border-neutral-200 pt-2.5">
+            <div className="mt-2.5 flex min-h-[34px] flex-wrap items-center gap-1.5 border-t border-neutral-200 pt-2.5">
               {filters.map((f) => (
                 <div key={f.key} className="min-w-0 flex-1">
                   <label className="sr-only" htmlFor={`${label}-${f.key}`}>
@@ -173,11 +151,19 @@ function DashboardStat({
                   </select>
                 </div>
               ))}
+              {hasActiveFilter && (
+                <Button
+                  variant="ghost" size="sm" icon="ti-x"
+                  onClick={() => filters.forEach((f) => onFilterChange(f.key, null))}
+                >
+                  Clear
+                </Button>
+              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </Card>
+    </StatCard>
   );
 }
 
@@ -314,9 +300,13 @@ export default function DashboardPage() {
   }
 
   async function fetchScholarships() {
-    const data = await _getEnrollmentScholarships({ page_size: 4, school_year: schoolYear });
-    const results = Array.isArray(data) ? data : data.results ?? [];
-    setScholarshipCount(results.length);
+    // page_size:1 and the paginator's own `count`, matching the enrolled and
+    // pending fetchers above. Counting `results.length` off a page instead
+    // capped the tile at its own page size — it read 4 for any total of 4 or
+    // more. An unpaginated response has no `count`, so fall back to the rows.
+    const data = await _getEnrollmentScholarships({ page_size: 1, school_year: schoolYear });
+    if (Array.isArray(data)) { setScholarshipCount(data.length); return; }
+    setScholarshipCount(data.count ?? (data.results ?? []).length);
   }
 
   async function fetchFinancialSummary() {
@@ -379,22 +369,8 @@ export default function DashboardPage() {
   const levelOpts = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }));
   const gradeOpts = (f) => (LEVEL_GRADES[f.level] ?? []).map((g) => ({ value: g, label: g }));
 
-  const revenueCells = [
-    { label: "Net Billed",  key: "net_billed",      icon: "ti-receipt",      tone: "bg-info-50 text-info-500",       link: "/invoices" },
-    { label: "Collected",   key: "total_collected", icon: "ti-cash",         tone: "bg-success-50 text-success-500", link: "/invoices?status=paid", series: "cumulative" },
-    { label: "Outstanding", key: "outstanding",     icon: "ti-alert-circle", tone: "bg-error-50 text-error-500",     link: "/invoices?status=unpaid" },
-  ];
-
-  // Only "Collected" gets a sparkline: it is the one figure with real
-  // month-by-month history. `net_billed` is a single balance and
-  // `outstanding` is derived from it, so neither has a series to draw.
-  const collectionsSpark = {
-    cumulative: (financialSummary?.collections_series ?? []).map((m) => Number(m.cumulative)),
-  };
-
-  const net = parseFloat(financialSummary?.net_billed ?? 0);
-  const collected = parseFloat(financialSummary?.total_collected ?? 0);
-  const collectionPct = net > 0 ? Math.min(100, Math.round((collected / net) * 100)) : 0;
+  // The revenue figures, their sparkline series and the collection rate all
+  // moved into BillingPanel, which derives them from the same payload.
 
   return (
     <>
@@ -454,12 +430,12 @@ export default function DashboardPage() {
         {/* Headline metrics */}
         <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <DashboardStat
-            label="Total Students" icon="ti-users" value={totalStudents} loading={loading}
+            label="Total Students" icon="ti-users" iconTone="brand" value={totalStudents} loading={loading}
             chipText={`${activeStudents.toLocaleString()} active`} chipTone="up"
             onOpen={() => navigate("/students")} openLabel="View all students"
           />
           <DashboardStat
-            label="Enrolled this S.Y." icon="ti-calendar-event" value={enrolledCount} loading={loading}
+            label="Enrolled this S.Y." icon="ti-calendar-event" iconTone="success" value={enrolledCount} loading={loading}
             chipText={`S.Y. ${enrolledFilters.year ?? schoolYear}`} chipTone="neutral"
             filters={[
               { key: "year",  options: yearOpts,  placeholder: "S.Y." },
@@ -476,7 +452,7 @@ export default function DashboardPage() {
             }))}
           />
           <DashboardStat
-            label="Pending Enrollment" icon="ti-clipboard-list" value={pendingCount} loading={loading}
+            label="Pending Enrollment" icon="ti-clipboard-list" iconTone="warning" value={pendingCount} loading={loading}
             chipText={pendingCount > 0 ? "needs action" : "all clear"}
             chipTone={pendingCount > 0 ? "down" : "up"}
             filters={[
@@ -494,145 +470,35 @@ export default function DashboardPage() {
             }))}
           />
           <DashboardStat
-            label="Scholarships Awarded" icon="ti-award" value={scholarshipCount} loading={loading}
+            label="Scholarships Awarded" icon="ti-award" iconTone="accent" value={scholarshipCount} loading={loading}
             chipText={`S.Y. ${schoolYear}`} chipTone="info"
             onOpen={canViewScholarships ? () => navigate("/scholarships") : undefined}
             openLabel="View scholarships"
           />
         </motion.div>
 
-        {/* Revenue — billing roles only; the backend 403s everyone else, so
-            showing a ₱0.00 strip to other roles would just mislead. */}
+        {/* Billing — one panel, not four tiles. collected + outstanding =
+            net_billed and the rate is collected ÷ net_billed, so these were
+            never four independent metrics; the panel shows that relationship
+            instead of restating one fact across four peer cards.
+
+            Billing roles only: the backend 403s everyone else, so a ₱0.00
+            strip shown to other roles would just mislead. */}
         {canViewFinancials && (
-          <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {revenueCells.map((item) => (
-              <Card key={item.key} padding="md" className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${item.tone}`}>
-                    <i className={`ti ${item.icon} text-[14px]`} aria-hidden="true" />
-                  </div>
-                  <span className="text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
-                    {item.label}
-                  </span>
-                </div>
-                {loading ? (
-                  <Skeleton height={22} width="70%" variant="pulse" />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => navigate(item.link)}
-                    className="focus-ring rounded-sm text-left text-xl font-bold tracking-[-0.02em] text-neutral-900 transition-colors hover:text-brand-600"
-                    style={{
-                      filter: showAmounts ? "none" : "blur(8px)",
-                      userSelect: showAmounts ? "auto" : "none",
-                    }}
-                  >
-                    {peso(financialSummary?.[item.key])}
-                  </button>
-                )}
-                <div className="flex items-end justify-between gap-2">
-                  <div className="text-xs text-neutral-500">S.Y. {financialYear ?? schoolYear}</div>
-                  {/* A sparkline only where a real series exists. Collections
-                      are the one dashboard figure with month-by-month history
-                      behind them (Payment.payment_date); the student and
-                      enrolment counts have no time axis in the schema, and
-                      drawing a trend line for them would be inventing one. */}
-                  {!loading && item.series && (
-                    <Sparkline
-                      values={collectionsSpark[item.series] ?? []}
-                      className={showAmounts ? "" : "blur-[6px]"}
-                    />
-                  )}
-                </div>
-              </Card>
-            ))}
-
-            <Card padding="md" className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-accent-50">
-                  <i className="ti ti-chart-pie text-[14px] text-accent-500" aria-hidden="true" />
-                </div>
-                <span className="flex-1 text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
-                  Collection Rate
-                </span>
-                <div className="flex gap-1">
-                  {financialYear && (
-                    <Button variant="ghost" size="sm" iconOnly icon="ti-x"
-                      title="Reset to current school year" aria-label="Reset to current school year"
-                      onClick={() => setFinancialYear(null)} />
-                  )}
-                  <Button
-                    variant={showAmounts ? "secondary" : "ghost"} size="sm" iconOnly
-                    icon={showAmounts ? "ti-eye" : "ti-eye-off"}
-                    title={showAmounts ? "Hide amounts" : "Show amounts"}
-                    aria-label={showAmounts ? "Hide financial amounts" : "Show financial amounts"}
-                    aria-pressed={!showAmounts}
-                    onClick={() => setShowAmounts((v) => !v)}
-                  />
-                  <Button
-                    variant={financialYear ? "secondary" : "ghost"} size="sm" iconOnly
-                    icon="ti-adjustments-horizontal"
-                    title="Filter by school year" aria-label="Filter by school year"
-                    aria-expanded={showFinancialFilters}
-                    onClick={() => setShowFinancialFilters((v) => !v)}
-                  />
-                </div>
-              </div>
-
-              <AnimatePresence initial={false}>
-                {showFinancialFilters && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeInOut" }}
-                    className="overflow-hidden"
-                  >
-                    <label className="sr-only" htmlFor="financial-year">School year</label>
-                    <select
-                      id="financial-year"
-                      value={financialYear ?? ""}
-                      onChange={(e) => setFinancialYear(e.target.value || null)}
-                      className="focus-ring w-full cursor-pointer rounded-sm border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-700 outline-none"
-                    >
-                      <option value="">Current ({schoolYear})</option>
-                      {schoolYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {loading ? (
-                <Skeleton height={22} width="50%" variant="pulse" />
-              ) : (
-                <div
-                  className={`text-xl font-bold ${
-                    collectionPct >= 80 ? "text-success-500"
-                      : collectionPct >= 50 ? "text-warning-500" : "text-error-500"
-                  }`}
-                  style={{ filter: showAmounts ? "none" : "blur(8px)", userSelect: showAmounts ? "auto" : "none" }}
-                >
-                  {collectionPct}%
-                </div>
-              )}
-              <div
-                className="h-1.5 overflow-hidden rounded-full bg-neutral-200"
-                role="progressbar"
-                aria-valuenow={collectionPct}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Collection rate"
-              >
-                {!loading && (
-                  <div
-                    className={`h-full rounded-full transition-[width] duration-500 ${
-                      !showAmounts ? "bg-neutral-400"
-                        : collectionPct >= 80 ? "bg-success-dot"
-                        : collectionPct >= 50 ? "bg-warning-dot" : "bg-brand-500"
-                    }`}
-                    style={{ width: showAmounts ? `${collectionPct}%` : "50%" }}
-                  />
-                )}
-              </div>
-            </Card>
+          <motion.div variants={pageVariants.item}>
+            <BillingPanel
+              summary={financialSummary}
+              loading={loading}
+              schoolYear={schoolYear}
+              filterYear={financialYear}
+              onFilterYearChange={setFinancialYear}
+              schoolYearOptions={schoolYearOptions}
+              showAmounts={showAmounts}
+              onToggleAmounts={() => setShowAmounts((v) => !v)}
+              showFilters={showFinancialFilters}
+              onToggleFilters={() => setShowFinancialFilters((v) => !v)}
+              onOpenInvoices={(link) => navigate(link)}
+            />
           </motion.div>
         )}
 

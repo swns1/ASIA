@@ -7,6 +7,7 @@ from axes.utils import reset as axes_reset
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models import Count, Q
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
@@ -454,6 +455,18 @@ class AuditLogListView(APIView):
         if status_value:
             queryset = queryset.filter(status=status_value)
 
+        # Free-text lookup across who did it, what they did, and the detail
+        # blurb — the three things someone scanning an audit trail actually
+        # reads. `metadata` is deliberately excluded: it's a JSON blob whose
+        # keys would produce confusing matches.
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(user_name__icontains=search)
+                | Q(action__icontains=search)
+                | Q(details__icontains=search)
+            )
+
         date_value = parse_date(request.query_params.get("date") or "")
         if date_value:
             queryset = queryset.filter(occurred_at__date=date_value)
@@ -474,3 +487,50 @@ class AuditLogListView(APIView):
         page = paginator.paginate_queryset(queryset, request)
         serializer = AuditLogSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+class AuditLogFacetsView(APIView):
+    """
+    GET /api/auth/audit-logs/facets/
+
+    The distinct roles and modules present in the log, plus per-status counts.
+
+    The page used to derive these by scanning every row it had downloaded,
+    which only worked because it fetched the whole table. Now that the list is
+    paginated server-side, the filter options have to come from the full set
+    rather than whatever happens to be on the current page.
+    """
+    authentication_classes = [NoOpAuthentication]
+    permission_classes = [HasRole]
+    required_roles = ADMIN_ROLES
+
+    def get(self, request):
+        # `.order_by()` clears the model's Meta.ordering. Without it the
+        # ordering column joins the SELECT and DISTINCT dedupes on the pair,
+        # returning one row per log rather than one per distinct value.
+        qs = AuditLog.objects.order_by()
+
+        roles = sorted(
+            r for r in qs.values_list("user_role", flat=True).distinct() if r
+        )
+
+        # Module values are stored inconsistently cased ("students" and
+        # "Students" are separate rows), so they're folded to one entry per
+        # distinct spelling-insensitive name. The list filter uses `iexact`,
+        # so any one spelling matches them all.
+        seen = {}
+        for m in qs.values_list("module", flat=True).distinct():
+            if not m:
+                continue
+            key = m.strip().lower()
+            if key and key not in seen:
+                seen[key] = m.strip()
+        modules = sorted(seen.values(), key=str.lower)
+
+        counts = {
+            row["status"]: row["count"]
+            for row in qs.values("status").annotate(count=Count("pk"))
+        }
+        counts["total"] = sum(counts.values())
+
+        return Response({"roles": roles, "modules": modules, "status_counts": counts})

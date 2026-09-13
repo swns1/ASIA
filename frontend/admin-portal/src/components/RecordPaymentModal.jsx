@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 
+import Modal from "./ui/Modal";
+import Button from "./ui/Button";
+import Alert from "./ui/Alert";
+import Skeleton from "./ui/Skeleton";
+import { StatusBadge } from "./ui/Badge";
+import { Field, Input, Textarea } from "./FormField";
+import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
+import { PAYMENT_METHODS } from "../constants/paymentMethods";
+
 import {
   getInvoice as _getInvoice,
   getInvoices as _getInvoices,
@@ -10,26 +19,7 @@ const getInvoice    = (id)  => _getInvoice(id);
 const getInvoices   = (p={})=> _getInvoices(p);
 const createPayment = (p)   => _createPayment(p);
 
-const PAYMENT_METHODS = [
-  { value:"cash",          label:"Cash",          icon:"ti-cash",          color:"#2e6b0d", bg:"#e8f5e0" },
-  { value:"gcash",         label:"GCash",         icon:"ti-device-mobile", color:"#1455a0", bg:"#e3f0fd" },
-  { value:"bank_transfer", label:"Bank Transfer", icon:"ti-building-bank", color:"#7c3aed", bg:"#f0e8fd" },
-  { value:"card",          label:"Card",          icon:"ti-credit-card",   color:"#854f0b", bg:"#fdf5e8" },
-  { value:"check",         label:"Check",         icon:"ti-file-text",     color:"#854f0b", bg:"#faeeda" },
-  { value:"others",        label:"Others",        icon:"ti-dots",          color:"#5c5752", bg:"#f0ede8" },
-];
-
-const STATUS_META = {
-  unpaid:         { label:"Unpaid",  color:"#a32d2d", bg:"#fde8e8" },
-  partially_paid: { label:"Partial", color:"#854f0b", bg:"#faeeda" },
-  paid:           { label:"Paid",    color:"#2e6b0d", bg:"#e8f5e0" },
-  void:           { label:"Void",    color:"#5c5752", bg:"#f0ede8" },
-};
-
 const fmt = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-const Sk  = ({ w="100%", h=14, r=6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
 
 /**
  * Shared Record Payment modal used by both PaymentsPage and InvoicesPage.
@@ -113,47 +103,44 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
     finally     { setSaving(false); }
   };
 
-  const inp = { width:"100%", border:"1.5px solid #fde2de", borderRadius:10, padding:"10px 14px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none", boxSizing:"border-box" };
-  const lbl = { display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 };
 
   const balance    = invoice ? parseFloat(invoice.balance ?? 0) : 0;
   const en         = invoice?.enrollment_detail;
-  const statusMeta = invoice ? STATUS_META[invoice.status] ?? STATUS_META.unpaid : null;
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(26,10,10,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }}>
-      <div style={{ background:"white", borderRadius:20, width:540, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(224,49,49,0.18)", animation:"slideUp 0.2s ease" }}>
-
-        {/* Header */}
-        <div style={{ padding:"22px 28px 18px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:38, height:38, borderRadius:10, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-cash" style={{ fontSize:18, color:"#2e6b0d" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>Record Payment</div>
-              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>Apply a payment to an invoice</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#8a6a6a", fontSize:20 }}><i className="ti ti-x" /></button>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-cash"
+      title="Record Payment"
+      description="Apply a payment to an invoice"
+      // A part-filled payment form shouldn't be lost to a stray backdrop click.
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button icon="ti-cash" loading={saving} disabled={!invoice} onClick={handleSave}>
+            {saving ? "Recording…" : "Record Payment"}
+          </Button>
         </div>
-
-        <div style={{ padding:"22px 28px" }}>
-          {error && (
-            <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
-            </div>
-          )}
+      }
+    >
+      <div>
+          {error && <Alert variant="error" className="mb-3.5">{error}</Alert>}
 
           {/* Invoice selector */}
           <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Invoice *</label>
-            {loadingInvoice ? <Sk h={52} /> : invoice ? (
+            <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Invoice <span className="text-brand-600">*</span></div>
+            {loadingInvoice ? <Skeleton height={52} /> : invoice ? (
               <div style={{ padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"#fff8f6" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                   <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{invoice.invoice_no}</span>
                   <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                    <span style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:99, background:statusMeta.bg, color:statusMeta.color }}>{statusMeta.label}</span>
+                    <StatusBadge status={invoice.status} map={INVOICE_STATUS_MAP} size="sm" />
                     {!preloadedInvoiceId && (
                       <button onClick={() => setInvoice(null)} style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"4px 8px", fontSize:11, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
                     )}
@@ -189,16 +176,13 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                     {invoiceResults.length === 0 && !searching && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No invoices found.</div>}
                     {invoiceResults.map((inv) => {
                       if (inv.status === "void" || inv.status === "paid") return null;
-                      const sm = STATUS_META[inv.status] ?? STATUS_META.unpaid;
                       const en = inv.enrollment_detail;
                       return (
                         <div key={inv.invoice_id} onClick={() => { setInvoice(inv); setDropdownOpen(false); setInvoiceSearch(""); }}
-                          style={{ padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                          onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
+                          className="cursor-pointer border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
                           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                             <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
-                            <span style={{ fontSize:10.5, fontWeight:700, padding:"2px 6px", borderRadius:99, background:sm.bg, color:sm.color }}>{sm.label}</span>
+                            <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
                           </div>
                           <div style={{ fontSize:12, color:"#5a4a4a", marginTop:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`} · {fmt(inv.balance ?? 0)} remaining</div>
                         </div>
@@ -212,7 +196,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
           {/* Payment method */}
           <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Payment Method *</label>
+            <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Payment Method <span className="text-brand-600">*</span></div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
               {PAYMENT_METHODS.map((pm) => {
                 const active = form.payment_method === pm.value;
@@ -229,14 +213,13 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
 
           {/* Amount + date */}
           <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:12, marginBottom:14 }}>
-            <div>
-              <label style={lbl}>Amount Paid *</label>
+            <Field label="Amount Paid" required>
               <div style={{ position:"relative" }}>
                 <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                <input type="number" min="0.01" step="0.01"
+                <Input type="number" min="0.01" step="0.01"
                   max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
                   value={form.amount_paid} onChange={(e) => setF("amount_paid", e.target.value)}
-                  placeholder="0.00" style={{ ...inp, paddingLeft:26, textAlign:"right" }} />
+                  placeholder="0.00" className="pl-[26px] text-right" />
               </div>
               {invoice && balance > 0 && (
                 <div style={{ marginTop:5, display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -257,35 +240,20 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                   })()}
                 </div>
               )}
-            </div>
-            <div>
-              <label style={lbl}>Payment Date *</label>
-              <input type="date" value={form.payment_date} onChange={(e) => setF("payment_date", e.target.value)} style={inp} />
-            </div>
+            </Field>
+            <Field label="Payment Date" required>
+              <Input type="date" value={form.payment_date} onChange={(e) => setF("payment_date", e.target.value)} />
+            </Field>
           </div>
 
           {/* Reference + notes */}
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Reference Number</label>
-            <input value={form.reference_number} onChange={(e) => setF("reference_number", e.target.value)} placeholder="Transaction ID, check no., etc." style={inp} />
-          </div>
-          <div>
-            <label style={lbl}>Notes</label>
-            <textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} placeholder="Optional remarks…" rows={2} style={{ ...inp, resize:"vertical" }} />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding:"16px 28px 24px", display:"flex", justifyContent:"flex-end", gap:10, borderTop:"1px solid #f5eaea" }}>
-          <button onClick={onClose} style={{ background:"transparent", color:"#855c5c", border:"1.5px solid #fde2de", borderRadius:50, padding:"9px 22px", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving || !invoice}
-            style={{ background:saving?"#e87474":"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", border:"none", borderRadius:50, padding:"9px 24px", fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:saving||!invoice?"not-allowed":"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:"0 4px 16px rgba(46,107,13,0.26)", opacity:!invoice?0.6:1 }}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ fontSize:13, animation:"spin 1s linear infinite" }} />Recording…</>
-              : <><i className="ti ti-cash" style={{ fontSize:13 }} />Record Payment</>}
-          </button>
-        </div>
+          <Field label="Reference Number">
+            <Input value={form.reference_number} onChange={(e) => setF("reference_number", e.target.value)} placeholder="Transaction ID, check no., etc." />
+          </Field>
+          <Field label="Notes">
+            <Textarea value={form.notes} onChange={(e) => setF("notes", e.target.value)} placeholder="Optional remarks…" rows={2} />
+          </Field>
       </div>
-    </div>
+    </Modal>
   );
 }
