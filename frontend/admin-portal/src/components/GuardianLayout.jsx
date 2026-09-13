@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { clearAuthSession, getCurrentUser } from "../utils/auth";
 import Button from "./ui/Button";
+import { ConfirmDialog } from "./ui/Modal";
 import logo from "../assets/logo.png";
 
 // A slim, staff-sidebar-free shell for the guardian (parent) portal. Guardians
@@ -14,6 +17,11 @@ export default function GuardianLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getCurrentUser();
+  // Gated behind a confirm the same way the staff Sidebar gates its own logout
+  // button. This one is an icon-only button sitting next to the account block
+  // in a top bar, so it is the easiest of the two to hit by accident, and
+  // clearAuthSession() ends the session server-side — there is no undo.
+  const [showLogout, setShowLogout] = useState(false);
 
   function handleLogout() {
     clearAuthSession();
@@ -64,7 +72,7 @@ export default function GuardianLayout({ children }) {
             size="sm"
             iconOnly
             icon="ti-logout"
-            onClick={handleLogout}
+            onClick={() => setShowLogout(true)}
             title="Log out"
             aria-label="Log out"
           />
@@ -72,6 +80,21 @@ export default function GuardianLayout({ children }) {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16 pt-7 sm:px-6">{children}</main>
+
+      <AnimatePresence>
+        {showLogout && (
+          <ConfirmDialog
+            icon="ti-logout"
+            danger={false}
+            title="Log out?"
+            message="You'll be returned to the login page and will need to sign in again to view your children's records."
+            confirmLabel="Yes, log out"
+            cancelLabel="Stay"
+            onConfirm={handleLogout}
+            onCancel={() => setShowLogout(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
