@@ -615,7 +615,6 @@ export default function ApplicantFormPage() {
                     <ReviewStep
                       student={student} household={household} guardians={guardians}
                       siblings={siblings} schools={schools}
-                      pendingUploads={[]} existingDocs={[]} isEdit={false}
                     />
                     <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[#fde2de] p-4">
                       <input

@@ -37,12 +37,15 @@ export const emptySibling = { full_name: "", age: "" };
 export const emptySchool = { school_name: "", school_address: "" };
 
 // ─── step config ─────────────────────────────────────────────────────────────
-// The full staff-facing set, including "documents" — StudentFormPage uses
-// this as-is. The applicant form (no document upload — see the plan's
-// decision 6) defines its own shorter list of these same step ids rather
-// than importing this one.
+// The staff-facing set. The applicant form defines its own shorter list of
+// these same step ids rather than importing this one.
+//
+// "documents" used to lead this list. It was there so OCR could extract a
+// birth certificate and prefill the fields below it; extraction was retired
+// (backend ocr/policy.py), leaving a step that collected files against a
+// student who did not exist yet. Documents are handled on the enrollment and
+// on /requirements now, via RequirementDocumentsPanel.
 export const STEPS = [
-  { id: "documents", label: "Documents",       icon: "ti-file-check" },
   { id: "student",   label: "Student",         icon: "ti-user" },
   { id: "household", label: "Household",       icon: "ti-home" },
   { id: "guardians", label: "Guardians",       icon: "ti-users" },

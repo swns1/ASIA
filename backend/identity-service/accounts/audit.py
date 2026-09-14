@@ -20,6 +20,19 @@ def is_audit_admin(user):
     return bool(user and normalize_role(getattr(user, "role", "")) in ADMIN_ROLES)
 
 
+# `admin` and `super_admin` are distinct roles, but is_audit_admin() treats
+# them identically -- which is correct for "may see the audit trail" and wrong
+# for "may edit this account". Without a rank, a plain admin could set the
+# super_admin's password (no current-password check applies when editing
+# someone else), log in as them, promote themselves, or delete the account
+# outright. Anything that targets or grants super_admin goes through this.
+SUPER_ADMIN_ROLES = {"super_admin", "superadmin"}
+
+
+def is_super_admin(user):
+    return bool(user and normalize_role(getattr(user, "role", "")) in SUPER_ADMIN_ROLES)
+
+
 def resolve_user_from_request(request):
     auth_header = request.META.get("HTTP_AUTHORIZATION", "")
     if not auth_header.startswith("Bearer "):

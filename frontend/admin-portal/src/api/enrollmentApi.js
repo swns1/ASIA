@@ -39,9 +39,37 @@ export const deleteEnrollment = (id) =>
 export const bulkCreateEnrollments = (payload) =>
   enrollmentClient.post("/enrollments/bulk/", payload).then((r) => r.data);
 
-export const getEnrollmentEligibility = (studentId) =>
+/**
+ * Progression + document eligibility for a student.
+ *
+ * `placement` is optional and describes the enrollment being considered
+ * ({ schoolLevel, gradeLevel, isTransferIn }). It matters because which
+ * documents are required depends on it: a Grade 7 transferee owes a Form 137
+ * and a Good Moral certificate, a Grade 7 learner promoted from our own
+ * Grade 6 owes neither. Omitted, the server reports on the next placement its
+ * progression rules work out.
+ *
+ * Pass `excludeEnrollmentId` when the report is about a row that already
+ * exists — an enrollment being edited, or a pending one about to be
+ * activated. That row is not part of its own history; counting it makes the
+ * learner look "continuing" and silently drops the transferee document rules,
+ * which is exactly the case the gate exists for. The server-side gate already
+ * excludes it, so omitting this is what made the preview and the gate
+ * disagree.
+ */
+export const getEnrollmentEligibility = (studentId, placement = {}) =>
   enrollmentClient
-    .get("/enrollments/eligibility/", { params: { student_id: studentId } })
+    .get("/enrollments/eligibility/", {
+      params: {
+        student_id: studentId,
+        ...(placement.schoolLevel ? { school_level: placement.schoolLevel } : null),
+        ...(placement.gradeLevel ? { grade_level: placement.gradeLevel } : null),
+        ...(placement.isTransferIn ? { is_transfer_in: true } : null),
+        ...(placement.excludeEnrollmentId
+          ? { exclude_enrollment_id: placement.excludeEnrollmentId }
+          : null),
+      },
+    })
     .then((r) => r.data);
 
 // ── Mid-year transfers ───────────────────────────────────────────────────────
@@ -189,14 +217,9 @@ export const getRiskAssessmentTrend = (studentId) =>
     .get("/ai/risk-assessment/trend/", { params: { student_id: studentId } })
     .then((r) => r.data);
 
-// ── Requirement types (enrollment-service mirror) ─────────────────────────────
-export const getRequirementTypes = (params = {}) =>
-  enrollmentClient.get("/requirement-types/", { params }).then((r) => r.data);
-
-export const getStudentRequirementSubmissions = (params = {}) =>
-  enrollmentClient
-    .get("/student-requirement-submissions/", { params })
-    .then((r) => r.data);
+// Requirement types and submissions used to be reachable from here too, which
+// meant two API clients for one resource. Everything document-related now goes
+// through api/requirementApi.js, which RequirementDocumentsPanel uses.
 
 // ── Section promotion ─────────────────────────────────────────────────────────
 export const promotePreview = (payload) =>

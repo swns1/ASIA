@@ -203,7 +203,20 @@ export function StudentStep({ data, onChange, showStatus = true, lrnRequired = t
           </Select>
         </Field>
         <Field label="Birth Date *">
-          <Input type="date" name="birth_date" value={data.birth_date || ""} onChange={h} required />
+          {/* min/max bound the picker to the same window validation.js already
+              enforces (EARLIEST_BIRTH_YEAR and "not in the future"). Without
+              them a future date was freely selectable in the calendar and only
+              rejected at submit, several steps later — the browser can say no
+              at the point of entry instead. */}
+          <Input
+            type="date"
+            name="birth_date"
+            value={data.birth_date || ""}
+            onChange={h}
+            min="1970-01-01"
+            max={new Date().toISOString().slice(0, 10)}
+            required
+          />
         </Field>
         <Field label="Religion">
           <Input name="religion" value={data.religion || ""} onChange={h} placeholder="Optional" />
@@ -602,7 +615,7 @@ export function ReviewStepSection({ icon, title, children }) {
   );
 }
 
-export function ReviewStep({ student, household, guardians, siblings, schools, pendingUploads = [], existingDocs = [], isEdit = false }) {
+export function ReviewStep({ student, household, guardians, siblings, schools }) {
   const Row = ReviewStepRow;
   const Section = ReviewStepSection;
 
@@ -669,16 +682,6 @@ export function ReviewStep({ student, household, guardians, siblings, schools, p
         </Section>
       )}
 
-      {(() => {
-        const docList = isEdit ? existingDocs.filter((d) => d.is_submitted) : pendingUploads;
-        return docList.length > 0 ? (
-          <Section icon="ti-file-check" title={`Documents (${docList.length})`}>
-            {docList.map((d, i) => (
-              <Row key={i} label={`Document ${i + 1}`} value={isEdit ? d.requirement_name : d.requirementName} />
-            ))}
-          </Section>
-        ) : null;
-      })()}
     </div>
   );
 }

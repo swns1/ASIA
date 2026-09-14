@@ -100,7 +100,14 @@ class NarrativeReportSerializer(serializers.ModelSerializer):
         return {"category_id": c.category_id, "name": c.name, "sort_order": c.sort_order}
 
     def validate_rating(self, value):
-        valid = {"outstanding", "satisfactory", "needs_improvement"}
+        # Derived from the model rather than restated here. This allowlist was
+        # hardcoded to the three legacy prototype ratings, which meant the
+        # DepEd Order No. 8 marks (AO/SO/RO/NO) — the vocabulary the model
+        # declares, the report card prints, the seed data uses, and
+        # ai.services.NARRATIVE_SCORE scores — could not be written through
+        # any endpoint. A teacher filling in the Observed Values section got a
+        # 400 for entering the only marks the form actually has.
+        valid = {choice for choice, _label in NarrativeReport.RATING_CHOICES}
         if value not in valid:
             raise serializers.ValidationError(f"Must be one of: {', '.join(sorted(valid))}.")
         return value

@@ -1236,7 +1236,12 @@ CREATE TABLE public.requirement_types (
     requirement_code character varying(50) NOT NULL,
     requirement_name character varying(150) NOT NULL,
     description text,
-    is_active boolean DEFAULT true NOT NULL
+    is_active boolean DEFAULT true NOT NULL,
+    is_required boolean DEFAULT true NOT NULL,
+    applies_to_levels text[] DEFAULT ARRAY['nursery'::text, 'kindergarten'::text, 'elementary'::text, 'junior_highschool'::text, 'senior_highschool'::text] NOT NULL,
+    applies_to_entry_statuses text[] DEFAULT ARRAY['new'::text, 'transferee'::text, 'continuing'::text] NOT NULL,
+    CONSTRAINT requirement_types_applies_to_entry_statuses_check CHECK (((applies_to_entry_statuses <@ ARRAY['new'::text, 'transferee'::text, 'continuing'::text]) AND (cardinality(applies_to_entry_statuses) > 0))),
+    CONSTRAINT requirement_types_applies_to_levels_check CHECK (((applies_to_levels <@ ARRAY['nursery'::text, 'kindergarten'::text, 'elementary'::text, 'junior_highschool'::text, 'senior_highschool'::text]) AND (cardinality(applies_to_levels) > 0)))
 );
 
 

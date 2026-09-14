@@ -23,10 +23,23 @@ export async function fetchRequirementTypes(activeOnly = true) {
   }
 }
 
-export async function fetchRequirementSummary(studentId) {
+/**
+ * One student's document checklist.
+ *
+ * `schoolLevel` / `entryStatus` are optional. Supplied, the server also
+ * answers `applies` per row — whether this learner is asked for that document
+ * at all — so a Grade 1 entrant is not shown an NCAE result. Omitted, every
+ * row comes back with `applies: null` and the caller sees the whole
+ * catalogue, which is what the standalone Requirements page wants.
+ */
+export async function fetchRequirementSummary(studentId, { schoolLevel, entryStatus } = {}) {
   try {
     const res = await client.get("/api/student-requirement-submissions/summary/", {
-      params: { student_id: studentId },
+      params: {
+        student_id: studentId,
+        ...(schoolLevel ? { school_level: schoolLevel } : null),
+        ...(entryStatus ? { entry_status: entryStatus } : null),
+      },
     });
     return res.data;
   } catch {

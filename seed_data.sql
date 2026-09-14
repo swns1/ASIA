@@ -146,7 +146,19 @@ ON CONFLICT DO NOTHING;
 
 -- =====================================================
 -- GUARDIANS
+--
+-- ON CONFLICT DO NOTHING cannot make this block re-runnable: the only unique
+-- constraint on this table is the PARTIAL uq_guardian_primary_per_student
+-- (primary contacts only), so every is_primary_contact = FALSE row -- the
+-- fathers, the guardian-relationship rows -- duplicated on every re-run, with
+-- no error and no sign anything had happened.
+--
+-- The seed owns students 100-151 outright, so clearing its own rows first is
+-- both safe and genuinely idempotent. Rows for any other student are left
+-- untouched.
 -- =====================================================
+DELETE FROM guardians WHERE student_id BETWEEN 100 AND 151;
+
 INSERT INTO guardians (student_id, relationship, full_name, occupation, email_address, mobile_number, is_primary_contact)
 VALUES
   (100, 'mother',   'Maribel Santos Reyes',         'Teacher',         'maribel.reyes.seed@gmail.com', '09171100001', TRUE),
@@ -212,20 +224,20 @@ VALUES
   (110, 'guardian', 'Maribel Santos Reyes',         'Teacher',         'maribel.reyes.seed@gmail.com', '09171100001', FALSE)
 ON CONFLICT DO NOTHING;
 
--- Link the guardian portal account (users.user_id = 6) to its two children.
--- guardians.guardian_id is generated, so match on (student_id, full_name)
--- rather than hardcoding ids. guardians.user_id is deliberately NOT unique --
--- one parent with two children owns two rows pointing at the same user (see
--- student-service/students/models.py). Student 100 has one enrollment and
--- student 110 has two (2024-2025 completed + 2025-2026 enrolled), so this
--- also exercises GuardianHomePage's one-card-per-child grouping.
-UPDATE guardians SET user_id = 6
-WHERE (student_id = 100 AND full_name = 'Maribel Santos Reyes')
-   OR (student_id = 110 AND full_name = 'Maribel Santos Reyes');
+-- The guardian portal account is linked to its children AFTER the USERS block
+-- below creates it — see "GUARDIAN PORTAL LINK" further down. It used to be
+-- done here, hardcoded to user_id = 6, which ran before that account existed
+-- and only worked because guardians.user_id carries no foreign key.
 
 -- =====================================================
 -- PREVIOUS SCHOOLS
+--
+-- Same problem as GUARDIANS above: this table has no unique constraint at
+-- all, so the ON CONFLICT clause had nothing to catch on and every row
+-- duplicated on a re-run. Cleared by the seed's own student range first.
 -- =====================================================
+DELETE FROM previous_schools WHERE student_id BETWEEN 100 AND 151;
+
 INSERT INTO previous_schools (student_id, school_name, school_address)
 VALUES
   (110, 'Little Stars Day Care Center',             'Brgy. San Vicente, Pasig City'),
@@ -271,6 +283,118 @@ VALUES
   (150, 'Concepcion National High School',          'Concepcion, Marikina City'),
   (151, 'Tumana National High School',              'Tumana, Marikina City')
 ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- REQUIREMENT TYPES  (IDs 1–13)
+-- The document catalogue, and the rule for who owes what.
+--
+-- This block did not exist before: on a database built from schema.sql +
+-- seed_data.sql the table was EMPTY, which made the completeness gate in
+-- enrollment-service a silent no-op and the whole requirements module
+-- invisible. The thirteen rows only ever existed in a developer's live DB.
+--
+-- is_required     — does a missing copy block activating an enrollment
+-- applies_to_*    — who is asked for it at all
+--
+-- Four gating documents, scoped, rather than thirteen for everyone:
+--   continuing Grade 4 learner → 2 required (PSA, health record)
+--   Grade 7 transferee         → 4 required (+ Form 137/138, good moral)
+--   Kindergarten entrant       → 2 required
+--
+-- Optional rows stay in the catalogue: they are still tracked, uploaded and
+-- OCR-checked, they simply do not block. See
+-- scripts/2026-09-requirement-applicability.sql for the per-row reasoning.
+--
+-- DO UPDATE, not DO NOTHING: an existing database already holds these rows
+-- from before the applicability columns existed, and DO NOTHING would leave
+-- them at the "required for everyone" column defaults — i.e. change nothing.
+-- The trade-off is that re-running this file resets hand-edited flags.
+-- =====================================================
+INSERT INTO requirement_types
+  (requirement_type_id, requirement_code, requirement_name, description,
+   is_active, is_required, applies_to_levels, applies_to_entry_statuses)
+VALUES
+  -- ── Required ────────────────────────────────────────────────────────────
+  (9,  'psa_birth_certificate', 'PSA Birth Certificate',
+       'PSA-issued birth certificate. The learner''s identity document.',
+       TRUE, TRUE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (10, 'health_record', 'Health Record',
+       'Health, medical or immunization record. ECCD checklist for nursery and kindergarten.',
+       TRUE, TRUE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (12, 'form_137_or_138', 'Form 137/138',
+       'Permanent record (SF10/Form 137) or report card (SF9/Form 138) from the previous school.',
+       TRUE, TRUE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (3,  'certificate_good_moral', 'Certificate of Good Moral',
+       'Certificate of Good Moral Character from the previous school.',
+       TRUE, TRUE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+
+  -- ── Optional ────────────────────────────────────────────────────────────
+  (1,  'birth_certificate', 'Birth Certificate',
+       'Local civil registry copy. Accepted while the PSA copy is still being obtained.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (2,  'form_138', 'Form 138',
+       'Report card (SF9). Accepted in place of the permanent record.',
+       TRUE, FALSE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (4,  'ncae_result', 'NCAE Result',
+       'National Career Assessment Examination result, presented at senior high entry. Not required — the NCAE has not been administered consistently in recent years.',
+       TRUE, FALSE,
+       ARRAY['senior_highschool'],
+       ARRAY['new','transferee']),
+  (8,  'clearance_previous_school', 'Clearance from Previous School',
+       'Clearance of accountabilities. Not required — routinely withheld over unpaid fees at the previous school.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (6,  'certificate_non_sf9', 'Certificate of Non-SF9',
+       'Issued by a previous school that cannot release the SF9.',
+       TRUE, FALSE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (5,  'esc_completers', 'ESC Completers',
+       'Educational Service Contracting certificate of junior high completion. Grantees only.',
+       TRUE, FALSE,
+       ARRAY['senior_highschool'],
+       ARRAY['new','transferee']),
+  (13, 'esc_transferee_qc', 'ESC Transferee QC',
+       'ESC transferee qualification certification. Grantees only.',
+       TRUE, FALSE,
+       ARRAY['junior_highschool'],
+       ARRAY['transferee']),
+  (11, 'alien_certificate', 'Alien Certificate',
+       'Alien Certificate of Registration. Foreign nationals only — nationality is not stored, so this cannot be scoped automatically.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (7,  'recommendation_letter', 'Recommendation Letter',
+       'Letter of recommendation. At the school''s discretion.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing'])
+ON CONFLICT (requirement_code) DO UPDATE SET
+  requirement_name          = EXCLUDED.requirement_name,
+  description               = EXCLUDED.description,
+  is_active                 = EXCLUDED.is_active,
+  is_required               = EXCLUDED.is_required,
+  applies_to_levels         = EXCLUDED.applies_to_levels,
+  applies_to_entry_statuses = EXCLUDED.applies_to_entry_statuses;
+
+-- Keep the sequence ahead of the explicit IDs above, or the next
+-- registrar-created requirement type collides on the primary key.
+SELECT setval('requirement_types_requirement_type_id_seq',
+              GREATEST((SELECT MAX(requirement_type_id) FROM requirement_types), 1));
+
 
 -- =====================================================
 -- ENROLLMENTS  (IDs 200–278)
@@ -379,21 +503,64 @@ ON CONFLICT DO NOTHING;
 -- CHANGE THESE BEFORE ANY DEPLOYMENT -- they are demo credentials, published
 -- in the repo, and are only appropriate for a local evaluation copy.
 -- =====================================================
-INSERT INTO users (user_id, name, email, role, password)
-OVERRIDING SYSTEM VALUE VALUES
-  (1, 'System Administrator', 'superadmin@slis.test', 'super_admin', 'pbkdf2_sha256$1200000$Awywpt86nzezzKE544ZK9C$mdHq/AfP1gXjProkIbOlAVYAHW+ADNH7u0sEO3tKvVg='),
-  (2, 'School Administrator', 'admin@slis.test',      'admin',       'pbkdf2_sha256$1200000$w1YJBCM8WVKq1n76785DWT$V/pdvTFxf7nlNv9Rl4GIlQd6WezfMmVu6YqBjOIrjxI='),
-  (3, 'Registrar',            'registrar@slis.test',  'registrar',   'pbkdf2_sha256$1200000$yzMNi7tGSufZ8G9TQoyOHG$39stXhKajw8YaJVmm5vhpVfW0+zc/OiWwpXfr2OWrCU='),
-  (4, 'Class Adviser',        'teacher@slis.test',    'teacher',     'pbkdf2_sha256$1200000$e2gDvoQBb0sQL8sUJ68pg7$oqQ8Y16lISVfyr5jCDTHPkZ68sM3lK3C8aHDH1HHxUY='),
-  (5, 'Accounting Officer',   'accounting@slis.test', 'accounting',  'pbkdf2_sha256$1200000$MnheUmYtho5VXP0hnkOdnW$/u0WyEZKJ8zNlFThAK/HWFQNqFMXgOYX2jE8swmoeGc='),
+-- Keyed on EMAIL, not on a hardcoded user_id.
+--
+-- This block used to specify user_id 1-6 explicitly with ON CONFLICT DO
+-- NOTHING. On any database that already had users -- which is every database
+-- anyone has actually been developing against -- ids 1-6 were already taken by
+-- unrelated accounts, so the PK conflicted and every documented demo account
+-- was silently skipped. The seed reported success and the credentials in the
+-- README simply did not work, with nothing to indicate why.
+--
+-- Matching on email instead means the accounts are created if absent and have
+-- their role and password reset to the documented values if present, which is
+-- what "load the demo data" is supposed to guarantee. The ids are left to the
+-- sequence, so the guardian link below resolves the account by email rather
+-- than assuming it landed on 6.
+-- Advance the sequence past whatever ids already exist BEFORE inserting.
+-- users.user_id is a plain serial (DEFAULT nextval), and the previous version
+-- of this block inserted explicit ids without touching the sequence — so on
+-- any database seeded that way the sequence still points at 1 and the first
+-- id-less INSERT here would collide with an existing row. The setval after the
+-- block stays too; this one just makes the block itself safe to run.
+SELECT setval('users_user_id_seq', GREATEST((SELECT MAX(user_id) FROM users), 1));
+
+INSERT INTO users (name, email, role, password)
+VALUES
+  ('System Administrator', 'superadmin@slis.test', 'super_admin', 'pbkdf2_sha256$1200000$Awywpt86nzezzKE544ZK9C$mdHq/AfP1gXjProkIbOlAVYAHW+ADNH7u0sEO3tKvVg='),
+  ('School Administrator', 'admin@slis.test',      'admin',       'pbkdf2_sha256$1200000$w1YJBCM8WVKq1n76785DWT$V/pdvTFxf7nlNv9Rl4GIlQd6WezfMmVu6YqBjOIrjxI='),
+  ('Registrar',            'registrar@slis.test',  'registrar',   'pbkdf2_sha256$1200000$yzMNi7tGSufZ8G9TQoyOHG$39stXhKajw8YaJVmm5vhpVfW0+zc/OiWwpXfr2OWrCU='),
+  ('Class Adviser',        'teacher@slis.test',    'teacher',     'pbkdf2_sha256$1200000$e2gDvoQBb0sQL8sUJ68pg7$oqQ8Y16lISVfyr5jCDTHPkZ68sM3lK3C8aHDH1HHxUY='),
+  ('Accounting Officer',   'accounting@slis.test', 'accounting',  'pbkdf2_sha256$1200000$MnheUmYtho5VXP0hnkOdnW$/u0WyEZKJ8zNlFThAK/HWFQNqFMXgOYX2jE8swmoeGc='),
   -- Guardian portal account. Without a role='guardian' user linked to a
   -- guardians row, /guardian is unreachable on a clean install -- there was
   -- no way to open the parent portal at all, which is why it had no test
   -- coverage. Linked to two children by the UPDATE further down.
-  (6, 'Maribel Santos Reyes', 'maribel.reyes.seed@gmail.com', 'guardian', 'pbkdf2_sha256$1200000$8PhJ7C04i3bYIkCkx9fhsV$eFuB016SoQZFpdFgJuH5t1eb4BIZ9Mz0+bDneX4UFoM=')
-ON CONFLICT DO NOTHING;
+  ('Maribel Santos Reyes', 'maribel.reyes.seed@gmail.com', 'guardian', 'pbkdf2_sha256$1200000$8PhJ7C04i3bYIkCkx9fhsV$eFuB016SoQZFpdFgJuH5t1eb4BIZ9Mz0+bDneX4UFoM=')
+ON CONFLICT (email) DO UPDATE
+  SET role     = EXCLUDED.role,
+      password = EXCLUDED.password,
+      name     = EXCLUDED.name;
 
 SELECT setval('users_user_id_seq', GREATEST((SELECT MAX(user_id) FROM users), 1));
+
+-- =====================================================
+-- GUARDIAN PORTAL LINK
+--
+-- Resolved by email rather than a hardcoded user_id, because the USERS block
+-- above no longer assigns ids explicitly. guardians.guardian_id is generated,
+-- so the guardian rows are matched on (student_id, full_name) too.
+--
+-- guardians.user_id is deliberately NOT unique -- one parent with two children
+-- owns two rows pointing at the same account (see
+-- student-service/students/models.py). Student 100 has one enrollment and
+-- student 110 has two (2024-2025 completed + 2025-2026 enrolled), so this also
+-- exercises GuardianHomePage's one-card-per-child grouping.
+-- =====================================================
+UPDATE guardians
+   SET user_id = (SELECT user_id FROM users WHERE email = 'maribel.reyes.seed@gmail.com')
+ WHERE (student_id = 100 AND full_name = 'Maribel Santos Reyes')
+    OR (student_id = 110 AND full_name = 'Maribel Santos Reyes');
 
 -- =====================================================
 -- GRADING TEMPLATES AND COMPONENTS
@@ -722,15 +889,30 @@ ON CONFLICT (enrollment_id, subject_id, grading_period) DO NOTHING;
 -- =====================================================
 -- SCORE ENTRIES
 -- Looks up component IDs by name from actual DB data
+--
+-- score_entries has NO unique constraint, so ON CONFLICT could not protect
+-- it and every row here duplicated on a re-run. That one is worse than the
+-- guardians/previous_schools duplication: computed grades are a weighted sum
+-- over these rows, so a second seeding silently changed every elementary and
+-- JHS grade in the demo — and the analytics and at-risk scoring built on top
+-- of them — with nothing on screen to suggest the data had moved.
 -- =====================================================
+DELETE FROM score_entries WHERE enrollment_id BETWEEN 200 AND 268;
+
 DO $$
 DECLARE
-  ww_elem  BIGINT;  pt_elem  BIGINT;
+  ww_elem  BIGINT;  pt_elem  BIGINT;  qa_elem  BIGINT;
   ww_jhs   BIGINT;  pt_jhs   BIGINT;  qa_jhs   BIGINT;
 BEGIN
   -- Template 2 = Standard Elementary, Template 3 = Standard JHS
   SELECT grading_component_id INTO ww_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Written Works'       LIMIT 1;
   SELECT grading_component_id INTO pt_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Performance Tasks'   LIMIT 1;
+  -- The Elementary template carries a Quarterly Assessment weight (20%) and
+  -- this block never looked the component up, so no elementary score row ever
+  -- filled it: every seeded elementary computed grade was a weighted average
+  -- over 80% of the defined weight, which reads as a plausible-but-wrong
+  -- grade rather than as missing data.
+  SELECT grading_component_id INTO qa_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Quarterly Assessment' LIMIT 1;
   SELECT grading_component_id INTO ww_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Written Works'       LIMIT 1;
   SELECT grading_component_id INTO pt_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Performance Tasks'   LIMIT 1;
   SELECT grading_component_id INTO qa_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Quarterly Assessment' LIMIT 1;
@@ -741,15 +923,19 @@ BEGIN
     (210, 3, ww_elem, '1st_quarter', 'Written Work 1',     37.00, 40.00, NOW()),
     (210, 3, ww_elem, '1st_quarter', 'Written Work 2',     36.00, 40.00, NOW()),
     (210, 3, pt_elem, '1st_quarter', 'Performance Task 1', 56.00, 60.00, NOW()),
+    (210, 3, qa_elem, '1st_quarter', 'Quarterly Assessment', 46.00, 50.00, NOW()),
     (210, 3, ww_elem, '2nd_quarter', 'Written Work 1',     35.00, 40.00, NOW()),
     (210, 3, ww_elem, '2nd_quarter', 'Written Work 2',     34.00, 40.00, NOW()),
     (210, 3, pt_elem, '2nd_quarter', 'Performance Task 1', 55.00, 60.00, NOW()),
+    (210, 3, qa_elem, '2nd_quarter', 'Quarterly Assessment', 45.00, 50.00, NOW()),
     (210, 3, ww_elem, '3rd_quarter', 'Written Work 1',     34.00, 40.00, NOW()),
     (210, 3, ww_elem, '3rd_quarter', 'Written Work 2',     33.00, 40.00, NOW()),
     (210, 3, pt_elem, '3rd_quarter', 'Performance Task 1', 54.00, 60.00, NOW()),
+    (210, 3, qa_elem, '3rd_quarter', 'Quarterly Assessment', 44.00, 50.00, NOW()),
     (210, 3, ww_elem, '4th_quarter', 'Written Work 1',     38.00, 40.00, NOW()),
     (210, 3, ww_elem, '4th_quarter', 'Written Work 2',     37.00, 40.00, NOW()),
-    (210, 3, pt_elem, '4th_quarter', 'Performance Task 1', 58.00, 60.00, NOW())
+    (210, 3, pt_elem, '4th_quarter', 'Performance Task 1', 58.00, 60.00, NOW()),
+    (210, 3, qa_elem, '4th_quarter', 'Quarterly Assessment', 47.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 212, Subject 3 (Math 4 — struggling student Patrick)
@@ -758,15 +944,19 @@ BEGIN
     (212, 3, ww_elem, '1st_quarter', 'Written Work 1',     24.00, 40.00, NOW()),
     (212, 3, ww_elem, '1st_quarter', 'Written Work 2',     23.00, 40.00, NOW()),
     (212, 3, pt_elem, '1st_quarter', 'Performance Task 1', 41.00, 60.00, NOW()),
+    (212, 3, qa_elem, '1st_quarter', 'Quarterly Assessment', 29.00, 50.00, NOW()),
     (212, 3, ww_elem, '2nd_quarter', 'Written Work 1',     26.00, 40.00, NOW()),
     (212, 3, ww_elem, '2nd_quarter', 'Written Work 2',     25.00, 40.00, NOW()),
     (212, 3, pt_elem, '2nd_quarter', 'Performance Task 1', 42.00, 60.00, NOW()),
+    (212, 3, qa_elem, '2nd_quarter', 'Quarterly Assessment', 31.00, 50.00, NOW()),
     (212, 3, ww_elem, '3rd_quarter', 'Written Work 1',     28.00, 40.00, NOW()),
     (212, 3, ww_elem, '3rd_quarter', 'Written Work 2',     27.00, 40.00, NOW()),
     (212, 3, pt_elem, '3rd_quarter', 'Performance Task 1', 44.00, 60.00, NOW()),
+    (212, 3, qa_elem, '3rd_quarter', 'Quarterly Assessment', 33.00, 50.00, NOW()),
     (212, 3, ww_elem, '4th_quarter', 'Written Work 1',     29.00, 40.00, NOW()),
     (212, 3, ww_elem, '4th_quarter', 'Written Work 2',     28.00, 40.00, NOW()),
-    (212, 3, pt_elem, '4th_quarter', 'Performance Task 1', 46.00, 60.00, NOW())
+    (212, 3, pt_elem, '4th_quarter', 'Performance Task 1', 46.00, 60.00, NOW()),
+    (212, 3, qa_elem, '4th_quarter', 'Quarterly Assessment', 35.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 222, Subject 6 (Math 6 — top student Jasmine)
@@ -775,15 +965,19 @@ BEGIN
     (222, 6, ww_elem, '1st_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '1st_quarter', 'Written Work 2',     39.00, 40.00, NOW()),
     (222, 6, pt_elem, '1st_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '1st_quarter', 'Quarterly Assessment', 49.00, 50.00, NOW()),
     (222, 6, ww_elem, '2nd_quarter', 'Written Work 1',     39.00, 40.00, NOW()),
     (222, 6, ww_elem, '2nd_quarter', 'Written Work 2',     38.00, 40.00, NOW()),
     (222, 6, pt_elem, '2nd_quarter', 'Performance Task 1', 58.00, 60.00, NOW()),
+    (222, 6, qa_elem, '2nd_quarter', 'Quarterly Assessment', 48.00, 50.00, NOW()),
     (222, 6, ww_elem, '3rd_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '3rd_quarter', 'Written Work 2',     39.00, 40.00, NOW()),
     (222, 6, pt_elem, '3rd_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '3rd_quarter', 'Quarterly Assessment', 49.00, 50.00, NOW()),
     (222, 6, ww_elem, '4th_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '4th_quarter', 'Written Work 2',     40.00, 40.00, NOW()),
-    (222, 6, pt_elem, '4th_quarter', 'Performance Task 1', 59.00, 60.00, NOW())
+    (222, 6, pt_elem, '4th_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '4th_quarter', 'Quarterly Assessment', 50.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 231, Subject 8 (Math 7 — JHS)
@@ -992,6 +1186,40 @@ OVERRIDING SYSTEM VALUE VALUES
   (914, 262, 900, '1st_semester', 'AO', NOW()),
   (915, 262, 901, '1st_semester', 'AO', NOW())
 ON CONFLICT (enrollment_id, category_id, grading_period) DO NOTHING;
+
+-- =====================================================
+-- SECTION ADVISORIES
+--
+-- Without at least one of these, the seeded teacher account (user_id 4,
+-- teacher@slis.test) cannot be demonstrated at all: teacher_student_ids()
+-- resolves a teacher to the students they may touch purely through this
+-- table, and it fails closed. A teacher with no advisory row therefore sees
+-- an empty My Sections, empty grades, empty attendance and empty class lists
+-- — indistinguishable from the feature being broken.
+--
+-- The three sections below are chosen because they actually contain seeded
+-- current-year learners AND seeded score entries / attendance, so every
+-- teacher-facing page has something real to render.
+--
+-- The teacher is resolved by email, not by a hardcoded user_id, for the same
+-- reason the USERS block above stopped assigning ids: on an existing database
+-- id 4 belongs to whoever happened to be created fourth. Clearing that
+-- teacher's own rows first keeps this re-runnable; advisories belonging to any
+-- other teacher are untouched.
+-- =====================================================
+DELETE FROM section_advisories
+ WHERE teacher_user_id = (SELECT user_id FROM users WHERE email = 'teacher@slis.test');
+
+INSERT INTO section_advisories (teacher_user_id, school_year, school_level, grade_level, section, strand, created_at)
+SELECT u.user_id, v.school_year, v.school_level, v.grade_level, v.section, v.strand, NOW()
+  FROM users u
+  CROSS JOIN (VALUES
+    ('2025-2026', 'elementary',        'Grade 4', 'A',       NULL::varchar),
+    ('2025-2026', 'elementary',        'Grade 6', 'A',       NULL),
+    ('2025-2026', 'junior_highschool', 'Grade 7', 'Diamond', NULL)
+  ) AS v(school_year, school_level, grade_level, section, strand)
+ WHERE u.email = 'teacher@slis.test'
+ON CONFLICT DO NOTHING;
 
 -- =====================================================
 -- SCHOOL SETTINGS

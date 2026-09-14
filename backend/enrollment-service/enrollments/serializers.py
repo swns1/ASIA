@@ -88,6 +88,12 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     progression_override_reason = serializers.CharField(
         write_only=True, required=False, allow_blank=True, default=""
     )
+    # The registrar's own "Transfer In" declaration, used to decide which
+    # documents this learner owes (requirements/rules.py). The durable record
+    # is still the EnrollmentTransfer row the client writes after this POST
+    # returns — which is exactly why the gate cannot read it and needs this:
+    # at validation time that row does not exist yet.
+    is_transfer_in = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = Enrollment
@@ -106,6 +112,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             "enrollment_status",
             "progression_override",
             "progression_override_reason",
+            "is_transfer_in",
         )
         read_only_fields = ("enrollment_id",)
 
@@ -118,8 +125,11 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         # ── Pull override flags before any other check ─────────────────────────
+        # Everything popped here is write-only: anything left in attrs reaches
+        # Enrollment(**attrs) and blows up on an unexpected keyword.
         progression_override = attrs.pop("progression_override", False)
         progression_override_reason = attrs.pop("progression_override_reason", "")
+        is_transfer_in = attrs.pop("is_transfer_in", False)
 
         # ── Semester / strand consistency ──────────────────────────────────────
         school_level = attrs.get("school_level", getattr(self.instance, "school_level", None))
@@ -306,27 +316,56 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         )
         if (direct_enrolled_creation or pending_to_enrolled_patch) and student:
             from requirements.models import RequirementType, StudentRequirementSubmission
+            from requirements.rules import derive_entry_status, missing_required
 
-            active_req_ids = set(
-                RequirementType.objects.filter(is_active=True)
-                .values_list("requirement_type_id", flat=True)
+            # Which documents this learner owes depends on where they are being
+            # placed and how they got here — not on the whole catalogue. See
+            # requirements/rules.py; before that, every active type was demanded
+            # of everyone, so a Grade 1 entrant was asked for a Form 137.
+            #
+            # grade_level cannot be read from the block above: that one defines
+            # it inside `if self.instance is None`, so it does not exist on the
+            # PATCH path. Same fallback shape as school_level near the top.
+            grade_level_val = attrs.get(
+                "grade_level", getattr(self.instance, "grade_level", None)
             )
+            school_level_val = attrs.get(
+                "school_level", getattr(self.instance, "school_level", None)
+            )
+
+            # EXCLUDING the row being validated. On a pending → enrolled
+            # activation the row already exists, so counting it would classify
+            # every activation as "continuing" and silently switch off the
+            # transferee rules on the exact path this gate exists for.
+            prior = Enrollment.objects.filter(student=student)
+            if self.instance is not None:
+                prior = prior.exclude(pk=self.instance.pk)
+
+            entry_status = derive_entry_status(
+                has_prior_enrollment=prior.exists(),
+                is_transfer_in=is_transfer_in,
+                grade_level=grade_level_val,
+            )
+
             submitted_ids = set(
                 StudentRequirementSubmission.objects
                 .filter(student_id=student.student_id, is_submitted=True)
                 .values_list("requirement_type_id", flat=True)
             )
-            missing_ids = active_req_ids - submitted_ids
-            if missing_ids:
-                missing_names = list(
-                    RequirementType.objects
-                    .filter(requirement_type_id__in=missing_ids)
-                    .values_list("requirement_name", flat=True)
-                )
+            missing = missing_required(
+                RequirementType.objects.filter(is_active=True),
+                submitted_ids,
+                school_level=school_level_val,
+                entry_status=entry_status,
+            )
+            if missing:
+                names = sorted(rt.requirement_name for rt in missing)
                 raise serializers.ValidationError({
                     "enrollment_status": (
-                        f"Cannot activate enrollment — missing required documents: "
-                        f"{', '.join(sorted(missing_names))}."
+                        f"Cannot activate enrollment — this learner is a "
+                        f"{entry_status} in {school_level_val or 'an unset school level'}, "
+                        f"and these required documents are missing: "
+                        f"{', '.join(names)}."
                     )
                 })
 

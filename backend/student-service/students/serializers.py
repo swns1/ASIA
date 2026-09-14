@@ -110,6 +110,17 @@ class GuardianSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guardian
         fields = "__all__"
+        # `user_id` is the ONLY key guardian-portal scoping uses: every service
+        # resolves a login account to the students it may see via
+        # guardians.user_id (guardian_student_ids() in enrollment-, billing-
+        # and student-service). Left inside "__all__" it was plainly writable,
+        # so anyone with write access here could point an arbitrary
+        # users.user_id at an arbitrary student and hand that account the
+        # child's grades, attendance, invoices and uploaded documents.
+        # Linking an account is a privileged operation and belongs to
+        # accounts/guardian_provisioning.py, which validates the target -- not
+        # to a plain PATCH of this column.
+        read_only_fields = ("user_id",)
 
     def get_student_name(self, obj):
         s = obj.student
@@ -201,6 +212,21 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentRequirementSubmission
         fields = "__all__"
+        # Mirrors enrollment-service's twin of this serializer
+        # (requirements/serializers.py). Both write the SAME table, but this
+        # copy had no read_only_fields at all -- so a client could POST
+        # {"student": N, "requirement_type": M, "is_submitted": true} with no
+        # file at all and satisfy the enrollment completeness gate, which
+        # tests is_submitted alone. These are set by create()/update() below,
+        # and only once a validated file has actually been stored.
+        read_only_fields = (
+            "student_requirement_submission_id",
+            "is_submitted",
+            "image_url",
+            "submitted_at",
+            "created_at",
+            "updated_at",
+        )
 
     def get_image_url(self, obj):
         return download_url(DOWNLOAD_PREFIX, obj.student_requirement_submission_id, bool(obj.image_url))

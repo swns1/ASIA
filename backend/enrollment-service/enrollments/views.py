@@ -1,6 +1,8 @@
+import logging
 from datetime import date
 
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -10,6 +12,7 @@ from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
 from accounts.permissions import (
+    GRADE_READ_ROLES,
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
     IsStaffOrOwnerGuardianReadOnly,
@@ -26,6 +29,33 @@ from .serializers import (
     StudentSummarySerializer,
 )
 from .filters import EnrollmentFilter
+
+logger = logging.getLogger(__name__)
+
+
+def _bulk_failure_reason(exc, *, context):
+    """A reason string safe to hand back in a bulk-operation report.
+
+    Validation errors are written for the user and say something actionable
+    ("this student already has an active enrollment this year"), so they are
+    passed through. Anything else is a bug or an infrastructure fault, and
+    str(exc) on those was leaking raw Postgres text — constraint names, column
+    names, SQL fragments — straight into the response. Log it with the request
+    ID instead and give the caller a sentence they can report.
+    """
+    if isinstance(exc, DRFValidationError):
+        detail = exc.detail
+        if isinstance(detail, dict):
+            parts = []
+            for messages in detail.values():
+                parts.extend(messages if isinstance(messages, list) else [messages])
+            return " ".join(str(p) for p in parts)
+        if isinstance(detail, list):
+            return " ".join(str(d) for d in detail)
+        return str(detail)
+
+    logger.exception("Bulk operation record failed (%s)", context)
+    return "Could not be processed due to an unexpected error. Please try again or report this."
 
 ACADEMIC_STAFF_ROLES = ("super_admin", "admin", "registrar")
 
@@ -1080,7 +1110,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             except Exception as exc:
                 failed_records.append({
                     "student_id": student_id,
-                    "reason": str(exc),
+                    "reason": _bulk_failure_reason(
+                        exc, context=f"bulk_create student_id={student_id}"
+                    ),
                 })
 
         return Response(
@@ -1300,7 +1332,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 failed_c.append({
                     "student_id":   student_obj.student_id,
                     "student_name": entry["student_name"],
-                    "reason":       str(exc),
+                    "reason":       _bulk_failure_reason(
+                        exc, context=f"promote_confirm student_id={student_obj.student_id}"
+                    ),
                 })
 
         return Response(
@@ -1322,7 +1356,19 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         from grades.models import Grade
         from grades.serializers import GradeSerializer
 
+        # This action does not call get_object(), so DRF never runs
+        # has_object_permission -- and IsStaffOrOwnerGuardianReadOnly's
+        # has_permission waves through every SAFE_METHOD for every
+        # authenticated role. The role allowlist therefore has to be explicit
+        # here, or `accounting` reads any student's grades through this route
+        # while GradeViewSet (IsAdvisoryTeacherOrStaff) denies the same role
+        # outright. Mirrors GRADE_READ_ROLES, plus guardians scoped below.
         role = getattr(request.user, "role", None)
+        if role not in GRADE_READ_ROLES and role != "guardian":
+            return Response(
+                {"detail": "You do not have access to this record."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if role in ("teacher", "guardian"):
             student_id = Enrollment.objects.filter(pk=pk).values_list("student_id", flat=True).first()
             allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
@@ -1354,8 +1400,15 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
         # Enrollment eligibility is a staff planning tool, not part of the
         # guardian portal — guardians have no business probing it.
+        # Guardians are denied outright; so is accounting. Eligibility hands
+        # back failed subject names with their grades, the full enrollment
+        # history and the missing-document list -- academic data a finance
+        # role has no business reading, and which GradeViewSet already denies
+        # it. This action doesn't call get_object(), so the viewset's
+        # permission class (which allows every authenticated role to read)
+        # never narrows it; the check has to be explicit here.
         role = getattr(request.user, "role", None)
-        if role == "guardian":
+        if role in ("guardian", "accounting"):
             return Response({"detail": "You do not have access to this record."}, status=403)
 
         student_id = request.query_params.get("student_id")
@@ -1377,11 +1430,27 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 return Response({"detail": "You do not have access to this record."}, status=403)
 
         # ── Fetch student's enrollment history ─────────────────────────────────
-        all_enrollments = list(
-            Enrollment.objects
-            .filter(student_id=student_id)
-            .order_by("-school_year", "-enrollment_id")
-        )
+        # `exclude_enrollment_id` is the row the caller is about to create or
+        # activate. It MUST be left out of the history, for the same reason
+        # EnrollmentSerializer.validate() excludes self.instance: on a
+        # pending -> enrolled activation the row already exists, so counting it
+        # classifies the learner as "continuing" and silently switches off the
+        # transferee document rules on the exact path the gate exists for.
+        # Without this the preview and the gate disagreed — the panel showed a
+        # Grade 7 walk-in as continuing and eligible, then the PATCH rejected
+        # them as a transferee owing Good Moral and a Form 137.
+        exclude_enrollment_id = request.query_params.get("exclude_enrollment_id")
+
+        history_qs = Enrollment.objects.filter(student_id=student_id)
+        if exclude_enrollment_id:
+            try:
+                history_qs = history_qs.exclude(pk=int(exclude_enrollment_id))
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "exclude_enrollment_id must be an integer."}, status=400
+                )
+
+        all_enrollments = list(history_qs.order_by("-school_year", "-enrollment_id"))
         last_completed = next(
             (e for e in all_enrollments if e.enrollment_status == "completed"), None
         )
@@ -1465,26 +1534,66 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             }
 
         # ── Required documents check ───────────────────────────────────────────
+        # Scoped to the placement being considered, not the whole catalogue.
+        # The caller may describe a hypothetical placement ("would a Grade 7
+        # transfer-in be eligible?"); with nothing supplied this reports on the
+        # next placement the progression rules above already worked out.
+        from requirements.rules import derive_entry_status, split_missing
+
+        q = request.query_params
+        school_level = q.get("school_level") or getattr(last_any, "school_level", None)
+        grade_level = q.get("grade_level") or next_allowed_grade \
+            or getattr(last_any, "grade_level", None)
+        is_transfer_in = str(q.get("is_transfer_in", "")).lower() in ("1", "true", "yes")
+
+        entry_status = derive_entry_status(
+            has_prior_enrollment=last_any is not None,
+            is_transfer_in=is_transfer_in,
+            grade_level=grade_level,
+        )
+
         active_req_types = list(RequirementType.objects.filter(is_active=True))
         submitted_ids = set(
             StudentRequirementSubmission.objects
             .filter(student_id=student_id, is_submitted=True)
             .values_list("requirement_type_id", flat=True)
         )
-        missing_docs = [
-            {
+        required_missing, optional_missing = split_missing(
+            active_req_types, submitted_ids,
+            school_level=school_level, entry_status=entry_status,
+        )
+
+        def _doc(rt):
+            return {
                 "requirement_type_id": rt.requirement_type_id,
                 "requirement_code": rt.requirement_code,
                 "requirement_name": rt.requirement_name,
             }
-            for rt in active_req_types
-            if rt.requirement_type_id not in submitted_ids
-        ]
+
+        # `missing_docs` keeps its name and shape — it is what every existing
+        # caller reads — but now holds only the documents that actually block.
+        missing_docs = [_doc(rt) for rt in required_missing]
+        optional_missing_docs = [_doc(rt) for rt in optional_missing]
+
+        # Applicability is decided per school level and entry status, and
+        # rules.applies_to() answers "no" — never "unknown" — when it cannot
+        # resolve one. For a student with no enrollment history and a caller
+        # that named no placement, that made EVERY document inapplicable and
+        # this endpoint reported a learner who had submitted nothing as
+        # document-complete and eligible. Say so explicitly instead: callers
+        # get an honest "not assessed" rather than a confident, wrong "none
+        # missing", and cannot read an empty list as a clean bill of health.
+        documents_assessed = bool(school_level)
 
         # ── Is eligible? ───────────────────────────────────────────────────────
-        # Eligible if: no grade blocks AND no missing docs (or new student)
+        # Eligible if: no grade blocks AND no missing docs (or new student).
+        # An unassessed document check is not a passing one.
         has_grade_blocks = len(blocking_reasons) > 0
-        is_eligible = not has_grade_blocks and len(missing_docs) == 0
+        is_eligible = (
+            not has_grade_blocks
+            and documents_assessed
+            and len(missing_docs) == 0
+        )
 
         return Response({
             "student_id": int(student_id),
@@ -1494,6 +1603,19 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "next_allowed_semester": next_allowed_semester,
             "blocking_reasons": blocking_reasons,
             "missing_docs": missing_docs,
+            # Still owed, but not blocking — a registrar wants to see that a
+            # transferee has yet to hand in a clearance even though it will not
+            # hold up the enrollment.
+            "optional_missing_docs": optional_missing_docs,
+            # What the document scoping above was computed against, so the
+            # client can explain the list rather than just print it.
+            "entry_status": entry_status,
+            "school_level_used": school_level,
+            "grade_level_used": grade_level,
+            # False means "we could not work out which documents apply", not
+            # "none are missing" — see the note above. Clients must not render
+            # an empty missing_docs as complete when this is False.
+            "documents_assessed": documents_assessed,
             "can_repeat": can_repeat,
             "admin_override_required": has_grade_blocks,
             "is_new_student": last_any is None,

@@ -91,8 +91,10 @@ export const getPaymentSummary = (params = {}) =>
 export const createPayment = (payload) =>
   billingClient.post("/payments/", payload).then((r) => r.data);
 
-export const updatePayment = (id, payload) =>
-  billingClient.patch(`/payments/${id}/`, payload).then((r) => r.data);
+// No updatePayment: payments are append-only server-side (see
+// StudentPaymentViewSet). This existed, was never called by any page, and
+// would now 405 — a correction is a reversing payment or a void-and-reissue,
+// not an edit.
 
 // ── Installments ──────────────────────────────────────────────────────────────
 export const getInstallments = (params = {}) =>

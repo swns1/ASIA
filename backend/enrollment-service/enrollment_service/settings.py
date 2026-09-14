@@ -100,6 +100,11 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Required by RequirementType's ArrayField columns (requirement_types
+    # .applies_to_levels / .applies_to_entry_statuses). Contributes no models
+    # and no migrations — Django's postgres.E005 system check simply refuses
+    # ArrayField unless the app is installed.
+    "django.contrib.postgres",
 
     # 3rd-party
     "rest_framework",
@@ -204,6 +209,14 @@ REST_FRAMEWORK = {
         "anon":    "30/minute",   # unauthenticated (should be rare)
         "user":    "300/minute",  # authenticated — shared across 9 sub-apps, raised from 120 to stop false 429s on normal staff usage
         "cluster": "20/minute",   # clustering is CPU-heavy but needs room for iteration
+        # Signed document downloads (requirements/views.py::file). These are
+        # fetched by <img>/<iframe> and so arrive without an Authorization
+        # header, which put them on the 30/min anon bucket — one student's
+        # document panel could exhaust it, and a school behind a single NAT
+        # address shared that budget building-wide. Access is controlled by
+        # the short-lived signed token, not by this limit; the limit only
+        # needs to stop a runaway loop.
+        "document_download": "240/minute",
     },
     # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "enrollment_service.pagination.StandardPagination",

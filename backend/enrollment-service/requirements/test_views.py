@@ -94,6 +94,9 @@ class TestSummaryAction(object):
             requirement_code="PSA",
             requirement_name="PSA Birth Certificate",
             description="",
+            is_required=True,
+            applies_to_levels=["elementary"],
+            applies_to_entry_statuses=["new", "transferee", "continuing"],
         )
         sub = SimpleNamespace(
             requirement_type_id=1,

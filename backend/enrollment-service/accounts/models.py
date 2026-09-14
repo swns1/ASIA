@@ -23,7 +23,9 @@ __all__ = ["ROLE_CHOICES", "UserManager", "User"]
 class User(models.Model):
     user_id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
+    # Matches the column: users.email is varchar(150), EmailField defaults to
+    # 254. See identity-service/accounts/models.py.
+    email = models.EmailField(max_length=150, unique=True)
     role = models.CharField(max_length=30, choices=ROLE_CHOICES)
     password = models.CharField(max_length=255)
     current_session_id = models.UUIDField(null=True, blank=True)

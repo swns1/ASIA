@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from calendar import monthrange
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from .models import (
@@ -328,10 +328,44 @@ def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "mon
 
     Returns the StudentInvoice instance.
     """
-    # Idempotency check
-    existing = StudentInvoice.objects.filter(enrollment_id=enrollment_id).exclude(status="void").first()
-    if existing:
-        return existing
+    # Serialise concurrent generation for THIS enrollment before the
+    # idempotency check below. The check is a read-then-write, and there is no
+    # invoice row to lock yet -- so two requests (a double-clicked "Generate
+    # Invoice", or a retried POST) both read "none exists" and both insert,
+    # leaving the student with two invoices and two installment schedules.
+    #
+    # A transaction-scoped advisory lock is the right shape here precisely
+    # because the thing being guarded does not exist yet; it is released
+    # automatically at COMMIT or ROLLBACK, so no cleanup path can leak it.
+    # The partial unique index on (enrollment_id) WHERE status <> 'void' is
+    # the durable backstop -- see scripts/2026-09-invoice-uniqueness.sql.
+    with transaction.atomic():
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                [_INVOICE_GEN_LOCK_NAMESPACE, int(enrollment_id)],
+            )
+
+        # Idempotency check
+        existing = (
+            StudentInvoice.objects.filter(enrollment_id=enrollment_id)
+            .exclude(status="void")
+            .first()
+        )
+        if existing:
+            return existing
+
+        return _build_invoice_for_enrollment(enrollment_id, payment_plan, effective_date)
+
+
+# Arbitrary but stable namespace for pg_advisory_xact_lock's (int4, int4) form,
+# so these locks cannot collide with an advisory lock taken anywhere else.
+_INVOICE_GEN_LOCK_NAMESPACE = 8021
+
+
+def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effective_date: date = None):
+    """The actual construction, called by generate_invoice_for_enrollment()
+    once it holds the per-enrollment lock and has confirmed none exists."""
 
     # 1) Fetch enrollment + fee schedule + scholarships
     enrollment = _fetch_enrollment(enrollment_id)

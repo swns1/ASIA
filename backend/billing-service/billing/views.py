@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -245,8 +245,17 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             if effective_date is None:
                 return Response({"detail": "effective_date must be a valid date (YYYY-MM-DD)."}, status=400)
 
+        # Parsed before the try below: int() raises ValueError too, so a
+        # non-numeric enrollment_id was caught by the same handler and echoed
+        # Python's own "invalid literal for int() with base 10: 'abc'" back to
+        # the user as if it were a billing error.
         try:
-            invoice = generate_invoice_for_enrollment(int(enrollment_id), payment_plan, effective_date=effective_date)
+            enrollment_id = int(enrollment_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "enrollment_id must be an integer."}, status=400)
+
+        try:
+            invoice = generate_invoice_for_enrollment(enrollment_id, payment_plan, effective_date=effective_date)
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
         ser = StudentInvoiceSerializer(invoice)
@@ -270,8 +279,15 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
                 {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
                 status=400,
             )
+        # Same reason as generate() above — int() on the URL pk raises
+        # ValueError, which the handler below would have echoed verbatim.
         try:
-            invoice = close_out_invoice_for_transfer(int(pk), effective_date)
+            invoice_id = int(pk)
+        except (TypeError, ValueError):
+            return Response({"detail": "Invalid invoice id."}, status=400)
+
+        try:
+            invoice = close_out_invoice_for_transfer(invoice_id, effective_date)
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
         ser = StudentInvoiceSerializer(invoice)
@@ -549,13 +565,36 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
 
 # ── Payments ─────────────────────────────────────────────────────────────────
 
-class StudentPaymentViewSet(viewsets.ModelViewSet):
+class StudentPaymentViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     /api/payments/                            GET, POST
     /api/payments/{id}/                       GET
 
     On POST: creates the payment row AND calls apply_payment() to distribute
     across installments and update invoice status.
+
+    Deliberately NOT a ModelViewSet: payments are append-only.
+
+    It used to be one, which exposed PUT/PATCH/DELETE that this docstring
+    never claimed and nothing in the UI ever called. Those routes were a
+    money-integrity hole rather than a feature: the overpayment guard and
+    apply_payment() both live in perform_create(), so editing a payment's
+    amount or deleting it changed the recorded total while leaving every
+    installment allocation and the parent invoice's status exactly as the
+    original amount had left them — an invoice could read "paid" on the
+    strength of a payment that had since been reduced or removed.
+    apply_payment() distributes an amount incrementally and cannot be run
+    backwards, so honouring an edit would mean recomputing the whole
+    allocation from scratch.
+
+    A correction is therefore a new, explicit record — a reversing payment, or
+    voiding the invoice and re-issuing — not an in-place edit. That also keeps
+    the audit trail truthful about what was collected and when.
 
     Supported query params (GET list):
       payment_method        — cash | gcash | bank_transfer | card | check | others

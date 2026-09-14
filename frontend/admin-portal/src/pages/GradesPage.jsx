@@ -990,9 +990,13 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
       {editing ? (
         <>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label" style={{ ...inp, flex:1, minWidth:0 }} />
-          <input type="number" value={score} onChange={(e) => setScore(e.target.value)} placeholder="Score" style={{ ...inp, width:70, textAlign:"right" }} />
+          {/* Bounded to what the server already enforces (score_entries has
+              CHECKs for score >= 0, max_score > 0 and score <= max_score).
+              These had no min or max at all, so a negative score or a typo'd
+              extra digit was accepted by the field and only refused on save. */}
+          <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="Score" style={{ ...inp, width:70, textAlign:"right" }} />
           <span style={{ fontSize:12, color:"#8a6a6a" }}>/</span>
-          <input type="number" value={max} onChange={(e) => setMax(e.target.value)} placeholder="Max" style={{ ...inp, width:70, textAlign:"right" }} />
+          <input type="number" min="0.01" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} placeholder="Max" style={{ ...inp, width:70, textAlign:"right" }} />
           <button onClick={handleSave} disabled={saving}
             style={{ background:"#e03131", color:"white", border:"none", borderRadius:7, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:4 }}>
             {saving ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize:12 }} />}

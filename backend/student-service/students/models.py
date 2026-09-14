@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -196,14 +197,53 @@ class PreviousSchool(models.Model):
         managed = False
 
 
+# Mirrors enrollment-service/requirements/models.py. The DB columns default to
+# the full lists and CHECK cardinality > 0, so `default=list` (empty) was a
+# guaranteed IntegrityError on any ORM-created row and, if one ever landed,
+# would silently stop the document being asked of anyone.
+SCHOOL_LEVELS = (
+    "nursery", "kindergarten", "elementary",
+    "junior_highschool", "senior_highschool",
+)
+ENTRY_STATUSES = ("new", "transferee", "continuing")
+
+
+def all_school_levels():
+    return list(SCHOOL_LEVELS)
+
+
+def all_entry_statuses():
+    return list(ENTRY_STATUSES)
+
+
 # Schema owner: enrollment-service (manages requirement_types table).
 # This is a read/write mirror — student-service uses it to record document
-# submissions with a proper Student FK. Do NOT add migrations here for these tables.
+# submissions with a proper Student FK.
+#
+# The DDL for these two tables must originate in enrollment-service and in
+# schema.sql, never here. A *state-only* migration is still correct and
+# expected: `managed = False` means Django emits no SQL for them, so the
+# migration only keeps this app's model state honest and stops the next
+# `makemigrations` run from inventing one. `students/test_requirement_mirror.py`
+# is what actually guards the two copies against drifting apart.
 class RequirementType(models.Model):
     requirement_type_id = models.BigAutoField(primary_key=True)
     requirement_code = models.CharField(max_length=50, unique=True)
     requirement_name = models.CharField(max_length=150)
     description = models.TextField(null=True, blank=True)
+    # See enrollment-service/requirements/models.py for why these three exist
+    # and why their defaults reproduce the pre-change behaviour.
+    is_required = models.BooleanField(default=True)
+    applies_to_levels = ArrayField(
+        models.CharField(max_length=20),
+        default=all_school_levels,
+        help_text="School levels this document is asked for.",
+    )
+    applies_to_entry_statuses = ArrayField(
+        models.CharField(max_length=20),
+        default=all_entry_statuses,
+        help_text="new / transferee / continuing.",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

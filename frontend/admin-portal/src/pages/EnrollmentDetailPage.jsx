@@ -3,13 +3,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   getEnrollment,
+  getEnrollmentEligibility,
   getGrades,
   getEnrollmentScholarships,
   updateEnrollment,
   transferOutEnrollment,
 } from "../api/enrollmentApi";
+import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
-import { getRequirementTypes, getStudentRequirementSubmissions } from "../api/enrollmentApi";
+
 import { updateStudentStatus } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
@@ -72,8 +74,12 @@ export default function EnrollmentDetailPage() {
   const [enrollment, setEnrollment] = useState(null);
   const [grades, setGrades] = useState([]);
   const [scholarships, setScholarships] = useState([]);
-  const [requirements, setRequirements] = useState(null);
-  const [reqTypes, setReqTypes] = useState([]);
+  // Taken from the eligibility endpoint rather than derived here, so the
+  // document list on this page and the gate that blocks activation agree on
+  // whether this learner is new, transferring in, or continuing. Guessing it
+  // client-side would mean showing "Required" next to a document the server
+  // would not actually block on.
+  const [entryStatus, setEntryStatus] = useState(null);
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -100,24 +106,27 @@ export default function EnrollmentDetailPage() {
     getEnrollment(id)
       .then((enr) => {
         setEnrollment(enr);
-        const sid = enr.student_id ?? enr.student;
         return Promise.all([
           getGrades({ enrollment: id, page_size: 200 }),
           getEnrollmentScholarships({ enrollment: id, page_size: 50 }),
-          getRequirementTypes({ is_active: true, page_size: 100 }),
-          sid
-            ? getStudentRequirementSubmissions({ student_id: sid, page_size: 200 }).catch(() => null)
-            : Promise.resolve(null),
           canViewBilling
             ? getInvoices({ enrollment_id: id, page_size: 5 }).catch(() => null)
             : Promise.resolve(null),
+          getEnrollmentEligibility(enr.student_id ?? enr.student, {
+            schoolLevel: enr.school_level,
+            gradeLevel: enr.grade_level,
+            // This enrollment is not part of its own history. Without the
+            // exclusion a Grade 7 walk-in with a pending row reads back as
+            // "continuing", and the panel labels the transferee documents
+            // the activation gate will actually demand as not applicable.
+            excludeEnrollmentId: id,
+          }).catch(() => null),
         ]);
       })
-      .then(([gradesData, scholData, rtypesData, reqData, invData]) => {
+      .then(([gradesData, scholData, invData, eligibility]) => {
+        setEntryStatus(eligibility?.entry_status ?? null);
         setGrades(Array.isArray(gradesData) ? gradesData : gradesData.results ?? []);
         setScholarships(Array.isArray(scholData) ? scholData : scholData.results ?? []);
-        setReqTypes(Array.isArray(rtypesData) ? rtypesData : rtypesData.results ?? []);
-        setRequirements(Array.isArray(reqData) ? reqData : reqData?.results ?? []);
         const invList = Array.isArray(invData) ? invData : invData?.results ?? [];
         setInvoice(invList[0] ?? null);
       })
@@ -220,13 +229,6 @@ export default function EnrollmentDetailPage() {
   const activePeriods = ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter","1st_semester","2nd_semester"]
     .filter((p) => Object.values(gradesBySubject).some((s) => s.periods[p]));
 
-  // Requirements summary — requirements is a list of StudentRequirementSubmission records
-  const submittedIds = new Set(
-    Array.isArray(requirements)
-      ? requirements.filter((r) => r.is_submitted).map((r) => r.requirement_type_id ?? r.requirement_type)
-      : []
-  );
-  const missingCount = reqTypes.filter((rt) => !submittedIds.has(rt.requirement_type_id)).length;
   const canMarkCompleted = enrollment.enrollment_status === "enrolled";
 
   // Compact enrollment info fields for the horizontal strip
@@ -359,33 +361,26 @@ export default function EnrollmentDetailPage() {
               )}
             </Card>
 
-            {/* Requirements */}
+            {/* Requirements — the shared panel, not a read-only list.
+                This is where the completeness gate actually blocks a
+                registrar, so it is where fixing it belongs; before this the
+                page could only show a count and offered no way anywhere. */}
             <Card title="Requirements" icon="ti-file-check">
-              {reqTypes.length === 0 ? (
-                <p style={{ margin: 0, fontSize: 12, color: C.muted }}>No types configured.</p>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 12, marginBottom: 8 }}>
-                    {missingCount === 0
-                      ? <span style={{ color: "#2e6b0d", fontWeight: 600 }}>✓ All submitted</span>
-                      : <span style={{ color: "#a32d2d" }}><strong>{missingCount}</strong> missing</span>
-                    }
-                    <span style={{ color: C.muted, marginLeft: 6 }}>· {reqTypes.length} total</span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                    {reqTypes.map((rt) => {
-                      const submitted = submittedIds.has(rt.requirement_type_id);
-                      return (
-                        <div key={rt.requirement_type_id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
-                          <i className={`ti ${submitted ? "ti-circle-check" : "ti-circle-x"}`}
-                            style={{ fontSize: 12, color: submitted ? "#2e6b0d" : "#a32d2d", flexShrink: 0 }} />
-                          <span style={{ color: C.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rt.requirement_name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <RequirementDocumentsPanel
+                studentId={enrollment.student_id ?? enrollment.student}
+                student={enrollment.student_detail}
+                variant="compact"
+                context={{ schoolLevel: enrollment.school_level, entryStatus }}
+                emptyMessage="No requirement types configured."
+              />
+              <button
+                type="button"
+                onClick={() => navigate(`/requirements?student=${enrollment.student_id ?? enrollment.student}`)}
+                style={{ marginTop: 12, background: "none", border: "none", padding: 0,
+                         cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: C.red }}
+              >
+                Open full document view →
+              </button>
             </Card>
 
             {/* Scholarships */}

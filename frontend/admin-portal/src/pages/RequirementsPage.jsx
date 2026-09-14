@@ -1,22 +1,12 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useCallback, useEffect, useRef, useState } from "react";
-import toast from "react-hot-toast";
-import ConfirmModal from "../components/ConfirmModal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import { StatCard } from "../components/ui/Card";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents } from "../api/studentApi";
-import {
-  fetchRequirementSummary,
-  removeRequirement,
-  replaceRequirement,
-  resolveMediaUrl,
-  uploadRequirement,
-} from "../api/requirementApi";
-import { scanDocument } from "../api/ocrApi";
-
+import { getStudent, getStudents } from "../api/studentApi";
+import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -42,24 +32,6 @@ function getAvatarPalette(name = "X") {
   return AVATAR_PALETTES[name.charCodeAt(0) % AVATAR_PALETTES.length];
 }
 
-// ── Requirement-type icon map ─────────────────────────────────────────────────
-const REQ_ICONS = {
-  birth_certificate:           "ti-certificate",
-  form_138:                    "ti-file-description",
-  certificate_good_moral:      "ti-rosette",
-  ncae_result:                 "ti-chart-bar",
-  esc_completers:              "ti-school",
-  certificate_non_sf9:         "ti-file-check",
-  recommendation_letter:       "ti-mail",
-  clearance_previous_school:   "ti-building",
-  psa_birth_certificate:       "ti-id",
-  health_record:               "ti-heart-rate-monitor",
-  alien_certificate:           "ti-world",
-  form_137_or_138:             "ti-files",
-  esc_transferee_qc:           "ti-arrows-transfer",
-};
-
-function reqIcon(code) { return REQ_ICONS[code] || "ti-file"; }
 
 // ── Filter constants ──────────────────────────────────────────────────────────
 const SCHOOL_LEVELS = [
@@ -80,313 +52,11 @@ const GRADE_LEVELS_BY_LEVEL = {
   senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
 };
 
-// Document download URLs are now signed API links (…/file/?token=…), not
-// plain media paths, so they no longer end in a file extension the way
-// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
-// derived server-side from the stored file's real extension) is the
-// reliable signal; the extension regex on `req.image_url` only remains as
-// a fallback for the brief window before both sides deploy together.
-function isImageUrl(req) {
-  if (!req) return false;
-  if (req.file_kind) return req.file_kind === "image";
-  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
-}
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
-
-function StatusBadge({ submitted }) {
-  return submitted ? (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: C.greenLight, color: C.green, fontSize: 11, fontWeight: 700, border: `1px solid ${C.greenBorder}` }}>
-      <i className="ti ti-circle-check" style={{ fontSize: 12 }} />Submitted
-    </span>
-  ) : (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#5c5752", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
-      <i className="ti ti-clock" style={{ fontSize: 12 }} />Pending
-    </span>
-  );
-}
-
-// ── Logout modal ──────────────────────────────────────────────────────────────
-
-// ── Remove confirm modal ──────────────────────────────────────────────────────
-function RemoveModal({ req, onConfirm, onCancel, removing }) {
-  return (
-    <ConfirmModal
-      icon="ti-trash"
-      title="Remove document?"
-      message={<>You're about to remove <strong style={{ color: C.text }}>{req?.requirement_name}</strong>. This cannot be undone.</>}
-      confirmLabel="Yes, remove"
-      loading={removing}
-      onConfirm={onConfirm}
-      onCancel={onCancel}
-    />
-  );
-}
-
-// ── Document check ────────────────────────────────────────────────────────────
-// Every requirement type is VERIFY now (see backend ocr/policy.py): the reader
-// confirms this is the paper the slot asked for, and that it names this
-// learner. It does not extract anything and it never blocks an upload — a
-// registrar holding a valid but unusual document has to be able to proceed, so
-// this reports and gets out of the way. `null` on either answer means "no
-// claim", which is not a failure and must not be drawn as one.
-function CheckStrip({ state, check, requirementName, studentName }) {
-  if (state === "idle") return null;
-  // "done" with nothing to show means the reader returned no verdict. That is
-  // not a pass — drawing it green would vouch for a document nobody checked.
-  const unchecked = state === "error" || (state === "done" && !check);
-
-  if (state === "scanning") {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.muted,
-                    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
-        <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
-        Checking this document…
-      </div>
-    );
-  }
-
-  if (unchecked) {
-    return (
-      <div style={{ fontSize: 12, color: C.muted, background: C.bg, border: `1px solid ${C.border}`,
-                    borderRadius: 10, padding: "10px 12px" }}>
-        <i className="ti ti-alert-circle" style={{ fontSize: 14, marginRight: 6 }} />
-        Couldn&apos;t check this document — you can still upload it.
-      </div>
-    );
-  }
-
-  const problems = [];
-  if (check?.is_expected_document === false) {
-    problems.push(`This does not look like a ${requirementName}.`);
-  }
-  if (check?.names_student === false) {
-    problems.push(`This document does not name ${studentName || "this student"}.`);
-  }
-  (check?.notes || []).forEach((n) => {
-    if (n.startsWith("No readable text")) problems.push(n);
-  });
-
-  const ok = problems.length === 0;
-  return (
-    <div style={{
-      fontSize: 12, borderRadius: 10, padding: "10px 12px",
-      color: ok ? C.green : C.redDark,
-      background: ok ? C.greenLight : C.redLight,
-      border: `1px solid ${ok ? C.greenBorder : C.redBorder}`,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
-        <i className={`ti ${ok ? "ti-circle-check" : "ti-alert-triangle"}`} style={{ fontSize: 14 }} />
-        {ok ? "Looks right" : "Worth a second look"}
-      </div>
-      {problems.map((msg) => (
-        <div key={msg} style={{ marginTop: 4, paddingLeft: 20 }}>{msg}</div>
-      ))}
-      {!ok && (
-        <div style={{ marginTop: 6, paddingLeft: 20, color: C.muted }}>
-          You can still upload it if you know it&apos;s correct.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Upload / Replace modal ────────────────────────────────────────────────────
-function UploadModal({ requirement, studentId, student, onClose, onSuccess }) {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [remarks, setRemarks] = useState(requirement?.remarks || "");
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [checkState, setCheckState] = useState("idle"); // idle | scanning | done | error
-  const [check, setCheck] = useState(null);
-  // A scan runs for tens of seconds (see ocrApi.js's timeout). Someone who
-  // picks the wrong file and corrects it would otherwise have the first
-  // scan land second and label the new file with the old file's verdict.
-  const scanSeq = useRef(0);
-  const fileInputRef = useRef(null);
-  const isReplace = !!requirement?.submission_id;
-
-  function acceptFile(f) {
-    if (!f) return;
-    setFile(f); setError("");
-    setCheck(null);
-
-    if (!f.type.startsWith("image/")) {
-      // A PDF has no page for the recogniser to read, so there is nothing to
-      // check — say nothing rather than showing a failed check. Still bump
-      // the sequence, so an image picked a moment ago cannot resolve and
-      // show its verdict against this PDF.
-      scanSeq.current += 1;
-      setPreview(null);
-      setCheckState("idle");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (ev) => setPreview(ev.target.result);
-    reader.readAsDataURL(f);
-
-    const seq = (scanSeq.current += 1);
-    setCheckState("scanning");
-    scanDocument(f, {
-      requirementCode: requirement?.requirement_code,
-      studentId,
-      firstName: student?.first_name,
-      lastName: student?.last_name,
-    })
-      .then((data) => {
-        if (seq !== scanSeq.current) return; // superseded by a newer file
-        if (!data?.success) { setCheckState("error"); return; }
-        setCheck(data.check || null);
-        setCheckState("done");
-      })
-      .catch(() => {
-        if (seq !== scanSeq.current) return;
-        setCheckState("error");
-      });
-  }
-
-  function handleFileChange(e) {
-    acceptFile(e.target.files?.[0]);
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    acceptFile(e.dataTransfer.files?.[0]);
-  }
-
-  async function handleSubmit() {
-    if (!file && !isReplace) { setError("Please select a file."); return; }
-    setUploading(true); setError("");
-    try {
-      if (isReplace) {
-        await replaceRequirement({ submissionId: requirement.submission_id, file, remarks });
-      } else {
-        await uploadRequirement({ studentId, requirementTypeId: requirement.requirement_type_id, file, remarks });
-      }
-      toast.success(isReplace ? "Document replaced." : "Document uploaded.");
-      onSuccess();
-    } catch (e) {
-      const msg = e.message || "Upload failed.";
-      setError(msg);
-      toast.error(msg);
-    } finally { setUploading(false); }
-  }
-
-  const currentImageUrl = isReplace && requirement.image_url ? resolveMediaUrl(requirement.image_url) : null;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 998, backdropFilter: "blur(4px)", padding: 16 }}>
-      <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden", animation: "slideUp 0.2s ease" }}>
-        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text}}>
-              {isReplace ? "Replace" : "Upload"} Document
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{requirement?.requirement_name}</div>
-          </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>
-            <i className="ti ti-x" style={{ fontSize: 14 }} />
-          </button>
-        </div>
-
-        <div style={{ padding: "20px 24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-          {currentImageUrl && !preview && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
-              <img src={currentImageUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${C.border}`, background: "#fafafa" }} />
-            </div>
-          )}
-
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ border: `2px dashed ${file ? C.redBorder : "#e0d0d0"}`, borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: file ? C.redLight : "#fafafa", transition: "all 0.15s" }}
-          >
-            <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={handleFileChange} />
-            {preview ? (
-              <img src={preview} alt="preview" style={{ maxHeight: 180, maxWidth: "100%", objectFit: "contain", borderRadius: 8 }} />
-            ) : file ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-file-description" style={{ fontSize: 32, color: C.red }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{file.name}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>Click to change file</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
-                  {isReplace ? "Drop new file or click to browse" : "Drop file here or click to browse"}
-                </div>
-                <div style={{ fontSize: 11, color: C.pale }}>Images (JPG, PNG, GIF) or PDF</div>
-              </div>
-            )}
-          </div>
-
-          <CheckStrip
-            state={checkState}
-            check={check}
-            requirementName={requirement?.requirement_name}
-            studentName={student ? `${student.first_name} ${student.last_name}` : ""}
-          />
-
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
-              Remarks <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span>
-            </label>
-            <textarea
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={2}
-              placeholder="Add any notes about this document…"
-              style={{ width: "100%", border: `1.5px solid #f0ceca`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", resize: "vertical", outline: "none", color: C.text, background: "#fffbfb", boxSizing: "border-box" }}
-            />
-          </div>
-
-          {error && (
-            <div style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-            </div>
-          )}
-        </div>
-
-        <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ ...s.secondaryBtn, flex: 1 }}>Cancel</button>
-          <button
-            onClick={handleSubmit}
-            disabled={uploading || (!file && !isReplace)}
-            style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: uploading ? "#f0dada" : `linear-gradient(135deg,${C.red},${C.redDark})`, color: uploading ? "#8a6a6a" : "white", fontSize: 13, fontWeight: 700, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            {uploading
-              ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Uploading…</>
-              : <><i className="ti ti-upload" style={{ fontSize: 14 }} />{isReplace ? "Replace Document" : "Upload Document"}</>
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Lightbox ──────────────────────────────────────────────────────────────────
-function ViewModal({ imageUrl, name, onClose }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(10,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 24 }} onClick={onClose}>
-      <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} style={{ position: "absolute", top: -14, right: -14, width: 36, height: 36, borderRadius: "50%", background: "white", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", zIndex: 1 }}>
-          <i className="ti ti-x" style={{ fontSize: 16, color: C.text }} />
-        </button>
-        <img src={imageUrl} alt={name} style={{ maxWidth: "86vw", maxHeight: "86vh", objectFit: "contain", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
-        <div style={{ position: "absolute", bottom: -32, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{name}</div>
-      </div>
-    </div>
-  );
-}
 
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -422,16 +92,36 @@ export default function RequirementsPage() {
   const [recentPageMeta,        setRecentPageMeta]        = useState({ count: 0, next: null, previous: null });
   const RECENT_PAGE_SIZE = 10;
 
-  // Requirements state
-  const [requirements, setRequirements] = useState([]);
-  const [reqLoading,   setReqLoading]   = useState(false);
-  const [reqError,     setReqError]     = useState("");
+  // Document counts, reported up by RequirementDocumentsPanel. The panel owns
+  // the fetching now, so this page no longer loads the same summary a second
+  // time purely to fill in the stat cards.
+  const [reqCounts,  setReqCounts]  = useState({ total: 0, submitted: 0, requiredMissing: 0 });
+  const [reqLoading, setReqLoading] = useState(false);
+  const [reqRefresh, setReqRefresh] = useState(0);
 
-  // Modal state
-  const [uploadModal, setUploadModal] = useState(null);
-  const [viewModal,   setViewModal]   = useState(null);
-  const [removeModal, setRemoveModal] = useState(null);
-  const [removing,    setRemoving]    = useState(false);
+  const handleReqChange = useCallback((counts) => {
+    setReqCounts(counts);
+    setReqLoading(false);
+  }, []);
+
+  // Deep link: /requirements?student=123.
+  //
+  // This page used to take no parameters at all, so the only way in was the
+  // sidebar followed by re-searching for a student by name. That is the whole
+  // reason a registrar blocked by "missing required documents" on an
+  // enrollment had nowhere to go — the enrollment pages now link straight
+  // here for the learner already on screen.
+  const [searchParams] = useSearchParams();
+  const deepLinkId = searchParams.get("student");
+  useEffect(() => {
+    if (!deepLinkId) return;
+    let cancelled = false;
+    getStudent(deepLinkId)
+      .then((student) => { if (!cancelled && student) selectStudent(student); })
+      .catch(() => { /* a bad id just leaves the picker empty */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkId]);
 
   // Load recent students — re-fetches when filters or page change
   const fetchRecentStudents = useCallback((page = 1) => {
@@ -483,62 +173,24 @@ export default function RequirementsPage() {
   }, [searchInput]);
 
   // Select a student → load requirements
-  async function selectStudent(student) {
+  function selectStudent(student) {
     suppressSearch.current = true;
     setSelectedStudent(student);
     setShowDropdown(false);
     setSearchResults([]);
     setSearchInput(`${student.first_name} ${student.last_name}`);
     setReqLoading(true);
-    setReqError("");
-    setRequirements([]);
-    try {
-      const data = await fetchRequirementSummary(student.student_id);
-      setRequirements(data);
-    } catch (e) {
-      setReqError(e.message || "Failed to load requirements.");
-    } finally {
-      setReqLoading(false);
-    }
+    setReqCounts({ total: 0, submitted: 0, requiredMissing: 0 });
   }
 
-  const reloadRequirements = useCallback(async () => {
+  const reloadRequirements = useCallback(() => {
     if (!selectedStudent) return;
     setReqLoading(true);
-    try {
-      const data = await fetchRequirementSummary(selectedStudent.student_id);
-      setRequirements(data);
-    } catch (e) {
-      setReqError(e.message);
-    } finally {
-      setReqLoading(false);
-    }
+    setReqRefresh((v) => v + 1);
   }, [selectedStudent]);
 
-  // Remove — opens modal instead of window.confirm
-  function handleRemove(req) {
-    setRemoveModal(req);
-  }
-
-  async function confirmRemove() {
-    if (!removeModal) return;
-    setRemoving(true);
-    try {
-      await removeRequirement(removeModal.submission_id);
-      toast.success("Document removed.");
-      reloadRequirements();
-    } catch (e) {
-      const msg = e.message || "Failed to remove document.";
-      setReqError(msg);
-      toast.error(msg);
-    } finally {
-      setRemoving(false);
-      setRemoveModal(null);
-    }
-  }
-
-  const submitted = requirements.filter((r) => r.is_submitted).length;
-  const pending   = requirements.length - submitted;
+  const submitted = reqCounts.submitted;
+  const pending   = Math.max(reqCounts.total - reqCounts.submitted, 0);
 
   return (
     <>
@@ -580,14 +232,14 @@ export default function RequirementsPage() {
                       value={searchInput}
                       onChange={(e) => {
                         setSearchInput(e.target.value);
-                        if (!e.target.value) { setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }
+                        if (!e.target.value) { setSelectedStudent(null); setShowDropdown(false); }
                       }}
                       placeholder="Search student name, LRN, or student number…"
                       style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", color: C.text }}
                     />
                     {searchInput && (
                       <button
-                        onClick={() => { setSearchInput(""); setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }}
+                        onClick={() => { setSearchInput(""); setSelectedStudent(null); setShowDropdown(false); }}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
                       >
                         <i className="ti ti-x" style={{ fontSize: 13 }} />
@@ -760,242 +412,28 @@ export default function RequirementsPage() {
                     </button>
                   </div>
                 </div>
-                <StatCard label="Total Requirements" value={requirements.length} icon="ti-list" iconTone="brand" loading={reqLoading} />
+                <StatCard label="Total Requirements" value={reqCounts.total} icon="ti-list" iconTone="brand" loading={reqLoading} />
                 <StatCard label="Submitted" value={submitted} icon="ti-circle-check" iconTone="success" loading={reqLoading} />
                 <StatCard label="Pending" value={pending} icon="ti-clock" iconTone="warning" loading={reqLoading} />
               </div>
               );
             })()}
 
-            {/* ── Document completeness bar ── */}
-            {selectedStudent && !reqLoading && requirements.length > 0 && (
-              <div style={{
-                background: submitted === requirements.length ? "#f0fdf4" : "#fef9ec",
-                border: `1px solid ${submitted === requirements.length ? "#bbf7d0" : "#fde68a"}`,
-                borderRadius: 12, padding: "14px 20px", display: "flex", alignItems: "center", gap: 16,
-              }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: submitted === requirements.length ? "#15803d" : "#92400e" }}>
-                      {submitted === requirements.length
-                        ? "All documents submitted — student is ready to be activated to Enrolled."
-                        : `${requirements.length - submitted} of ${requirements.length} document(s) still missing.`}
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: submitted === requirements.length ? "#16a34a" : "#d97706" }}>
-                      {submitted} / {requirements.length}
-                    </span>
-                  </div>
-                  <div style={{ height: 8, background: "#e5e7eb", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${requirements.length > 0 ? Math.round((submitted / requirements.length) * 100) : 0}%`,
-                      background: submitted === requirements.length
-                        ? "linear-gradient(to right,#16a34a,#22c55e)"
-                        : "linear-gradient(to right,#d97706,#f59e0b)",
-                      borderRadius: 99, transition: "width .4s ease",
-                    }} />
-                  </div>
-                </div>
-                {submitted < requirements.length && (
-                  <div style={{ fontSize: 11, color: "#92400e", textAlign: "center", flexShrink: 0, maxWidth: 160, lineHeight: 1.5 }}>
-                    <i className="ti ti-info-circle" style={{ fontSize: 13, display: "block", marginBottom: 2 }} />
-                    Enrollment can be created as <strong>Pending</strong>. All docs required to activate.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Requirements grid ── */}
+            {/* The document checklist itself lives in a shared panel so the
+                enrollment pages can embed the same thing — that is where the
+                completeness gate blocks a registrar, and where fixing it
+                belongs. This page keeps the search, the level/grade filters
+                and the recent-students table; only the per-student document
+                block moved. */}
             {selectedStudent && (
-              <section style={{ ...s.panel, overflow: "hidden" }}>
-                <div style={s.panelHeader}>
-                  <div>
-                    <div style={s.panelTitle}>Requirement Documents</div>
-                    <div style={{ fontSize: 11.5, color: C.pale, marginTop: 2 }}>
-                      {submitted} of {requirements.length} submitted
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {requirements.length > 0 && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ height: 8, width: 120, borderRadius: 99, background: "#f0e4e4", overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${requirements.length ? (submitted / requirements.length) * 100 : 0}%`, background: `linear-gradient(90deg,${C.green},#43a047)`, borderRadius: 99, transition: "width 0.4s" }} />
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>
-                          {requirements.length ? Math.round((submitted / requirements.length) * 100) : 0}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  {reqError && (
-                    <div style={{ ...s.errorBanner, margin: "16px 20px 0" }}>
-                      <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{reqError}
-                      <button onClick={() => setReqError("")} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b91c1c" }}>
-                        <i className="ti ti-x" style={{ fontSize: 13 }} />
-                      </button>
-                    </div>
-                  )}
-
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ background: "#fdfafa" }}>
-                        {[
-                          { label: "Requirement",    w: "32%" },
-                          { label: "Status",         w: "14%" },
-                          { label: "Date Submitted", w: "18%" },
-                          { label: "Remarks",        w: "26%" },
-                          { label: "",               w: "10%" },
-                        ].map(({ label, w }) => (
-                          <th key={label} style={{
-                            textAlign: "left", fontSize: 10.5, fontWeight: 600,
-                            color: "#8a6a6a", padding: "13px 18px",
-                            borderBottom: `1px solid ${C.border}`,
-                            textTransform: "uppercase", letterSpacing: "0.07em",
-                            width: w,
-                            background: "#fdfafa",
-                          }}>
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reqLoading
-                        ? Array.from({ length: 6 }).map((_, i) => (
-                            <tr key={i}>
-                              <td style={{ padding: "14px 18px", borderBottom: `1px solid #f9f0f0` }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                  <Sk w={32} h={32} r={8} />
-                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                    <Sk w={160} h={13} /><Sk w={100} h={10} />
-                                  </div>
-                                </div>
-                              </td>
-                              {[70, 100, 140, 80].map((w, j) => (
-                                <td key={j} style={{ padding: "14px 18px", borderBottom: `1px solid #f9f0f0` }}>
-                                  <Sk w={w} h={13} />
-                                </td>
-                              ))}
-                            </tr>
-                          ))
-                        : requirements.length === 0
-                          ? (
-                            <tr>
-                              <td colSpan={5} style={{ textAlign: "center", padding: "56px 16px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                                  <div style={{ width: 52, height: 52, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
-                                    <i className="ti ti-file-search" style={{ fontSize: 22, color: C.red }} />
-                                  </div>
-                                  <div style={{ fontSize: 14, color: "#7a5050", fontWeight: 600 }}>No requirement types configured</div>
-                                  <div style={{ fontSize: 12, color: C.pale }}>Requirements are set up per school level and grade</div>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                          : requirements.map((req) => {
-                              const imageUrl = resolveMediaUrl(req.image_url);
-                              const hasImage = req.is_submitted && imageUrl && isImageUrl(req);
-                              const icon = reqIcon(req.requirement_code);
-                              return (
-                                <tr key={req.requirement_type_id} className="student-row">
-                                  {/* Requirement name + icon */}
-                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                      <div style={{
-                                        width: 34, height: 34, borderRadius: 9,
-                                        background: req.is_submitted ? C.greenLight : C.redLight,
-                                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                                      }}>
-                                        <i className={`ti ${req.is_submitted ? "ti-file-check" : icon}`} style={{ fontSize: 15, color: req.is_submitted ? C.green : C.red }} />
-                                      </div>
-                                      <div>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3 }}>
-                                          {req.requirement_name}
-                                        </div>
-                                        {req.description && (
-                                          <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>{req.description}</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </td>
-
-                                  {/* Status */}
-                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
-                                    <StatusBadge submitted={req.is_submitted} />
-                                  </td>
-
-                                  {/* Date submitted */}
-                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
-                                    {req.submitted_at
-                                      ? (
-                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                          <i className="ti ti-calendar" style={{ fontSize: 12, color: "#8a6a6a" }} />
-                                          <span style={{ fontSize: 12, color: "#5a4a4a" }}>
-                                            {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
-                                          </span>
-                                        </div>
-                                      )
-                                      : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                                  </td>
-
-                                  {/* Remarks */}
-                                  <td style={{ padding: "13px 18px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}>
-                                    {req.remarks
-                                      ? <span style={{ fontSize: 12, color: "#7a5050", fontStyle: "italic" }}>"{req.remarks}"</span>
-                                      : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                                  </td>
-
-                                  {/* Actions */}
-                                  <td
-                                    style={{ padding: "13px 14px", borderBottom: `1px solid #f9f0f0`, verticalAlign: "middle" }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                                      {req.is_submitted ? (
-                                        <>
-                                          {hasImage && (
-                                            <button
-                                              className="row-action" title="View"
-                                              onClick={() => setViewModal({ imageUrl, name: req.requirement_name })}
-                                            >
-                                              <i className="ti ti-eye" style={{ fontSize: 14 }} />
-                                            </button>
-                                          )}
-                                          <button
-                                            className="row-action" title="Replace"
-                                            onClick={() => setUploadModal(req)}
-                                          >
-                                            <i className="ti ti-replace" style={{ fontSize: 14 }} />
-                                          </button>
-                                          <button
-                                            className="row-action danger" title="Remove"
-                                            style={{ color: "#8a6a6a" }}
-                                            onClick={() => handleRemove(req)}
-                                          >
-                                            <i className="ti ti-trash" style={{ fontSize: 14 }} />
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <button
-                                          className="row-action" title="Upload"
-                                          onClick={() => setUploadModal(req)}
-                                          style={{ color: C.red }}
-                                        >
-                                          <i className="ti ti-upload" style={{ fontSize: 14 }} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                      }
-                    </tbody>
-                  </table>
-                </div>
+              <section style={{ ...s.panel, padding: 20 }}>
+                <RequirementDocumentsPanel
+                  studentId={selectedStudent.student_id}
+                  student={selectedStudent}
+                  variant="table"
+                  refreshKey={reqRefresh}
+                  onChange={handleReqChange}
+                />
               </section>
             )}
 
@@ -1194,29 +632,6 @@ export default function RequirementsPage() {
               </>
             )}
           </div>
-      {/* ── Modals ── */}
-      {uploadModal && (
-        <UploadModal
-          requirement={uploadModal}
-          studentId={selectedStudent?.student_id}
-          student={selectedStudent}
-          onClose={() => setUploadModal(null)}
-          onSuccess={() => { setUploadModal(null); reloadRequirements(); }}
-        />
-      )}
-
-      {viewModal && (
-        <ViewModal imageUrl={viewModal.imageUrl} name={viewModal.name} onClose={() => setViewModal(null)} />
-      )}
-
-      {removeModal && (
-        <RemoveModal
-          req={removeModal}
-          onConfirm={confirmRemove}
-          onCancel={() => setRemoveModal(null)}
-          removing={removing}
-        />
-      )}
     </>
   );
 }

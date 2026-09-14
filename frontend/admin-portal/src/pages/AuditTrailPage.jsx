@@ -274,7 +274,8 @@ export default function AuditTrailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [logs, setLogs] = useState([]);
-  const [source, setSource] = useState("");
+  // No `source` state: it only ever fed the unreachable "sample records"
+  // banner (see the note where that banner used to render).
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -328,7 +329,6 @@ export default function AuditTrailPage() {
       });
       setLogs((data.results || []).map(normalizeLog));
       setTotalCount(data.count ?? 0);
-      setSource(data.source);
     } catch (e) {
       setError(e.message || "Failed to load log records.");
     } finally {
@@ -411,12 +411,14 @@ export default function AuditTrailPage() {
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* Banners */}
+        {/* The "Showing local sample records until the audit API endpoint is
+            connected" banner used to sit here. It was unreachable:
+            auditTrailApi hardcodes source: "api" on success and throws on
+            failure, so `source` can never be "sample", and the local sample
+            dataset it referred to no longer exists. Unreachable UI that
+            promises mock data is worse than none — it suggests to anyone
+            reading the file that this page might not be live. */}
         <AnimatePresence>
-          {source === "sample" && (
-            <Alert key="info" variant="info" icon="ti-info-circle">
-              Showing local sample records until the audit API endpoint is connected.
-            </Alert>
-          )}
           {error && (
             <Alert key="error" variant="error" icon="ti-alert-circle">{error}</Alert>
           )}

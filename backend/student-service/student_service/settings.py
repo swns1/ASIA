@@ -75,6 +75,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Required by the RequirementType mirror's ArrayField columns. Contributes
+    # no models and no migrations — Django's postgres.E005 system check simply
+    # refuses ArrayField unless the app is installed.
+    'django.contrib.postgres',
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
@@ -95,6 +99,13 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    # This service was the only one of the four without CsrfViewMiddleware.
+    # The DRF endpoints authenticate with a Bearer token rather than the
+    # session cookie, so nothing here was exploitable — but /admin/ is mounted
+    # and session-authenticated, and an unexplained asymmetry between four
+    # otherwise-identical stacks is exactly the kind of thing that gets
+    # copied forward into whichever service is added next.
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -169,6 +180,12 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "120/minute",
         "ocr":  "10/minute",
+        # Signed document downloads (students/views.py::file). Loaded by
+        # <img>/<iframe> with no Authorization header, so they landed on the
+        # 30/min anon bucket and a single document panel could exhaust it for
+        # everyone sharing the building's public IP. The signed token is the
+        # access control; this bound only exists to stop a runaway loop.
+        "document_download": "240/minute",
         # Public applicant-facing endpoints (intake/throttles.py) — each is
         # keyed per-invite, not per-IP, so these rates bound one applicant's
         # own traffic rather than the whole building's. A real form takes

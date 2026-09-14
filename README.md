@@ -34,16 +34,23 @@ psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
 
 #### Demo accounts
 
-`seed_data.sql` creates five accounts, one per role, all with the password
+`seed_data.sql` creates six accounts, one per role, all with the password
 **`SlisDemo2026!`**:
 
-| Email | Role |
-|---|---|
-| `superadmin@slis.test` | super_admin |
-| `admin@slis.test` | admin |
-| `registrar@slis.test` | registrar |
-| `teacher@slis.test` | teacher |
-| `accounting@slis.test` | accounting |
+| Email | Role | Notes |
+|---|---|---|
+| `superadmin@slis.test` | super_admin | |
+| `admin@slis.test` | admin | |
+| `registrar@slis.test` | registrar | |
+| `teacher@slis.test` | teacher | Adviser of Grade 4-A, Grade 6-A and Grade 7-Diamond (SY 2025-2026). A teacher with no `section_advisories` row sees empty class lists, grades and attendance — the scoping fails closed — so the seed creates those advisories too. |
+| `accounting@slis.test` | accounting | |
+| `maribel.reyes.seed@gmail.com` | guardian | Parent portal (`/guardian`). Linked to two children, one of whom has two school years, so the one-card-per-child grouping is visible. |
+
+These accounts are matched **by email**, not by a fixed `user_id`: the seed
+creates them if absent and resets the role and password if present. An earlier
+version pinned them to ids 1-6, which meant that on any database that already
+had users the ids collided, `ON CONFLICT DO NOTHING` skipped every row, and
+these credentials silently did not exist.
 
 > These are evaluation credentials committed to a public repo. Change or delete
 > them before the system is deployed anywhere real.

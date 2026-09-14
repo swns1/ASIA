@@ -304,11 +304,16 @@ export default function Sidebar({
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
                 aria-hidden="true"
               >
-                {(currentUser?.name || "SA").slice(0, 2).toUpperCase()}
+                {(currentUser?.name || "?").slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-neutral-900">
-                  {currentUser?.name || "Super Admin"}
+                  {/* Falls back to a neutral placeholder, not "Super Admin".
+                      A missing name is a loading or data problem, and
+                      rendering the highest-privilege label for it told the
+                      person on screen they were signed in as something they
+                      are not — the role line below already says the truth. */}
+                  {currentUser?.name || "Signed in"}
                 </div>
                 <div className="truncate text-xs text-neutral-500">
                   {portalLabelFor(currentUser?.role)}

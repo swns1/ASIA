@@ -5,6 +5,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework import serializers
 from django.conf import settings
 from django.db import transaction
@@ -329,6 +330,14 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         url_path="file",
         authentication_classes=[],
         permission_classes=[AllowAny],
+        # Anonymous by design (see above), which put these on the 30/min
+        # AnonRateThrottle bucket — a single student's document panel could
+        # exhaust it, and a school behind one NAT address shared that budget
+        # building-wide, so thumbnails failed as 429s that looked like broken
+        # images. The signed token is the access control; this only needs to
+        # stop a runaway loop. Mirrors enrollment-service's twin action.
+        throttle_classes=[ScopedRateThrottle],
+        throttle_scope="document_download",
     )
     def file(self, request, pk=None):
         try:
@@ -347,4 +356,15 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         if not os.path.isfile(file_path):
             raise Http404
 
-        return FileResponse(open(file_path, "rb"), as_attachment=True, filename=os.path.basename(file_path))
+        # Inline rather than as_attachment, matching enrollment-service's twin:
+        # the SPA renders these in <img>/<iframe>, and an attachment
+        # disposition makes the browser download a PDF instead of showing it.
+        # Uploads are magic-byte restricted to jpg/png/pdf and served from the
+        # API origin, so inline display cannot reach the SPA's session storage.
+        response = FileResponse(
+            open(file_path, "rb"),
+            as_attachment=False,
+            filename=os.path.basename(file_path),
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        return response

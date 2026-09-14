@@ -1,8 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
@@ -34,7 +35,7 @@ const getScholarshipTypes         = ()       => _getScholarshipTypes({ is_active
 const createEnrollmentScholarship = (p)      => _createEnrollmentScholarship(p);
 const sendEnrollmentEmail         = (p)      => _sendEnrollmentEmail(p);
 const getStudentEnrollments       = (sid)    => _getEnrollments({ student: sid, page_size: 100 });
-const getStudentEligibility       = (sid)    => _getEligibility(sid);
+const getStudentEligibility       = (sid, placement) => _getEligibility(sid, placement);
 const transferInEnrollment        = (id, p)  => _transferInEnrollment(id, p);
 const createPreviousSchool        = (p)      => _createPreviousSchool(p);
 
@@ -179,7 +180,7 @@ function SectionCard({ title, icon, badge, children, motionProps = {} }) {
 }
 
 // ─── EligibilityPanel ────────────────────────────────────────────────────────
-function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin }) {
+function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin, student, onDocumentsChanged }) {
   if (loading) {
     return (
       <div style={{ background: "#fff8f6", border: `1px solid ${C.redMid}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 13 }}>
@@ -267,6 +268,28 @@ function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, 
           <div style={{ fontSize: 11, color: "#78350f", marginTop: 8, fontStyle: "italic" }}>
             Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
           </div>
+          {/* Fix it here rather than sending the registrar off to find another
+              page. Submissions belong to the student, not the enrollment, so
+              uploading before this enrollment exists is perfectly valid. */}
+          {student && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#92400e" }}>
+                Upload documents now
+              </summary>
+              <div style={{ marginTop: 10, background: "white", borderRadius: 10, padding: "12px 14px" }}>
+                <RequirementDocumentsPanel
+                  studentId={student.student_id}
+                  student={student}
+                  variant="compact"
+                  context={{
+                    schoolLevel: eligibility.school_level_used,
+                    entryStatus: eligibility.entry_status,
+                  }}
+                  onChange={onDocumentsChanged}
+                />
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -454,11 +477,23 @@ export default function EnrollmentFormPage() {
   const [error,   setError]   = useState("");
   const [invoicePrompt, setInvoicePrompt] = useState(null); // { enrollmentId, studentName }
   const [student, setStudent] = useState(null);
+
+  // Re-runs the eligibility report. Called after a document is uploaded from
+  // the panel below, so the missing list and the submit guard both reflect
+  // what the registrar just handed over rather than going stale.
+  //
+  // This only nudges the effect below rather than fetching itself: the fetch
+  // has to react to the placement fields too, and having two places issue it
+  // is how the report went stale in the first place.
+  function refreshEligibility() {
+    setEligibilityNonce((n) => n + 1);
+  }
   const [studentLastGrade, setStudentLastGrade] = useState(null);
 
   // Eligibility state (new enrollment)
   const [eligibility,        setEligibility]        = useState(null);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityNonce,   setEligibilityNonce]   = useState(0);
   const [overrideMode,       setOverrideMode]       = useState(false);
   const [overrideReason,     setOverrideReason]     = useState("");
 
@@ -560,21 +595,53 @@ export default function EnrollmentFormPage() {
       }
     }
 
-    // Fetch eligibility report for the selected student
+    // The eligibility fetch itself lives in the effect below, keyed on the
+    // placement fields. Firing it from here read `form` one tick before the
+    // setForm() above had applied, so the report was computed against the
+    // previous placement — and it never re-ran when the registrar then
+    // changed the grade level or ticked Transfer In.
+  };
+
+  // Which documents a learner owes depends on WHERE they are being placed and
+  // HOW they got here, so the report has to be recomputed whenever any of
+  // those change — not once, when the student was picked. Getting this wrong
+  // is not cosmetic: the panel would say two documents were missing while the
+  // server demanded four, and the registrar met a 400 the page had just told
+  // them would not happen.
+  //
+  // `defaultedStudentRef` keeps the "new students start as Pending" default a
+  // first-load decision. Re-applying it on every placement change would fight
+  // a registrar who deliberately chose Enrolled.
+  const defaultedStudentRef = useRef(null);
+  useEffect(() => {
+    if (isEdit && !student) return;
+    if (!student?.student_id) return;
+
+    let cancelled = false;
     setEligibilityLoading(true);
-    getStudentEligibility(st.student_id)
+    getStudentEligibility(student.student_id, {
+      schoolLevel: form.school_level,
+      gradeLevel: form.grade_level,
+      isTransferIn,
+      // On an edit, the row being changed is not part of its own history —
+      // counting it makes every activation look like a "continuing" learner
+      // and silently drops the transferee document rules. Mirrors the
+      // exclusion EnrollmentSerializer.validate() already does server-side.
+      excludeEnrollmentId: isEdit ? id : undefined,
+    })
       .then((data) => {
+        if (cancelled) return;
         setEligibility(data);
-        // Brand-new students (no prior enrollment history) default to
-        // Pending rather than Enrolled — they typically still need to
-        // submit documents before being fully activated.
-        if (data?.is_new_student) {
+        if (data?.is_new_student && defaultedStudentRef.current !== student.student_id) {
+          defaultedStudentRef.current = student.student_id;
           setForm((f) => ({ ...f, enrollment_status: "pending" }));
         }
       })
-      .catch(() => setEligibility(null))
-      .finally(() => setEligibilityLoading(false));
-  };
+      .catch(() => { if (!cancelled) setEligibility(null); })
+      .finally(() => { if (!cancelled) setEligibilityLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [student, form.school_level, form.grade_level, isTransferIn, eligibilityNonce, isEdit, id]);
 
   // Deep link from the student's profile (e.g. "New Enrollment" on
   // StudentDetailPage) — preselect that student instead of leaving the
@@ -661,8 +728,22 @@ export default function EnrollmentFormPage() {
     if (!form.section.trim())         return "Section is required.";
     if (isSHS && !form.semester)      return "Semester is required for Senior HS.";
     if (isSHS && !form.strand.trim()) return "Strand is required for Senior HS.";
-    if (!isEdit && eligibility && !eligibility.is_new_student && !eligibility.is_eligible && !overrideMode)
-      return "Student is not eligible for enrollment. Review the eligibility panel above.";
+    // Two independent axes, kept separate here because the server keeps them
+    // separate too. `is_eligible` folds grade blocks and missing documents
+    // into one boolean, while the override toggle below renders only for
+    // grade blocks (`admin_override_required`) — so testing `is_eligible`
+    // here used to leave a returning student with missing documents unable to
+    // submit at all, with no override anywhere on the page to clear it.
+    //
+    // Grade axis: blocks any status, admin-overridable.
+    if (!isEdit && eligibility?.admin_override_required && !overrideMode)
+      return "Student has failed or incomplete subjects. An admin override is required.";
+    // Document axis: only bites on "enrolled", mirroring the server gate in
+    // enrollments/serializers.py, which fires solely on create-as-enrolled or
+    // pending -> enrolled. This is what makes the panel's own advice —
+    // "enrollment can be created as Pending" — actually true.
+    if (!isEdit && form.enrollment_status === "enrolled" && (eligibility?.missing_docs?.length ?? 0) > 0)
+      return "Required documents are still missing. Save this enrollment as Pending, or upload the documents first.";
     if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade && !overrideMode)
       return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
     if (!isEdit && overrideMode && !overrideReason.trim())
@@ -688,6 +769,11 @@ export default function EnrollmentFormPage() {
           payload.progression_override = true;
           payload.progression_override_reason = overrideReason.trim();
         }
+        // Write-only, consumed by EnrollmentSerializer.validate(). The gate
+        // needs to know this learner is transferring in to decide which
+        // documents they owe, and it cannot read the EnrollmentTransfer row
+        // below — that is only created after this request returns.
+        payload.is_transfer_in = isTransferIn;
         if (isEdit) {
           if (gradePlacementChanged) {
             payload.progression_override = true;
@@ -854,6 +940,8 @@ export default function EnrollmentFormPage() {
                     onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
                     onChangeReason={setOverrideReason}
                     isAdmin={isAdmin}
+                    student={student}
+                    onDocumentsChanged={refreshEligibility}
                   />
                 </motion.div>
               )}
