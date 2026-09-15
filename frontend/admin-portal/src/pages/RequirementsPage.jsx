@@ -1,12 +1,30 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import { StatCard } from "../components/ui/Card";
+import ConfirmModal from "../components/ConfirmModal";
+import Card, { StatCard, Panel } from "../components/ui/Card";
+import Alert from "../components/ui/Alert";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Modal from "../components/ui/Modal";
+import Pagination from "../components/Pagination";
+import Badge from "../components/ui/Badge";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import { getAvatarPalette } from "../utils/avatarPalette";
+import { StatusBadge as StudentStatusBadge } from "../components/ui/Badge";
+import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { getStudent, getStudents } from "../api/studentApi";
-import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
+import {
+  fetchRequirementSummary,
+  removeRequirement,
+  replaceRequirement,
+  resolveMediaUrl,
+  uploadRequirement,
+} from "../api/requirementApi";
+
 
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -18,29 +36,65 @@ const C = {
   bg: "#fdf8f6", white: "#ffffff",
 };
 
-// ── Avatar palette ────────────────────────────────────────────────────────────
-const AVATAR_PALETTES = [
-  { bg: "#fde8e8", color: "#c0392b" },
-  { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#2e6b0d" },
-  { bg: "#fdf5e8", color: "#854f0b" },
-  { bg: "#f0e8fd", color: "#7c3aed" },
-  { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#1455a0" },
+
+// ── Requirement-type icon map ─────────────────────────────────────────────────
+const REQ_ICONS = {
+  birth_certificate:           "ti-certificate",
+  form_138:                    "ti-file-description",
+  certificate_good_moral:      "ti-rosette",
+  ncae_result:                 "ti-chart-bar",
+  esc_completers:              "ti-school",
+  certificate_non_sf9:         "ti-file-check",
+  recommendation_letter:       "ti-mail",
+  clearance_previous_school:   "ti-building",
+  psa_birth_certificate:       "ti-id",
+  health_record:               "ti-heart-rate-monitor",
+  alien_certificate:           "ti-world",
+  form_137_or_138:             "ti-files",
+  esc_transferee_qc:           "ti-arrows-transfer",
+};
+
+const RECENT_COLUMNS = [
+  { key: 'student', label: 'Student', width: '35%' },
+  { key: 'lrn',     label: 'LRN',     width: '20%' },
+  { key: 'grade',   label: 'Grade',   width: '20%' },
+  { key: 'status',  label: 'Status',  width: '15%' },
+  { key: 'arrow',   label: '',        width: '10%' },
 ];
-function getAvatarPalette(name = "X") {
-  return AVATAR_PALETTES[name.charCodeAt(0) % AVATAR_PALETTES.length];
+
+const REQUIREMENT_COLUMNS = [
+  { key: 'name',      label: 'Requirement',    width: '32%' },
+  { key: 'status',    label: 'Status',         width: '14%' },
+  { key: 'submitted', label: 'Date Submitted', width: '18%' },
+  { key: 'remarks',   label: 'Remarks',        width: '26%' },
+  { key: 'actions',   label: '',               width: '10%' },
+];
+
+function reqIcon(code) { return REQ_ICONS[code] || "ti-file"; }
+
+// Document download URLs are now signed API links (…/file/?token=…), not
+// plain media paths, so they no longer end in a file extension the way
+// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
+// derived server-side from the stored file's real extension) is the
+// reliable signal; the extension regex on `req.image_url` only remains as
+// a fallback for the brief window before both sides deploy together.
+function isImageUrl(req) {
+  if (!req) return false;
+  if (req.file_kind) return req.file_kind === "image";
+  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
 }
 
-
 // ── Filter constants ──────────────────────────────────────────────────────────
+// `tone` names the shared ChipGroup palette entry; the categorical school-level
+// tones are the same ones EnrollmentsPage uses, so a level reads the same colour
+// on both pages.
 const SCHOOL_LEVELS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#c92a2a" },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#854f0b" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          bg: "#f0e8fd", color: "#7c3aed" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          bg: "#e8f0fd", color: "#2563eb" },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#2e6b0d" },
-  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   bg: "#fde8f8", color: "#be185d" },
+  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary" },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh" },
+  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh" },
 ];
 
 const GRADE_LEVELS_BY_LEVEL = {
@@ -54,9 +108,200 @@ const GRADE_LEVELS_BY_LEVEL = {
 
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-);
+
+function StatusBadge({ submitted }) {
+  return submitted ? (
+    <Badge variant="success" icon="ti-circle-check" size="sm">Submitted</Badge>
+  ) : (
+    <Badge variant="muted" icon="ti-clock" size="sm">Pending</Badge>
+  );
+}
+
+// ── Logout modal ──────────────────────────────────────────────────────────────
+
+// ── Remove confirm modal ──────────────────────────────────────────────────────
+function RemoveModal({ req, onConfirm, onCancel, removing }) {
+  return (
+    <ConfirmModal
+      icon="ti-trash"
+      title="Remove document?"
+      message={<>You're about to remove <strong style={{ color: C.text }}>{req?.requirement_name}</strong>. This cannot be undone.</>}
+      confirmLabel="Yes, remove"
+      loading={removing}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
+  );
+}
+
+// ── Upload / Replace modal ────────────────────────────────────────────────────
+function UploadModal({ requirement, studentId, onClose, onSuccess }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [remarks, setRemarks] = useState(requirement?.remarks || "");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+  const isReplace = !!requirement?.submission_id;
+
+  function handleFileChange(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setError("");
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setPreview(ev.target.result);
+      reader.readAsDataURL(f);
+    } else { setPreview(null); }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    setFile(f); setError("");
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setPreview(ev.target.result);
+      reader.readAsDataURL(f);
+    } else { setPreview(null); }
+  }
+
+  async function handleSubmit() {
+    if (!file && !isReplace) { setError("Please select a file."); return; }
+    setUploading(true); setError("");
+    try {
+      if (isReplace) {
+        await replaceRequirement({ submissionId: requirement.submission_id, file, remarks });
+      } else {
+        await uploadRequirement({ studentId, requirementTypeId: requirement.requirement_type_id, file, remarks });
+      }
+      toast.success(isReplace ? "Document replaced." : "Document uploaded.");
+      onSuccess();
+    } catch (e) {
+      const msg = e.message || "Upload failed.";
+      setError(msg);
+      toast.error(msg);
+    } finally { setUploading(false); }
+  }
+
+  const currentImageUrl = isReplace && requirement.image_url ? resolveMediaUrl(requirement.image_url) : null;
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={uploading}
+      icon={isReplace ? "ti-replace" : "ti-upload"}
+      title={`${isReplace ? "Replace" : "Upload"} Document`}
+      description={requirement?.requirement_name}
+      // A chosen file and typed remarks shouldn't be lost to a stray click.
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex gap-2.5">
+          <Button variant="secondary" fullWidth onClick={onClose} disabled={uploading}>
+            Cancel
+          </Button>
+          <Button
+            icon="ti-upload"
+            fullWidth
+            loading={uploading}
+            disabled={!file && !isReplace}
+            onClick={handleSubmit}
+          >
+            {uploading ? "Uploading…" : isReplace ? "Replace Document" : "Upload Document"}
+          </Button>
+        </div>
+      }
+    >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {currentImageUrl && !preview && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
+              <img src={currentImageUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${C.border}`, background: "#fafafa" }} />
+            </div>
+          )}
+
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ border: `2px dashed ${file ? C.redBorder : "#e0d0d0"}`, borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: file ? C.redLight : "#fafafa", transition: "all 0.15s" }}
+          >
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={handleFileChange} />
+            {preview ? (
+              <img src={preview} alt="preview" style={{ maxHeight: 180, maxWidth: "100%", objectFit: "contain", borderRadius: 8 }} />
+            ) : file ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <i className="ti ti-file-description" style={{ fontSize: 32, color: C.red }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{file.name}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>Click to change file</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
+                  {isReplace ? "Drop new file or click to browse" : "Drop file here or click to browse"}
+                </div>
+                <div style={{ fontSize: 11, color: C.pale }}>Images (JPG, PNG, GIF) or PDF</div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+              Remarks <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span>
+            </label>
+            <textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={2}
+              placeholder="Add any notes about this document…"
+              style={{ width: "100%", border: `1.5px solid #f0ceca`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", resize: "vertical", outline: "none", color: C.text, background: "#fffbfb", boxSizing: "border-box" }}
+            />
+          </div>
+
+          {error && (
+            <div style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
+            </div>
+          )}
+        </div>
+
+    </Modal>
+  );
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+// Deliberately not the shared Modal: a lightbox has no dialog card, and Modal's
+// white panel and 960px cap would both fight a full-bleed document view. It
+// still needs the dialog semantics and Escape handling Modal would have given.
+function ViewModal({ imageUrl, name, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={name}
+      style={{ position: "fixed", inset: 0, background: "rgba(10,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 24 }}
+      onClick={onClose}
+    >
+      <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: "absolute", top: -14, right: -14, width: 36, height: 36, borderRadius: "50%", background: "white", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", zIndex: 1 }}>
+          <i className="ti ti-x" style={{ fontSize: 16, color: C.text }} />
+        </button>
+        <img src={imageUrl} alt={name} style={{ maxWidth: "86vw", maxHeight: "86vh", objectFit: "contain", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
+        <div style={{ position: "absolute", bottom: -32, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{name}</div>
+      </div>
+    </div>
+  );
+}
 
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -92,17 +337,21 @@ export default function RequirementsPage() {
   const [recentPageMeta,        setRecentPageMeta]        = useState({ count: 0, next: null, previous: null });
   const RECENT_PAGE_SIZE = 10;
 
-  // Document counts, reported up by RequirementDocumentsPanel. The panel owns
-  // the fetching now, so this page no longer loads the same summary a second
-  // time purely to fill in the stat cards.
-  const [reqCounts,  setReqCounts]  = useState({ total: 0, submitted: 0, requiredMissing: 0 });
-  const [reqLoading, setReqLoading] = useState(false);
-  const [reqRefresh, setReqRefresh] = useState(0);
+  // Requirements state
+  const [requirements, setRequirements] = useState([]);
+  const [reqLoading,   setReqLoading]   = useState(false);
+  const [reqError,     setReqError]     = useState("");
 
-  const handleReqChange = useCallback((counts) => {
-    setReqCounts(counts);
-    setReqLoading(false);
-  }, []);
+  // Modal state
+  const [uploadModal, setUploadModal] = useState(null);
+  const [viewModal,   setViewModal]   = useState(null);
+  const [removeModal, setRemoveModal] = useState(null);
+  const [removing,    setRemoving]    = useState(false);
+
+  // Auth guard
+  useEffect(() => {
+    if (!sessionStorage.getItem("access_token")) navigate("/");
+  }, [navigate]);
 
   // Deep link: /requirements?student=123.
   //
@@ -173,28 +422,65 @@ export default function RequirementsPage() {
   }, [searchInput]);
 
   // Select a student → load requirements
-  function selectStudent(student) {
+  async function selectStudent(student) {
     suppressSearch.current = true;
     setSelectedStudent(student);
     setShowDropdown(false);
     setSearchResults([]);
     setSearchInput(`${student.first_name} ${student.last_name}`);
     setReqLoading(true);
-    setReqCounts({ total: 0, submitted: 0, requiredMissing: 0 });
+    setReqError("");
+    setRequirements([]);
+    try {
+      const data = await fetchRequirementSummary(student.student_id);
+      setRequirements(data);
+    } catch (e) {
+      setReqError(e.message || "Failed to load requirements.");
+    } finally {
+      setReqLoading(false);
+    }
   }
 
-  const reloadRequirements = useCallback(() => {
+  const reloadRequirements = useCallback(async () => {
     if (!selectedStudent) return;
     setReqLoading(true);
-    setReqRefresh((v) => v + 1);
+    try {
+      const data = await fetchRequirementSummary(selectedStudent.student_id);
+      setRequirements(data);
+    } catch (e) {
+      setReqError(e.message);
+    } finally {
+      setReqLoading(false);
+    }
   }, [selectedStudent]);
 
-  const submitted = reqCounts.submitted;
-  const pending   = Math.max(reqCounts.total - reqCounts.submitted, 0);
+  // Remove — opens modal instead of window.confirm
+  function handleRemove(req) {
+    setRemoveModal(req);
+  }
+
+  async function confirmRemove() {
+    if (!removeModal) return;
+    setRemoving(true);
+    try {
+      await removeRequirement(removeModal.submission_id);
+      toast.success("Document removed.");
+      reloadRequirements();
+    } catch (e) {
+      const msg = e.message || "Failed to remove document.";
+      setReqError(msg);
+      toast.error(msg);
+    } finally {
+      setRemoving(false);
+      setRemoveModal(null);
+    }
+  }
+
+  const submitted = requirements.filter((r) => r.is_submitted).length;
+  const pending   = requirements.length - submitted;
 
   return (
     <>
-      <style>{baseCss}</style>
           <PageHeader
             title="Student Requirements"
             icon="ti-file-check"
@@ -208,186 +494,108 @@ export default function RequirementsPage() {
             }
           />
 
-          <div style={s.content}>
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
 
             {/* ── Filter + Search panel ── */}
-            <motion.div
-              style={{
-                background: "white", border: `1px solid ${C.border}`,
-                borderRadius: 14, padding: "18px 20px",
-                boxShadow: "0 2px 12px rgba(224,49,49,0.05)",
-                display: "flex", flexDirection: "column", gap: 0,
-                position: "relative", zIndex: 100,
-              }}
-            >
-              {/* Search row */}
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ flex: 1, position: "relative" }} ref={searchRef}>
-                  <div
-                    className="search-wrap"
-                    style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border .15s, box-shadow .15s" }}
-                  >
-                    <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a", flexShrink: 0 }} />
+            {/* The search is a student autocomplete with an overlaying result
+                list, not FilterBar's plain text search, so it rides in
+                `extraControls`; the chip rows below are ordinary children. */}
+            <FilterBar
+              hasFilters={Boolean(hasFilters)}
+              onClearFilters={() => { setLevelFilter(""); setGradeFilter(""); }}
+              className="relative z-[100]"
+              onSearch={() => { if (searchInput.trim()) setShowDropdown(true); }}
+              extraControls={
+                <div className="relative flex-1" ref={searchRef}>
+                  <div className="filterbar-search flex h-[42px] items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
+                    <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
+                    <label htmlFor="requirements-search" className="sr-only">Search students</label>
                     <input
+                      id="requirements-search"
                       value={searchInput}
                       onChange={(e) => {
                         setSearchInput(e.target.value);
-                        if (!e.target.value) { setSelectedStudent(null); setShowDropdown(false); }
+                        if (!e.target.value) { setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }
                       }}
                       placeholder="Search student name, LRN, or student number…"
-                      style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none", color: C.text }}
+                      className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500"
                     />
                     {searchInput && (
                       <button
-                        onClick={() => { setSearchInput(""); setSelectedStudent(null); setShowDropdown(false); }}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}
+                        type="button"
+                        aria-label="Clear search"
+                        onClick={() => { setSearchInput(""); setSelectedStudent(null); setRequirements([]); setShowDropdown(false); }}
+                        className="focus-ring flex shrink-0 items-center rounded-sm p-0.5 text-neutral-500 hover:text-brand-600"
                       >
-                        <i className="ti ti-x" style={{ fontSize: 13 }} />
+                        <i className="ti ti-x text-[13px]" aria-hidden="true" />
                       </button>
                     )}
                     {searchLoading && (
-                      <i className="ti ti-loader-2" style={{ fontSize: 13, color: C.red, animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                      <i className="ti ti-loader-2 shrink-0 animate-spin text-[13px] text-brand-500" aria-hidden="true" />
                     )}
                   </div>
 
-                  {/* Dropdown */}
                   {showDropdown && (
-                    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "white", border: `1.5px solid ${C.border}`, borderRadius: 12, boxShadow: "0 12px 40px rgba(224,49,49,0.14)", zIndex: 9999, maxHeight: 280, overflowY: "auto" }}>
+                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[9999] max-h-[280px] overflow-y-auto rounded-xl border-[1.5px] border-neutral-200 bg-white shadow-[0_12px_40px_rgba(224,49,49,0.14)]">
                       {searchLoading && (
-                        <div style={{ padding: "14px 16px", color: C.pale, fontSize: 13 }}>Searching…</div>
+                        <div className="px-4 py-3.5 text-[13px] text-neutral-500">Searching…</div>
                       )}
                       {!searchLoading && searchResults.length === 0 && (
-                        <div style={{ padding: "14px 16px", color: C.pale, fontSize: 13 }}>No students found.</div>
+                        <div className="px-4 py-3.5 text-[13px] text-neutral-500">No students found.</div>
                       )}
                       {!searchLoading && searchResults.map((st) => {
                         const ap = getAvatarPalette(st.last_name ?? "X");
                         return (
-                        <div key={st.student_id}
-                          className="dropdown-item"
-                          onClick={() => selectStudent(st)}
-                          style={{ padding: "11px 16px", cursor: "pointer", borderBottom: `1px solid ${C.softBorder}`, display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: "50%", background: ap.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: ap.color, flexShrink: 0 }}>
-                            {st.first_name?.[0]}{st.last_name?.[0]}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-                              {st.first_name} {st.middle_name ? st.middle_name + " " : ""}{st.last_name}
+                          <div
+                            key={st.student_id}
+                            onClick={() => selectStudent(st)}
+                            className="flex cursor-pointer items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5 transition-colors last:border-b-0 hover:bg-brand-50"
+                          >
+                            <div
+                              className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                              style={{ background: ap.bg, color: ap.color }}
+                              aria-hidden="true"
+                            >
+                              {st.first_name?.[0]}{st.last_name?.[0]}
                             </div>
-                            <div style={{ fontSize: 11, color: C.pale }}>LRN: {st.lrn} · {st.student_number}</div>
+                            <div className="min-w-0">
+                              <div className="text-[13px] font-bold text-neutral-900">
+                                {st.first_name} {st.middle_name ? st.middle_name + " " : ""}{st.last_name}
+                              </div>
+                              <div className="text-xs text-neutral-500">LRN: {st.lrn} · {st.student_number}</div>
+                            </div>
                           </div>
-                        </div>
                         );
                       })}
                     </div>
                   )}
                 </div>
+              }
+            >
+              <FilterRow label="School Level">
+                <ChipGroup
+                  options={SCHOOL_LEVELS.map((l) => ({
+                    value: l.value, label: l.label, icon: l.icon, tone: l.tone,
+                  }))}
+                  value={levelFilter}
+                  onChange={setLevelFilter}
+                  label="Filter by school level"
+                />
+              </FilterRow>
 
-                <button
-                  style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#c92a2a"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
-                  onClick={() => { if (searchInput.trim()) setShowDropdown(true); }}
-                >
-                  Search
-                </button>
-                <AnimatePresence>
-                  {hasFilters && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.88 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.88 }}
-                      transition={{ duration: 0.14 }}
-                      whileTap={{ scale: 0.93 }}
-                      onClick={() => { setLevelFilter(""); setGradeFilter(""); }}
-                      style={{ height: 42, padding: "0 14px", background: "white", border: "1.5px solid #fca5a5", borderRadius: 12, fontSize: 12, fontWeight: 600, color: "#b91c1c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}
-                    >
-                      <i className="ti ti-filter-off" style={{ fontSize: 13 }} />Clear
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Divider */}
-              <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
-
-              {/* Chip rows */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-                {/* School Level chips */}
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
-                  <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {SCHOOL_LEVELS.map((lvl) => {
-                      const active = levelFilter === lvl.value;
-                      return (
-                        <motion.button
-                          key={lvl.value}
-                          layout
-                          initial={false}
-                          animate={{
-                            backgroundColor: active ? lvl.bg    : "#ffffff",
-                            color:           active ? lvl.color : "#855c5c",
-                            borderColor:     active ? lvl.color : "#f0e4e4",
-                          }}
-                          transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                          onClick={() => setLevelFilter(lvl.value)}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                        >
-                          <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
-                          {lvl.label}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
-
-                {/* Grade Level chips — CSS max-height cascade */}
-                <div style={{
-                  maxHeight: levelFilter !== "" ? 200 : 0,
-                  overflow: "hidden",
-                  opacity: levelFilter !== "" ? 1 : 0,
-                  marginTop: levelFilter !== "" ? 0 : -12,
-                  transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
-                  pointerEvents: levelFilter !== "" ? "auto" : "none",
-                }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
-                    <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      {gradeOptions.map((g, idx) => {
-                        const val = g === "All Grades" ? "" : g;
-                        const active = gradeFilter === val;
-                        return (
-                          <motion.button
-                            key={`${levelFilter}-${g}`}
-                            layout
-                            initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
-                            animate={{
-                              opacity: 1, y: 0,
-                              backgroundColor: active ? "#fff0f0" : "#ffffff",
-                              color:           active ? "#c92a2a" : "#855c5c",
-                              borderColor:     active ? "#e03131" : "#f0e4e4",
-                            }}
-                            transition={{
-                              opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                              y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                              backgroundColor: { duration: 0.18, ease: "easeOut" },
-                              color:           { duration: 0.18, ease: "easeOut" },
-                              borderColor:     { duration: 0.18, ease: "easeOut" },
-                              layout:          { type: "spring", stiffness: 400, damping: 36 },
-                            }}
-                            onClick={() => setGradeFilter(val)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                          >
-                            {g}
-                          </motion.button>
-                        );
-                      })}
-                    </motion.div>
-                  </div>
-                </div>
-
-              </div>
-            </motion.div>
+              <CollapsibleFilterRow open={levelFilter !== ""} label="Grade Level">
+                <ChipGroup
+                  options={gradeOptions.map((g) => ({
+                    value: g === "All Grades" ? "" : g, label: g,
+                  }))}
+                  value={gradeFilter}
+                  onChange={setGradeFilter}
+                  label="Filter by grade level"
+                  stagger
+                  generation={levelFilter}
+                />
+              </CollapsibleFilterRow>
+            </FilterBar>
 
             {/* ── Selected student stats ── */}
             {selectedStudent && (() => {
@@ -412,7 +620,7 @@ export default function RequirementsPage() {
                     </button>
                   </div>
                 </div>
-                <StatCard label="Total Requirements" value={reqCounts.total} icon="ti-list" iconTone="brand" loading={reqLoading} />
+                <StatCard label="Total Requirements" value={requirements.length} icon="ti-list" iconTone="brand" loading={reqLoading} />
                 <StatCard label="Submitted" value={submitted} icon="ti-circle-check" iconTone="success" loading={reqLoading} />
                 <StatCard label="Pending" value={pending} icon="ti-clock" iconTone="warning" loading={reqLoading} />
               </div>
@@ -426,212 +634,241 @@ export default function RequirementsPage() {
                 and the recent-students table; only the per-student document
                 block moved. */}
             {selectedStudent && (
-              <section style={{ ...s.panel, padding: 20 }}>
-                <RequirementDocumentsPanel
-                  studentId={selectedStudent.student_id}
-                  student={selectedStudent}
-                  variant="table"
-                  refreshKey={reqRefresh}
-                  onChange={handleReqChange}
-                />
-              </section>
+              <Panel
+                padding="none"
+                className="overflow-hidden"
+                title="Requirement Documents"
+                subtitle={`${submitted} of ${requirements.length} submitted`}
+                action={requirements.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-[120px] overflow-hidden rounded-full bg-neutral-200">
+                      <div
+                        className="h-full rounded-full bg-success-500 transition-[width] duration-300"
+                        style={{ width: `${requirements.length ? (submitted / requirements.length) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-success-600">
+                      {requirements.length ? Math.round((submitted / requirements.length) * 100) : 0}%
+                    </span>
+                  </div>
+                )}
+              >
+                <div>
+                  {reqError && (
+                    <div className="px-5 pt-4">
+                      <Alert variant="error" icon="ti-alert-circle" dismissible onDismiss={() => setReqError("")}>
+                        {reqError}
+                      </Alert>
+                    </div>
+                  )}
+
+                  <Table
+                    columns={REQUIREMENT_COLUMNS}
+                    loading={reqLoading}
+                    isEmpty={requirements.length === 0}
+                    skeletonRows={6}
+                    empty={{
+                      icon: "ti-file-search",
+                      title: "No requirements found",
+                      subtitle: "This student has no requirement records yet.",
+                    }}
+                  >
+                    {requirements.map((req) => {
+                      const imageUrl = resolveMediaUrl(req.image_url);
+                      const hasImage = req.is_submitted && imageUrl && isImageUrl(req);
+                      const icon = reqIcon(req.requirement_code);
+                      return (
+                        <TableRow key={req.requirement_type_id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] ${req.is_submitted ? "bg-success-50" : "bg-brand-100"}`}>
+                                <i
+                                  className={`ti ${req.is_submitted ? "ti-file-check" : icon} text-[15px] ${req.is_submitted ? "text-success-600" : "text-brand-600"}`}
+                                  aria-hidden="true"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[13px] font-semibold leading-tight text-neutral-900">
+                                  {req.requirement_name}
+                                </div>
+                                {req.description && (
+                                  <div className="mt-0.5 text-xs text-neutral-500">{req.description}</div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell>
+                            <StatusBadge submitted={req.is_submitted} />
+                          </TableCell>
+
+                          <TableCell>
+                            {req.submitted_at ? (
+                              <div className="flex items-center gap-1.5">
+                                <i className="ti ti-calendar text-xs text-neutral-500" aria-hidden="true" />
+                                <span className="text-xs text-neutral-700">
+                                  {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs italic text-neutral-500">—</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            {req.remarks
+                              ? <span className="text-xs italic text-neutral-700">&ldquo;{req.remarks}&rdquo;</span>
+                              : <span className="text-xs italic text-neutral-500">—</span>}
+                          </TableCell>
+
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1">
+                              {req.is_submitted ? (
+                                <>
+                                  {hasImage && (
+                                    <Button
+                                      variant="ghost" size="sm" icon="ti-eye"
+                                      aria-label={`View ${req.requirement_name}`}
+                                      onClick={() => setViewModal({ imageUrl, name: req.requirement_name })}
+                                    />
+                                  )}
+                                  <Button
+                                    variant="ghost" size="sm" icon="ti-replace"
+                                    aria-label={`Replace ${req.requirement_name}`}
+                                    onClick={() => setUploadModal(req)}
+                                  />
+                                  <Button
+                                    variant="ghost" size="sm" icon="ti-trash"
+                                    aria-label={`Remove ${req.requirement_name}`}
+                                    onClick={() => handleRemove(req)}
+                                  />
+                                </>
+                              ) : (
+                                <Button
+                                  variant="ghost" size="sm" icon="ti-upload"
+                                  aria-label={`Upload ${req.requirement_name}`}
+                                  onClick={() => setUploadModal(req)}
+                                />
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </Table>
+                </div>
+              </Panel>
             )}
 
             {/* ── Recently enrolled students ── */}
             {!selectedStudent && (
               <>
-              <section style={s.panel}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "#fdfafa" }}>
-
-                      {[
-                        { label: "Student",  w: "35%" },
-                        { label: "LRN",      w: "20%" },
-                        { label: "Grade",    w: "20%" },
-                        { label: "Status",   w: "15%" },
-                        { label: "",         w: "10%" },
-                      ].map(({ label, w }, i, arr) => (
-                        <th key={label} style={{
-                          textAlign: "left", fontSize: 10.5, fontWeight: 600,
-                          color: "#8a6a6a", padding: "13px 18px",
-                          borderBottom: `1px solid ${C.border}`,
-                          textTransform: "uppercase", letterSpacing: "0.07em",
-                          width: w,
-                          background: "#fdfafa",
-                          borderRadius: i === 0 ? "16px 0 0 0" : i === arr.length - 1 ? "0 16px 0 0" : 0,
-                        }}>
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentStudentsLoading
-                      ? Array.from({ length: RECENT_PAGE_SIZE }).map((_, i) => (
-                          <tr key={i}>
-                            <td style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                <Sk w={36} h={36} r={99} />
-                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                  <Sk w={130} h={13} /><Sk w={90} h={11} />
-                                </div>
+              <Card padding="none" className="overflow-hidden">
+                <Table
+                  columns={RECENT_COLUMNS}
+                  loading={recentStudentsLoading}
+                  isEmpty={recentStudents.length === 0}
+                  skeletonRows={RECENT_PAGE_SIZE}
+                  empty={{
+                    icon: "ti-users-off",
+                    title: "No students found",
+                    subtitle: hasFilters
+                      ? "Try a different school level or grade."
+                      : "No recently enrolled students to show.",
+                  }}
+                >
+                  {recentStudents.map((st) => {
+                    const rap = getAvatarPalette(st.last_name ?? "X");
+                    const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
+                    const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
+                    const gradeLabel = st.grade_level
+                      ? st.grade_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                      : st.school_level
+                        ? st.school_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                        : null;
+                    return (
+                      <TableRow key={st.student_id} onClick={() => selectStudent(st)}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                              style={{ background: rap.bg, color: rap.color }}
+                              aria-hidden="true"
+                            >
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-[13px] font-semibold leading-tight text-neutral-900 transition-colors group-hover:text-brand-600">
+                                {fullName}
                               </div>
-                            </td>
-                            {[88, 100, 70, 40].map((w, j) => (
-                              <td key={j} style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                                <Sk w={w} h={13} />
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      : recentStudents.length === 0
-                        ? (
-                          <tr>
-                            <td colSpan={5} style={{ textAlign: "center", padding: "56px 16px" }}>
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                                <div style={{ width: 52, height: 52, borderRadius: 14, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
-                                  <i className="ti ti-users" style={{ fontSize: 22, color: C.red }} />
-                                </div>
-                                <div style={{ fontSize: 14, color: "#7a5050", fontWeight: 600 }}>No students found</div>
-                                <div style={{ fontSize: 12, color: C.pale }}>Try adjusting the level or grade filter above</div>
+                              <div className="mt-0.5 text-xs text-neutral-500">
+                                {st.student_number || <span className="italic">no student number</span>}
                               </div>
-                            </td>
-                          </tr>
-                        )
-                        : recentStudents.map((st, idx) => {
-                            const isLast = idx === recentStudents.length - 1;
-                            const tdStyle = (extra = {}) => ({ padding: "13px 18px", borderBottom: isLast ? "none" : "1px solid #f9f0f0", verticalAlign: "middle", ...extra });
-                            const rap = getAvatarPalette(st.last_name ?? "X");
-                            const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
-                            const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
-                            const statusMeta = {
-                              active:      { bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50", label: "Active" },
-                              inactive:    { bg: "#f0ede8", color: "#5c5752", dot: "#9e9e9e", label: "Inactive" },
-                              transferred: { bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800", label: "Transferred" },
-                              graduated:   { bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3", label: "Graduated" },
-                              dropped:     { bg: "#fde8e8", color: "#9b2020", dot: "#f44336", label: "Dropped" },
-                            };
-                            const pill = statusMeta[st.status] ?? statusMeta.inactive;
-                            const gradeLabel = st.grade_level
-                              ? st.grade_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-                              : st.school_level
-                                ? st.school_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-                                : null;
-                            return (
-                              <tr
-                                key={st.student_id}
-                                className="student-row"
-                                onClick={() => selectStudent(st)}
-                              >
-                                {/* Student */}
-                                <td style={tdStyle()}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                    <div style={{
-                                      width: 36, height: 36, borderRadius: "50%",
-                                      background: rap.bg, flexShrink: 0,
-                                      display: "flex", alignItems: "center", justifyContent: "center",
-                                      fontSize: 12, fontWeight: 700, color: rap.color,
-                                    }}>
-                                      {initials}
-                                    </div>
-                                    <div>
-                                      <div className="row-name" style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a", lineHeight: 1.3, transition: "color 0.12s" }}>
-                                        {fullName}
-                                      </div>
-                                      <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>
-                                        {st.student_number
-                                          ? st.student_number
-                                          : <span style={{ fontStyle: "italic", color: "#8a6a6a" }}>no student number</span>}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
+                            </div>
+                          </div>
+                        </TableCell>
 
-                                {/* LRN */}
-                                <td style={tdStyle()}>
-                                  {st.lrn
-                                    ? <span style={{ fontFamily: "monospace", fontSize: 12, color: "#5a4a4a", background: "#f9f4f4", padding: "3px 8px", borderRadius: 6 }}>{st.lrn}</span>
-                                    : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                                </td>
+                        <TableCell>
+                          {st.lrn
+                            ? <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">{st.lrn}</span>
+                            : <span className="text-xs italic text-neutral-500">—</span>}
+                        </TableCell>
 
-                                {/* Grade */}
-                                <td style={tdStyle()}>
-                                  {gradeLabel
-                                    ? <span style={{ fontSize: 12, color: "#5a4a4a" }}>{gradeLabel}</span>
-                                    : <span style={{ color: "#8a6a6a", fontStyle: "italic", fontSize: 12 }}>—</span>}
-                                </td>
+                        <TableCell>
+                          {gradeLabel
+                            ? <span className="text-xs text-neutral-700">{gradeLabel}</span>
+                            : <span className="text-xs italic text-neutral-500">—</span>}
+                        </TableCell>
 
-                                {/* Status */}
-                                <td style={tdStyle()}>
-                                  <span style={{
-                                    display: "inline-flex", alignItems: "center", gap: 5,
-                                    fontSize: 11.5, fontWeight: 600,
-                                    padding: "4px 10px", borderRadius: 99,
-                                    background: pill.bg, color: pill.color,
-                                  }}>
-                                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: pill.dot, flexShrink: 0 }} />
-                                    {pill.label}
-                                  </span>
-                                </td>
+                        <TableCell>
+                          <StudentStatusBadge status={st.status} map={STUDENT_STATUS_MAP} size="sm" />
+                        </TableCell>
 
-                                {/* Arrow */}
-                                <td style={tdStyle({ padding: "13px 14px" })}>
-                                  <i className="ti ti-chevron-right" style={{ fontSize: 14, color: "#8a6a6a" }} />
-                                </td>
-                              </tr>
-                            );
-                          })
-                    }
-                  </tbody>
-                </table>
+                        <TableCell>
+                          <i className="ti ti-chevron-right text-sm text-neutral-500" aria-hidden="true" />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </Table>
+              </Card>
 
-              </section>
-
-              {/* Pagination */}
-              {!recentStudentsLoading && recentPageMeta.count > RECENT_PAGE_SIZE && (() => {
-                const totalPages = Math.ceil(recentPageMeta.count / RECENT_PAGE_SIZE);
-                const windowSize = Math.min(totalPages, 5);
-                const start = Math.min(Math.max(1, recentPage - 2), Math.max(1, totalPages - windowSize + 1));
-                const pages = Array.from({ length: windowSize }, (_, i) => start + i);
-                return (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, color: "#8a6a6a" }}>
-                      Page <strong style={{ color: "#7a5050" }}>{recentPage}</strong> of{" "}
-                      <strong style={{ color: "#7a5050" }}>{totalPages}</strong>
-                      &nbsp;·&nbsp;{recentPageMeta.count.toLocaleString()} total records
-                    </span>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button
-                        style={{ ...pgBtn, opacity: !recentPageMeta.previous ? 0.4 : 1, cursor: !recentPageMeta.previous ? "default" : "pointer" }}
-                        disabled={!recentPageMeta.previous}
-                        onClick={() => fetchRecentStudents(recentPage - 1)}
-                      >
-                        <i className="ti ti-chevron-left" style={{ fontSize: 13 }} />
-                      </button>
-                      {pages.map((p) => (
-                        <button
-                          key={p}
-                          style={{ ...pgBtn, ...(p === recentPage ? pgBtnActive : {}) }}
-                          onClick={() => fetchRecentStudents(p)}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                      <button
-                        style={{ ...pgBtn, opacity: !recentPageMeta.next ? 0.4 : 1, cursor: !recentPageMeta.next ? "default" : "pointer" }}
-                        disabled={!recentPageMeta.next}
-                        onClick={() => fetchRecentStudents(recentPage + 1)}
-                      >
-                        <i className="ti ti-chevron-right" style={{ fontSize: 13 }} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
+              {!recentStudentsLoading && recentPageMeta.count > RECENT_PAGE_SIZE && (
+                <Pagination
+                  page={recentPage}
+                  totalPages={Math.ceil(recentPageMeta.count / RECENT_PAGE_SIZE)}
+                  count={recentPageMeta.count}
+                  hasPrevious={Boolean(recentPageMeta.previous)}
+                  hasNext={Boolean(recentPageMeta.next)}
+                  onPageChange={(p) => fetchRecentStudents(p)}
+                />
+              )}
               </>
             )}
           </div>
+
+      {/* ── Modals ── */}
+      {uploadModal && (
+        <UploadModal
+          requirement={uploadModal}
+          studentId={selectedStudent?.student_id}
+          onClose={() => setUploadModal(null)}
+          onSuccess={() => { setUploadModal(null); reloadRequirements(); }}
+        />
+      )}
+
+      {viewModal && (
+        <ViewModal imageUrl={viewModal.imageUrl} name={viewModal.name} onClose={() => setViewModal(null)} />
+      )}
+
+      {removeModal && (
+        <RemoveModal
+          req={removeModal}
+          onConfirm={confirmRemove}
+          onCancel={() => setRemoveModal(null)}
+          removing={removing}
+        />
+      )}
     </>
   );
 }
@@ -641,46 +878,5 @@ export default function RequirementsPage() {
 // styling and `.search-wrap:focus-within` all live in index.css now, and the
 // `.nav-item`/`.nav-active` overrides were dead weight — the sidebar no longer
 // uses those class names, so the rules matched nothing.
-const baseCss = `
-  .dropdown-item:hover { background:#fff8f6; }
-  .dropdown-item:last-child { border-bottom:none !important; }
-  .student-row:last-child td { border-bottom:none !important; }
-  tbody tr:last-child td { border-bottom:none !important; }
-`;
 
-const s = {
-  shell:       { display: "flex", height: "100vh", background: C.bg, fontFamily: "'DM Sans',sans-serif", overflow: "hidden" },
-  sidebar:     { width: 224, flexShrink: 0, background: C.white, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", boxShadow: "2px 0 12px rgba(224,49,49,0.04)" },
-  brandWrap:   { padding: "22px 18px 18px", borderBottom: `1px solid ${C.border}` },
-  nav:         { flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
-  navSection:  { fontSize: 9.5, color: "#8a6a6a", letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 10px 4px", fontWeight: 600 },
-  navItem:     { display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, fontSize: 13, cursor: "pointer" },
-  userBox:     { display: "flex", alignItems: "center", gap: 10, padding: "10px", borderRadius: 10, background: "#fff8f6" },
-  avatar:      { width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#fde8e8,#fca5a5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.red, flexShrink: 0 },
-  userName:    { fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  userRole:    { fontSize: 11, color: C.pale, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  logoutBtn:   { width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: C.white, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", transition: "all 0.12s" },
-  main:        { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topbar:      { background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 8px rgba(224,49,49,0.04)" },
-  topbarTitle: { fontSize: 16, fontWeight: 700, color: C.text},
-  topbarSub:   { fontSize: 11.5, color: C.pale, marginTop: 1 },
-  content:     { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 },
-  panel:       { background: C.white, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "visible", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" },
-  panelHeader: { padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" },
-  panelTitle:  { fontSize: 14, fontWeight: 700, color: C.text},
-  primaryBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: `linear-gradient(135deg,#e03131,#c92a2a)`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)" },
-  secondaryBtn:{ flex: 1, height: 42, border: "1.5px solid #f0e0e0", borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans',sans-serif" },
-  dangerBtn:   { flex: 1, height: 42, border: "none", borderRadius: 10, background: `linear-gradient(135deg,#e03131,#c92a2a)`, fontSize: 13, color: C.white, cursor: "pointer", fontWeight: 700, fontFamily: "'DM Sans',sans-serif" },
-  errorBanner: { background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8, marginBottom: 16 },
-};
 
-const pgBtn = {
-  width: 32, height: 32, border: "1px solid #f0e4e4", borderRadius: 8,
-  background: "white", display: "flex", alignItems: "center", justifyContent: "center",
-  cursor: "pointer", fontSize: 12, color: "#855c5c",
-  fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s",
-};
-
-const pgBtnActive = {
-  background: "#fff0f0", borderColor: "#e03131", color: "#c92a2a", fontWeight: 700,
-};

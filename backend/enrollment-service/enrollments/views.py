@@ -818,6 +818,47 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_class = EnrollmentFilter
 
+    @action(detail=False, methods=["get"], url_path="school-years")
+    def school_years(self, request):
+        """
+        GET /api/enrollments/school-years/
+
+        Every school year that actually has enrollments, newest first, with a
+        count each. The sidebar picker used to *compute* this list as a fixed
+        window (3 past + current + 1 future) around the settings' current year,
+        which had two failure modes: it offered years with no data at all, and
+        it silently capped at 5 entries — so once a school had six years of
+        history, the oldest became unreachable through the UI.
+
+        The current school year is always included even with a zero count:
+        at the start of a term nothing is enrolled yet, and that is precisely
+        the year a registrar needs to select in order to start enrolling.
+        """
+        from django.db.models import Count
+
+        # Deliberately not self.get_queryset(): the picker is staff-facing
+        # chrome and should list the same years regardless of who is looking,
+        # rather than narrowing to one teacher's advisory sections.
+        rows = (
+            Enrollment.objects.exclude(school_year__isnull=True)
+            .exclude(school_year="")
+            .order_by()
+            .values("school_year")
+            .annotate(count=Count("pk"))
+        )
+        counts = {r["school_year"]: r["count"] for r in rows}
+
+        today = date.today()
+        year = today.year if today.month >= 7 else today.year - 1
+        current = f"{year}-{year + 1}"
+        counts.setdefault(current, 0)
+
+        results = [
+            {"school_year": y, "count": counts[y]}
+            for y in sorted(counts, reverse=True)
+        ]
+        return Response({"current": current, "results": results})
+
     def get_queryset(self):
         qs = super().get_queryset()
         role = getattr(self.request.user, "role", None)

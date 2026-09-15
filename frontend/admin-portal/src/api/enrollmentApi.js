@@ -21,6 +21,12 @@ export const getDashboardSummary = (params = {}) =>
   enrollmentClient.get("/dashboard/summary/", { params }).then((r) => r.data);
 
 // ── Enrollments ───────────────────────────────────────────────────────────────
+// Every school year that has enrollments, newest first, with a count each —
+// plus the current year even when it's still empty. Replaces the old computed
+// window, which both invented years with no data and silently capped at five.
+export const getSchoolYears = () =>
+  enrollmentClient.get("/enrollments/school-years/").then((r) => r.data);
+
 export const getEnrollments = (params = {}) =>
   enrollmentClient.get("/enrollments/", { params }).then((r) => r.data);
 
