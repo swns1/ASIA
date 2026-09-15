@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
-import { modalVariants, springTransition } from "../utils/motion";
 import { mobileNumber, birthDate, email as emailCheck } from "../utils/validation";
 import { getStudent, updateStudent } from "../api/studentApi";
 import {
@@ -31,6 +30,7 @@ import {
   updateHousehold,
 } from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
+import { ConfirmDialog } from "../components/ui/Modal";
 
 import {
   STEPS, C, cardStyle,
@@ -46,49 +46,6 @@ import {
 
 
 
-
-
-
-function EnrollmentPromptModal({ studentName, onSkip, onProceed, onDocuments }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={onSkip}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.5)", backdropFilter: "blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
-        style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#c92a2a" }} />
-          </div>
-          <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Enrollment?</h3>
-          <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
-            <strong>{studentName || "The student"}</strong> has been added. Would you like to proceed to enrollment now?
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-            onClick={onSkip} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Skip for Now
-          </motion.button>
-          {/* The wizard no longer collects documents, so this is the path to
-              them for a student who has just been created. */}
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-            onClick={onDocuments} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Add Documents
-          </motion.button>
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-            onClick={onProceed} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Proceed to Enrollment
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
 
 
 
@@ -213,7 +170,7 @@ export default function StudentFormPage() {
   const [householdId, setHouseholdId] = useState(null);
 
   // Shown after successfully creating a new student, offering to jump straight into enrollment
-  const [enrollPrompt, setEnrollPrompt] = useState(null); // { studentId, studentName }
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
 
   const DRAFT_KEY = "student_form_draft";
   const isNewStudent = !id;
@@ -542,38 +499,28 @@ export default function StudentFormPage() {
         // ════════════════════════════════════════════════════════
         // CREATE MODE — use the bulk endpoint
         // ════════════════════════════════════════════════════════
+        // One call, one transaction. Siblings and previous schools used to be
+        // created here in a client-side loop *after* the student existed, so a
+        // failure partway through saved the student, lost the siblings, and --
+        // because `lrn` is UNIQUE -- left a retry that could never succeed.
+        // The endpoint now writes all of it atomically, so a failure means
+        // nothing was created and pressing Save again simply works.
         const bulkPayload = {
           student: studentPayload,
           household: householdHasContent(household)
             ? nullify(household, nullableHouseholdFields)
             : null,
           guardians: guardians.filter((g) => g.full_name?.trim()).map((g) => nullify(g, nullableGuardianFields)),
+          siblings: siblings
+            .filter((s) => s.full_name?.trim())
+            .map((s) => ({ full_name: s.full_name, age: s.age ? parseInt(s.age) : null })),
+          previous_schools: schools
+            .filter((s) => s.school_name?.trim())
+            .map((s) => ({ school_name: s.school_name, school_address: s.school_address })),
         };
 
         const result = await bulkCreateStudent(bulkPayload);
         newStudentId = result.student.student_id;
-
-        // siblings
-        for (const s of siblings) {
-          if (s.full_name.trim()) {
-            await createSibling({
-              student: newStudentId,
-              full_name: s.full_name,
-              age: s.age ? parseInt(s.age) : null,
-            });
-          }
-        }
-
-        // previous schools
-        for (const s of schools) {
-          if (s.school_name.trim()) {
-            await createPreviousSchool({
-              student: newStudentId,
-              school_name: s.school_name,
-              school_address: s.school_address,
-            });
-          }
-        }
       }
 
       clearDraft();
@@ -581,11 +528,14 @@ export default function StudentFormPage() {
         toast.success("Student updated.");
         navigate("/students");
       } else {
-        toast.success("Student created.");
-        setEnrollPrompt({
-          studentId: newStudentId,
-          studentName: [student.first_name, student.last_name].filter(Boolean).join(" ").trim(),
-        });
+        // Registration and enrolment are one process, not two errands. A
+        // student with no enrolment has no section, appears in no SF1 or SF2
+        // and can be given no grades -- and nothing else in the app says so,
+        // which is exactly how one gets forgotten. `replace` because the form
+        // behind us has already been submitted: Back must reach /students, not
+        // a filled-in form that would create a second record.
+        toast.success("Student created — now enroll them.");
+        navigate(`/enrollments/new?student=${newStudentId}&continuing=1`, { replace: true });
       }
     } catch (err) {
       const data = err?.response?.data;
@@ -650,7 +600,7 @@ export default function StudentFormPage() {
             transition={{ duration: 0.2, delay: isFirstRender ? 0.06 : 0 }}
             whileHover={{ x: -2 }}
             whileTap={{ scale: 0.96 }}
-            onClick={() => { clearDraft(); navigate("/students"); }}
+            onClick={() => setLeaveConfirm(true)}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
           >
             ← Back to Students
@@ -837,13 +787,18 @@ export default function StudentFormPage() {
 
 
       <AnimatePresence>
-        {enrollPrompt && (
-          <EnrollmentPromptModal
-            key="enroll-prompt"
-            studentName={enrollPrompt.studentName}
-            onSkip={() => { setEnrollPrompt(null); navigate("/students"); }}
-            onProceed={() => navigate(`/enrollments/new?student=${enrollPrompt.studentId}`)}
-            onDocuments={() => navigate(`/requirements?student=${enrollPrompt.studentId}`)}
+        {leaveConfirm && (
+          <ConfirmDialog
+            icon="ti-arrow-left"
+            danger={false}
+            title="Leave this registration?"
+            message={id
+              ? "Your changes to this student have not been saved yet."
+              : "Nothing has been saved yet, and the draft held on this device will be cleared."}
+            confirmLabel="Yes, leave"
+            cancelLabel="Keep filling in"
+            onConfirm={() => { clearDraft(); navigate("/students"); }}
+            onCancel={() => setLeaveConfirm(false)}
           />
         )}
       </AnimatePresence>

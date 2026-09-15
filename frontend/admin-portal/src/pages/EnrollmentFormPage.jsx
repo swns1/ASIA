@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
+import { ConfirmDialog } from "../components/ui/Modal";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
@@ -180,7 +181,71 @@ function SectionCard({ title, icon, badge, children, motionProps = {} }) {
 }
 
 // ─── EligibilityPanel ────────────────────────────────────────────────────────
-function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin, student, onDocumentsChanged }) {
+// The missing-documents block, shared by both branches of EligibilityPanel.
+// It used to live only in the returning-student branch, so a brand-new student
+// -- an applicant just approved from the kiosk, or a student created moments
+// ago at the counter -- saw a green "can be enrolled in any grade level" panel
+// and no mention of documents at all, then hit a flat refusal from the server
+// the moment the status was switched to Enrolled. The eligibility endpoint has
+// always returned missing_docs for new students (enrollments/views.py derives
+// entry_status regardless of history); only this component threw it away.
+//
+// `defaultOpen` is for the hand-off from registration or from an approved
+// application: on that path the document set is known to be empty, so the
+// upload belongs in front of the registrar rather than behind a disclosure.
+function MissingDocsBlock({ missingDocs, student, eligibility, onDocumentsChanged, defaultOpen = false }) {
+  // documents_assessed=false means "we could not work out which documents
+  // apply", not "none are missing" -- enrollments/views.py says so explicitly
+  // and warns clients not to read the empty list as a clean bill of health.
+  if (eligibility?.documents_assessed === false) {
+    return (
+      <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "flex-start", gap: 7 }}>
+        <i className="ti ti-help-circle" style={{ fontSize: 14, marginTop: 1, flexShrink: 0 }} />
+        <span>Required documents could not be checked without a school level. Pick one above to see what this learner still owes.</span>
+      </div>
+    );
+  }
+  if (!missingDocs?.length) return null;
+  return (
+    <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+        <i className="ti ti-file-x" style={{ marginRight: 5 }} />Missing Required Documents ({missingDocs.length})
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+        {missingDocs.map((d) => (
+          <li key={d.requirement_type_id} style={{ fontSize: 12, color: "#7c2d12" }}>{d.requirement_name}</li>
+        ))}
+      </ul>
+      <div style={{ fontSize: 11, color: "#78350f", marginTop: 8, fontStyle: "italic" }}>
+        Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
+      </div>
+      {/* Fix it here rather than sending the registrar off to find another
+          page. Submissions belong to the student, not the enrollment, so
+          uploading before this enrollment exists is perfectly valid. */}
+      {student && (
+        <details style={{ marginTop: 10 }} open={defaultOpen}>
+          <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#92400e" }}>
+            Upload documents now
+          </summary>
+          <div style={{ marginTop: 10, background: "white", borderRadius: 10, padding: "12px 14px" }}>
+            <RequirementDocumentsPanel
+              studentId={student.student_id}
+              student={student}
+              variant="compact"
+              context={{
+                schoolLevel: eligibility.school_level_used,
+                entryStatus: eligibility.entry_status,
+              }}
+              onChange={onDocumentsChanged}
+            />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin, student, onDocumentsChanged, continuing = false }) {
   if (loading) {
     return (
       <div style={{ background: "#fff8f6", border: `1px solid ${C.redMid}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 13 }}>
@@ -194,16 +259,30 @@ function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, 
 
   const { is_eligible, is_new_student, blocking_reasons, missing_docs, can_repeat, admin_override_required, next_allowed_grade, last_enrollment } = eligibility;
 
+  // A new student has no grade history to block on -- but they are also the
+  // learner most likely to owe every document, so the documents they still owe
+  // are rendered here too. This branch used to return the green panel alone,
+  // which read as a clean bill of health and left the registrar to discover the
+  // requirement only when the server refused to activate the enrollment.
   if (is_new_student) {
     return (
-      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 9, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <i className="ti ti-star" style={{ fontSize: 15, color: "#2e6b0d" }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="ti ti-star" style={{ fontSize: 15, color: "#2e6b0d" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>New Student</div>
+            <div style={{ fontSize: 12, color: "#166534", marginTop: 1 }}>No prior enrollment records. Student can be enrolled in any grade level.</div>
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>New Student</div>
-          <div style={{ fontSize: 12, color: "#166534", marginTop: 1 }}>No prior enrollment records. Student can be enrolled in any grade level.</div>
-        </div>
+        <MissingDocsBlock
+          missingDocs={missing_docs}
+          student={student}
+          eligibility={eligibility}
+          onDocumentsChanged={onDocumentsChanged}
+          defaultOpen={continuing}
+        />
       </div>
     );
   }
@@ -254,44 +333,13 @@ function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, 
         </div>
       )}
 
-      {/* Missing documents */}
-      {missing_docs.length > 0 && (
-        <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-            <i className="ti ti-file-x" style={{ marginRight: 5 }} />Missing Required Documents ({missing_docs.length})
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
-            {missing_docs.map((d) => (
-              <li key={d.requirement_type_id} style={{ fontSize: 12, color: "#7c2d12" }}>{d.requirement_name}</li>
-            ))}
-          </ul>
-          <div style={{ fontSize: 11, color: "#78350f", marginTop: 8, fontStyle: "italic" }}>
-            Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
-          </div>
-          {/* Fix it here rather than sending the registrar off to find another
-              page. Submissions belong to the student, not the enrollment, so
-              uploading before this enrollment exists is perfectly valid. */}
-          {student && (
-            <details style={{ marginTop: 10 }}>
-              <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#92400e" }}>
-                Upload documents now
-              </summary>
-              <div style={{ marginTop: 10, background: "white", borderRadius: 10, padding: "12px 14px" }}>
-                <RequirementDocumentsPanel
-                  studentId={student.student_id}
-                  student={student}
-                  variant="compact"
-                  context={{
-                    schoolLevel: eligibility.school_level_used,
-                    entryStatus: eligibility.entry_status,
-                  }}
-                  onChange={onDocumentsChanged}
-                />
-              </div>
-            </details>
-          )}
-        </div>
-      )}
+      <MissingDocsBlock
+        missingDocs={missing_docs}
+        student={student}
+        eligibility={eligibility}
+        onDocumentsChanged={onDocumentsChanged}
+        defaultOpen={continuing}
+      />
 
       {/* Admin override toggle — only shown to admin users */}
       {admin_override_required && isAdmin && (
@@ -465,6 +513,16 @@ export default function EnrollmentFormPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isEdit   = Boolean(id);
+  // Set by the hand-off from student registration (StudentFormPage) and from
+  // approving an application. It means the student record already exists and
+  // this form is the second half of one process -- which changes both what the
+  // page says and what abandoning it costs.
+  // Requires the student too: the banner and the leave-confirm both assert
+  // that a student record already exists, so a bare ?continuing=1 (a shared
+  // or hand-edited URL) must not be able to make those claims.
+  const continuing =
+    !isEdit && searchParams.get("continuing") === "1" && Boolean(searchParams.get("student"));
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
   // Invoice generation is BILLING_ROLES-only on billing-service, even though
   // this route allows every staff role — skip the "Generate Invoice?" prompt
@@ -657,7 +715,16 @@ export default function EnrollmentFormPage() {
     if (!preselectId) return;
     (async () => {
       const st = await getStudent(preselectId).catch(() => null);
-      if (!st) return;
+      if (!st) {
+        // Silently returning left an empty student picker under a banner
+        // still claiming "Step 2 of 2", with nothing to say the link was
+        // stale or the record gone.
+        setError(
+          `Could not load student #${preselectId}. They may have been removed — ` +
+          `pick the student manually, or go back to Students.`,
+        );
+        return;
+      }
 
       const appliedGrade = searchParams.get("grade_level");
       const appliedLevel = searchParams.get("school_level") || schoolLevelForGrade(appliedGrade || "");
@@ -870,7 +937,7 @@ export default function EnrollmentFormPage() {
             whileHover={{ x: -2 }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.12 }}
-            onClick={() => navigate("/enrollments")}
+            onClick={() => setLeaveConfirm(true)}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
             <i className="ti ti-arrow-left" style={{ fontSize: 13 }} />Back to Enrollments
           </motion.button>
@@ -888,6 +955,22 @@ export default function EnrollmentFormPage() {
             </span>
           </div>
         </motion.div>
+
+        {/* Arrived straight from registration or from approving an
+            application: say so, so this reads as the second half of one task
+            rather than an unrelated form, and name what Pending will mean if
+            they stop here. */}
+        {continuing && (
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#1e40af", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 9 }}>
+            <i className="ti ti-arrow-narrow-right" style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }} />
+            <div>
+              <strong>Step 2 of 2 — enrolling {student ? `${student.first_name} ${student.last_name}`.trim() : "this student"}.</strong>
+              <div style={{ marginTop: 2, color: "#1d4ed8" }}>
+                The student record is already saved. Saving as <strong>Pending</strong> is fine — they are not enrolled, and take no section or grades, until the required documents are in.
+              </div>
+            </div>
+          </div>
+        )}
 
         <AnimatePresence>
           {error && (
@@ -942,6 +1025,7 @@ export default function EnrollmentFormPage() {
                     isAdmin={isAdmin}
                     student={student}
                     onDocumentsChanged={refreshEligibility}
+                    continuing={continuing}
                   />
                 </motion.div>
               )}
@@ -1215,7 +1299,7 @@ export default function EnrollmentFormPage() {
               transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 12 }}>
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                type="button" onClick={() => navigate("/enrollments")}
+                type="button" onClick={() => setLeaveConfirm(true)}
                 style={{ background: "transparent", color: C.muted, border: `1.5px solid ${C.redMid}`, borderRadius: 50, padding: "10px 24px", fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
                 Cancel
               </motion.button>
@@ -1244,11 +1328,27 @@ export default function EnrollmentFormPage() {
     <AnimatePresence>
       {invoicePrompt && (
         <InvoicePromptModal
+          key="invoice-prompt"
           enrollmentId={invoicePrompt.enrollmentId}
           studentName={invoicePrompt.studentName}
           effectiveDate={invoicePrompt.effectiveDate}
           onClose={() => { setInvoicePrompt(null); navigate("/enrollments"); }}
-          onGoToInvoices={() => navigate(`/invoices?enrollment_id=${invoicePrompt.enrollmentId}`)}
+          onGoToInvoices={() => navigate(`/invoices?selected=${invoicePrompt.enrollmentId}`)}
+        />
+      )}
+      {leaveConfirm && (
+        <ConfirmDialog
+          key="leave-confirm"
+          icon="ti-arrow-left"
+          danger={false}
+          title={continuing ? "Stop before enrolling?" : "Discard this enrollment?"}
+          message={continuing
+            ? `${student ? `${student.first_name} ${student.last_name}`.trim() : "This student"} has already been saved as a student record. Stopping now leaves them with no enrollment — no section, no class lists and no grades — until someone enrolls them later.`
+            : "Anything entered on this form will be lost."}
+          confirmLabel={continuing ? "Yes, enroll later" : "Yes, discard"}
+          cancelLabel={continuing ? "Continue enrolling" : "Keep editing"}
+          onConfirm={() => navigate("/enrollments")}
+          onCancel={() => setLeaveConfirm(false)}
         />
       )}
     </AnimatePresence>

@@ -398,6 +398,26 @@ class ApplySubmitView(APIView):
             student_data = validated_view.get("student", {})
             matches = duplicates.find_matches(student_data)
 
+            # ApplicantSubmissionSerializer declares only the five keys that go
+            # on to become real records, so `serializer.data` does not carry
+            # `applying_for` -- and assigning it wholesale below used to destroy
+            # the grade level the applicant chose. That key is the only piece of
+            # enrolment intent the kiosk collects, and StudentApplicationsPage
+            # reads it back on approval to prefill the enrolment form, so losing
+            # it here silently emptied that prefill.
+            #
+            # Re-whitelisted through the same allow-list the draft PATCH uses,
+            # so submit is no more permissive than autosave. It cannot reach a
+            # student record: intake/services.py re-whitelists to the student
+            # keys again before create_student_bundle.
+            from .serializers import ALLOWED_APPLYING_FOR_FIELDS, whitelist
+            applying_for = whitelist(
+                (application.payload_json or {}).get("applying_for"),
+                ALLOWED_APPLYING_FOR_FIELDS,
+            )
+            if applying_for:
+                validated_view["applying_for"] = applying_for
+
             application.payload_json = validated_view
             application.lrn = (student_data.get("lrn") or "").strip() or None
             application.first_name = student_data.get("first_name", "")

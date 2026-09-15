@@ -161,6 +161,115 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 > Sample documents are real civil-registry records and are **gitignored** (`OCR_IMAGES/`,
 > `students/fixtures/*.jpg`). Do not commit them — see the note in `.gitignore`.
 
+## Deployment
+
+There is no Dockerfile, PaaS config, or reverse proxy in this repo. What is
+documented here is a **LAN testing deployment**: the four services plus the
+built frontend running on one Windows machine, reachable from other devices on
+the same network. That is enough for demos and panel testing. It is not a public
+production deployment — nothing in this stack terminates TLS.
+
+### Before the first deploy
+
+1. **Rotate the Gemini API key** — a live one is in git history (commit `5bcd352`).
+2. **Change the demo account passwords** listed above; they are published in this repo.
+3. Keep the repo private until the documents noted under *Known in-progress work* are purged from history.
+
+### 1. Environment
+
+In each `backend/*/.env`:
+
+```ini
+DEBUG=0
+ALLOWED_HOSTS=192.168.1.42                      # this machine's LAN IP
+CORS_ALLOWED_ORIGINS=http://192.168.1.42:4173   # where the frontend is served
+```
+
+`SECRET_KEY` must still be identical across all four. Leave every `SECURE_*`
+flag **off** for a plain-HTTP LAN run — `SECURE_SSL_REDIRECT=1` without HTTPS
+makes every page unreachable. `NUM_PROXIES` stays `0` with no proxy in front.
+
+`ALLOWED_HOSTS` is not optional once `DEBUG=0`: an empty list rejects every
+request, which looks exactly like the service being down.
+
+Find the LAN IP with `ipconfig`, or run `.\scripts\serve-lan.ps1 -Check`, which
+prints it along with the URLs.
+
+### 2. Collect static files
+
+```powershell
+foreach ($s in 'identity','student','billing','enrollment') {
+  Push-Location "backend\$s-service"
+  ..\..\.venv\Scripts\python.exe manage.py collectstatic --noinput
+  Pop-Location
+}
+```
+
+Required, not optional. Static files go through whitenoise's
+`CompressedManifestStaticFilesStorage`, which raises on any file it has no hash
+for — skip this and `/admin/` and the DRF browsable API break at request time.
+
+### 3. Start the services
+
+```powershell
+.\scripts\serve-lan.ps1
+```
+
+waitress, not gunicorn: gunicorn stays pinned for a future Linux host but does
+not run on Windows. Each service binds `0.0.0.0` (not `127.0.0.1`) so the LAN
+can reach it, and opens in its own window — close the windows to stop the stack.
+The script refuses to start if a `.env` or a static manifest is missing.
+
+Verify from the host, then from another device:
+
+```powershell
+.\scripts\health-check.ps1 -HostName 192.168.1.42
+```
+
+All four must return `{"status": "ok"}`. A `503` means the service is up but the
+shared database is unreachable.
+
+### 4. Build and serve the frontend
+
+The production build **must** be given the API URLs — `vite build` aborts
+without them rather than silently baking in `localhost`:
+
+```powershell
+cd frontend\admin-portal
+$env:VITE_IDENTITY_API_URL   = "http://192.168.1.42:8001/api/auth"
+$env:VITE_STUDENT_API_URL    = "http://192.168.1.42:8000/api"
+$env:VITE_BILLING_API_URL    = "http://192.168.1.42:8002/api"
+$env:VITE_ENROLLMENT_API_URL = "http://192.168.1.42:8003/api"
+npm run build
+npm run preview -- --host 0.0.0.0 --port 4173
+```
+
+Confirm the URLs were actually used — the count must be **0**:
+
+```powershell
+(Select-String -Path dist\assets\*.js -Pattern "localhost:80").Count
+```
+
+Whatever serves `dist/` must fall back to `index.html` for unknown paths, or
+refreshing on any route 404s. `vercel.json` does this on Vercel only.
+
+### 5. Schedule the overdue-installments job
+
+Nothing invokes this automatically:
+
+```powershell
+cd backend\billing-service
+..\..\.venv\Scripts\python.exe manage.py flag_overdue_installments
+```
+
+Register it daily in Windows Task Scheduler, or installments stay `pending` past
+their due date.
+
+### Firewall
+
+Windows Firewall blocks inbound connections on these ports by default. Allow
+8000-8003 and the frontend port for **Private** networks only — never Public.
+
 ## Known in-progress work
 
 - **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. `HasRole` (both the shared copy used by billing/enrollment/student and identity-service's own) now fails closed if a view omits `required_roles` — it used to silently allow any authenticated user, guardians included; a view that genuinely wants that must set `ALLOW_ANY_AUTHENTICATED_ROLE = True` explicitly. `backend/shared/` now also holds `authentication.py` (`SingleSessionJWTAuthentication`, de-duplicated from three per-service copies) and `health.py`; `user_stub.py` remains unused dead code (see git history/audit notes for why).

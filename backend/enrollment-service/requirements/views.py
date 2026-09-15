@@ -42,6 +42,12 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["student_id", "requirement_type"]
     ordering_fields = ["created_at", "updated_at"]
+    # ViewSet.as_view() rejects any @action initkwarg that is not already an
+    # attribute of the class, and APIView declares throttle_classes but not
+    # throttle_scope -- so the scoped `file` action below made the router raise
+    # TypeError while building urlpatterns, taking the whole service down at
+    # import. None leaves the default routes unscoped; the action sets its own.
+    throttle_scope = None
 
     def get_queryset(self):
         qs = StudentRequirementSubmission.objects.select_related("requirement_type")

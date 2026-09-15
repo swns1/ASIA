@@ -312,6 +312,66 @@ class TestApplyingFor:
             "strand": "STEM",
         }
 
+    def _submit(self, invite, application):
+        """Drives ApplySubmitView with every ORM call mocked, the same way
+        TestApplySubmitView does — see this module's docstring for why there
+        is no real database to hit."""
+        token = issue_session_token(invite, application)
+        request = factory.post(f"/api/apply/{invite.pk}/submit/", HTTP_X_APPLICANT_TOKEN=token)
+
+        with patch("intake.invites.StudentApplication.objects.select_related") as select_related,              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update,              patch("intake.views.duplicates.find_matches", return_value=[]),              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter,              patch("intake.views.transaction.atomic", return_value=nullcontext()):
+            select_related.return_value.get.return_value = application
+            select_for_update.return_value.get.return_value = application
+            application.save = MagicMock()
+            invite_filter.return_value.update = MagicMock(return_value=1)
+
+            return ApplySubmitView.as_view()(request, invite_id=invite.pk)
+
+    def test_survives_submission(self):
+        """ApplicantSubmissionSerializer declares only the five record-shaped
+        keys, so `serializer.data` drops applying_for — and submit assigns that
+        over the whole payload. Without carrying it across, the grade level the
+        family chose was destroyed at submit and the enrolment prefill the
+        registrar gets on approval was silently always empty."""
+        invite = _invite()
+        application = _draft(invite, payload={
+            "student": _valid_student_payload(),
+            "applying_for": {"grade_level": "Grade 7", "school_level": "junior_highschool"},
+        })
+
+        response = self._submit(invite, application)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert application.payload_json["applying_for"] == {
+            "grade_level": "Grade 7",
+            "school_level": "junior_highschool",
+        }
+        # The student bundle still validated and survived alongside it.
+        assert application.payload_json["student"]["first_name"] == "Juan"
+
+    def test_submission_is_no_more_permissive_than_the_draft(self):
+        """Carrying the key across must not become a hole: submit re-applies
+        the same allow-list the draft PATCH uses, so a client that posts
+        straight to submit cannot smuggle in a section or a status."""
+        invite = _invite()
+        application = _draft(invite, payload={
+            "student": _valid_student_payload(),
+            "applying_for": {
+                "grade_level": "Grade 11",
+                "strand": "STEM",
+                "section": "Sampaguita",          # registrar's call, never the applicant's
+                "enrollment_status": "enrolled",  # would skip the review it exists for
+            },
+        })
+
+        response = self._submit(invite, application)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert application.payload_json["applying_for"] == {
+            "grade_level": "Grade 11",
+            "strand": "STEM",
+        }
+
     def test_never_reaches_the_student_bundle(self):
         from .services import _whitelisted_bundle
 

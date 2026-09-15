@@ -207,9 +207,20 @@ TIME_ZONE = "Asia/Manila"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "/static/"
+STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Django 5.1 removed STATICFILES_STORAGE in favour of STORAGES, and Django 6
+# ignores the old name in silence -- so this service read as "configured for
+# whitenoise's compressed manifest storage" while actually getting plain
+# StaticFilesStorage: no compression, no cache-busting hashes. Declared here it
+# takes effect, which makes `collectstatic` mandatory before serving, since
+# manifest storage raises on any static file it holds no hash for.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # DRF throttling (see DEFAULT_THROTTLE_CLASSES above) reads/writes through

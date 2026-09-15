@@ -6,7 +6,7 @@ const studentClient = createApiClient({
   timeout: 10000,
 });
 
-export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "" } = {}) {
+export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "", unenrolled = "" } = {}) {
   const res = await studentClient.get("/students/", {
     params: {
       page,
@@ -17,6 +17,8 @@ export async function getStudents({ page = 1, page_size, search = "", status = "
       ...(ordering     && { ordering }),
       ...(school_level && { school_level }),
       ...(grade_level  && { grade_level }),
+      // A school year: students with no live enrollment for it.
+      ...(unenrolled   && { unenrolled }),
     },
   });
   return res.data;

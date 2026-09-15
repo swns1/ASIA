@@ -19,7 +19,6 @@ from .models import (
     Student,
     Household,
     Guardian,
-    StudentSibling,
     Sibling,
     PreviousSchool,
     RequirementType,
@@ -30,7 +29,6 @@ from .serializers import (
     StudentBillingSummarySerializer,
     HouseholdSerializer,
     GuardianSerializer,
-    StudentSiblingSerializer,
     SiblingSerializer,
     PreviousSchoolSerializer,
     RequirementTypeSerializer,
@@ -58,6 +56,52 @@ def _scope_to_teacher_roster(queryset, user, *, field="student_id__in", deny_acc
     if role == "accounting" and deny_accounting:
         return queryset.none()
     return queryset
+
+
+# Household fields that carry real meaning downstream. parent_marital_status,
+# living_arrangement, is_4ps_beneficiary and four_ps_id drive fee discounts and
+# scholarship eligibility (see HouseholdViewSet.get_queryset), which is why
+# linking two siblings must not quietly discard one family's copy of them.
+_HOUSEHOLD_MERGE_FIELDS = (
+    "parent_marital_status",
+    "living_arrangement",
+    "is_4ps_beneficiary",
+    "four_ps_id",
+)
+
+
+def _merge_household_details(source_id, target_id):
+    """Copy across any detail the surviving household is missing, and return a
+    description of every field where the two disagreed.
+
+    Linking siblings moves students between households and abandons the empty
+    row. Before this, the abandoned row's details went with it: a child could
+    lose their 4Ps beneficiary status -- and the fee discount that rides on it
+    -- purely by being recorded as somebody's sibling.
+
+    Conflicts are reported, never auto-resolved. Choosing between two stated
+    marital statuses is a registrar's call, not a merge rule's.
+    """
+    source = Household.objects.filter(pk=source_id).first()
+    target = Household.objects.filter(pk=target_id).first()
+    if not source or not target:
+        return []
+
+    updates = {}
+    conflicts = []
+    for field in _HOUSEHOLD_MERGE_FIELDS:
+        src = getattr(source, field, None)
+        tgt = getattr(target, field, None)
+        if src is None or src == "" or src is False:
+            continue                      # nothing worth carrying over
+        if tgt is None or tgt == "" or tgt is False:
+            updates[field] = src
+        elif src != tgt:
+            conflicts.append(f"{field}: kept {tgt!r}; the other household said {src!r}")
+
+    if updates:
+        Household.objects.filter(pk=target_id).update(**updates)
+    return conflicts
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -89,6 +133,23 @@ class StudentViewSet(viewsets.ModelViewSet):
                 Q(middle_name__icontains=name) |
                 Q(last_name__icontains=name)
             )
+        # ?unenrolled=<school_year> -- students with no live enrollment for
+        # that year. A student registered but never enrolled has no section,
+        # appears in no SF1 or SF2 and can be given no grades, and until this
+        # filter existed nothing in the app could list them: the registration
+        # and enrolment forms both warn that someone must "enrol them later",
+        # with no way to find out who that is. Cancelled and completed rows do
+        # not count as covering the year -- only a live one does.
+        unenrolled_year = (params.get("unenrolled") or "").strip()
+        if unenrolled_year:
+            from accounts.enrollment_mirror import EnrollmentMirror
+            covered = (
+                EnrollmentMirror.objects
+                .filter(school_year=unenrolled_year, enrollment_status__in=("enrolled", "pending"))
+                .values_list("student_id", flat=True)
+            )
+            queryset = queryset.exclude(student_id__in=list(covered))
+
         # accounting keeps roster-wide access (see get_serializer_class --
         # it gets a reduced field set instead, not a filtered queryset: any
         # student could need an invoice, so scoping by teacher-style roster
@@ -113,10 +174,33 @@ class StudentViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             student, household, guardians = create_student_bundle(data)
 
+            # Same atomic block as the student itself. Created here rather than
+            # by the client afterwards: a half-finished registration used to
+            # leave a saved student with its siblings lost, and since `lrn` is
+            # UNIQUE the retry could never get past the student row again.
+            # Mirrors intake/services.py::approve_application, which has always
+            # written these two inside its own transaction.
+            siblings = Sibling.objects.bulk_create([
+                Sibling(student=student, full_name=sib["full_name"], age=sib.get("age"))
+                for sib in data.get("siblings", [])
+                if (sib.get("full_name") or "").strip()
+            ])
+            previous_schools = PreviousSchool.objects.bulk_create([
+                PreviousSchool(
+                    student=student,
+                    school_name=sch["school_name"],
+                    school_address=sch.get("school_address", ""),
+                )
+                for sch in data.get("previous_schools", [])
+                if (sch.get("school_name") or "").strip()
+            ])
+
         response_data = {
             "student": student,
             "household": household,
             "guardians": guardians,
+            "siblings": siblings,
+            "previous_schools": previous_schools,
         }
         response_serializer = StudentBulkCreateResponseSerializer(response_data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -181,18 +265,50 @@ class StudentViewSet(viewsets.ModelViewSet):
             if not household_id:
                 household_id = Household.objects.create().household_id
 
-            # Move whichever side isn't already in it. If the two were in
-            # different households the sibling's old one is left behind rather
-            # than deleted -- it may still hold another child, and an empty
-            # household row is harmless.
-            for person in (student, sibling):
-                if person.household_id != household_id:
-                    Student.objects.filter(pk=person.pk).update(household_id=household_id)
+            # Is there a second, different household being absorbed?
+            absorbed_id = None
+            if (student.household_id and sibling.household_id
+                    and student.household_id != sibling.household_id):
+                absorbed_id = (
+                    sibling.household_id if household_id == student.household_id
+                    else student.household_id
+                )
 
-        return Response({
+            conflicts = []
+            if absorbed_id:
+                # Carry across anything the surviving household is missing
+                # before the move, so 4Ps status and the rest are not lost with
+                # the abandoned row.
+                conflicts = _merge_household_details(absorbed_id, household_id)
+
+                # Sibling-ness is transitive: everyone already in the absorbed
+                # household is a sibling of both of these students, so the
+                # whole group moves. Moving only the named student used to
+                # silently split them from children they were already recorded
+                # with, leaving the old household holding the remainder.
+                moved = list(
+                    Student.objects.filter(household_id=absorbed_id)
+                    .values_list("student_id", flat=True)
+                )
+                Student.objects.filter(household_id=absorbed_id).update(household_id=household_id)
+            else:
+                moved = []
+                for person in (student, sibling):
+                    if person.household_id != household_id:
+                        Student.objects.filter(pk=person.pk).update(household_id=household_id)
+                        moved.append(person.pk)
+
+        payload = {
             "household_id": household_id,
+            "moved_student_ids": moved,
             "detail": f"{student.first_name} and {sibling.first_name} are now recorded as siblings.",
-        })
+        }
+        # Surfaced rather than resolved: where the two households disagreed the
+        # surviving value was kept, and a registrar has to be told which so
+        # they can correct it if the wrong one won.
+        if conflicts:
+            payload["household_conflicts"] = conflicts
+        return Response(payload)
 
     @action(detail=True, methods=["post"], url_path="unlink-sibling")
     def unlink_sibling(self, request, pk=None):
@@ -305,6 +421,12 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     ordering_fields = ["student_requirement_submission_id", "submitted_at", "verified_at"]
+    # ViewSet.as_view() rejects any @action initkwarg that is not already an
+    # attribute of the class, and APIView declares throttle_classes but not
+    # throttle_scope -- so the scoped `file` action below made the router raise
+    # TypeError while building urlpatterns, taking the whole service down at
+    # import. None leaves the default routes unscoped; the action sets its own.
+    throttle_scope = None
 
     def get_queryset(self):
         queryset = super().get_queryset()

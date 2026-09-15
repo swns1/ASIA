@@ -162,9 +162,20 @@ class Guardian(models.Model):
 
 
 class StudentSibling(models.Model):
+    """UNUSED. Models sibling-ness as an explicit student-to-student link; the
+    system records it through a shared `students.household_id` instead (see
+    StudentViewSet.siblings / link_sibling for why keeping both means keeping
+    two answers to one question that can disagree). The table exists, so the
+    model is kept to describe it -- nothing reads or writes it.
+
+    The related names are deliberately explicit: `related_name="siblings"`
+    made `student.siblings` resolve to THIS unused model rather than to the
+    wizard-entered Sibling rows or the household-derived list, which is a trap
+    for anyone reaching for the obvious attribute name.
+    """
     student_sibling_id = models.BigAutoField(primary_key=True)
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="siblings")
-    sibling_student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="sibling_of")
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="student_sibling_links")
+    sibling_student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="student_sibling_links_reverse")
     relationship_note = models.CharField(max_length=20, default="sibling", null=True)
 
     class Meta:

@@ -1749,7 +1749,6 @@ export default function GradesPage() {
               gradesBySubject[name][g.grading_period] = parseFloat(g.numeric_grade);
             });
             return callGemini("grade_report", {
-              student_name:    fullName,
               grade_level:     enrollment.grade_level,
               school_level:    enrollment.school_level,
               section:         enrollment.section,

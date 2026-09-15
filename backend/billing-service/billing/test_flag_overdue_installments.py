@@ -18,7 +18,7 @@ from django.core.management import call_command
 
 @patch("billing.management.commands.flag_overdue_installments.InvoiceInstallment.objects.filter")
 def test_flags_only_pending_and_partially_paid_installments_past_due_date(mock_filter):
-    mock_filter.return_value.update.return_value = 3
+    mock_filter.return_value.exclude.return_value.update.return_value = 3
     out = StringIO()
 
     call_command("flag_overdue_installments", stdout=out)
@@ -27,13 +27,27 @@ def test_flags_only_pending_and_partially_paid_installments_past_due_date(mock_f
     _, kwargs = mock_filter.call_args
     assert kwargs["status__in"] == ("pending", "partially_paid")
     assert "due_date__lt" in kwargs
-    mock_filter.return_value.update.assert_called_once_with(status="overdue")
+    mock_filter.return_value.exclude.return_value.update.assert_called_once_with(status="overdue")
     assert "Flagged 3 installment(s) as overdue." in out.getvalue()
 
 
 @patch("billing.management.commands.flag_overdue_installments.InvoiceInstallment.objects.filter")
+def test_installments_on_a_void_invoice_are_left_alone(mock_filter):
+    """Voiding an invoice is a status flip on the parent and never touches its
+    installments, which stay "pending". Without this exclusion those rows kept
+    ageing into "overdue", so a cancelled invoice grew overdue installments
+    that both the invoice detail tab and the guardian ledger showed as owed."""
+    mock_filter.return_value.exclude.return_value.update.return_value = 0
+    out = StringIO()
+
+    call_command("flag_overdue_installments", stdout=out)
+
+    mock_filter.return_value.exclude.assert_called_once_with(invoice__status="void")
+
+
+@patch("billing.management.commands.flag_overdue_installments.InvoiceInstallment.objects.filter")
 def test_reports_zero_when_nothing_is_overdue(mock_filter):
-    mock_filter.return_value.update.return_value = 0
+    mock_filter.return_value.exclude.return_value.update.return_value = 0
     out = StringIO()
 
     call_command("flag_overdue_installments", stdout=out)

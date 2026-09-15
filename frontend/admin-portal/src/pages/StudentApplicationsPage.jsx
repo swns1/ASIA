@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
+import Card from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import Alert from "../components/ui/Alert";
@@ -211,8 +212,10 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
       const result = await approveStudentApplication(applicationId, { student: { lrn: lrn.trim() } });
       onDecided?.();
       onClose();
+      // Falsy created_student_id means this was a replay of an already-approved
+      // application: nothing was created now, so do not claim it was.
       if (!result.created_student_id) {
-        toast.success("Application approved — student record created.");
+        toast.success("Application already approved.");
         return;
       }
       // Approving only creates the student record. Until an Enrollment
@@ -222,7 +225,14 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
       // form with what the family said they were applying for; the section
       // is the registrar's call, so the form still asks for it.
       toast.success("Student record created — now enrol them for this school year.");
-      const params = new URLSearchParams({ student: String(result.created_student_id) });
+      // continuing=1 marks this as the second half of one process, exactly as
+      // the counter-registration hand-off does. It matters more here: an
+      // applicant who filled the kiosk form has uploaded no documents at all,
+      // so the enrolment form should open the upload panel rather than hide it.
+      const params = new URLSearchParams({
+        student: String(result.created_student_id),
+        continuing: "1",
+      });
       if (applyingFor.grade_level) params.set("grade_level", applyingFor.grade_level);
       if (applyingFor.school_level) params.set("school_level", applyingFor.school_level);
       if (applyingFor.strand) params.set("strand", applyingFor.strand);
@@ -319,7 +329,6 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
             guardians={payload.guardians || []}
             siblings={payload.siblings || []}
             schools={payload.previous_schools || []}
-            pendingUploads={[]} existingDocs={[]} isEdit={false}
           />
 
           {decided ? (
@@ -382,35 +391,40 @@ export default function StudentApplicationsPage() {
         <Tabs tabs={TABS} value={active} onChange={setActive} className="mb-4" />
 
         <TabPanel id={active} direction={direction}>
-          <Table
-            columns={COLUMNS}
-            loading={loading}
-            error={error}
-            onRetry={load}
-            errorSubject="student applications"
-            isEmpty={!loading && !error && rows.length === 0}
-            empty={{
-              icon: "ti-inbox",
-              title: `No ${TABS.find((t) => t.id === active)?.label.toLowerCase()} applications`,
-              subtitle: "Issue a form link to get started.",
-            }}
-          >
-            {rows.map((row) => (
-              <TableRow key={row.student_application_id} onClick={() => setOpenApplicationId(row.student_application_id)}>
-                <TableCell><span className="font-semibold text-neutral-900">{row.reference}</span></TableCell>
-                <TableCell>{`${row.first_name} ${row.last_name}`.trim() || "—"}</TableCell>
-                <TableCell>{row.lrn || <span className="text-neutral-400">Not yet assigned</span>}</TableCell>
-                <TableCell>{fmtDate(row.submitted_at)}</TableCell>
-                <TableCell>
-                  {row.duplicate_of_student_id && (
-                    <span title="Possible duplicate of an existing student">
-                      <i className="ti ti-alert-triangle text-warning-500" aria-hidden="true" />
-                    </span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </Table>
+          {/* The queue sits on a card like every other list page (see
+              StudentsPage); TabPanel already supplies the entrance
+              animation, so this needs no motion wrapper of its own. */}
+          <Card padding="none" className="overflow-hidden">
+            <Table
+              columns={COLUMNS}
+              loading={loading}
+              error={error}
+              onRetry={load}
+              errorSubject="student applications"
+              isEmpty={!loading && !error && rows.length === 0}
+              empty={{
+                icon: "ti-inbox",
+                title: `No ${TABS.find((t) => t.id === active)?.label.toLowerCase()} applications`,
+                subtitle: "Issue a form link to get started.",
+              }}
+            >
+              {rows.map((row) => (
+                <TableRow key={row.student_application_id} onClick={() => setOpenApplicationId(row.student_application_id)}>
+                  <TableCell><span className="font-semibold text-neutral-900">{row.reference}</span></TableCell>
+                  <TableCell>{`${row.first_name} ${row.last_name}`.trim() || "—"}</TableCell>
+                  <TableCell>{row.lrn || <span className="text-neutral-400">Not yet assigned</span>}</TableCell>
+                  <TableCell>{fmtDate(row.submitted_at)}</TableCell>
+                  <TableCell>
+                    {row.duplicate_of_student_id && (
+                      <span title="Possible duplicate of an existing student">
+                        <i className="ti ti-alert-triangle text-warning-500" aria-hidden="true" />
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </Table>
+          </Card>
         </TabPanel>
       </div>
 

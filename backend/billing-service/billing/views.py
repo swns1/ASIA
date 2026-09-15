@@ -694,6 +694,24 @@ class StudentPaymentViewSet(
         # for the comparison was pointless precision loss on money math.
         invoice_id = serializer.validated_data["invoice"].invoice_id
         invoice    = StudentInvoice.objects.select_for_update().get(invoice_id=invoice_id)
+
+        # ── Guard: a voided invoice is not collectable ──
+        # Voiding is a status flip on the parent and nothing else, so the
+        # balance below -- computed from items minus discounts, which never
+        # look at status -- still reads as money owed. The overpayment guard
+        # therefore let the payment through, and apply_payment() finished by
+        # setting the invoice to "paid"/"partially_paid", silently un-voiding
+        # it. A correction against a voided invoice is a re-issue, not a
+        # payment.
+        from rest_framework.exceptions import ValidationError
+        if invoice.status == "void":
+            raise ValidationError({
+                "invoice": (
+                    f"Invoice {invoice.invoice_no} is void and cannot take payments. "
+                    f"Re-issue it first if this student still owes."
+                )
+            })
+
         from .serializers import StudentInvoiceSerializer
         inv_data   = StudentInvoiceSerializer(invoice).data
         net_amount = Decimal(inv_data.get("net_amount", 0))
@@ -702,7 +720,6 @@ class StudentPaymentViewSet(
         amount     = Decimal(serializer.validated_data["amount_paid"])
 
         if amount > balance + Decimal("0.01"):
-            from rest_framework.exceptions import ValidationError
             raise ValidationError({
                 "amount_paid": f"Payment of ₱{amount:,.2f} exceeds remaining balance of ₱{balance:,.2f}."
             })

@@ -17,6 +17,7 @@ from django.db import IntegrityError
 
 from accounts.guardian_provisioning import (
     ALREADY_LINKED,
+    SKIPPED_EMAIL_IN_USE,
     CREATED,
     LINKED,
     SKIPPED_NO_EMAIL,
@@ -103,6 +104,7 @@ def test_a_second_child_links_the_existing_account_instead_of_creating_a_duplica
     # guardian row raises IntegrityError the moment a sibling enrolls.
     existing = MagicMock()
     existing.user_id = 42
+    existing.role = "guardian"
     results, mirror, user_model = _run([_guardian(pk=7)], existing_user=existing)
 
     assert results[CREATED] == []
@@ -114,6 +116,7 @@ def test_a_second_child_links_the_existing_account_instead_of_creating_a_duplica
 def test_matches_an_existing_account_case_insensitively():
     existing = MagicMock()
     existing.user_id = 42
+    existing.role = "guardian"
     _, _, user_model = _run([_guardian(email="  NORA@Example.COM ")], existing_user=existing)
 
     # Lookup is iexact on the trimmed, lowercased address, so the same parent
@@ -142,6 +145,7 @@ def test_losing_a_race_on_create_falls_back_to_linking():
     # constraint, so re-read and link rather than surfacing an error.
     existing = MagicMock()
     existing.user_id = 77
+    existing.role = "guardian"
     mirror = _MirrorStub([_guardian(pk=3)])
     user_qs = MagicMock()
     user_qs.first.side_effect = [None, existing]  # miss, then found on retry
@@ -246,3 +250,49 @@ class TestProvisionForEnrollment:
             # No exception escapes: enrolling a student must not 500 because a
             # convenience side effect failed.
             assert provision_for_enrollment(enrollment) is None
+
+
+class TestEmailAlreadyBelongsToStaff:
+    """`users.email` is UNIQUE across every role, and a staff member who is
+    also a parent is ordinary at this scale. Matching on email alone bound
+    guardian rows to teacher and accounting accounts -- granting nothing (every
+    guardian-scoped query checks role == "guardian" first) but consuming the
+    link, so the row read as provisioned for ever and the real parent could
+    never be given portal access.
+
+    This is not hypothetical here: seanwesleysalapare@gmail.com sits on four
+    guardian rows and on an accounting account.
+    """
+
+    def _staff(self, role="accounting", user_id=3):
+        staff = MagicMock()
+        staff.user_id = user_id
+        staff.role = role
+        return staff
+
+    def test_a_staff_account_is_not_linked_and_is_reported(self):
+        staff = self._staff()
+        results, mirror, user_model = _run([_guardian(pk=9)], existing_user=staff)
+
+        assert mirror.updates == []                      # nothing bound
+        user_model.objects.create.assert_not_called()    # and no duplicate made
+        assert len(results[SKIPPED_EMAIL_IN_USE]) == 1
+        assert "accounting" in results[SKIPPED_EMAIL_IN_USE][0]
+        assert not results[LINKED]
+
+    def test_a_teacher_account_is_refused_too(self):
+        results, mirror, _ = _run([_guardian(pk=9)], existing_user=self._staff(role="teacher"))
+
+        assert mirror.updates == []
+        assert len(results[SKIPPED_EMAIL_IN_USE]) == 1
+
+    def test_a_guardian_account_is_still_linked(self):
+        """The guard must narrow the match, not break the ordinary path."""
+        account = MagicMock()
+        account.user_id = 42
+        account.role = "guardian"
+        results, mirror, _ = _run([_guardian(pk=9)], existing_user=account)
+
+        assert mirror.updates == [(9, {"user_id": 42})]
+        assert len(results[LINKED]) == 1
+        assert not results[SKIPPED_EMAIL_IN_USE]

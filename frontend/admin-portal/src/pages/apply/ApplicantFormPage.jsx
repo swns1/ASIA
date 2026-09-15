@@ -26,11 +26,11 @@ import useIdleReset from "../../hooks/useIdleReset";
 import { clearAuthSession } from "../../utils/auth";
 import { lrn as lrnCheck, mobileNumber, birthDate } from "../../utils/validation";
 
-// Deliberately its own list, NOT StudentFormSteps.jsx's exported STEPS —
-// that one includes "documents", and there is no document upload here in
-// v1 (the applicant is physically at the school for anything that needs a
-// paper original; see the plan's decision 6). Same {id, label, icon} shape,
-// passed to StepBar via its `steps` prop.
+// Its own list rather than StudentFormSteps.jsx's exported STEPS. The two
+// happen to match today (STEPS used to carry a "documents" step, which is why
+// they were split), but they are free to diverge: there is no document upload
+// here, because an applicant is physically at the school for anything needing
+// a paper original. Same {id, label, icon} shape, passed to StepBar as `steps`.
 const APPLICANT_STEPS = [
   { id: "student",   label: "Student",       icon: "ti-user" },
   { id: "household", label: "Household",     icon: "ti-home" },
@@ -224,6 +224,7 @@ export default function ApplicantFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reference, setReference] = useState("");
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [countdown, setCountdown] = useState(SUCCESS_RETURN_SECONDS);
 
   const submittingRef = useRef(false);
@@ -398,7 +399,11 @@ export default function ApplicantFormPage() {
     exitTaps.current = [...exitTaps.current, now].filter((t) => now - t < EXIT_TAP_WINDOW_MS);
     if (exitTaps.current.length >= EXIT_TAP_COUNT) {
       exitTaps.current = [];
-      navigate("/login", { replace: true });
+      // Ask first. Five taps is a deliberate gesture, but it is five taps on a
+      // header an applicant may well be touching, and leaving abandons whatever
+      // has not autosaved in the last few seconds. The gate below is the same
+      // one the handover and idle dialogs use.
+      setShowExitConfirm(true);
     }
   };
 
@@ -653,6 +658,19 @@ export default function ApplicantFormPage() {
             <p className="mt-2 text-right text-xs text-[#c62828]">{validationError}</p>
           )}
         </div>
+      )}
+
+      {showExitConfirm && (
+        <ConfirmDialog
+          icon="ti-door-exit"
+          title="Leave the applicant form?"
+          message="This returns the device to the staff login. Anything typed since the last save is not stored yet."
+          confirmLabel="Yes, leave"
+          cancelLabel="Stay on the form"
+          danger={false}
+          onConfirm={() => navigate("/login", { replace: true })}
+          onCancel={() => setShowExitConfirm(false)}
+        />
       )}
 
       {showIdleWarning && phase === "form" && (
