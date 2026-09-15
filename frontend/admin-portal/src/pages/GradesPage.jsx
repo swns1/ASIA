@@ -5,12 +5,19 @@ import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Tabs from "../components/ui/Tabs";
+import Card from "../components/ui/Card";
+import { StatusBadge } from "../components/ui/Badge";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Button from "../components/ui/Button";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
 import toast from "react-hot-toast";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
-import EmptyState from "../components/EmptyState";
-import ErrorState from "../components/ui/ErrorState";
 import Pagination from "../components/Pagination";
+import Skeleton from "../components/ui/Skeleton";
+import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -52,13 +59,23 @@ const createNarrativeReport  = (p)      => _createNarrativeReport(p);
 const updateNarrativeReport  = (id, p)  => _updateNarrativeReport(id, p);
 const deleteNarrativeReport  = (id)     => _deleteNarrativeReport(id);
 
+// `tone` names the shared ChipGroup palette entry rather than carrying its own
+// bg/color pair — these were already the same values, just spelled out locally.
 const OVERVIEW_SCHOOL_LEVELS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   bg: "#fff0f0", color: "#c92a2a" },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", bg: "#fdf5e8", color: "#854f0b" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          bg: "#f0e8fd", color: "#7c3aed" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          bg: "#e8f0fd", color: "#2563eb" },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        bg: "#e8fdf0", color: "#2e6b0d" },
-  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   bg: "#fde8f8", color: "#be185d" },
+  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand"        },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery"      },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary"   },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh"   },
+  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh"   },
+];
+
+// The pass/fail facet. `dot` fills the status dot and the selected chip's
+// count badge; "All" carries no dot, matching every other status chip row.
+const REMARKS_FILTER_OPTIONS = [
+  { value: "",       label: "All"                                      },
+  { value: "passed", label: "Passed", tone: "success", dot: "#4caf50" },
+  { value: "failed", label: "Failed", tone: "error",   dot: "#f44336" },
 ];
 
 const OVERVIEW_GRADE_LEVELS = {
@@ -71,10 +88,16 @@ const OVERVIEW_GRADE_LEVELS = {
 
 const OVERVIEW_PAGE_SIZE = 20;
 
-function SortIcon({ k, sortKey, sortDir }) {
-  if (sortKey !== k) return <i className="ti ti-selector" style={{ fontSize: 11, color: "#8a6a6a", marginLeft: 4 }} />;
-  return <i className={`ti ti-sort-${sortDir === "asc" ? "ascending" : "descending"}`} style={{ fontSize: 11, color: "#c92a2a", marginLeft: 4 }} />;
-}
+// Overview's sortable columns. `Table` renders the caret and wires the click,
+// so the local SortIcon helper this page used is gone.
+const OVERVIEW_COLUMNS = [
+  { key: "name",        label: "Student",         align: "left", width: "40%" },
+  { key: "grade_level", label: "Grade / Section", sortable: true },
+  { key: "total",       label: "Grades",          sortable: true },
+  { key: "passed",      label: "Passed",          sortable: true },
+  { key: "failed",      label: "Failed",          sortable: true },
+  { key: "avg",         label: "Average",         sortable: true },
+];
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
@@ -212,374 +235,195 @@ function OverviewTab({ onNavigate }) {
   const isFirstRender = useIsFirstRender();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div className="flex flex-col gap-[18px]">
 
-      {/* ── Filter white card ── */}
-      <motion.div
-        initial={isFirstRender ? { opacity: 0, y: 8 } : false}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.28 : 0 }}
-        style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 0, position: "relative", zIndex: 2 }}
+      {/* ── Filters ── */}
+      <FilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        onClearSearch={() => setSearch("")}
+        onSearch={() => searchInputRef.current?.blur()}
+        searchRef={searchInputRef}
+        searchPlaceholder="Search student name or LRN…"
+        searchLabel="Search students by name or LRN"
+        hasFilters={Boolean(hasFilters)}
+        onClearFilters={clearFilters}
+        animate={isFirstRender}
+        animateDelay={0.28}
       >
-        {/* Search row */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div className="search-wrap" style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 16px", height: 42, transition: "border .15s,box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a", flexShrink: 0 }} />
-            <input
-              ref={searchInputRef}
-              aria-label="Search students by name or LRN"
-              placeholder="Search student name or LRN…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && searchInputRef.current?.blur()}
-              style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
-            />
-            {search && (
-              <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 2, borderRadius: 4 }}>
-                <i className="ti ti-x" style={{ fontSize: 13 }} />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => searchInputRef.current?.focus()}
-            style={{ height: 42, padding: "0 20px", background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, fontSize: 13, fontWeight: 600, color: "#7a5050", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.14s", flexShrink: 0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e03131"; e.currentTarget.style.color = "#c92a2a"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#f0e4e4"; e.currentTarget.style.color = "#7a5050"; }}
-          >
-            Search
-          </button>
-          <AnimatePresence>
-            {hasFilters && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.88 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.88 }}
-                transition={{ duration: 0.14 }}
-                whileTap={{ scale: 0.93 }}
-                onClick={clearFilters}
-                style={{ height: 42, padding: "0 14px", background: "white", border: "1.5px solid #fca5a5", borderRadius: 12, fontSize: 12, fontWeight: 600, color: "#b91c1c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}
-              >
-                <i className="ti ti-filter-off" style={{ fontSize: 13 }} />Clear
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
+        <FilterRow label="School Year">
+          <ChipGroup
+            options={schoolYearOptions.map((o) => ({ ...o, icon: "ti-calendar" }))}
+            value={schoolYear}
+            onChange={setSchoolYear}
+            label="Filter by school year"
+          />
+        </FilterRow>
 
-        {/* Divider */}
-        <div style={{ height: 1, background: "#f5eaea", margin: "14px 0" }} />
+        <FilterRow label="School Level">
+          <ChipGroup
+            options={OVERVIEW_SCHOOL_LEVELS}
+            value={schoolLevel}
+            onChange={setSchoolLevel}
+            label="Filter by school level"
+          />
+        </FilterRow>
 
-        {/* Chip rows */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Both cascade off School Level, so they stay mounted and animate
+            open rather than popping in and shoving the table down. */}
+        <CollapsibleFilterRow open={schoolLevel !== ""} label="Grade Level">
+          <ChipGroup
+            options={[{ value: "", label: "All Grades" }, ...gradeLevelOptions.map((g) => ({ value: g, label: g }))]}
+            value={gradeLevel}
+            onChange={setGradeLevel}
+            label="Filter by grade level"
+            stagger
+            generation={schoolLevel}
+          />
+        </CollapsibleFilterRow>
 
-          {/* School Year */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Year</div>
-            <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              {schoolYearOptions.map((o) => {
-                const active = schoolYear === o.value;
-                return (
-                  <motion.button
-                    key={o.value}
-                    layout
-                    initial={false}
-                    animate={{ backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#c92a2a" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
-                    transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                    onClick={() => setSchoolYear(o.value)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                  >
-                    <i className="ti ti-calendar" style={{ fontSize: 12 }} />
-                    {o.label}
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </div>
+        <CollapsibleFilterRow open={schoolLevel !== ""} label="Grading Period">
+          <ChipGroup
+            options={[
+              { value: "", label: "All Periods" },
+              ...periodOptions.map((p) => ({ value: p, label: PERIOD_LABELS[p], tone: "info" })),
+            ]}
+            value={gradingPeriod}
+            onChange={setGradingPeriod}
+            label="Filter by grading period"
+            stagger
+            generation={`${schoolLevel}-period`}
+          />
+        </CollapsibleFilterRow>
 
-          {/* School Level */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>School Level</div>
-            <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              {OVERVIEW_SCHOOL_LEVELS.map((lvl) => {
-                const active = schoolLevel === lvl.value;
-                return (
-                  <motion.button
-                    key={lvl.value}
-                    layout
-                    initial={false}
-                    animate={{ backgroundColor: active ? lvl.bg : "#ffffff", color: active ? lvl.color : "#855c5c", borderColor: active ? lvl.color : "#f0e4e4" }}
-                    transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                    onClick={() => setSchoolLevel(lvl.value)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                  >
-                    <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />
-                    {lvl.label}
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </div>
-
-          {/* Grade Level — CSS max-height cascade, no layout shift on siblings */}
-          <div style={{
-            maxHeight: schoolLevel !== "" ? 200 : 0,
-            overflow: "hidden",
-            opacity: schoolLevel !== "" ? 1 : 0,
-            marginTop: schoolLevel !== "" ? 0 : -12,
-            transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
-            pointerEvents: schoolLevel !== "" ? "auto" : "none",
-          }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grade Level</div>
-              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                {["All Grades", ...gradeLevelOptions].map((g, idx) => {
-                  const val    = g === "All Grades" ? "" : g;
-                  const active = gradeLevel === val;
-                  return (
-                    <motion.button
-                      key={`${schoolLevel}-${g}`}
-                      layout
-                      initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
-                      animate={{ opacity: 1, y: 0, backgroundColor: active ? "#fff0f0" : "#ffffff", color: active ? "#c92a2a" : "#855c5c", borderColor: active ? "#e03131" : "#f0e4e4" }}
-                      transition={{
-                        opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                        y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                        backgroundColor: { duration: 0.18, ease: "easeOut" },
-                        color:           { duration: 0.18, ease: "easeOut" },
-                        borderColor:     { duration: 0.18, ease: "easeOut" },
-                        layout:          { type: "spring", stiffness: 400, damping: 36 },
-                      }}
-                      onClick={() => setGradeLevel(val)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                    >
-                      {g}
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Grading Period — CSS max-height cascade, tied to school level */}
-          <div style={{
-            maxHeight: schoolLevel !== "" ? 200 : 0,
-            overflow: "hidden",
-            opacity: schoolLevel !== "" ? 1 : 0,
-            marginTop: schoolLevel !== "" ? 0 : -12,
-            transition: "max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease",
-            pointerEvents: schoolLevel !== "" ? "auto" : "none",
-          }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Grading Period</div>
-              <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                {["All Periods", ...periodOptions].map((p, idx) => {
-                  const val    = p === "All Periods" ? "" : p;
-                  const active = gradingPeriod === val;
-                  return (
-                    <motion.button
-                      key={`${schoolLevel}-period-${p}`}
-                      layout
-                      initial={{ opacity: 0, y: 6, backgroundColor: "#ffffff", color: "#855c5c", borderColor: "#f0e4e4" }}
-                      animate={{ opacity: 1, y: 0, backgroundColor: active ? "#e3f0fd" : "#ffffff", color: active ? "#1455a0" : "#855c5c", borderColor: active ? "#1455a0" : "#f0e4e4" }}
-                      transition={{
-                        opacity:         { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                        y:               { duration: 0.16, ease: "easeOut", delay: idx * 0.03 },
-                        backgroundColor: { duration: 0.18, ease: "easeOut" },
-                        color:           { duration: 0.18, ease: "easeOut" },
-                        borderColor:     { duration: 0.18, ease: "easeOut" },
-                        layout:          { type: "spring", stiffness: 400, damping: 36 },
-                      }}
-                      onClick={() => setGradingPeriod(val)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                    >
-                      {p === "All Periods" ? p : PERIOD_LABELS[p]}
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Remarks / Status */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Status</div>
-            <motion.div layout style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              {[
-                { value: "",       label: "All",    bg: "#fff0f0", color: "#c92a2a", dot: null       },
-                { value: "passed", label: "Passed", bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50" },
-                { value: "failed", label: "Failed", bg: "#fde8e8", color: "#9b2020", dot: "#f44336" },
-              ].map((s) => {
-                const active = remarks === s.value;
-                return (
-                  <motion.button
-                    key={s.value}
-                    layout
-                    initial={false}
-                    animate={{ backgroundColor: active ? s.bg : "#ffffff", color: active ? s.color : "#855c5c", borderColor: active ? s.color : "#f0e4e4" }}
-                    transition={{ layout: { type: "spring", stiffness: 400, damping: 36 }, duration: 0.18, ease: "easeOut" }}
-                    onClick={() => setRemarks(s.value)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, fontSize: 12, fontWeight: 600, border: "1.5px solid", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                  >
-                    {s.dot && (
-                      <motion.span
-                        animate={{ backgroundColor: active ? s.dot : "#c0b8b8" }}
-                        transition={{ duration: 0.18 }}
-                        style={{ width: 7, height: 7, borderRadius: "50%", display: "inline-block" }}
-                      />
-                    )}
-                    {s.label}
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </div>
-
-        </div>
-      </motion.div>
+        <FilterRow label="Status">
+          <ChipGroup
+            options={REMARKS_FILTER_OPTIONS}
+            value={remarks}
+            onChange={setRemarks}
+            label="Filter by pass/fail status"
+          />
+        </FilterRow>
+      </FilterBar>
 
       {/* ── Table ── */}
       <motion.div
         initial={isFirstRender ? { opacity: 0, y: 10 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.38 : 0 }}
-        style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)", position: "relative", zIndex: 1 }}
       >
-        {/* Table toolbar */}
+        <Card padding="none">
+          <Table
+            columns={OVERVIEW_COLUMNS}
+            loading={loading}
+            error={loadError}
+            errorSubject="the class list"
+            onRetry={() => fetchPage(1)}
+            isEmpty={sorted.length === 0}
+            skeletonRows={6}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={toggleSort}
+            empty={
+              // A search that filtered everything out is a different message
+              // from having no students at all — the first is about the query,
+              // the second about the filters.
+              rows.length > 0
+                ? { icon: "ti-search-off", title: "No matching students", subtitle: `No students match "${search}".` }
+                : { icon: "ti-users", title: "No students found", subtitle: "Try adjusting the filters above." }
+            }
+          >
+            {sorted.map((r) => {
+              const gs  = gradeStyle(r.avg);
+              const pal = getAvatarPalette(r.name);
+              return (
+                <TableRow key={r.enrollment_id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
+                        style={{ background: pal.bg, color: pal.color }}
+                      >
+                        {initialsFrom(r.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold text-neutral-900">{r.name}</div>
+                        <div className="text-xs text-neutral-500">LRN {r.lrn} · {r.student_number}</div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          variant="secondary" size="sm" icon="ti-table"
+                          onClick={(e) => { e.stopPropagation(); onNavigate("summary", r._student, r._enrollment); }}
+                          title="View Grade Summary"
+                        >
+                          Summary
+                        </Button>
+                        <Button
+                          variant="secondary" size="sm" icon="ti-pencil"
+                          onClick={(e) => { e.stopPropagation(); onNavigate("entry", r._student, r._enrollment); }}
+                          title="Go to Grade Entry"
+                        >
+                          Entry
+                        </Button>
+                      </div>
+                    </div>
+                  </TableCell>
 
-        {/* Loading skeleton */}
-        {loading && (
-          <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {[1,2,3,4,5,6].map((i) => (
-              <div key={i} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <Sk w={32} h={32} r={8} />
-                <Sk w="22%" h={13} />
-                <Sk w="12%" h={13} />
-                <Sk w="10%" h={13} />
-                <Sk w="10%" h={13} />
-                <Sk w="8%"  h={22} r={99} />
-              </div>
-            ))}
-          </div>
-        )}
+                  <TableCell align="center">
+                    <div className="text-xs font-semibold text-neutral-900">{r.grade_level}</div>
+                    <div className="text-xs text-neutral-500">{r.section}</div>
+                  </TableCell>
 
-        {/* Data table */}
-        {!loading && sorted.length > 0 && (
-          <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 520px)", overflowY: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#fdfafa" }}>
-                  <th style={{ ...thStyle, textAlign: "left", paddingLeft: 20, position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }}>Student</th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("grade_level")}>Grade / Section <SortIcon k="grade_level" sortKey={sortKey} sortDir={sortDir} /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("total")}>Grades <SortIcon k="total" sortKey={sortKey} sortDir={sortDir} /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("passed")}>Passed <SortIcon k="passed" sortKey={sortKey} sortDir={sortDir} /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", position: "sticky", top: 0, zIndex: 1, background: "#fdfafa" }} onClick={() => toggleSort("failed")}>Failed <SortIcon k="failed" sortKey={sortKey} sortDir={sortDir} /></th>
-                  <th style={{ ...thStyle, cursor: "pointer", background: "#f9f4f4", position: "sticky", top: 0, zIndex: 1 }} onClick={() => toggleSort("avg")}>Average <SortIcon k="avg" sortKey={sortKey} sortDir={sortDir} /></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r, idx) => {
-                  const gs  = gradeStyle(r.avg);
-                  const pal = getPalette(r.name.split(" ").pop() ?? "X");
-                  const ini = r.name.split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-                  return (
-                    <motion.tr
-                      key={r.enrollment_id}
-                      initial={{ opacity: 0, x: -6 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.18, ease: "easeOut", delay: Math.min(idx * 0.018, 0.28) }}
-                      onMouseEnter={(e) => Array.from(e.currentTarget.cells).forEach((c) => c.style.background = "#fff8f6")}
-                      onMouseLeave={(e) => Array.from(e.currentTarget.cells).forEach((c, i) => c.style.background = i === 5 ? "#fdfafa" : "")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <td style={{ ...tdStyle, textAlign: "left", paddingLeft: 20 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 8, background: pal.bg, color: pal.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{ini}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{r.name}</div>
-                            <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>LRN {r.lrn} · {r.student_number}</div>
-                          </div>
-                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                            <motion.button
-                              initial={false}
-                              whileHover={{ scale: 1.06, backgroundColor: "#e3f0fd", color: "#1455a0", borderColor: "#1455a0" }}
-                              whileTap={{ scale: 0.94 }}
-                              transition={{ duration: 0.12 }}
-                              onClick={(e) => { e.stopPropagation(); onNavigate("summary", r._student, r._enrollment); }}
-                              title="View Grade Summary"
-                              style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 8px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", fontSize: 11, fontWeight: 600, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
-                            >
-                              <i className="ti ti-table" style={{ fontSize: 11 }} />Summary
-                            </motion.button>
-                            <motion.button
-                              initial={false}
-                              whileHover={{ scale: 1.06, backgroundColor: "#fff0f0", color: "#c92a2a", borderColor: "#e03131" }}
-                              whileTap={{ scale: 0.94 }}
-                              transition={{ duration: 0.12 }}
-                              onClick={(e) => { e.stopPropagation(); onNavigate("entry", r._student, r._enrollment); }}
-                              title="Go to Grade Entry"
-                              style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 8px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", fontSize: 11, fontWeight: 600, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
-                            >
-                              <i className="ti ti-pencil" style={{ fontSize: 11 }} />Entry
-                            </motion.button>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#1a0a0a" }}>{r.grade_level}</div>
-                        <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>{r.section}</div>
-                      </td>
-                      <td style={tdStyle}><span style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{r.total}</span></td>
-                      <td style={tdStyle}><span style={{ fontSize: 13, fontWeight: 700, color: "#2e6b0d" }}>{r.passed}</span></td>
-                      <td style={tdStyle}><span style={{ fontSize: 13, fontWeight: 700, color: r.failed > 0 ? "#9b2020" : "#8a6a6a" }}>{r.failed}</span></td>
-                      <td style={{ ...tdStyle, background: "#fdfafa" }}>
-                        {r.avg !== null
-                          ? <span style={{ fontSize: 13, fontWeight: 700, padding: "3px 12px", borderRadius: 8, background: gs.bg, color: gs.color }}>{r.avg.toFixed(2)}</span>
-                          : <span style={{ fontSize: 12, color: "#8a6a6a", fontStyle: "italic" }}>No grades</span>
-                        }
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  <TableCell align="center" className="text-[13px] font-semibold text-neutral-900">
+                    {r.total}
+                  </TableCell>
 
-        {/* No results */}
-        {/* A failed load must look like a failure, say why, and offer a way
-            out — it must never fall through to the empty state. */}
-        {!loading && loadError && (
-          <ErrorState error={loadError} subject="the class list" onRetry={() => fetchPage(1)} />
-        )}
+                  <TableCell align="center" className="text-[13px] font-bold text-success-500">
+                    {r.passed}
+                  </TableCell>
 
-        {!loading && !loadError && sorted.length === 0 && rows.length === 0 && (
-          <EmptyState icon="ti-users" title="No students found" subtitle="Try adjusting the filters above." />
-        )}
+                  <TableCell
+                    align="center"
+                    className={`text-[13px] font-bold ${r.failed > 0 ? "text-error-500" : "text-neutral-500"}`}
+                  >
+                    {r.failed}
+                  </TableCell>
 
-        {/* Search filtered to zero */}
-        {!loading && sorted.length === 0 && rows.length > 0 && (
-          <div style={{ padding: "40px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: 13, color: "#8a6a6a" }}>No students match "<strong>{search}</strong>".</div>
-          </div>
-        )}
+                  <TableCell align="center">
+                    {r.avg !== null ? (
+                      <span
+                        className="rounded-lg px-3 py-0.5 text-[13px] font-bold"
+                        style={{ background: gs.bg, color: gs.color }}
+                      >
+                        {r.avg.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-xs italic text-neutral-500">No grades</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </Table>
 
-        {/* Legend */}
-        {!loading && sorted.length > 0 && (
-          <div style={{ padding: "12px 20px", borderTop: "1px solid #f5eaea", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "#8a6a6a", fontWeight: 600 }}>Legend:</span>
-            {[
-              { range: "90–100", label: "Outstanding",         color: "#1455a0", bg: "#e3f0fd" },
-              { range: "85–89",  label: "Very Satisfactory",   color: "#2e6b0d", bg: "#e8f5e0" },
-              { range: "80–84",  label: "Satisfactory",        color: "#2e6b0d", bg: "#eaf3de" },
-              { range: "75–79",  label: "Fairly Satisfactory", color: "#854f0b", bg: "#faeeda" },
-              { range: "< 75",   label: "Did Not Meet",        color: "#9b2020", bg: "#fde8e8" },
-            ].map((l) => (
-              <div key={l.range} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: l.bg, color: l.color }}>{l.range}</span>
-                <span style={{ fontSize: 11, color: "#8a6a6a" }}>{l.label}</span>
-              </div>
-            ))}
-          </div>
-        )}
+          {/* Legend */}
+          {!loading && !loadError && sorted.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3.5 border-t border-neutral-200 px-5 py-3">
+              <span className="text-xs font-semibold text-neutral-500">Legend:</span>
+              {GRADE_LEGEND.map((l) => (
+                <div key={l.range} className="flex items-center gap-1.5">
+                  <span
+                    className="rounded-md px-1.5 py-0.5 text-xs font-bold"
+                    style={{ background: l.bg, color: l.color }}
+                  >
+                    {l.range}
+                  </span>
+                  <span className="text-xs text-neutral-500">{l.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </motion.div>
 
       {/* ── Pagination ── */}
@@ -645,14 +489,6 @@ const SCHOOL_LEVEL_META = {
 
 const COMPONENT_COLORS = ["#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2"];
 
-const PALETTES = [
-  { bg:"#fde8e8", color:"#c0392b" },{ bg:"#e8f0fd", color:"#2563eb" },
-  { bg:"#e8fdf0", color:"#2e6b0d" },{ bg:"#fdf5e8", color:"#854f0b" },
-  { bg:"#f0e8fd", color:"#7c3aed" },{ bg:"#fde8f8", color:"#be185d" },
-  { bg:"#e8fdfd", color:"#1455a0" },
-];
-const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
-
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const thStyle = {
   // neutral-600, not 500: these headers sit on the tinted #f9f4f4 sticky
@@ -667,10 +503,6 @@ const tdStyle = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width:w, height:h, borderRadius:r, background:"linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize:"200% 100%", animation:"shimmer 1.6s ease-in-out infinite" }} />
-);
-
 function gradeStyle(g) {
   if (g === null || g === undefined) return { color:"#8a6a6a", bg:"transparent", label:"—" };
   const n = parseFloat(g);
@@ -680,6 +512,17 @@ function gradeStyle(g) {
   if (n >= 75) return { color:"#854f0b", bg:"#faeeda",  label:"Fairly Satisfactory" };
   return { color:"#9b2020", bg:"#fde8e8", label:"Did Not Meet" };
 }
+
+// Derived from gradeStyle rather than restated: the legend previously hard-coded
+// its own copy of these five bands, so changing a threshold or colour in
+// gradeStyle would have left the legend quietly describing the old scheme.
+const GRADE_LEGEND = [
+  { range: "90–100", at: 95 },
+  { range: "85–89",  at: 87 },
+  { range: "80–84",  at: 82 },
+  { range: "75–79",  at: 77 },
+  { range: "< 75",   at: 70 },
+].map(({ range, at }) => ({ range, ...gradeStyle(at) }));
 
 function gradeColor(g) {
   if (g >= 90) return { color:"#1455a0", bg:"#e3f0fd" };
@@ -709,8 +552,8 @@ function StudentPicker({ value, onChange }) {
   }, [query]);
 
   if (value) {
-    const p = getPalette(value.last_name ?? "X");
-    const initials = `${value.first_name?.[0]??""}${value.last_name?.[0]??""}`.toUpperCase();
+    const p = getAvatarPalette(`${value.first_name ?? ""} ${value.last_name ?? ""}`);
+    const initials = initialsFrom(value.first_name, value.last_name);
     const fullName = [value.first_name, value.middle_name, value.last_name, value.suffix].filter(Boolean).join(" ");
     return (
       <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"linear-gradient(to right,#fff8f6,white)" }}>
@@ -741,13 +584,11 @@ function StudentPicker({ value, onChange }) {
         <div style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:12, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:280, overflowY:"auto", zIndex:1000 }}>
           {results.length === 0 && !loading && <div style={{ padding:"20px 16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No students match "{query}".</div>}
           {results.map((st) => {
-            const p = getPalette(st.last_name ?? "X");
-            const initials = `${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase();
+            const p = getAvatarPalette(`${st.first_name ?? ""} ${st.last_name ?? ""}`);
+            const initials = initialsFrom(st.first_name, st.last_name);
             return (
               <div key={st.student_id} onClick={() => { onChange(st); setOpen(false); setQuery(""); }}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #f9f0f0" }}
-                onMouseEnter={(e) => e.currentTarget.style.background="#fff8f6"}
-                onMouseLeave={(e) => e.currentTarget.style.background="transparent"}>
+                className="flex cursor-pointer items-center gap-3 border-b border-neutral-100 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
                 <div style={{ width:34, height:34, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{initials}</div>
                 <div>
                   <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{st.last_name}, {st.first_name}</div>
@@ -824,7 +665,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
 
   if (loading) return (
     <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"24px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      {[1,2,3,4,5].map((i) => <div key={i} style={{ marginBottom:12 }}><Sk w="100%" h={36} r={8} /></div>)}
+      {[1,2,3,4,5].map((i) => <div key={i} style={{ marginBottom:12 }}><Skeleton width="100%" height={36} radius={8} /></div>)}
     </div>
   );
 
@@ -876,9 +717,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
             ) : subjects.map((sub, idx) => {
               const subGrades = periods.map((p) => gradeMap[sub.subject_id]?.[p] ?? null);
               return (
-                <tr key={sub.subject_id} style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}
-                  onMouseEnter={(e) => { Array.from(e.currentTarget.cells).forEach((c) => c.style.background="#fff8f6"); }}
-                  onMouseLeave={(e) => { Array.from(e.currentTarget.cells).forEach((c, i) => c.style.background = i === periods.length+1 ? "#fdfafa" : ""); }}>
+                <tr key={sub.subject_id} className="grade-matrix-row" style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}>
                   <td style={{ ...tdStyle, textAlign:"left" }}>
                     <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{sub.subject_name}</div>
                     <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1, fontFamily:"monospace" }}>{sub.subject_code}</div>
@@ -982,9 +821,7 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
   const inp = { border:"1.5px solid #fde2de", borderRadius:8, padding:"6px 10px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none" };
 
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#fdfafa", border:"1px solid #f5eaea", borderRadius:10, transition:"border-color 0.12s" }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor="#fca5a5"}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor="#f5eaea"}>
+    <div className="flex items-center gap-2.5 rounded-[10px] border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 transition-colors duration-150 hover:border-brand-300">
       <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
       {editing ? (
         <>
@@ -1006,18 +843,16 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
           <span style={{ flex:1, fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{entry.label}</span>
           <span style={{ fontSize:13, color:"#5a4a4a" }}>{entry.score} / {entry.max_score}</span>
           <span style={{ fontSize:12, fontWeight:700, padding:"2px 8px", borderRadius:6, background:gc.bg, color:gc.color }}>{pct}%</span>
-          <button onClick={() => setEditing(true)}
-            style={{ width:26, height:26, border:"1px solid #f0e4e4", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c", transition:"all 0.12s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#c92a2a"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#855c5c"; }}>
-            <i className="ti ti-pencil" style={{ fontSize:11 }} />
-          </button>
-          <button onClick={() => setConfirmDelete(true)} aria-label={`Delete score entry ${entry.label}`}
-            style={{ width:26, height:26, border:"1px solid #f0e4e4", borderRadius:7, background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#8a6a6a", transition:"all 0.12s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background="#fff0f0"; e.currentTarget.style.color="#c92a2a"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#8a6a6a"; }}>
-            <i className="ti ti-trash" style={{ fontSize:11 }} />
-          </button>
+          <Button
+            variant="ghost" size="sm" icon="ti-pencil"
+            aria-label={`Edit score entry ${entry.label}`}
+            onClick={() => setEditing(true)}
+          />
+          <Button
+            variant="ghost" size="sm" icon="ti-trash"
+            aria-label={`Delete score entry ${entry.label}`}
+            onClick={() => setConfirmDelete(true)}
+          />
         </>
       )}
       <AnimatePresence>
@@ -1146,8 +981,8 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
         <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
           {[1,2,3].map((i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#fdfafa", borderRadius: 10 }}>
-              <Sk w="28%" h={14} />
-              <div style={{ flex: 1, display: "flex", gap: 6 }}><Sk w={110} h={28} r={99} /><Sk w={110} h={28} r={99} /><Sk w={140} h={28} r={99} /></div>
+              <Skeleton width="28%" height={14} />
+              <div style={{ flex: 1, display: "flex", gap: 6 }}><Skeleton width={110} height={28} radius={99} /><Skeleton width={110} height={28} radius={99} /><Skeleton width={140} height={28} radius={99} /></div>
             </div>
           ))}
         </div>
@@ -1166,9 +1001,7 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
             const saving        = savingStates[cat.category_id] ?? false;
             return (
               <div key={cat.category_id}
-                style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px", background: "#fdfafa", borderRadius: 10, border: "1px solid #f0ecfd" }}
-                onMouseEnter={(e) => e.currentTarget.style.borderColor = "#c4b5fd"}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = "#f0ecfd"}>
+                className="flex items-center gap-3.5 rounded-[10px] border border-accent-50 bg-neutral-50 px-4 py-2.5 transition-colors duration-150 hover:border-accent-dot">
                 <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
                   {NARRATIVE_RATINGS.map((r) => {
@@ -1436,8 +1269,8 @@ export default function GradesPage() {
 
   const gc = computation ? gradeColor(computation.final_grade) : null;
 
-  const palette  = student ? getPalette(student.last_name ?? "X") : null;
-  const initials = student ? `${student.first_name?.[0]??""}${student.last_name?.[0]??""}`.toUpperCase() : "";
+  const palette  = student ? getAvatarPalette(`${student.first_name ?? ""} ${student.last_name ?? ""}`) : null;
+  const initials = student ? initialsFrom(student.first_name, student.last_name) : "";
   const fullName = student ? [student.first_name, student.middle_name, student.last_name, student.suffix].filter(Boolean).join(" ") : "";
 
   const gradeCount  = sumGrades.length;
@@ -1507,9 +1340,10 @@ export default function GradesPage() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fullName}</div>
                 <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>LRN {student.lrn}</div>
-                <span style={{ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:99, background: student.status==="active"?"#e8f5e0":"#f0ede8", color: student.status==="active"?"#2e6b0d":"#5c5752", marginTop:4, display:"inline-block" }}>
-                  {student.status}
-                </span>
+                {/* Was an inline pill that only told "active" from everything
+                    else, so transferred/graduated/dropped all rendered as the
+                    same grey. The shared map distinguishes all five. */}
+                <StatusBadge status={student.status} map={STUDENT_STATUS_MAP} size="sm" className="mt-1" />
               </div>
             </div>
           </motion.div>
@@ -1537,7 +1371,7 @@ export default function GradesPage() {
               {loadingEnr
                 ? [1,2].map((i) => (
                     <div key={i} style={{ padding:"10px 14px", borderRadius:12, border:"1px solid #f5eaea" }}>
-                      <Sk w="80%" h={14} /><div style={{ marginTop:6 }}><Sk w="50%" h={11} /></div>
+                      <Skeleton width="80%" height={14} /><div style={{ marginTop:6 }}><Skeleton width="50%" height={11} /></div>
                     </div>
                   ))
                 : enrollments.length === 0
@@ -1868,7 +1702,7 @@ export default function GradesPage() {
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           {[1,2,3].map((i) => (
             <div key={i} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px" }}>
-              <Sk w="40%" h={16} /><div style={{ marginTop:12 }}><Sk w="100%" h={40} /></div>
+              <Skeleton width="40%" height={16} /><div style={{ marginTop:12 }}><Skeleton width="100%" height={40} /></div>
             </div>
           ))}
         </div>
@@ -2030,6 +1864,12 @@ export default function GradesPage() {
         @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes rowIn   { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
+        /* The gradebook matrix is a cross-tab, not a record list, so it keeps
+           its own <table> rather than the shared Table. Hovering used to be
+           done in JS by walking every cell and restoring the Average column
+           by index; as a CSS rule the tinted column just keeps its own
+           background and nothing has to be put back. */
+        .grade-matrix-row:hover > td { background: var(--color-brand-50); }
       `}</style>
 
       <PageHeader
