@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -17,9 +17,36 @@ import logo from "../assets/logo.png";
 // module (Dashboard, Enrollments, Grades, Attendance, Analytics,
 // Scholarships, Academic Calendar, Teacher Advisories) opens to. Individual
 // pages may still switch to a different year locally without affecting this.
+// How many non-current years stay in the "Recent" group before the rest fall
+// into "Earlier". A school gains one year per year, so this only ever grows
+// slowly — the grouping exists to make the list scannable, not to hide data.
+const RECENT_YEARS = 4;
+
 function SchoolYearPicker() {
-  const { schoolYear, setSchoolYear, options } = useSchoolYear();
+  const { schoolYear, setSchoolYear, options, currentYear, yearCounts } = useSchoolYear();
+
+  // Grouped so the year you're working in is always the first thing under the
+  // cursor, and a decade of history stays reachable without a second click.
+  // With only two or three years on file the groups collapse to almost nothing,
+  // so this doesn't add ceremony to a young school.
+  const groups = useMemo(() => {
+    const rest = options.filter((y) => y !== currentYear);
+    return [
+      ["Current", options.filter((y) => y === currentYear)],
+      ["Recent", rest.slice(0, RECENT_YEARS)],
+      ["Earlier", rest.slice(RECENT_YEARS)],
+    ].filter(([, years]) => years.length > 0);
+  }, [options, currentYear]);
+
   if (!schoolYear) return null; // still resolving the default on first load
+
+  // The count distinguishes a year with real data from one that's empty — the
+  // noun is left off because this picker also governs Grades, Attendance and
+  // Analytics, where "enrollments" would be the wrong word.
+  const labelFor = (y) => {
+    const n = yearCounts[y];
+    return n == null ? y : `${y} · ${n}`;
+  };
 
   return (
     <div className="border-b border-neutral-200 px-3.5 pb-2.5 pt-3">
@@ -36,8 +63,12 @@ function SchoolYearPicker() {
         title="Applies to Dashboard, Enrollments, Grades, Attendance, Analytics, Scholarships, Academic Calendar, and Teacher Advisories"
         className="px-2.5 py-1.5 text-sm font-semibold"
       >
-        {options.map((y) => (
-          <option key={y} value={y}>{y}</option>
+        {groups.map(([label, years]) => (
+          <optgroup key={label} label={label}>
+            {years.map((y) => (
+              <option key={y} value={y}>{labelFor(y)}</option>
+            ))}
+          </optgroup>
         ))}
       </Select>
     </div>
