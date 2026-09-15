@@ -27,7 +27,52 @@ function monthLabel(ym) {
   return new Date(y, m - 1, 1).toLocaleDateString("en-PH", { month: "long", year: "numeric" });
 }
 
-const SLASH = { P: "/", L: "/", A: "", E: "" };
+// DepEd SF2 legend: a BLANK cell means the learner was present, "x" marks an
+// absence, and "/" marks a tardy. The previous map inverted this — it put a
+// mark on every present learner and left absences blank, so a perfect-
+// attendance register and a fully-absent one printed identically.
+//
+// The official daily grid does not distinguish excused from unexcused
+// absence; both print "x". The distinction is preserved in the data and in
+// the app, just not on this form.
+const MARK = { P: "", L: "/", A: "x", E: "x" };
+
+// DepEd requires learners listed MALE first (alphabetically), then FEMALE
+// (alphabetically), with per-sex subtotals. Anything else is the first thing
+// a registrar notices on a printed form.
+const SEX_RANK = { male: 0, female: 1 };
+
+function learnerSortKey(en) {
+  const st = en.student_detail || {};
+  return `${st.last_name ?? ""} ${st.first_name ?? ""}`.trim().toLowerCase();
+}
+
+// StandardPagination caps page_size at 500 (enrollment_service/pagination.py),
+// so the old `page_size: 5000` silently returned only the first 500 records.
+// Default ordering is "-date", so a normal-size section (40 learners × ~22
+// school days ≈ 880 rows) lost its earliest days for everyone, and Days
+// Present / Days Absent printed short. Walk every page instead.
+const ATTENDANCE_PAGE_SIZE = 500;
+const ATTENDANCE_MAX_PAGES = 20;
+
+async function fetchAllAttendance(params) {
+  const out = [];
+  for (let page = 1; page <= ATTENDANCE_MAX_PAGES; page += 1) {
+    const res  = await getAttendance({ ...params, page, page_size: ATTENDANCE_PAGE_SIZE });
+    const rows = Array.isArray(res) ? res : (res?.results ?? []);
+    out.push(...rows);
+    // A plain array means the endpoint isn't paginated; one pass is all there is.
+    if (Array.isArray(res) || !res?.next) break;
+  }
+  return out;
+}
+
+function bySexThenName(a, b) {
+  const ra = SEX_RANK[(a.student_detail?.sex ?? "").toLowerCase()] ?? 2;
+  const rb = SEX_RANK[(b.student_detail?.sex ?? "").toLowerCase()] ?? 2;
+  if (ra !== rb) return ra - rb;
+  return learnerSortKey(a).localeCompare(learnerSortKey(b));
+}
 
 export default function SF2PrintPage() {
   const [sp] = useSearchParams();
@@ -56,19 +101,17 @@ export default function SF2PrintPage() {
         ]);
         setSettings(sett);
         const list = (Array.isArray(enrData) ? enrData : (enrData?.results ?? []))
-          .sort((a, b) => (a.student_detail?.last_name ?? "").localeCompare(b.student_detail?.last_name ?? ""));
+          .sort(bySexThenName);
         setEnrollments(list);
 
         const [y, m] = month.split("-").map(Number);
-        const att = await getAttendance({
+        const recs = await fetchAllAttendance({
           date__gte: `${month}-01`,
           date__lte: new Date(y, m, 0).toISOString().slice(0, 10),
           enrollment__school_year: school_year,
           enrollment__grade_level: grade_level,
           enrollment__section:     section,
-          page_size: 5000,
         });
-        const recs = Array.isArray(att) ? att : (att?.results ?? []);
         const map = {};
         list.forEach(e => { map[e.enrollment_id] = {}; });
         recs.forEach(r => {
@@ -99,8 +142,34 @@ export default function SF2PrintPage() {
 
   const schoolName    = settings?.school_name || "South Lakes Integrated School";
   const schoolAddress = settings?.school_address || "";
-  const males   = enrollments.filter(e => (e.student_detail?.sex || "").toLowerCase() === "male").length;
-  const females = enrollments.filter(e => (e.student_detail?.sex || "").toLowerCase() === "female").length;
+  const sexOf     = (e) => (e.student_detail?.sex || "").toLowerCase();
+  const maleRows   = enrollments.filter(e => sexOf(e) === "male");
+  const femaleRows = enrollments.filter(e => sexOf(e) === "female");
+  // Learners whose sex isn't recorded still have to appear somewhere — DepEd
+  // has no such column, so they print after the two named groups rather than
+  // being silently dropped from the register.
+  const otherRows  = enrollments.filter(e => sexOf(e) !== "male" && sexOf(e) !== "female");
+  const males   = maleRows.length;
+  const females = femaleRows.length;
+
+  // One learner's month: days with a record, split present (incl. tardy) vs
+  // absent. Hoisted so the subtotal rows can reuse it.
+  const tally = (en) => {
+    const rec = attMap[en.enrollment_id] || {};
+    let present = 0, absent = 0;
+    schoolDays.forEach(d => {
+      const s = rec[d.date];
+      if (!s) return;
+      if (isPresentStatus(s)) present++;
+      else absent++;
+    });
+    return { present, absent };
+  };
+
+  const sumTally = (rows) => rows.reduce(
+    (acc, en) => { const t = tally(en); return { present: acc.present + t.present, absent: acc.absent + t.absent }; },
+    { present: 0, absent: 0 },
+  );
 
   const TH = (s = {}) => ({ border: `1px solid ${C.border}`, fontSize: 7, fontWeight: 700, textAlign: "center", verticalAlign: "middle", padding: "1px 0", background: C.bg, color: C.dark, lineHeight: 1.2, fontFamily: PRINT_FONT, ...s });
   const TD = (s = {}) => ({ border: `1px solid ${C.border}`, fontSize: 7, textAlign: "center", verticalAlign: "middle", padding: 0, height: 15, color: C.dark, ...s });
@@ -176,53 +245,81 @@ export default function SF2PrintPage() {
           </thead>
 
           <tbody>
-            {enrollments.map((en, idx) => {
-              const st  = en.student_detail || {};
-              const rec = attMap[en.enrollment_id] || {};
-              const name = `${st.last_name || "—"}, ${st.first_name || ""}${st.middle_name ? " " + st.middle_name[0] + "." : ""}${st.suffix ? " " + st.suffix : ""}`;
-              let present = 0, absent = 0;
-              schoolDays.forEach(d => {
-                const s = rec[d.date];
-                if (!s) return;
-                if (isPresentStatus(s)) present++;
-                else absent++;
+            {/* Learner rows are grouped by sex, and numbering restarts within
+                each group, as the official register does. */}
+            {[
+              { key: "male",   rows: maleRows,   label: "TOTAL MALE" },
+              { key: "female", rows: femaleRows, label: "TOTAL FEMALE" },
+              { key: "other",  rows: otherRows,  label: "TOTAL (SEX NOT RECORDED)" },
+            ].flatMap(group => {
+              if (group.rows.length === 0) return [];
+              const groupTotal = sumTally(group.rows);
+
+              const learnerRows = group.rows.map((en, idx) => {
+                const st   = en.student_detail || {};
+                const rec  = attMap[en.enrollment_id] || {};
+                const name = `${st.last_name || "—"}, ${st.first_name || ""}${st.middle_name ? " " + st.middle_name[0] + "." : ""}${st.suffix ? " " + st.suffix : ""}`;
+                const { present, absent } = tally(en);
+
+                return (
+                  <tr key={en.enrollment_id}>
+                    <td title={name} style={TD({ textAlign: "left", paddingLeft: 3, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" })}>
+                      {idx + 1}. {name}
+                    </td>
+                    <td style={TD({ fontSize: 6 })}>{st.lrn || ""}</td>
+                    {days.flatMap(d => {
+                      if (d.isWeekend) return [<td key={d.date} style={WK} />];
+                      const mark = MARK[rec[d.date]] ?? "";
+                      return [
+                        <td key={`${d.date}-am`} style={TD({ fontSize: 9, fontWeight: 700 })}>{mark}</td>,
+                        <td key={`${d.date}-pm`} style={TD({ fontSize: 9, fontWeight: 700 })}>{mark}</td>,
+                      ];
+                    })}
+                    <td style={TD({ fontWeight: 700, fontSize: 8 })}>{present || ""}</td>
+                    <td style={TD({ fontWeight: 700, fontSize: 8 })}>{absent || ""}</td>
+                  </tr>
+                );
               });
 
-              return (
-                <tr key={en.enrollment_id}>
-                  <td title={name} style={TD({ textAlign: "left", paddingLeft: 3, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" })}>
-                    {idx + 1}. {name}
+              return [
+                ...learnerRows,
+                <tr key={`${group.key}-total`}>
+                  <td colSpan={2} style={TD({ textAlign: "right", fontWeight: 700, fontSize: 7, paddingRight: 4, background: C.bg })}>
+                    {group.label} — {group.rows.length}
                   </td>
-                  <td style={TD({ fontSize: 6 })}>{st.lrn || ""}</td>
-                  {days.flatMap(d => {
-                    if (d.isWeekend) return [<td key={d.date} style={WK} />];
-                    const mark = SLASH[rec[d.date]] ?? "";
-                    return [
-                      <td key={`${d.date}-am`} style={TD({ fontSize: 9, fontWeight: 700 })}>{mark}</td>,
-                      <td key={`${d.date}-pm`} style={TD({ fontSize: 9, fontWeight: 700 })}>{mark}</td>,
-                    ];
-                  })}
-                  <td style={TD({ fontWeight: 700, fontSize: 8 })}>{present || ""}</td>
-                  <td style={TD({ fontWeight: 700, fontSize: 8 })}>{absent || ""}</td>
-                </tr>
-              );
+                  {days.flatMap(d => d.isWeekend
+                    ? [<td key={d.date} style={WK} />]
+                    : [<td key={`${d.date}-a`} style={TD({ background: C.bg })} />, <td key={`${d.date}-p`} style={TD({ background: C.bg })} />]
+                  )}
+                  <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{groupTotal.present || ""}</td>
+                  <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{groupTotal.absent || ""}</td>
+                </tr>,
+              ];
             })}
 
+            {/* Combined total. The headcount belongs in the label, not in the
+                Days Absent column, which is where it used to print. */}
             <tr>
               <td colSpan={2} style={TD({ textAlign: "right", fontWeight: 700, fontSize: 7, paddingRight: 4, background: C.bg })}>
-                TOTAL ENROLLED
+                COMBINED TOTAL — {enrollments.length}
               </td>
               {days.flatMap(d => d.isWeekend
                 ? [<td key={d.date} style={WK} />]
                 : [<td key={`${d.date}-a`} style={TD({ background: C.bg })} />, <td key={`${d.date}-p`} style={TD({ background: C.bg })} />]
               )}
-              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })} />
-              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{enrollments.length}</td>
+              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{sumTally(enrollments).present || ""}</td>
+              <td style={TD({ fontWeight: 700, fontSize: 8, background: C.bg })}>{sumTally(enrollments).absent || ""}</td>
             </tr>
           </tbody>
         </table>
 
-        <div style={{ marginTop: 6, fontSize: 7.5, display: "flex", gap: 24, color: C.dark }}>
+        {/* The official register carries its legend on the form itself —
+            without it the marks are unreadable to anyone but the encoder. */}
+        <div style={{ marginTop: 6, fontSize: 7.5, display: "flex", gap: 24, color: C.dark, flexWrap: "wrap" }}>
+          <span><b>Legend:</b> blank = Present &nbsp;·&nbsp; <b>x</b> = Absent &nbsp;·&nbsp; <b>/</b> = Tardy</span>
+        </div>
+
+        <div style={{ marginTop: 4, fontSize: 7.5, display: "flex", gap: 24, color: C.dark, flexWrap: "wrap" }}>
           <span><b>Total School Days:</b> {schoolDays.length}</span>
           <span><b>Total Enrolled:</b> {enrollments.length}</span>
           <span><b>Male:</b> {males}</span>

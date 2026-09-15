@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -146,10 +147,13 @@ class Guardian(models.Model):
     # Links this contact record to a `role=guardian` login account
     # (identity-service `users` table). NOT unique — one guardian/parent can
     # be linked across multiple Guardian rows (siblings), each pointing at
-    # the same user_id. Null until an admin links the account (see
-    # GuardianViewSet). This table is managed=False; the column was added
-    # via raw SQL directly against the DB, not a Django migration — see the
-    # README's database setup section for the ALTER TABLE statement.
+    # the same user_id. Null until the account is linked, either by an admin
+    # through GuardianViewSet or automatically by
+    # enrollment-service's accounts/guardian_provisioning.py on enrollment
+    # save. This table is managed=False and the column was originally added
+    # by raw SQL rather than a migration, but it is part of the committed
+    # schema now — see `guardians` in schema.sql, which is the source of
+    # truth for table structure (there is no ALTER TABLE to run).
     user_id = models.BigIntegerField(null=True, blank=True, db_index=True)
 
     class Meta:
@@ -158,9 +162,20 @@ class Guardian(models.Model):
 
 
 class StudentSibling(models.Model):
+    """UNUSED. Models sibling-ness as an explicit student-to-student link; the
+    system records it through a shared `students.household_id` instead (see
+    StudentViewSet.siblings / link_sibling for why keeping both means keeping
+    two answers to one question that can disagree). The table exists, so the
+    model is kept to describe it -- nothing reads or writes it.
+
+    The related names are deliberately explicit: `related_name="siblings"`
+    made `student.siblings` resolve to THIS unused model rather than to the
+    wizard-entered Sibling rows or the household-derived list, which is a trap
+    for anyone reaching for the obvious attribute name.
+    """
     student_sibling_id = models.BigAutoField(primary_key=True)
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="siblings")
-    sibling_student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="sibling_of")
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="student_sibling_links")
+    sibling_student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="student_sibling_links_reverse")
     relationship_note = models.CharField(max_length=20, default="sibling", null=True)
 
     class Meta:
@@ -193,14 +208,53 @@ class PreviousSchool(models.Model):
         managed = False
 
 
+# Mirrors enrollment-service/requirements/models.py. The DB columns default to
+# the full lists and CHECK cardinality > 0, so `default=list` (empty) was a
+# guaranteed IntegrityError on any ORM-created row and, if one ever landed,
+# would silently stop the document being asked of anyone.
+SCHOOL_LEVELS = (
+    "nursery", "kindergarten", "elementary",
+    "junior_highschool", "senior_highschool",
+)
+ENTRY_STATUSES = ("new", "transferee", "continuing")
+
+
+def all_school_levels():
+    return list(SCHOOL_LEVELS)
+
+
+def all_entry_statuses():
+    return list(ENTRY_STATUSES)
+
+
 # Schema owner: enrollment-service (manages requirement_types table).
 # This is a read/write mirror — student-service uses it to record document
-# submissions with a proper Student FK. Do NOT add migrations here for these tables.
+# submissions with a proper Student FK.
+#
+# The DDL for these two tables must originate in enrollment-service and in
+# schema.sql, never here. A *state-only* migration is still correct and
+# expected: `managed = False` means Django emits no SQL for them, so the
+# migration only keeps this app's model state honest and stops the next
+# `makemigrations` run from inventing one. `students/test_requirement_mirror.py`
+# is what actually guards the two copies against drifting apart.
 class RequirementType(models.Model):
     requirement_type_id = models.BigAutoField(primary_key=True)
     requirement_code = models.CharField(max_length=50, unique=True)
     requirement_name = models.CharField(max_length=150)
     description = models.TextField(null=True, blank=True)
+    # See enrollment-service/requirements/models.py for why these three exist
+    # and why their defaults reproduce the pre-change behaviour.
+    is_required = models.BooleanField(default=True)
+    applies_to_levels = ArrayField(
+        models.CharField(max_length=20),
+        default=all_school_levels,
+        help_text="School levels this document is asked for.",
+    )
+    applies_to_entry_statuses = ArrayField(
+        models.CharField(max_length=20),
+        default=all_entry_statuses,
+        help_text="new / transferee / continuing.",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

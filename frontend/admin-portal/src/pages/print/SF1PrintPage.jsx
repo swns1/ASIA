@@ -24,6 +24,35 @@ function ageAsOfJune1(birthDate, schoolYear) {
   return age > 0 ? age : "—";
 }
 
+// The REMARKS column used to be hardcoded empty, so a transferred-out or
+// dropped learner was indistinguishable from an active one on the register.
+// `cancelled` stands in for DepEd's "Dropped" — the model has no such status
+// (see the plan's Tier 3 note on the enrollment lifecycle).
+const REMARKS_BY_STATUS = {
+  transferred_out: "Transferred Out",
+  cancelled:       "Dropped",
+  completed:       "",
+  enrolled:        "",
+  pending:         "",
+};
+
+// DepEd orders the School Register MALE first (alphabetically), then FEMALE
+// (alphabetically). Learners with no recorded sex sort last rather than being
+// dropped from the register.
+const SEX_RANK = { male: 0, female: 1 };
+
+function learnerSortKey(en) {
+  const st = en.student_detail || {};
+  return `${st.last_name ?? ""} ${st.first_name ?? ""}`.trim().toLowerCase();
+}
+
+function bySexThenName(a, b) {
+  const ra = SEX_RANK[(a.student_detail?.sex ?? "").toLowerCase()] ?? 2;
+  const rb = SEX_RANK[(b.student_detail?.sex ?? "").toLowerCase()] ?? 2;
+  if (ra !== rb) return ra - rb;
+  return learnerSortKey(a).localeCompare(learnerSortKey(b));
+}
+
 const TH = ({ children, w, first, last }) => (
   <th style={{
     padding: "7px 5px", color: "white", fontWeight: 700, fontSize: 8.5,
@@ -77,12 +106,11 @@ export default function SF1PrintPage() {
         if (settings?.school_name) setSchoolName(settings.school_name);
         if (settings?.school_address) setSchoolAddress(settings.school_address);
 
+        // DepEd lists learners MALE first (alphabetically), then FEMALE
+        // (alphabetically). Sorting by surname alone is the first thing a
+        // registrar notices on a printed School Register.
         const enrollments = (Array.isArray(enrollData) ? enrollData : enrollData.results ?? [])
-          .sort((a, b) => {
-            const la = (a.student_detail?.last_name ?? "").toLowerCase();
-            const lb = (b.student_detail?.last_name ?? "").toLowerCase();
-            return la.localeCompare(lb);
-          });
+          .sort(bySexThenName);
 
         const studentIds = enrollments.map((e) =>
           e.student_id ?? e.student ?? e.student_detail?.student_id
@@ -187,14 +215,12 @@ export default function SF1PrintPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ sd, father, mother, guardian, contact }, i) => {
-                  const nameParts = [
-                    sd.last_name,
-                    sd.first_name,
-                    sd.middle_name,
-                    sd.suffix,
-                  ].filter(Boolean);
-                  const fullName = nameParts.join(", ");
+                {rows.map(({ enr, sd, father, mother, guardian, contact }, i) => {
+                  // "DELA CRUZ, Juan Santos Jr." — only the surname is comma-
+                  // separated. Joining every part with commas produced
+                  // "Dela Cruz, Juan, Santos, Jr.", which is not a name.
+                  const given = [sd.first_name, sd.middle_name, sd.suffix].filter(Boolean).join(" ");
+                  const fullName = [sd.last_name, given].filter(Boolean).join(", ");
                   const rowBg = i % 2 === 0 ? "white" : C.bg;
 
                   return (
@@ -210,7 +236,7 @@ export default function SF1PrintPage() {
                       <TD left>{mother?.full_name}</TD>
                       <TD left>{guardian?.full_name}</TD>
                       <TD>{contact || "—"}</TD>
-                      <TD>{""}</TD>
+                      <TD>{REMARKS_BY_STATUS[enr?.enrollment_status] ?? ""}</TD>
                     </tr>
                   );
                 })}

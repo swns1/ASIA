@@ -28,9 +28,10 @@ def client_ip(request):
     left-most X-Forwarded-For value unconditionally, which is spoofable by
     any client, since nothing in this stack strips or verifies that header
     (there is no reverse proxy in front of these services -- see README).
-    NUM_PROXIES defaults to 0 in every service's settings (never trust
-    X-Forwarded-For) until a real reverse proxy exists and this is
-    configured to match the actual hop count.
+    NUM_PROXIES is 1 in every service's settings, since every deployed
+    environment sits behind exactly one reverse proxy (the hosting
+    platform's load balancer) -- update it to match if that hop count
+    ever changes (e.g. a CDN added in front of the proxy).
     """
     num_proxies = settings.REST_FRAMEWORK.get("NUM_PROXIES") or 0
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")

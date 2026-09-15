@@ -4,7 +4,12 @@ from rest_framework import filters, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from accounts.permissions import IsAdvisoryTeacherOrStaff, guardian_student_ids, teacher_student_ids
+from accounts.permissions import (
+    IsAdvisoryTeacherOrStaff,
+    assert_teacher_may_write_enrollment,
+    guardian_student_ids,
+    teacher_student_ids,
+)
 from enrollments.models import Enrollment
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer, BulkAttendanceSerializer
@@ -40,6 +45,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        # The `bulk` action below already enforces this; the single-record
+        # create path was reachable without it, so a teacher could record
+        # attendance for any student in the school.
+        assert_teacher_may_write_enrollment(
+            self.request.user, serializer.validated_data.get("enrollment")
+        )
         serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
 
     def perform_update(self, serializer):

@@ -49,10 +49,41 @@ export function attIndex(dateStr, type) {
   return 0;
 }
 
+// The two cut-offs behind every "how is this learner doing" signal in the app.
+// They were re-encoded as bare literals in four places -- gradeColor below,
+// GuardianChildPage's gradeVariant/attendanceVariant, GradesPage's own
+// gradeColor, and TeacherSectionsPage -- which is three chances too many for
+// a DepEd threshold to drift. 75 is the DepEd passing mark; 90 is the top
+// descriptor band (see deped.py server-side).
+export const GRADE_OUTSTANDING = 90;
+export const GRADE_PASSING = 75;
+
+/**
+ * Semantic band for a numeric grade, for anything keyed on a design-system
+ * variant name (Badge, text tone) rather than a raw colour.
+ */
+export function gradeBand(g) {
+  if (g == null) return "muted";
+  if (g >= GRADE_OUTSTANDING) return "success";
+  if (g >= GRADE_PASSING) return "info";
+  return "error";
+}
+
+/**
+ * Attendance shares the cut-offs but not the middle meaning: a 75-89% grade
+ * is merely unremarkable, 75-89% attendance is something to act on.
+ */
+export function attendanceBand(rate) {
+  if (rate == null) return "muted";
+  if (rate >= GRADE_OUTSTANDING) return "success";
+  if (rate >= GRADE_PASSING) return "warning";
+  return "error";
+}
+
 export function gradeColor(g) {
   if (g == null) return "#7a5050";
-  if (g >= 90) return "#1a6b0d";
-  if (g >= 75) return "#1455a0";
+  if (g >= GRADE_OUTSTANDING) return "#1a6b0d";
+  if (g >= GRADE_PASSING) return "#1455a0";
   return "#c92a2a";
 }
 

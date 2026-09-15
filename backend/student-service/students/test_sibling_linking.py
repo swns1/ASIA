@@ -183,3 +183,92 @@ class TestUnlinkSibling:
         view = _view(_student(household_id=None))
         response = view.unlink_sibling(view.request, pk=1)
         assert response.status_code == 400
+
+
+class TestAbsorbingASecondHousehold:
+    """Both children already had a household -- the case that lost data.
+
+    Linking used to move only the named student into the other household and
+    abandon their old row. Two things went wrong with that: the abandoned row
+    carried is_4ps_beneficiary / four_ps_id / parent_marital_status /
+    living_arrangement, which drive fee discounts and scholarship eligibility,
+    so a child could lose their 4Ps status by being recorded as somebody's
+    sibling; and anyone else already in that household was silently left
+    behind, splitting them from the sibling they were recorded with.
+    """
+
+    def _households(self, source, target):
+        """_merge_household_details reads source first, then target."""
+        household_model = MagicMock()
+        household_model.objects.filter.return_value.first.side_effect = [source, target]
+        return household_model
+
+    def _blank(self, **overrides):
+        base = dict(parent_marital_status="", living_arrangement="",
+                    is_4ps_beneficiary=False, four_ps_id=None)
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def _link(self, student_model, household_model):
+        student = _student(pk=1, household_id=5)
+        sibling = _student(pk=2, household_id=7, first_name="Juan")
+        view = _view(student, data={"sibling_student_id": 2})
+        with _no_db_transaction(), \
+                patch("students.views.Student", student_model), \
+                patch("students.views.Household", household_model):
+            student_model.objects.get.return_value = sibling
+            return view.link_sibling(view.request, pk=1)
+
+    def test_everyone_in_the_absorbed_household_moves_not_just_the_one_named(self):
+        student_model = MagicMock()
+        # Household 7 holds the sibling AND another child already linked to them.
+        student_model.objects.filter.return_value.values_list.return_value = [2, 9]
+        household_model = self._households(self._blank(), self._blank())
+
+        response = self._link(student_model, household_model)
+
+        assert response.data["household_id"] == 5
+        assert sorted(response.data["moved_student_ids"]) == [2, 9]
+        # Moved as a group, by household -- not one student at a time.
+        student_model.objects.filter.assert_any_call(household_id=7)
+        student_model.objects.filter.return_value.update.assert_called_with(household_id=5)
+
+    def test_details_the_surviving_household_lacks_are_carried_across(self):
+        student_model = MagicMock()
+        student_model.objects.filter.return_value.values_list.return_value = [2]
+        source = self._blank(is_4ps_beneficiary=True, four_ps_id="4PS-991")
+        household_model = self._households(source, self._blank())
+
+        self._link(student_model, household_model)
+
+        household_model.objects.filter.return_value.update.assert_called_once_with(
+            is_4ps_beneficiary=True, four_ps_id="4PS-991",
+        )
+
+    def test_a_disagreement_is_reported_not_silently_resolved(self):
+        """Choosing between two stated marital statuses is a registrar's call,
+        so the surviving value is kept and the difference surfaced."""
+        student_model = MagicMock()
+        student_model.objects.filter.return_value.values_list.return_value = [2]
+        source = self._blank(parent_marital_status="separated")
+        target = self._blank(parent_marital_status="married")
+        household_model = self._households(source, target)
+
+        response = self._link(student_model, household_model)
+
+        conflicts = response.data["household_conflicts"]
+        assert len(conflicts) == 1
+        assert "parent_marital_status" in conflicts[0]
+        assert "married" in conflicts[0] and "separated" in conflicts[0]
+        # Nothing was overwritten on the survivor.
+        household_model.objects.filter.return_value.update.assert_not_called()
+
+    def test_no_conflicts_key_when_the_two_agree(self):
+        student_model = MagicMock()
+        student_model.objects.filter.return_value.values_list.return_value = [2]
+        same = dict(parent_marital_status="married")
+        household_model = self._households(self._blank(**same), self._blank(**same))
+
+        response = self._link(student_model, household_model)
+
+        assert "household_conflicts" not in response.data

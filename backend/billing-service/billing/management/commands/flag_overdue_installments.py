@@ -32,8 +32,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         today = timezone.now().date()
+        # Voiding an invoice is a plain status flip on the parent -- it never
+        # touches child installments, which stay "pending". Without the parent
+        # check those rows kept ageing into "overdue", so a cancelled invoice
+        # grew overdue installments that the invoice detail tab and the
+        # guardian's own ledger both displayed as money owed.
         updated = InvoiceInstallment.objects.filter(
             due_date__lt=today,
             status__in=("pending", "partially_paid"),
-        ).update(status="overdue")
+        ).exclude(invoice__status="void").update(status="overdue")
         self.stdout.write(f"Flagged {updated} installment(s) as overdue.")

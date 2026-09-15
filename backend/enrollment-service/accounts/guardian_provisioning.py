@@ -50,6 +50,7 @@ LINKED = "linked"          # an existing account matched by email
 CREATED = "created"        # a new account was made and linked
 SKIPPED_NO_EMAIL = "skipped_no_email"
 ALREADY_LINKED = "already_linked"
+SKIPPED_EMAIL_IN_USE = "skipped_email_in_use"   # the address belongs to a staff account
 
 
 def _clean_email(value):
@@ -58,6 +59,28 @@ def _clean_email(value):
 
 def _clean_name(value):
     return " ".join((value or "").split()).lower()
+
+
+def _linkable_account(email):
+    """The existing account this guardian row may be linked to, if any.
+
+    Deliberately role-scoped. `users.email` is UNIQUE across every role, and a
+    staff member who is also a parent is entirely ordinary at this scale -- so
+    matching on email alone bound guardian rows to teacher and accounting
+    accounts. That grants no extra access (every guardian-scoped query is
+    gated on role == "guardian" before it resolves the link), but it consumes
+    the link: the row then reads as provisioned, this module reports it
+    ALREADY_LINKED for ever, and the actual parent can never be given portal
+    access without someone unpicking it by hand.
+
+    Returns (linkable_user, blocking_user). At most one is ever set.
+    """
+    existing = User.objects.filter(email__iexact=email).first()
+    if existing is None:
+        return None, None
+    if getattr(existing, "role", None) == "guardian":
+        return existing, None
+    return None, existing
 
 
 def _link_same_person_across_household(guardian, user_id, results):
@@ -98,14 +121,36 @@ def _link_same_person_across_household(guardian, user_id, results):
     email = _clean_email(guardian.email_address)
     name = _clean_name(guardian.full_name)
 
-    for row in GuardianMirror.objects.filter(student_id__in=sibling_ids, user_id__isnull=True):
+    household_rows = list(GuardianMirror.objects.filter(student_id__in=sibling_ids))
+
+    # A name match is much weaker evidence than an email match, and it is the
+    # only evidence available for the rows that matter most (the registrar
+    # typed the email on one child and left it blank on the next). Guard it:
+    # if the same name appears in this household under a different address,
+    # the name plainly is not unique to this person and must not be treated as
+    # proof of identity.
+    emails_by_name = {}
+    for row in household_rows:
         row_email = _clean_email(row.email_address)
-        same_person = row_email == email if row_email else _clean_name(row.full_name) == name
-        if not same_person:
+        if row_email:
+            emails_by_name.setdefault(_clean_name(row.full_name), set()).add(row_email)
+    name_is_ambiguous = len(emails_by_name.get(name, set()) - {email}) > 0
+
+    for row in household_rows:
+        if row.user_id is not None:
             continue
+        row_email = _clean_email(row.email_address)
+        if row_email:
+            if row_email != email:
+                continue
+            basis = "same email"
+        else:
+            if name_is_ambiguous or not name or _clean_name(row.full_name) != name:
+                continue
+            basis = "same name, no email on the row"
         GuardianMirror.objects.filter(pk=row.pk).update(user_id=user_id)
         results[LINKED].append(
-            f"{row.full_name} (guardian #{row.guardian_id}, sibling) -> same account"
+            f"{row.full_name} (guardian #{row.guardian_id}, sibling) -> same account ({basis})"
         )
 
 
@@ -121,7 +166,10 @@ def provision_guardian_accounts(student_id):
     Never raises on a per-guardian problem: one bad row must not roll back an
     enrollment or block the rest.
     """
-    results = {LINKED: [], CREATED: [], SKIPPED_NO_EMAIL: [], ALREADY_LINKED: []}
+    results = {
+        LINKED: [], CREATED: [], SKIPPED_NO_EMAIL: [],
+        ALREADY_LINKED: [], SKIPPED_EMAIL_IN_USE: [],
+    }
 
     guardians = GuardianMirror.objects.filter(student_id=student_id)
 
@@ -139,7 +187,14 @@ def provision_guardian_accounts(student_id):
 
         # Match case-insensitively: the same parent typed in twice by two
         # different registrars shouldn't become two accounts.
-        existing = User.objects.filter(email__iexact=email).first()
+        existing, blocker = _linkable_account(email)
+        if blocker:
+            results[SKIPPED_EMAIL_IN_USE].append(
+                f"{label} -> {email} already belongs to a "
+                f"{getattr(blocker, 'role', 'non-guardian')} account (#{blocker.user_id}); "
+                f"give this guardian their own address, or change that account's role"
+            )
+            continue
         if existing:
             GuardianMirror.objects.filter(pk=guardian.pk).update(user_id=existing.user_id)
             results[LINKED].append(f"{label} -> existing account {email}")
@@ -158,7 +213,13 @@ def provision_guardian_accounts(student_id):
         except IntegrityError:
             # Lost a race against a concurrent provision for the same email
             # (two siblings enrolled at once). Re-read and link instead.
-            existing = User.objects.filter(email__iexact=email).first()
+            existing, blocker = _linkable_account(email)
+            if blocker:
+                results[SKIPPED_EMAIL_IN_USE].append(
+                    f"{label} -> {email} already belongs to a "
+                    f"{getattr(blocker, 'role', 'non-guardian')} account (#{blocker.user_id})"
+                )
+                continue
             if not existing:
                 logger.exception(
                     "Could not provision a guardian account for %s <%s>", label, email

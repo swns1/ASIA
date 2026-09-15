@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { pageVariants } from "../utils/motion";
 
@@ -35,6 +35,7 @@ import {
   voidInvoice as _voidInvoice,
 } from "../api/billingApi";
 import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
+import { fmtDate } from "../utils/format";
 
 const getInvoices       = (p = {}) => _getInvoices(p);
 const getInvoice        = (id)     => _getInvoice(id);
@@ -85,7 +86,6 @@ const PAYMENT_COLUMNS = [
 ];
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
 
 // ── Generate Invoice Modal ────────────────────────────────────────────────────
@@ -608,7 +608,6 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function InvoicesPage() {
   usePageTitle("Invoices");
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [invoices,     setInvoices]     = useState([]);
@@ -698,8 +697,6 @@ export default function InvoicesPage() {
   }, [schoolYear]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     if (!seededYear.current) return; // still waiting on the default year
     fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id", yearFilter);
   // eslint-disable-next-line react-hooks/exhaustive-deps

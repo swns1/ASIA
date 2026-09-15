@@ -208,7 +208,7 @@ function CreateUserModal({ onClose, onCreated }) {
             type="email"
             value={values.email}
             onChange={set("email")}
-            placeholder="e.g. maria@southlakes.edu"
+            placeholder="e.g. maria@southlakes.edu.ph"
             autoComplete="email"
           />
         </Field>

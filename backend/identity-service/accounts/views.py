@@ -18,7 +18,13 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-from .audit import ADMIN_ROLES, is_audit_admin, record_audit_event
+from .audit import (
+    ADMIN_ROLES,
+    SUPER_ADMIN_ROLES,
+    is_audit_admin,
+    is_super_admin,
+    record_audit_event,
+)
 from .authentication import NoOpAuthentication
 from .models import AuditLog, User, VALID_ROLES
 from .permissions import HasRole
@@ -74,10 +80,18 @@ class LoginView(APIView):
         # ip_or_username=True clears whichever key AXES_LOCKOUT_PARAMETERS
         # is actually using (defaults to IP address alone, not username --
         # see settings.py) rather than assuming one or the other.
+        # Reset the exact (ip, username) pair that just succeeded, and only
+        # that pair — AXES_LOCKOUT_PARAMETERS is ["ip_address", "username"],
+        # so that is the key actually being tracked.
+        #
+        # ip_or_username=True cleared every counter for the IP *or* the
+        # username instead, which meant one valid low-privilege credential
+        # could be used to wipe the brute-force state for every other account
+        # being attacked from the same address: log in as yourself, and the
+        # attacker's failed attempts against the super_admin reset too.
         axes_reset(
             ip=get_client_ip_address(request),
             username=serializer.validated_data["identifier"],
-            ip_or_username=True,
         )
 
         session_id = uuid.uuid4()
@@ -212,6 +226,15 @@ class UserListView(APIView):
         if role not in VALID_ROLES:
             return Response({"detail": f"Invalid role '{role}'."}, status=400)
 
+        # Creating a second super_admin is a super_admin's decision -- otherwise
+        # the hierarchy enforced in UserDetailView is trivially sidestepped by
+        # minting a fresh super_admin and logging in as it.
+        if role in SUPER_ADMIN_ROLES and not is_super_admin(requester):
+            return Response(
+                {"detail": "Only a super admin can create a super admin account."},
+                status=403,
+            )
+
         if User.objects.filter(email__iexact=email).exists():
             return Response({"detail": "A user with this email already exists."}, status=400)
 
@@ -292,6 +315,17 @@ class UserDetailView(APIView):
         if not target:
             return Response({"detail": "User not found."}, status=404)
 
+        # ── Role hierarchy ────────────────────────────────────────────────────
+        # A super_admin account may only be edited by a super_admin (or by
+        # itself). Otherwise a plain admin could reset the super_admin's
+        # password -- the current-password check below applies only to
+        # self-edits -- and then simply log in as them.
+        if is_super_admin(target) and not is_own_profile and not is_super_admin(requester):
+            return Response(
+                {"detail": "Only a super admin can modify a super admin account."},
+                status=403,
+            )
+
         data    = request.data
         changes = []
         # Set True by the role/password sections below. A role or password
@@ -333,6 +367,21 @@ class UserDetailView(APIView):
             new_role = (data["role"] or "").strip()
             if new_role and new_role not in VALID_ROLES:
                 return Response({"detail": f"Invalid role '{new_role}'."}, status=400)
+            # Nobody edits their own role. An admin who can hand themselves
+            # super_admin makes the distinction between the two meaningless,
+            # and a self-demotion is just as likely to be a mistake that locks
+            # the last admin out of the system.
+            if new_role and new_role != target.role and is_own_profile:
+                return Response(
+                    {"detail": "You cannot change your own role. Ask another admin."},
+                    status=403,
+                )
+            # Granting super_admin is a super_admin's decision.
+            if new_role in SUPER_ADMIN_ROLES and not is_super_admin(requester):
+                return Response(
+                    {"detail": "Only a super admin can grant the super admin role."},
+                    status=403,
+                )
             if new_role and new_role != target.role:
                 changes.append(f"role changed from '{target.role}' to '{new_role}'")
                 target.role = new_role
@@ -411,6 +460,14 @@ class UserDetailView(APIView):
         if not target:
             return Response({"detail": "User not found."}, status=404)
 
+        # Same hierarchy as patch(): a plain admin must not be able to delete
+        # the super_admin account out from under the system.
+        if is_super_admin(target) and not is_super_admin(requester):
+            return Response(
+                {"detail": "Only a super admin can delete a super admin account."},
+                status=403,
+            )
+
         name, email, role = target.name, target.email, target.role
         target.delete()
 
@@ -432,7 +489,12 @@ class UserDetailView(APIView):
 class AuditLogPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
-    max_page_size = 10000
+    # Was 10000. Audit rows carry a free-text `details` plus a JSON `metadata`
+    # blob, so a single ?page_size=10000 pulled tens of megabytes and held a
+    # worker for the duration — trivially, and from any admin session. The
+    # page only ever renders a screenful; the filter options it used to need
+    # the whole table for now come from the facets endpoint.
+    max_page_size = 200
 
 
 class AuditLogListView(APIView):

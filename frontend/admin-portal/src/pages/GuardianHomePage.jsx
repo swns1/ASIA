@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getCurrentUser } from "../utils/auth";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
 import { StatusBadge } from "../components/ui/Badge";
@@ -63,8 +64,6 @@ export default function GuardianHomePage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/login"); return; }
     fetchChildren(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,8 +82,10 @@ export default function GuardianHomePage() {
       </motion.div>
 
       {error && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-error-500/30 bg-error-50 px-4 py-3 text-sm text-error-500">
-          <i className="ti ti-alert-circle text-base" aria-hidden="true" />{error}
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-error-500/30 bg-error-50 px-4 py-3 text-sm text-error-500">
+          <i className="ti ti-alert-circle text-base" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button variant="secondary" size="sm" icon="ti-refresh" onClick={fetchChildren}>Try again</Button>
         </div>
       )}
 
@@ -103,7 +104,7 @@ export default function GuardianHomePage() {
             </div>
           ))}
         </div>
-      ) : children.length === 0 ? (
+      ) : error ? null : children.length === 0 ? (
         <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-16 text-center">
           <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--color-brand-100),var(--color-brand-200))]">
             <i className="ti ti-users text-2xl text-neutral-500" aria-hidden="true" />

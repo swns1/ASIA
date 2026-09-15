@@ -32,6 +32,38 @@ psql -U postgres -d "SLIS THESIS FINAL" -f schema.sql
 psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
 ```
 
+#### Demo accounts
+
+`seed_data.sql` creates six accounts, one per role, all with the password
+**`SlisDemo2026!`**:
+
+| Email | Role | Notes |
+|---|---|---|
+| `superadmin@slis.test` | super_admin | |
+| `admin@slis.test` | admin | |
+| `registrar@slis.test` | registrar | |
+| `teacher@slis.test` | teacher | Adviser of Grade 4-A, Grade 6-A and Grade 7-Diamond (SY 2025-2026). A teacher with no `section_advisories` row sees empty class lists, grades and attendance — the scoping fails closed — so the seed creates those advisories too. |
+| `accounting@slis.test` | accounting | |
+| `maribel.reyes.seed@gmail.com` | guardian | Parent portal (`/guardian`). Linked to two children, one of whom has two school years, so the one-card-per-child grouping is visible. |
+
+These accounts are matched **by email**, not by a fixed `user_id`: the seed
+creates them if absent and resets the role and password if present. An earlier
+version pinned them to ids 1-6, which meant that on any database that already
+had users the ids collided, `ON CONFLICT DO NOTHING` skipped every row, and
+these credentials silently did not exist.
+
+> These are evaluation credentials committed to a public repo. Change or delete
+> them before the system is deployed anywhere real.
+
+The seed also populates `subjects`, `grading_templates`, `grading_components`
+and `users` — without those, the `grades` rows violate their subject foreign
+key, the opening `BEGIN;` rolls the whole file back, and there is no account to
+log in with.
+
+**Demo data lives in SY 2025-2026, 1st Quarter.** Analytics and the class lists
+default to the current school year, which has no seeded data; select
+2025-2026 / 1st Quarter to see populated results.
+
 `schema.sql` is a `pg_dump --schema-only` snapshot of the schema, which was built up via pgAdmin over time with no other tracked source — it's the only artifact that captures the whole thing, including two validation triggers (`trg_billing_item_parent_category_match`, `trg_validate_grading_period`) and a view (`student_invoice_balances`) that Django's models/migrations layer can't see at all. Most Django models still declare `managed = False` and point at these tables rather than owning them via migrations (see "Known in-progress work" below), so `schema.sql`, not `manage.py migrate`, is the source of truth for table structure. Regenerate it after a real schema change made via pgAdmin:
 
 ```sh
@@ -129,10 +161,119 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 > Sample documents are real civil-registry records and are **gitignored** (`OCR_IMAGES/`,
 > `students/fixtures/*.jpg`). Do not commit them — see the note in `.gitignore`.
 
+## Deployment
+
+There is no Dockerfile, PaaS config, or reverse proxy in this repo. What is
+documented here is a **LAN testing deployment**: the four services plus the
+built frontend running on one Windows machine, reachable from other devices on
+the same network. That is enough for demos and panel testing. It is not a public
+production deployment — nothing in this stack terminates TLS.
+
+### Before the first deploy
+
+1. **Rotate the Gemini API key** — a live one is in git history (commit `5bcd352`).
+2. **Change the demo account passwords** listed above; they are published in this repo.
+3. Keep the repo private until the documents noted under *Known in-progress work* are purged from history.
+
+### 1. Environment
+
+In each `backend/*/.env`:
+
+```ini
+DEBUG=0
+ALLOWED_HOSTS=192.168.1.42                      # this machine's LAN IP
+CORS_ALLOWED_ORIGINS=http://192.168.1.42:4173   # where the frontend is served
+```
+
+`SECRET_KEY` must still be identical across all four. Leave every `SECURE_*`
+flag **off** for a plain-HTTP LAN run — `SECURE_SSL_REDIRECT=1` without HTTPS
+makes every page unreachable. `NUM_PROXIES` stays `0` with no proxy in front.
+
+`ALLOWED_HOSTS` is not optional once `DEBUG=0`: an empty list rejects every
+request, which looks exactly like the service being down.
+
+Find the LAN IP with `ipconfig`, or run `.\scripts\serve-lan.ps1 -Check`, which
+prints it along with the URLs.
+
+### 2. Collect static files
+
+```powershell
+foreach ($s in 'identity','student','billing','enrollment') {
+  Push-Location "backend\$s-service"
+  ..\..\.venv\Scripts\python.exe manage.py collectstatic --noinput
+  Pop-Location
+}
+```
+
+Required, not optional. Static files go through whitenoise's
+`CompressedManifestStaticFilesStorage`, which raises on any file it has no hash
+for — skip this and `/admin/` and the DRF browsable API break at request time.
+
+### 3. Start the services
+
+```powershell
+.\scripts\serve-lan.ps1
+```
+
+waitress, not gunicorn: gunicorn stays pinned for a future Linux host but does
+not run on Windows. Each service binds `0.0.0.0` (not `127.0.0.1`) so the LAN
+can reach it, and opens in its own window — close the windows to stop the stack.
+The script refuses to start if a `.env` or a static manifest is missing.
+
+Verify from the host, then from another device:
+
+```powershell
+.\scripts\health-check.ps1 -HostName 192.168.1.42
+```
+
+All four must return `{"status": "ok"}`. A `503` means the service is up but the
+shared database is unreachable.
+
+### 4. Build and serve the frontend
+
+The production build **must** be given the API URLs — `vite build` aborts
+without them rather than silently baking in `localhost`:
+
+```powershell
+cd frontend\admin-portal
+$env:VITE_IDENTITY_API_URL   = "http://192.168.1.42:8001/api/auth"
+$env:VITE_STUDENT_API_URL    = "http://192.168.1.42:8000/api"
+$env:VITE_BILLING_API_URL    = "http://192.168.1.42:8002/api"
+$env:VITE_ENROLLMENT_API_URL = "http://192.168.1.42:8003/api"
+npm run build
+npm run preview -- --host 0.0.0.0 --port 4173
+```
+
+Confirm the URLs were actually used — the count must be **0**:
+
+```powershell
+(Select-String -Path dist\assets\*.js -Pattern "localhost:80").Count
+```
+
+Whatever serves `dist/` must fall back to `index.html` for unknown paths, or
+refreshing on any route 404s. `vercel.json` does this on Vercel only.
+
+### 5. Schedule the overdue-installments job
+
+Nothing invokes this automatically:
+
+```powershell
+cd backend\billing-service
+..\..\.venv\Scripts\python.exe manage.py flag_overdue_installments
+```
+
+Register it daily in Windows Task Scheduler, or installments stay `pending` past
+their due date.
+
+### Firewall
+
+Windows Firewall blocks inbound connections on these ports by default. Allow
+8000-8003 and the frontend port for **Private** networks only — never Public.
+
 ## Known in-progress work
 
 - **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. `HasRole` (both the shared copy used by billing/enrollment/student and identity-service's own) now fails closed if a view omits `required_roles` — it used to silently allow any authenticated user, guardians included; a view that genuinely wants that must set `ALLOW_ANY_AUTHENTICATED_ROLE = True` explicitly. `backend/shared/` now also holds `authentication.py` (`SingleSessionJWTAuthentication`, de-duplicated from three per-service copies) and `health.py`; `user_stub.py` remains unused dead code (see git history/audit notes for why).
-- **Clustering analytics** (`enrollment-service/ai/`): K-means/PCA clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
+- **Clustering analytics** (`enrollment-service/ai/`): K-means clustering of student performance is implemented and wired into the UI (`AnalyticsPage`). Runs are now persisted (`RiskAssessmentRun` / `StudentRiskScore`) and the at-risk score is anchored to DepEd decision thresholds rather than free hyperparameters, but the component weights in `ai/services.py` are still hardcoded rather than configurable per school.
 
 - **Flipping the remaining `managed = False` models to `managed = True` needs the `accounts` app-label collision resolved first — not a decision to make in passing.** All four services independently define a local app named `accounts` (their own `User` stub, hand-copied per service — see `backend/shared/`'s notes above), but Django's migration bookkeeping (`django_migrations`) is keyed by `(app_label, migration_name)` in the **one shared database**, not per-service. Checked directly against the real DB: `accounts.0001_initial` is recorded **once**, even though all four services carry a file by that name with different `CreateModel` contents — whichever service happened to migrate first "claimed" that row, and the other three's `0001_initial.py` has never actually executed. Harmless today only because every current `accounts` migration is `managed = False` (a no-op either way). It stops being harmless the moment any service's `accounts` app gets a real, executed migration: a same-named migration in a *different* service would read as "already applied" and silently skip its own `CREATE TABLE`, even against a genuinely empty database. Fix first (e.g. a distinct `AppConfig.label` per service), independently of and before any `managed = True` conversion work.
 - **`schema.sql`** (repo root) is a `pg_dump --schema-only` snapshot of the real schema — see the Database setup section above. Verified by loading it into a throwaway database from scratch (0 errors, exact table/view count match). It's a complete, working substitute for `manage.py migrate` today, but doesn't by itself fix `pytest-django`'s automatic test-database creation, which still drives Django's own migration executor and hits the `django.contrib.admin` → `AUTH_USER_MODEL` wall documented in `enrollment-service/ai/test_risk_assessment.py`'s module docstring (that FK requires `users` to exist, and no *migration* creates it in student-service, billing-service, or enrollment-service). Closing that gap for real integration testing — without re-triggering the collision above — most likely means point pytest-django's `django_db_setup` fixture at `schema.sql` directly instead of at `manage.py migrate`, rather than converting all 55 tables to `managed = True`.

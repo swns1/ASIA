@@ -2,6 +2,7 @@
 -- PostgreSQL database dump
 --
 
+\restrict QEfN12BabqZUAmIKkzK0cba8DgCHYLvmeNQqfoaX468Js8POpaZpXM9XbRNR2ji
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.6
@@ -143,7 +144,6 @@ CREATE TABLE public.application_invites (
     applicant_last_name character varying(50) NOT NULL,
     contact_email character varying(150),
     contact_mobile character varying(20),
-    mode character varying(10) NOT NULL,
     issued_by_user_id bigint NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
@@ -166,7 +166,8 @@ CREATE TABLE public.attendance_records (
     remarks text,
     recorded_by integer,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT attendance_records_status_check CHECK (((status)::text = ANY (ARRAY['P'::text, 'A'::text, 'L'::text, 'E'::text])))
 );
 
 
@@ -1174,7 +1175,9 @@ CREATE TABLE public.narrative_reports (
     category_id bigint NOT NULL,
     grading_period character varying(20) NOT NULL,
     rating character varying(20) NOT NULL,
-    recorded_at timestamp with time zone DEFAULT now() NOT NULL
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT narrative_reports_grading_period_check CHECK (((grading_period)::text = ANY (ARRAY['1st_quarter'::text, '2nd_quarter'::text, '3rd_quarter'::text, '4th_quarter'::text, '1st_semester'::text, '2nd_semester'::text]))),
+    CONSTRAINT narrative_reports_rating_check CHECK (((rating)::text = ANY (ARRAY['AO'::text, 'SO'::text, 'RO'::text, 'NO'::text, 'outstanding'::text, 'satisfactory'::text, 'needs_improvement'::text])))
 );
 
 
@@ -1237,7 +1240,12 @@ CREATE TABLE public.requirement_types (
     requirement_code character varying(50) NOT NULL,
     requirement_name character varying(150) NOT NULL,
     description text,
-    is_active boolean DEFAULT true NOT NULL
+    is_active boolean DEFAULT true NOT NULL,
+    is_required boolean DEFAULT true NOT NULL,
+    applies_to_levels text[] DEFAULT ARRAY['nursery'::text, 'kindergarten'::text, 'elementary'::text, 'junior_highschool'::text, 'senior_highschool'::text] NOT NULL,
+    applies_to_entry_statuses text[] DEFAULT ARRAY['new'::text, 'transferee'::text, 'continuing'::text] NOT NULL,
+    CONSTRAINT requirement_types_applies_to_entry_statuses_check CHECK (((applies_to_entry_statuses <@ ARRAY['new'::text, 'transferee'::text, 'continuing'::text]) AND (cardinality(applies_to_entry_statuses) > 0))),
+    CONSTRAINT requirement_types_applies_to_levels_check CHECK (((applies_to_levels <@ ARRAY['nursery'::text, 'kindergarten'::text, 'elementary'::text, 'junior_highschool'::text, 'senior_highschool'::text]) AND (cardinality(applies_to_levels) > 0)))
 );
 
 
@@ -3238,10 +3246,59 @@ CREATE INDEX idx_enrollment_overrides_enrollment_id ON public.enrollment_overrid
 
 
 --
+-- Name: idx_enrollments_school_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_enrollments_school_year ON public.enrollments USING btree (school_year);
+
+
+--
+-- Name: idx_enrollments_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_enrollments_status ON public.enrollments USING btree (enrollment_status);
+
+
+--
+-- Name: idx_enrollments_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_enrollments_student ON public.enrollments USING btree (student_id);
+
+
+--
 -- Name: idx_fee_schedule_items_schedule; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_fee_schedule_items_schedule ON public.fee_schedule_items USING btree (fee_schedule_id);
+
+
+--
+-- Name: idx_grades_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_grades_subject ON public.grades USING btree (subject_id);
+
+
+--
+-- Name: idx_guardians_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_guardians_student ON public.guardians USING btree (student_id);
+
+
+--
+-- Name: idx_invoice_discounts_invoice; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_invoice_discounts_invoice ON public.student_invoice_discounts USING btree (invoice_id);
+
+
+--
+-- Name: idx_invoice_installments_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_invoice_installments_due ON public.invoice_installments USING btree (status, due_date);
 
 
 --
@@ -3252,10 +3309,73 @@ CREATE INDEX idx_invoice_installments_invoice ON public.invoice_installments USI
 
 
 --
+-- Name: idx_invoice_items_invoice; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_invoice_items_invoice ON public.student_invoice_items USING btree (invoice_id);
+
+
+--
+-- Name: idx_previous_schools_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_previous_schools_student ON public.previous_schools USING btree (student_id);
+
+
+--
 -- Name: idx_score_entries_lookup; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_score_entries_lookup ON public.score_entries USING btree (enrollment_id, subject_id, grading_component_id, grading_period);
+
+
+--
+-- Name: idx_siblings_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_siblings_student ON public.siblings USING btree (student_id);
+
+
+--
+-- Name: idx_student_invoices_enrollment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_invoices_enrollment ON public.student_invoices USING btree (enrollment_id);
+
+
+--
+-- Name: idx_student_invoices_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_invoices_status ON public.student_invoices USING btree (status);
+
+
+--
+-- Name: idx_student_payments_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_payments_date ON public.student_payments USING btree (payment_date);
+
+
+--
+-- Name: idx_student_payments_invoice; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_payments_invoice ON public.student_payments USING btree (invoice_id);
+
+
+--
+-- Name: idx_students_household; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_students_household ON public.students USING btree (household_id);
+
+
+--
+-- Name: idx_subjects_placement; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_subjects_placement ON public.subjects USING btree (school_level, grade_level);
 
 
 --
@@ -3431,6 +3551,27 @@ CREATE UNIQUE INDEX uq_enrollments_student_sy ON public.enrollments USING btree 
 --
 
 CREATE UNIQUE INDEX uq_guardian_primary_per_student ON public.guardians USING btree (student_id) WHERE (is_primary_contact = true);
+
+
+--
+-- Name: uq_school_settings_singleton; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_school_settings_singleton ON public.school_settings USING btree ((true));
+
+
+--
+-- Name: uq_section_advisories_no_strand; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_section_advisories_no_strand ON public.section_advisories USING btree (teacher_user_id, school_year, school_level, grade_level, section) WHERE (strand IS NULL);
+
+
+--
+-- Name: uq_student_invoices_live_per_enrollment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_student_invoices_live_per_enrollment ON public.student_invoices USING btree (enrollment_id) WHERE ((status)::text <> 'void'::text);
 
 
 --
@@ -3758,14 +3899,6 @@ ALTER TABLE ONLY public.student_invoice_items
 
 
 --
--- Name: student_invoices student_invoices_enrollment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.student_invoices
-    ADD CONSTRAINT student_invoices_enrollment_id_fkey FOREIGN KEY (enrollment_id) REFERENCES public.enrollments(enrollment_id) ON DELETE CASCADE;
-
-
---
 -- Name: student_payments student_payments_invoice_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3849,4 +3982,5 @@ ALTER TABLE ONLY public.token_blacklist_outstandingtoken
 -- PostgreSQL database dump complete
 --
 
+\unrestrict QEfN12BabqZUAmIKkzK0cba8DgCHYLvmeNQqfoaX468Js8POpaZpXM9XbRNR2ji
 

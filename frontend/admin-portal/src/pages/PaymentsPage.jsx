@@ -14,6 +14,7 @@ import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 
 import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
+import { fmtDate } from "../utils/format";
 import { PAYMENT_METHODS, PAYMENT_METHOD_MAP as PM } from "../constants/paymentMethods";
 const getPayments = (p = {}) => _getPayments(p);
 
@@ -32,7 +33,6 @@ const SORT_OPTIONS = [
 ];
 
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—";
 
 // Columns for the payments table. Not sortable here — ordering is driven by
 // the Sort chip row in the filter bar, which maps to the API's `ordering`.
@@ -135,8 +135,6 @@ export default function PaymentsPage() {
   }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchPayments();
   }, [refreshKey]);
 

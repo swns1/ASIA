@@ -105,4 +105,28 @@ jobs:
 
       - run: npm run lint
       - run: npm run test
-      - run: npm run build
+
+      - name: Production build
+        # vite.config.js aborts a production build when these are unset, so a
+        # bundle can never silently ship pointing at localhost (it did exactly
+        # that, in 16 places, before the guard existed). CI therefore has to
+        # supply them -- which also makes this step prove the production path
+        # works rather than only the dev one. The values are placeholders; only
+        # their presence is being checked here.
+        env:
+          VITE_IDENTITY_API_URL: https://ci.example.invalid/api/auth
+          VITE_STUDENT_API_URL: https://ci.example.invalid/students/api
+          VITE_BILLING_API_URL: https://ci.example.invalid/billing/api
+          VITE_ENROLLMENT_API_URL: https://ci.example.invalid/enrollment/api
+        run: npm run build
+
+      - name: Assert no localhost in the bundle
+        # The guard above only proves the vars were set. This proves they were
+        # actually used -- a build that baked in localhost fails here.
+        run: |
+          if grep -rq "localhost:80" dist/assets/; then
+            echo "::error::Production bundle contains localhost URLs"
+            grep -ro "localhost:80[0-9][0-9]" dist/assets/ | sort -u
+            exit 1
+          fi
+          echo "OK: no localhost URLs in dist/"

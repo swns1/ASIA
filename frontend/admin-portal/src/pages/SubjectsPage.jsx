@@ -15,7 +15,6 @@ import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/Fil
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { useNavigate } from "react-router-dom";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -251,7 +250,6 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function SubjectsPage() {
   usePageTitle("Subjects");
-  const navigate    = useNavigate();
   const canManage   = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [subjects,     setSubjects]    = useState([]);
@@ -285,8 +283,6 @@ export default function SubjectsPage() {
   }, [search, levelFilter, gradeFilter]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchSubjects(1, "", "all");
     getTemplates().then((d) => setTemplates(Array.isArray(d) ? d : d?.results ?? [])).catch(() => {});
   }, []);

@@ -209,7 +209,16 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
         await Promise.all(
           eligible.map(async (st) => {
             try {
-              const e = await apiGetEligibility(st.student_id);
+              // The placement MUST be passed. Which documents a learner owes
+              // is decided per school level and entry status, so with no
+              // placement the server cannot resolve applicability and reports
+              // nothing as missing — every brand-new student rendered as
+              // document-complete here even when they had submitted nothing.
+              // This class's own level and grade are exactly the placement
+              // these candidates are being considered for.
+              const e = await apiGetEligibility(st.student_id, {
+                schoolLevel, gradeLevel,
+              });
               eligMap[st.student_id] = e;
             } catch { /* non-critical */ }
           })
@@ -433,12 +442,19 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                       const name = [st.last_name+",", st.first_name, st.middle_name].filter(Boolean).join(" ");
                       const isSelected = selected.has(st.student_id);
                       const elig = eligibilityMap[st.student_id];
+                      // `documents_assessed: false` means the server could not
+                      // work out which documents apply — an empty missing_docs
+                      // then says nothing, so it must not read as a green
+                      // "Eligible". Drawing it green would vouch for a
+                      // checklist nobody ran.
                       const eligBadge = elig == null ? null
                         : elig.blocking_reasons?.length > 0
                           ? { bg:"#fef2f2", color:"#991b1b", border:"#fca5a5", icon:"ti-circle-x", label:"Blocked" }
                           : elig.missing_docs?.length > 0
                             ? { bg:"#fffbeb", color:"#92400e", border:"#fde68a", icon:"ti-file-x", label:`Docs (${elig.missing_docs.length})` }
-                            : { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0", icon:"ti-circle-check", label:"Eligible" };
+                            : elig.documents_assessed === false
+                              ? { bg:"#f5f5f4", color:"#57534e", border:"#d6d3d1", icon:"ti-help-circle", label:"Docs not checked" }
+                              : { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0", icon:"ti-circle-check", label:"Eligible" };
                       return (
                         <motion.div key={st.student_id}
                           initial={{ opacity: 0, y: 6 }}
@@ -1119,7 +1135,7 @@ export default function EnrollmentsPage() {
   const [loadError, setLoadError] = useState(null);
 
   const fetchEnrollments = useCallback(async (pg = 1) => {
-    if (!token) { navigate("/"); return; }
+    if (!token) return;
     setLoading(true);
     setLoadError(null);
     try {

@@ -12,7 +12,6 @@ import Modal from "../components/ui/Modal";
 import Badge from "../components/ui/Badge";
 import { Field, Input, Textarea } from "../components/FormField";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
-import { useNavigate } from "react-router-dom";
 
 import {
   getScholarshipTypes as _getScholarshipTypes,
@@ -292,7 +291,6 @@ function ScholarshipRow({ sch, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function ScholarshipTypesPage() {
   usePageTitle("Scholarship Types");
-  const navigate = useNavigate();
 
   const [scholarships,  setScholarships]  = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -317,8 +315,6 @@ export default function ScholarshipTypesPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchScholarships(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

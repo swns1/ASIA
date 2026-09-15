@@ -343,8 +343,6 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     if (!schoolYear) return; // global school year still resolving
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps

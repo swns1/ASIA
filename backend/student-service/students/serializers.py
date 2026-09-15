@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from shared.uploads import download_url, file_kind_for, safe_save
+from .validators import LrnFormatMixin
 from .models import (
     Student,
     Household,
@@ -36,7 +37,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class StudentSerializer(serializers.ModelSerializer):
+class StudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
@@ -109,6 +110,17 @@ class GuardianSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guardian
         fields = "__all__"
+        # `user_id` is the ONLY key guardian-portal scoping uses: every service
+        # resolves a login account to the students it may see via
+        # guardians.user_id (guardian_student_ids() in enrollment-, billing-
+        # and student-service). Left inside "__all__" it was plainly writable,
+        # so anyone with write access here could point an arbitrary
+        # users.user_id at an arbitrary student and hand that account the
+        # child's grades, attendance, invoices and uploaded documents.
+        # Linking an account is a privileged operation and belongs to
+        # accounts/guardian_provisioning.py, which validates the target -- not
+        # to a plain PATCH of this column.
+        read_only_fields = ("user_id",)
 
     def get_student_name(self, obj):
         s = obj.student
@@ -119,8 +131,13 @@ class GuardianSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if attrs.get("is_primary_contact"):
+            # A PATCH need not carry `student`, and attrs.get("student") was
+            # then None -- so this filtered on student=None, matched nothing,
+            # and let a second primary contact through on any partial update.
+            # Fall back to the row being edited.
+            student = attrs.get("student") or getattr(self.instance, "student", None)
             existing = Guardian.objects.filter(
-                student=attrs.get("student"),
+                student=student,
                 is_primary_contact=True
             )
             if self.instance:
@@ -200,6 +217,21 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentRequirementSubmission
         fields = "__all__"
+        # Mirrors enrollment-service's twin of this serializer
+        # (requirements/serializers.py). Both write the SAME table, but this
+        # copy had no read_only_fields at all -- so a client could POST
+        # {"student": N, "requirement_type": M, "is_submitted": true} with no
+        # file at all and satisfy the enrollment completeness gate, which
+        # tests is_submitted alone. These are set by create()/update() below,
+        # and only once a validated file has actually been stored.
+        read_only_fields = (
+            "student_requirement_submission_id",
+            "is_submitted",
+            "image_url",
+            "submitted_at",
+            "created_at",
+            "updated_at",
+        )
 
     def get_image_url(self, obj):
         return download_url(DOWNLOAD_PREFIX, obj.student_requirement_submission_id, bool(obj.image_url))
@@ -231,7 +263,7 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class BulkStudentSerializer(serializers.ModelSerializer):
+class BulkStudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
     """Used only inside bulk-create — student_id, household FK, and updated_at are managed server-side."""
     class Meta:
         model = Student
@@ -245,13 +277,39 @@ class BulkHouseholdSerializer(serializers.ModelSerializer):
         exclude = ["household_id"]
 
 
+# `student` is set by the view from the row it just created, so these two omit
+# it -- a nested payload cannot name a student that does not exist yet. Mirrors
+# intake/serializers.py's ApplicantSibling/PreviousSchool pair, which exist for
+# the same reason on the approval path.
+class BulkSiblingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sibling
+        fields = ("full_name", "age")
+
+
+class BulkPreviousSchoolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PreviousSchool
+        fields = ("school_name", "school_address")
+
+
 class StudentBulkCreateSerializer(serializers.Serializer):
     student   = BulkStudentSerializer()
     household = BulkHouseholdSerializer(required=False, allow_null=True)
     guardians = BulkGuardianSerializer(many=True, required=False, default=list)
+    # Siblings and previous schools used to be created by the client, one HTTP
+    # call each, after this endpoint returned. A failure partway through left a
+    # student saved with its siblings lost -- and because `lrn` is UNIQUE, the
+    # retry could never succeed, so the form became unusable with no way back.
+    # They belong in the same transaction as the student, which is what the
+    # approval path (intake/services.py::approve_application) already did.
+    siblings         = BulkSiblingSerializer(many=True, required=False, default=list)
+    previous_schools = BulkPreviousSchoolSerializer(many=True, required=False, default=list)
 
 
 class StudentBulkCreateResponseSerializer(serializers.Serializer):
     student   = StudentSerializer()
     household = HouseholdSerializer(allow_null=True)
     guardians = GuardianSerializer(many=True)
+    siblings         = SiblingSerializer(many=True)
+    previous_schools = PreviousSchoolSerializer(many=True)

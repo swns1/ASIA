@@ -5,6 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
+    assert_teacher_may_write_enrollment,
     guardian_student_ids,
     teacher_student_ids,
 )
@@ -40,6 +41,14 @@ class GradeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _scope_to_student_records(super().get_queryset(), self.request.user)
 
+    def perform_create(self, serializer):
+        # has_object_permission never runs on create — without this a teacher
+        # could post a grade for any student in the school.
+        assert_teacher_may_write_enrollment(
+            self.request.user, serializer.validated_data.get("enrollment")
+        )
+        serializer.save()
+
 
 class NarrativeCategoryViewSet(viewsets.ModelViewSet):
     queryset           = NarrativeCategory.objects.all()
@@ -63,3 +72,9 @@ class NarrativeReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return _scope_to_student_records(super().get_queryset(), self.request.user)
+
+    def perform_create(self, serializer):
+        assert_teacher_may_write_enrollment(
+            self.request.user, serializer.validated_data.get("enrollment")
+        )
+        serializer.save()

@@ -87,66 +87,78 @@ INSERT INTO students (
   status, current_address, permanent_address, household_id, updated_at
 ) OVERRIDING SYSTEM VALUE VALUES
   -- Nursery / Kindergarten (100–109)
-  (100, 'SEED-0100', 'SEED00000100', 'Maria',      'Santos',      'Reyes',       NULL, 5, 'female', 'Roman Catholic',   '2020-03-15', NULL,                         NULL,          'active',     'Blk 1 Lot 2 Sampaguita St., Brgy. San Jose, Quezon City',    'Blk 1 Lot 2 Sampaguita St., Brgy. San Jose, Quezon City',    100, NOW()),
-  (101, 'SEED-0101', 'SEED00000101', 'Juan',        'Cruz',        'Dela Cruz',   NULL, 4, 'male',   'Roman Catholic',   '2021-06-22', NULL,                         NULL,          'active',     '123 Mabini St., Brgy. Poblacion, Marikina City',              '123 Mabini St., Brgy. Poblacion, Marikina City',              101, NOW()),
-  (102, 'SEED-0102', 'SEED00000102', 'Ana',         'Bautista',    'Garcia',      NULL, 5, 'female', 'Born Again',       '2020-11-05', NULL,                         NULL,          'active',     '45 Rizal Ave., Brgy. Sta. Cruz, Pasig City',                  '45 Rizal Ave., Brgy. Sta. Cruz, Pasig City',                  102, NOW()),
-  (103, 'SEED-0103', 'SEED00000103', 'Carlos',      'Ong',         'Tan',         NULL, 6, 'male',   'Roman Catholic',   '2019-08-30', NULL,                         NULL,          'active',     '78 Bonifacio St., Brgy. San Isidro, Caloocan City',           '78 Bonifacio St., Brgy. San Isidro, Caloocan City',           103, NOW()),
-  (104, 'SEED-0104', 'SEED00000104', 'Sofia',       'Lim',         'Aquino',      NULL, 5, 'female', 'Iglesia ni Cristo','2020-02-14', NULL,                         NULL,          'active',     '22 Mango St., Brgy. Bagong Silang, Valenzuela City',          '22 Mango St., Brgy. Bagong Silang, Valenzuela City',          104, NOW()),
-  (105, 'SEED-0105', 'SEED00000105', 'Miguel',      'Ramos',       'Fernandez',   NULL, 4, 'male',   'Roman Catholic',   '2021-04-10', NULL,                         NULL,          'active',     '9 Kalaw St., Brgy. Malate, Manila',                           '9 Kalaw St., Brgy. Malate, Manila',                           105, NOW()),
-  (106, 'SEED-0106', 'SEED00000106', 'Isabella',    'Torres',      'Villanueva',  NULL, 6, 'female', 'Roman Catholic',   '2019-12-01', NULL,                         NULL,          'active',     '56 Quezon Blvd., Brgy. Sta. Mesa, Manila',                    '56 Quezon Blvd., Brgy. Sta. Mesa, Manila',                    106, NOW()),
-  (107, 'SEED-0107', 'SEED00000107', 'Rafael',      'Mendoza',     'Castillo',    NULL, 5, 'male',   'Protestant',       '2020-07-19', NULL,                         NULL,          'active',     '33 Luna St., Brgy. Ugong, Pasig City',                        '33 Luna St., Brgy. Ugong, Pasig City',                        107, NOW()),
-  (108, 'SEED-0108', 'SEED00000108', 'Camille',     'Navarro',     'Espinoza',    NULL, 5, 'female', 'Roman Catholic',   '2020-09-25', NULL,                         NULL,          'inactive',   '10 Magsaysay Ave., Brgy. San Antonio, Quezon City',           '10 Magsaysay Ave., Brgy. San Antonio, Quezon City',           108, NOW()),
-  (109, 'SEED-0109', 'SEED00000109', 'Andres',      'Florendo',    'Santiago',    NULL, 6, 'male',   'Roman Catholic',   '2019-05-07', NULL,                         NULL,          'active',     '88 Gen. Luna St., Brgy. Pacita, San Pedro, Laguna',           '88 Gen. Luna St., Brgy. Pacita, San Pedro, Laguna',           109, NOW()),
+  (100, 'SEED-0100', '136700000100', 'Maria',      'Santos',      'Reyes',       NULL, 5, 'female', 'Roman Catholic',   '2020-03-15', NULL,                         NULL,          'active',     'Blk 1 Lot 2 Sampaguita St., Brgy. San Jose, Quezon City',    'Blk 1 Lot 2 Sampaguita St., Brgy. San Jose, Quezon City',    100, NOW()),
+  (101, 'SEED-0101', '136700000101', 'Juan',        'Cruz',        'Dela Cruz',   NULL, 4, 'male',   'Roman Catholic',   '2021-06-22', NULL,                         NULL,          'active',     '123 Mabini St., Brgy. Poblacion, Marikina City',              '123 Mabini St., Brgy. Poblacion, Marikina City',              101, NOW()),
+  (102, 'SEED-0102', '136700000102', 'Ana',         'Bautista',    'Garcia',      NULL, 5, 'female', 'Born Again',       '2020-11-05', NULL,                         NULL,          'active',     '45 Rizal Ave., Brgy. Sta. Cruz, Pasig City',                  '45 Rizal Ave., Brgy. Sta. Cruz, Pasig City',                  102, NOW()),
+  (103, 'SEED-0103', '136700000103', 'Carlos',      'Ong',         'Tan',         NULL, 6, 'male',   'Roman Catholic',   '2019-08-30', NULL,                         NULL,          'active',     '78 Bonifacio St., Brgy. San Isidro, Caloocan City',           '78 Bonifacio St., Brgy. San Isidro, Caloocan City',           103, NOW()),
+  (104, 'SEED-0104', '136700000104', 'Sofia',       'Lim',         'Aquino',      NULL, 5, 'female', 'Iglesia ni Cristo','2020-02-14', NULL,                         NULL,          'active',     '22 Mango St., Brgy. Bagong Silang, Valenzuela City',          '22 Mango St., Brgy. Bagong Silang, Valenzuela City',          104, NOW()),
+  (105, 'SEED-0105', '136700000105', 'Miguel',      'Ramos',       'Fernandez',   NULL, 4, 'male',   'Roman Catholic',   '2021-04-10', NULL,                         NULL,          'active',     '9 Kalaw St., Brgy. Malate, Manila',                           '9 Kalaw St., Brgy. Malate, Manila',                           105, NOW()),
+  (106, 'SEED-0106', '136700000106', 'Isabella',    'Torres',      'Villanueva',  NULL, 6, 'female', 'Roman Catholic',   '2019-12-01', NULL,                         NULL,          'active',     '56 Quezon Blvd., Brgy. Sta. Mesa, Manila',                    '56 Quezon Blvd., Brgy. Sta. Mesa, Manila',                    106, NOW()),
+  (107, 'SEED-0107', '136700000107', 'Rafael',      'Mendoza',     'Castillo',    NULL, 5, 'male',   'Protestant',       '2020-07-19', NULL,                         NULL,          'active',     '33 Luna St., Brgy. Ugong, Pasig City',                        '33 Luna St., Brgy. Ugong, Pasig City',                        107, NOW()),
+  (108, 'SEED-0108', '136700000108', 'Camille',     'Navarro',     'Espinoza',    NULL, 5, 'female', 'Roman Catholic',   '2020-09-25', NULL,                         NULL,          'inactive',   '10 Magsaysay Ave., Brgy. San Antonio, Quezon City',           '10 Magsaysay Ave., Brgy. San Antonio, Quezon City',           108, NOW()),
+  (109, 'SEED-0109', '136700000109', 'Andres',      'Florendo',    'Santiago',    NULL, 6, 'male',   'Roman Catholic',   '2019-05-07', NULL,                         NULL,          'active',     '88 Gen. Luna St., Brgy. Pacita, San Pedro, Laguna',           '88 Gen. Luna St., Brgy. Pacita, San Pedro, Laguna',           109, NOW()),
   -- Elementary (110–124)
-  (110, 'SEED-0110', 'SEED00000110', 'Bianca',      'Reyes',       'Soriano',     NULL, 10,'female', 'Roman Catholic',   '2015-03-20', NULL,                         NULL,          'active',     '14 Tulip St., Brgy. San Vicente, Pasig City',                 '14 Tulip St., Brgy. San Vicente, Pasig City',                 110, NOW()),
-  (111, 'SEED-0111', 'SEED00000111', 'Marco',       'Dela Cruz',   'Valdez',      NULL, 11,'male',   'Roman Catholic',   '2014-07-11', NULL,                         NULL,          'active',     '5 Dahlia St., Brgy. Bagong Barrio, Caloocan City',            '5 Dahlia St., Brgy. Bagong Barrio, Caloocan City',            111, NOW()),
-  (112, 'SEED-0112', 'SEED00000112', 'Kristine',    'Aguilar',     'Mercado',     NULL, 10,'female', 'Born Again',       '2015-11-28', NULL,                         NULL,          'active',     '77 Rosal St., Brgy. Pinyahan, Quezon City',                   '77 Rosal St., Brgy. Pinyahan, Quezon City',                   112, NOW()),
-  (113, 'SEED-0113', 'SEED00000113', 'Dominic',     'Fuentes',     'Pascual',     NULL, 11,'male',   'Roman Catholic',   '2014-04-03', NULL,                         NULL,          'active',     '31 Orchid St., Brgy. Manggahan, Pasig City',                  '31 Orchid St., Brgy. Manggahan, Pasig City',                  113, NOW()),
-  (114, 'SEED-0114', 'SEED00000114', 'Jasmine',     'Chua',        'Dizon',       NULL, 11,'female', 'Roman Catholic',   '2014-09-15', 'jasmine.dizon.seed@gmail.com','09171234601', 'active',    '62 Rose St., Brgy. Dela Paz, Antipolo City',                  '62 Rose St., Brgy. Dela Paz, Antipolo City',                  114, NOW()),
-  (115, 'SEED-0115', 'SEED00000115', 'Patrick',     'Salazar',     'Jimenez',     NULL, 10,'male',   'Iglesia ni Cristo','2015-01-22', NULL,                         NULL,          'active',     '19 Sunflower St., Brgy. Payatas, Quezon City',                '19 Sunflower St., Brgy. Payatas, Quezon City',                115, NOW()),
-  (116, 'SEED-0116', 'SEED00000116', 'Hannah',      'Morales',     'Beltran',     NULL, 11,'female', 'Roman Catholic',   '2014-06-30', NULL,                         NULL,          'active',     '43 Jasmine St., Brgy. Taguig, Taguig City',                   '43 Jasmine St., Brgy. Taguig, Taguig City',                   116, NOW()),
-  (117, 'SEED-0117', 'SEED00000117', 'Ryan',        'Gonzales',    'Ibarra',      NULL, 11,'male',   'Roman Catholic',   '2014-10-18', NULL,                         NULL,          'active',     '7 Sampaguita Rd., Brgy. Sto. Niño, Marikina City',            '7 Sampaguita Rd., Brgy. Sto. Niño, Marikina City',            117, NOW()),
-  (118, 'SEED-0118', 'SEED00000118', 'Alyssa',      'Villanueva',  'Cortez',      NULL, 11,'female', 'Roman Catholic',   '2014-02-05', 'alyssa.cortez.seed@gmail.com','09181234602', 'active',   '88 Everlasting St., Brgy. Novaliches, Quezon City',           '88 Everlasting St., Brgy. Novaliches, Quezon City',           118, NOW()),
-  (119, 'SEED-0119', 'SEED00000119', 'Kevin',       'Tan',         'Perez',       NULL, 12,'male',   'Protestant',       '2013-08-12', NULL,                         NULL,          'active',     '22 Iris St., Brgy. Batasan Hills, Quezon City',               '22 Iris St., Brgy. Batasan Hills, Quezon City',               119, NOW()),
-  (120, 'SEED-0120', 'SEED00000120', 'Patricia',    'Lim',         'Villafuerte', NULL, 10,'female', 'Roman Catholic',   '2015-05-17', NULL,                         NULL,          'active',     '3 Mariposa St., Brgy. Silangan, San Mateo, Rizal',            '3 Mariposa St., Brgy. Silangan, San Mateo, Rizal',            120, NOW()),
-  (121, 'SEED-0121', 'SEED00000121', 'Jerome',      'Santos',      'Evangelista', NULL, 11,'male',   'Roman Catholic',   '2014-03-09', NULL,                         NULL,          'transferred','55 Narra St., Brgy. Bagbag, Quezon City',                      '55 Narra St., Brgy. Bagbag, Quezon City',                      121, NOW()),
-  (122, 'SEED-0122', 'SEED00000122', 'Angelica',    'Reyes',       'Domingo',     NULL, 10,'female', 'Born Again',       '2015-12-24', NULL,                         NULL,          'active',     '14 Niyog St., Brgy. San Isidro, Cainta, Rizal',               '14 Niyog St., Brgy. San Isidro, Cainta, Rizal',               122, NOW()),
-  (123, 'SEED-0123', 'SEED00000123', 'Nathan',      'Cruz',        'Rosales',     NULL, 11,'male',   'Roman Catholic',   '2014-07-21', NULL,                         NULL,          'active',     '67 Ilang-Ilang St., Brgy. Dulong Bayan, Marikina City',       '67 Ilang-Ilang St., Brgy. Dulong Bayan, Marikina City',       123, NOW()),
-  (124, 'SEED-0124', 'SEED00000124', 'Tricia',      'Ocampo',      'Hernandez',   NULL, 12,'female', 'Roman Catholic',   '2013-04-08', 'tricia.h.seed@gmail.com',    '09191234603', 'active',    '29 Waling-Waling St., Brgy. Kamuning, Quezon City',           '29 Waling-Waling St., Brgy. Kamuning, Quezon City',           124, NOW()),
+  (110, 'SEED-0110', '136700000110', 'Bianca',      'Reyes',       'Soriano',     NULL, 10,'female', 'Roman Catholic',   '2015-03-20', NULL,                         NULL,          'active',     '14 Tulip St., Brgy. San Vicente, Pasig City',                 '14 Tulip St., Brgy. San Vicente, Pasig City',                 110, NOW()),
+  (111, 'SEED-0111', '136700000111', 'Marco',       'Dela Cruz',   'Valdez',      NULL, 11,'male',   'Roman Catholic',   '2014-07-11', NULL,                         NULL,          'active',     '5 Dahlia St., Brgy. Bagong Barrio, Caloocan City',            '5 Dahlia St., Brgy. Bagong Barrio, Caloocan City',            111, NOW()),
+  (112, 'SEED-0112', '136700000112', 'Kristine',    'Aguilar',     'Mercado',     NULL, 10,'female', 'Born Again',       '2015-11-28', NULL,                         NULL,          'active',     '77 Rosal St., Brgy. Pinyahan, Quezon City',                   '77 Rosal St., Brgy. Pinyahan, Quezon City',                   112, NOW()),
+  (113, 'SEED-0113', '136700000113', 'Dominic',     'Fuentes',     'Pascual',     NULL, 11,'male',   'Roman Catholic',   '2014-04-03', NULL,                         NULL,          'active',     '31 Orchid St., Brgy. Manggahan, Pasig City',                  '31 Orchid St., Brgy. Manggahan, Pasig City',                  113, NOW()),
+  (114, 'SEED-0114', '136700000114', 'Jasmine',     'Chua',        'Dizon',       NULL, 11,'female', 'Roman Catholic',   '2014-09-15', 'jasmine.dizon.seed@gmail.com','09171234601', 'active',    '62 Rose St., Brgy. Dela Paz, Antipolo City',                  '62 Rose St., Brgy. Dela Paz, Antipolo City',                  114, NOW()),
+  (115, 'SEED-0115', '136700000115', 'Patrick',     'Salazar',     'Jimenez',     NULL, 10,'male',   'Iglesia ni Cristo','2015-01-22', NULL,                         NULL,          'active',     '19 Sunflower St., Brgy. Payatas, Quezon City',                '19 Sunflower St., Brgy. Payatas, Quezon City',                115, NOW()),
+  (116, 'SEED-0116', '136700000116', 'Hannah',      'Morales',     'Beltran',     NULL, 11,'female', 'Roman Catholic',   '2014-06-30', NULL,                         NULL,          'active',     '43 Jasmine St., Brgy. Taguig, Taguig City',                   '43 Jasmine St., Brgy. Taguig, Taguig City',                   116, NOW()),
+  (117, 'SEED-0117', '136700000117', 'Ryan',        'Gonzales',    'Ibarra',      NULL, 11,'male',   'Roman Catholic',   '2014-10-18', NULL,                         NULL,          'active',     '7 Sampaguita Rd., Brgy. Sto. Niño, Marikina City',            '7 Sampaguita Rd., Brgy. Sto. Niño, Marikina City',            117, NOW()),
+  (118, 'SEED-0118', '136700000118', 'Alyssa',      'Villanueva',  'Cortez',      NULL, 11,'female', 'Roman Catholic',   '2014-02-05', 'alyssa.cortez.seed@gmail.com','09181234602', 'active',   '88 Everlasting St., Brgy. Novaliches, Quezon City',           '88 Everlasting St., Brgy. Novaliches, Quezon City',           118, NOW()),
+  (119, 'SEED-0119', '136700000119', 'Kevin',       'Tan',         'Perez',       NULL, 12,'male',   'Protestant',       '2013-08-12', NULL,                         NULL,          'active',     '22 Iris St., Brgy. Batasan Hills, Quezon City',               '22 Iris St., Brgy. Batasan Hills, Quezon City',               119, NOW()),
+  (120, 'SEED-0120', '136700000120', 'Patricia',    'Lim',         'Villafuerte', NULL, 10,'female', 'Roman Catholic',   '2015-05-17', NULL,                         NULL,          'active',     '3 Mariposa St., Brgy. Silangan, San Mateo, Rizal',            '3 Mariposa St., Brgy. Silangan, San Mateo, Rizal',            120, NOW()),
+  (121, 'SEED-0121', '136700000121', 'Jerome',      'Santos',      'Evangelista', NULL, 11,'male',   'Roman Catholic',   '2014-03-09', NULL,                         NULL,          'transferred','55 Narra St., Brgy. Bagbag, Quezon City',                      '55 Narra St., Brgy. Bagbag, Quezon City',                      121, NOW()),
+  (122, 'SEED-0122', '136700000122', 'Angelica',    'Reyes',       'Domingo',     NULL, 10,'female', 'Born Again',       '2015-12-24', NULL,                         NULL,          'active',     '14 Niyog St., Brgy. San Isidro, Cainta, Rizal',               '14 Niyog St., Brgy. San Isidro, Cainta, Rizal',               122, NOW()),
+  (123, 'SEED-0123', '136700000123', 'Nathan',      'Cruz',        'Rosales',     NULL, 11,'male',   'Roman Catholic',   '2014-07-21', NULL,                         NULL,          'active',     '67 Ilang-Ilang St., Brgy. Dulong Bayan, Marikina City',       '67 Ilang-Ilang St., Brgy. Dulong Bayan, Marikina City',       123, NOW()),
+  (124, 'SEED-0124', '136700000124', 'Tricia',      'Ocampo',      'Hernandez',   NULL, 12,'female', 'Roman Catholic',   '2013-04-08', 'tricia.h.seed@gmail.com',    '09191234603', 'active',    '29 Waling-Waling St., Brgy. Kamuning, Quezon City',           '29 Waling-Waling St., Brgy. Kamuning, Quezon City',           124, NOW()),
   -- Junior HS (125–139)
-  (125, 'SEED-0125', 'SEED00000125', 'Joshua',      'Buenaventura','Medina',      NULL, 13,'male',   'Roman Catholic',   '2012-09-14', NULL,                         NULL,          'active',     '101 Sampaguita Ave., Brgy. Pasong Tamo, Quezon City',         '101 Sampaguita Ave., Brgy. Pasong Tamo, Quezon City',         125, NOW()),
-  (126, 'SEED-0126', 'SEED00000126', 'Christine',   'Roca',        'Briones',     NULL, 14,'female', 'Roman Catholic',   '2011-02-28', NULL,                         '09201234604', 'active',    '34 Catmon St., Brgy. Malinao, Pasig City',                    '34 Catmon St., Brgy. Malinao, Pasig City',                    126, NOW()),
-  (127, 'SEED-0127', 'SEED00000127', 'Mark',        'Aquino',      'Navarro',     NULL, 13,'male',   'Iglesia ni Cristo','2012-06-17', NULL,                         NULL,          'active',     '18 Bamboo St., Brgy. Pinagbuhatan, Pasig City',               '18 Bamboo St., Brgy. Pinagbuhatan, Pasig City',               127, NOW()),
-  (128, 'SEED-0128', 'SEED00000128', 'Natasha',     'Guerrero',    'Flores',      NULL, 15,'female', 'Roman Catholic',   '2010-11-03', 'natasha.f.seed@gmail.com',   '09211234605', 'active',    '5 Acacia St., Brgy. Calauan, Laguna',                         '5 Acacia St., Brgy. Calauan, Laguna',                         128, NOW()),
-  (129, 'SEED-0129', 'SEED00000129', 'Daniel',      'Paglinawan',  'Ramirez',     NULL, 15,'male',   'Born Again',       '2010-08-22', NULL,                         NULL,          'active',     '88 Narra Ave., Brgy. Barangka, Mandaluyong City',             '88 Narra Ave., Brgy. Barangka, Mandaluyong City',             129, NOW()),
-  (130, 'SEED-0130', 'SEED00000130', 'Stephanie',   'Bondoc',      'Magno',       NULL, 13,'female', 'Roman Catholic',   '2012-04-05', NULL,                         NULL,          'active',     '7 Mabolo St., Brgy. Cembo, Makati City',                      '7 Mabolo St., Brgy. Cembo, Makati City',                      130, NOW()),
-  (131, 'SEED-0131', 'SEED00000131', 'Christian',   'Padilla',     'Tolentino',   NULL, 14,'male',   'Roman Catholic',   '2011-10-30', NULL,                         '09221234606', 'active',    '23 Molave St., Brgy. Bagumbayan, Quezon City',                '23 Molave St., Brgy. Bagumbayan, Quezon City',                131, NOW()),
-  (132, 'SEED-0132', 'SEED00000132', 'Mia',         'Recio',       'Evangelista', NULL, 14,'female', 'Protestant',       '2011-07-16', NULL,                         NULL,          'active',     '55 Ylang-Ylang St., Brgy. San Roque, Antipolo City',          '55 Ylang-Ylang St., Brgy. San Roque, Antipolo City',          132, NOW()),
-  (133, 'SEED-0133', 'SEED00000133', 'Vincent',     'Alcantara',   'Batungbakal', NULL, 15,'male',   'Roman Catholic',   '2010-03-19', 'vincent.b.seed@gmail.com',   '09231234607', 'active',   '42 Dao St., Brgy. Dela Paz, Antipolo City',                   '42 Dao St., Brgy. Dela Paz, Antipolo City',                   133, NOW()),
-  (134, 'SEED-0134', 'SEED00000134', 'Pauline',     'Pascua',      'Macapagal',   NULL, 13,'female', 'Roman Catholic',   '2012-01-07', NULL,                         NULL,          'active',     '9 Camia St., Brgy. San Antonio, San Pedro, Laguna',           '9 Camia St., Brgy. San Antonio, San Pedro, Laguna',           134, NOW()),
-  (135, 'SEED-0135', 'SEED00000135', 'Aaron',       'Cabrera',     'Manalo',      NULL, 14,'male',   'Iglesia ni Cristo','2011-05-25', NULL,                         NULL,          'active',     '16 Carabao St., Brgy. San Miguel, Pasig City',                '16 Carabao St., Brgy. San Miguel, Pasig City',                135, NOW()),
-  (136, 'SEED-0136', 'SEED00000136', 'Clarissa',    'Mateo',       'Baluyot',     NULL, 15,'female', 'Roman Catholic',   '2010-12-11', NULL,                         NULL,          'inactive',   '63 Ilang-Ilang Ave., Brgy. Pineda, Pasig City',               '63 Ilang-Ilang Ave., Brgy. Pineda, Pasig City',               136, NOW()),
-  (137, 'SEED-0137', 'SEED00000137', 'Emmanuel',    'Poblete',     'Jimenez',     NULL, 13,'male',   'Roman Catholic',   '2012-08-04', NULL,                         NULL,          'active',     '38 Ipil St., Brgy. Sto. Tomas, Pasig City',                   '38 Ipil St., Brgy. Sto. Tomas, Pasig City',                   137, NOW()),
-  (138, 'SEED-0138', 'SEED00000138', 'Abigail',     'Ramos',       'Fajardo',     NULL, 15,'female', 'Born Again',       '2010-06-29', 'abigail.f.seed@gmail.com',   '09241234608', 'active',   '71 Atis St., Brgy. San Juan, Cainta, Rizal',                  '71 Atis St., Brgy. San Juan, Cainta, Rizal',                  138, NOW()),
-  (139, 'SEED-0139', 'SEED00000139', 'Brandon',     'Ignacio',     'Coronel',     NULL, 14,'male',   'Roman Catholic',   '2011-09-18', NULL,                         NULL,          'active',     '50 Banaba St., Brgy. Kasiglahan, San Jose Del Monte, Bulacan', '50 Banaba St., Brgy. Kasiglahan, San Jose Del Monte, Bulacan',139, NOW()),
+  (125, 'SEED-0125', '136700000125', 'Joshua',      'Buenaventura','Medina',      NULL, 13,'male',   'Roman Catholic',   '2012-09-14', NULL,                         NULL,          'active',     '101 Sampaguita Ave., Brgy. Pasong Tamo, Quezon City',         '101 Sampaguita Ave., Brgy. Pasong Tamo, Quezon City',         125, NOW()),
+  (126, 'SEED-0126', '136700000126', 'Christine',   'Roca',        'Briones',     NULL, 14,'female', 'Roman Catholic',   '2011-02-28', NULL,                         '09201234604', 'active',    '34 Catmon St., Brgy. Malinao, Pasig City',                    '34 Catmon St., Brgy. Malinao, Pasig City',                    126, NOW()),
+  (127, 'SEED-0127', '136700000127', 'Mark',        'Aquino',      'Navarro',     NULL, 13,'male',   'Iglesia ni Cristo','2012-06-17', NULL,                         NULL,          'active',     '18 Bamboo St., Brgy. Pinagbuhatan, Pasig City',               '18 Bamboo St., Brgy. Pinagbuhatan, Pasig City',               127, NOW()),
+  (128, 'SEED-0128', '136700000128', 'Natasha',     'Guerrero',    'Flores',      NULL, 15,'female', 'Roman Catholic',   '2010-11-03', 'natasha.f.seed@gmail.com',   '09211234605', 'active',    '5 Acacia St., Brgy. Calauan, Laguna',                         '5 Acacia St., Brgy. Calauan, Laguna',                         128, NOW()),
+  (129, 'SEED-0129', '136700000129', 'Daniel',      'Paglinawan',  'Ramirez',     NULL, 15,'male',   'Born Again',       '2010-08-22', NULL,                         NULL,          'active',     '88 Narra Ave., Brgy. Barangka, Mandaluyong City',             '88 Narra Ave., Brgy. Barangka, Mandaluyong City',             129, NOW()),
+  (130, 'SEED-0130', '136700000130', 'Stephanie',   'Bondoc',      'Magno',       NULL, 13,'female', 'Roman Catholic',   '2012-04-05', NULL,                         NULL,          'active',     '7 Mabolo St., Brgy. Cembo, Makati City',                      '7 Mabolo St., Brgy. Cembo, Makati City',                      130, NOW()),
+  (131, 'SEED-0131', '136700000131', 'Christian',   'Padilla',     'Tolentino',   NULL, 14,'male',   'Roman Catholic',   '2011-10-30', NULL,                         '09221234606', 'active',    '23 Molave St., Brgy. Bagumbayan, Quezon City',                '23 Molave St., Brgy. Bagumbayan, Quezon City',                131, NOW()),
+  (132, 'SEED-0132', '136700000132', 'Mia',         'Recio',       'Evangelista', NULL, 14,'female', 'Protestant',       '2011-07-16', NULL,                         NULL,          'active',     '55 Ylang-Ylang St., Brgy. San Roque, Antipolo City',          '55 Ylang-Ylang St., Brgy. San Roque, Antipolo City',          132, NOW()),
+  (133, 'SEED-0133', '136700000133', 'Vincent',     'Alcantara',   'Batungbakal', NULL, 15,'male',   'Roman Catholic',   '2010-03-19', 'vincent.b.seed@gmail.com',   '09231234607', 'active',   '42 Dao St., Brgy. Dela Paz, Antipolo City',                   '42 Dao St., Brgy. Dela Paz, Antipolo City',                   133, NOW()),
+  (134, 'SEED-0134', '136700000134', 'Pauline',     'Pascua',      'Macapagal',   NULL, 13,'female', 'Roman Catholic',   '2012-01-07', NULL,                         NULL,          'active',     '9 Camia St., Brgy. San Antonio, San Pedro, Laguna',           '9 Camia St., Brgy. San Antonio, San Pedro, Laguna',           134, NOW()),
+  (135, 'SEED-0135', '136700000135', 'Aaron',       'Cabrera',     'Manalo',      NULL, 14,'male',   'Iglesia ni Cristo','2011-05-25', NULL,                         NULL,          'active',     '16 Carabao St., Brgy. San Miguel, Pasig City',                '16 Carabao St., Brgy. San Miguel, Pasig City',                135, NOW()),
+  (136, 'SEED-0136', '136700000136', 'Clarissa',    'Mateo',       'Baluyot',     NULL, 15,'female', 'Roman Catholic',   '2010-12-11', NULL,                         NULL,          'inactive',   '63 Ilang-Ilang Ave., Brgy. Pineda, Pasig City',               '63 Ilang-Ilang Ave., Brgy. Pineda, Pasig City',               136, NOW()),
+  (137, 'SEED-0137', '136700000137', 'Emmanuel',    'Poblete',     'Jimenez',     NULL, 13,'male',   'Roman Catholic',   '2012-08-04', NULL,                         NULL,          'active',     '38 Ipil St., Brgy. Sto. Tomas, Pasig City',                   '38 Ipil St., Brgy. Sto. Tomas, Pasig City',                   137, NOW()),
+  (138, 'SEED-0138', '136700000138', 'Abigail',     'Ramos',       'Fajardo',     NULL, 15,'female', 'Born Again',       '2010-06-29', 'abigail.f.seed@gmail.com',   '09241234608', 'active',   '71 Atis St., Brgy. San Juan, Cainta, Rizal',                  '71 Atis St., Brgy. San Juan, Cainta, Rizal',                  138, NOW()),
+  (139, 'SEED-0139', '136700000139', 'Brandon',     'Ignacio',     'Coronel',     NULL, 14,'male',   'Roman Catholic',   '2011-09-18', NULL,                         NULL,          'active',     '50 Banaba St., Brgy. Kasiglahan, San Jose Del Monte, Bulacan', '50 Banaba St., Brgy. Kasiglahan, San Jose Del Monte, Bulacan',139, NOW()),
   -- Senior HS (140–151)
-  (140, 'SEED-0140', 'SEED00000140', 'Andrea',      'Padua',       'Lagman',      NULL, 17,'female', 'Roman Catholic',   '2008-04-21', 'andrea.l.seed@gmail.com',    '09251234609', 'active',   '12 Pine St., Brgy. Plainview, Mandaluyong City',             '12 Pine St., Brgy. Plainview, Mandaluyong City',             140, NOW()),
-  (141, 'SEED-0141', 'SEED00000141', 'Jeremiah',    'Villegas',    'Santos',      NULL, 16,'male',   'Roman Catholic',   '2009-08-14', NULL,                         '09261234610', 'active',    '34 Oak St., Brgy. Addition Hills, Mandaluyong City',          '34 Oak St., Brgy. Addition Hills, Mandaluyong City',          141, NOW()),
-  (142, 'SEED-0142', 'SEED00000142', 'Francesca',   'Robles',      'Dizon',       NULL, 17,'female', 'Roman Catholic',   '2008-11-30', 'francesca.d.seed@gmail.com', '09271234611', 'active',   '56 Maple St., Brgy. Vergara, Mandaluyong City',              '56 Maple St., Brgy. Vergara, Mandaluyong City',              142, NOW()),
-  (143, 'SEED-0143', 'SEED00000143', 'Raphael',     'Corpus',      'Avila',       NULL, 16,'male',   'Protestant',       '2009-03-07', NULL,                         NULL,          'active',     '78 Cedar St., Brgy. Wack-Wack, Mandaluyong City',            '78 Cedar St., Brgy. Wack-Wack, Mandaluyong City',            143, NOW()),
-  (144, 'SEED-0144', 'SEED00000144', 'Samantha',    'Bañez',       'Marquez',     NULL, 17,'female', 'Iglesia ni Cristo','2008-07-22', 'samantha.m.seed@gmail.com',  '09281234612', 'active',   '90 Birch St., Brgy. Hagdang Bato, Mandaluyong City',         '90 Birch St., Brgy. Hagdang Bato, Mandaluyong City',         144, NOW()),
-  (145, 'SEED-0145', 'SEED00000145', 'Elijah',      'Tadeo',       'Reyes',       NULL, 16,'male',   'Roman Catholic',   '2009-12-05', NULL,                         NULL,          'active',     '100 Elm St., Brgy. Burol, Malabon City',                      '100 Elm St., Brgy. Burol, Malabon City',                      145, NOW()),
-  (146, 'SEED-0146', 'SEED00000146', 'Vanessa',     'Malabanan',   'Catalan',     NULL, 17,'female', 'Roman Catholic',   '2008-02-18', 'vanessa.c.seed@gmail.com',   '09291234613', 'active',   '22 Fir St., Brgy. Longos, Malabon City',                      '22 Fir St., Brgy. Longos, Malabon City',                      146, NOW()),
-  (147, 'SEED-0147', 'SEED00000147', 'Gabriel',     'Cayabyab',    'Maceda',      NULL, 16,'male',   'Born Again',       '2009-05-31', NULL,                         NULL,          'active',     '44 Spruce St., Brgy. Catmon, Malabon City',                   '44 Spruce St., Brgy. Catmon, Malabon City',                   147, NOW()),
-  (148, 'SEED-0148', 'SEED00000148', 'Erica',       'Palma',       'Guerrero',    NULL, 17,'female', 'Roman Catholic',   '2008-09-11', 'erica.g.seed@gmail.com',     '09301234614', 'active',   '66 Willow St., Brgy. Tañong, Malabon City',                   '66 Willow St., Brgy. Tañong, Malabon City',                   148, NOW()),
-  (149, 'SEED-0149', 'SEED00000149', 'Dominique',   'Esguerra',    'Buenaflor',   NULL, 16,'male',   'Roman Catholic',   '2009-10-24', NULL,                         NULL,          'active',     '88 Aspen St., Brgy. Hulong Duhat, Malabon City',              '88 Aspen St., Brgy. Hulong Duhat, Malabon City',              149, NOW()),
-  (150, 'SEED-0150', 'SEED00000150', 'Isabelle',    'Macaraeg',    'Aguilar',     NULL, 17,'female', 'Protestant',       '2008-06-03', 'isabelle.a.seed@gmail.com',  '09311234615', 'graduated', '10 Sequoia St., Brgy. Concepcion, Marikina City',            '10 Sequoia St., Brgy. Concepcion, Marikina City',            150, NOW()),
-  (151, 'SEED-0151', 'SEED00000151', 'Cedric',      'Peñaranda',   'Magalang',    NULL, 17,'male',   'Roman Catholic',   '2008-01-15', NULL,                         NULL,          'active',     '28 Redwood St., Brgy. Tumana, Marikina City',                 '28 Redwood St., Brgy. Tumana, Marikina City',                 151, NOW())
+  (140, 'SEED-0140', '136700000140', 'Andrea',      'Padua',       'Lagman',      NULL, 17,'female', 'Roman Catholic',   '2008-04-21', 'andrea.l.seed@gmail.com',    '09251234609', 'active',   '12 Pine St., Brgy. Plainview, Mandaluyong City',             '12 Pine St., Brgy. Plainview, Mandaluyong City',             140, NOW()),
+  (141, 'SEED-0141', '136700000141', 'Jeremiah',    'Villegas',    'Santos',      NULL, 16,'male',   'Roman Catholic',   '2009-08-14', NULL,                         '09261234610', 'active',    '34 Oak St., Brgy. Addition Hills, Mandaluyong City',          '34 Oak St., Brgy. Addition Hills, Mandaluyong City',          141, NOW()),
+  (142, 'SEED-0142', '136700000142', 'Francesca',   'Robles',      'Dizon',       NULL, 17,'female', 'Roman Catholic',   '2008-11-30', 'francesca.d.seed@gmail.com', '09271234611', 'active',   '56 Maple St., Brgy. Vergara, Mandaluyong City',              '56 Maple St., Brgy. Vergara, Mandaluyong City',              142, NOW()),
+  (143, 'SEED-0143', '136700000143', 'Raphael',     'Corpus',      'Avila',       NULL, 16,'male',   'Protestant',       '2009-03-07', NULL,                         NULL,          'active',     '78 Cedar St., Brgy. Wack-Wack, Mandaluyong City',            '78 Cedar St., Brgy. Wack-Wack, Mandaluyong City',            143, NOW()),
+  (144, 'SEED-0144', '136700000144', 'Samantha',    'Bañez',       'Marquez',     NULL, 17,'female', 'Iglesia ni Cristo','2008-07-22', 'samantha.m.seed@gmail.com',  '09281234612', 'active',   '90 Birch St., Brgy. Hagdang Bato, Mandaluyong City',         '90 Birch St., Brgy. Hagdang Bato, Mandaluyong City',         144, NOW()),
+  (145, 'SEED-0145', '136700000145', 'Elijah',      'Tadeo',       'Reyes',       NULL, 16,'male',   'Roman Catholic',   '2009-12-05', NULL,                         NULL,          'active',     '100 Elm St., Brgy. Burol, Malabon City',                      '100 Elm St., Brgy. Burol, Malabon City',                      145, NOW()),
+  (146, 'SEED-0146', '136700000146', 'Vanessa',     'Malabanan',   'Catalan',     NULL, 17,'female', 'Roman Catholic',   '2008-02-18', 'vanessa.c.seed@gmail.com',   '09291234613', 'active',   '22 Fir St., Brgy. Longos, Malabon City',                      '22 Fir St., Brgy. Longos, Malabon City',                      146, NOW()),
+  (147, 'SEED-0147', '136700000147', 'Gabriel',     'Cayabyab',    'Maceda',      NULL, 16,'male',   'Born Again',       '2009-05-31', NULL,                         NULL,          'active',     '44 Spruce St., Brgy. Catmon, Malabon City',                   '44 Spruce St., Brgy. Catmon, Malabon City',                   147, NOW()),
+  (148, 'SEED-0148', '136700000148', 'Erica',       'Palma',       'Guerrero',    NULL, 17,'female', 'Roman Catholic',   '2008-09-11', 'erica.g.seed@gmail.com',     '09301234614', 'active',   '66 Willow St., Brgy. Tañong, Malabon City',                   '66 Willow St., Brgy. Tañong, Malabon City',                   148, NOW()),
+  (149, 'SEED-0149', '136700000149', 'Dominique',   'Esguerra',    'Buenaflor',   NULL, 16,'male',   'Roman Catholic',   '2009-10-24', NULL,                         NULL,          'active',     '88 Aspen St., Brgy. Hulong Duhat, Malabon City',              '88 Aspen St., Brgy. Hulong Duhat, Malabon City',              149, NOW()),
+  (150, 'SEED-0150', '136700000150', 'Isabelle',    'Macaraeg',    'Aguilar',     NULL, 17,'female', 'Protestant',       '2008-06-03', 'isabelle.a.seed@gmail.com',  '09311234615', 'graduated', '10 Sequoia St., Brgy. Concepcion, Marikina City',            '10 Sequoia St., Brgy. Concepcion, Marikina City',            150, NOW()),
+  (151, 'SEED-0151', '136700000151', 'Cedric',      'Peñaranda',   'Magalang',    NULL, 17,'male',   'Roman Catholic',   '2008-01-15', NULL,                         NULL,          'active',     '28 Redwood St., Brgy. Tumana, Marikina City',                 '28 Redwood St., Brgy. Tumana, Marikina City',                 151, NOW())
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
 -- GUARDIANS
+--
+-- ON CONFLICT DO NOTHING cannot make this block re-runnable: the only unique
+-- constraint on this table is the PARTIAL uq_guardian_primary_per_student
+-- (primary contacts only), so every is_primary_contact = FALSE row -- the
+-- fathers, the guardian-relationship rows -- duplicated on every re-run, with
+-- no error and no sign anything had happened.
+--
+-- The seed owns students 100-151 outright, so clearing its own rows first is
+-- both safe and genuinely idempotent. Rows for any other student are left
+-- untouched.
 -- =====================================================
+DELETE FROM guardians WHERE student_id BETWEEN 100 AND 151;
+
 INSERT INTO guardians (student_id, relationship, full_name, occupation, email_address, mobile_number, is_primary_contact)
 VALUES
   (100, 'mother',   'Maribel Santos Reyes',         'Teacher',         'maribel.reyes.seed@gmail.com', '09171100001', TRUE),
@@ -204,12 +216,28 @@ VALUES
   (148, 'mother',   'Rosario Palma Guerrero',       'Vendor',          NULL,                           '09791100049', TRUE),
   (149, 'father',   'Danilo Esguerra Buenaflor',    'OFW',             NULL,                           '09801100050', TRUE),
   (150, 'mother',   'Luzviminda Macaraeg Aguilar',  'Teacher',         NULL,                           '09811100051', TRUE),
-  (151, 'father',   'Ricardo Peñaranda Magalang',   'Engineer',        NULL,                           '09821100052', TRUE)
+  (151, 'father',   'Ricardo Peñaranda Magalang',   'Engineer',        NULL,                           '09821100052', TRUE),
+  -- Second child for the guardian portal account below. Student 110 already
+  -- has a primary contact (their mother), so this is a non-primary
+  -- relationship='guardian' row -- a child can have a mother on record and a
+  -- separate registered guardian. Keeps uq_guardian_primary_per_student happy.
+  (110, 'guardian', 'Maribel Santos Reyes',         'Teacher',         'maribel.reyes.seed@gmail.com', '09171100001', FALSE)
 ON CONFLICT DO NOTHING;
+
+-- The guardian portal account is linked to its children AFTER the USERS block
+-- below creates it — see "GUARDIAN PORTAL LINK" further down. It used to be
+-- done here, hardcoded to user_id = 6, which ran before that account existed
+-- and only worked because guardians.user_id carries no foreign key.
 
 -- =====================================================
 -- PREVIOUS SCHOOLS
+--
+-- Same problem as GUARDIANS above: this table has no unique constraint at
+-- all, so the ON CONFLICT clause had nothing to catch on and every row
+-- duplicated on a re-run. Cleared by the seed's own student range first.
 -- =====================================================
+DELETE FROM previous_schools WHERE student_id BETWEEN 100 AND 151;
+
 INSERT INTO previous_schools (student_id, school_name, school_address)
 VALUES
   (110, 'Little Stars Day Care Center',             'Brgy. San Vicente, Pasig City'),
@@ -255,6 +283,118 @@ VALUES
   (150, 'Concepcion National High School',          'Concepcion, Marikina City'),
   (151, 'Tumana National High School',              'Tumana, Marikina City')
 ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- REQUIREMENT TYPES  (IDs 1–13)
+-- The document catalogue, and the rule for who owes what.
+--
+-- This block did not exist before: on a database built from schema.sql +
+-- seed_data.sql the table was EMPTY, which made the completeness gate in
+-- enrollment-service a silent no-op and the whole requirements module
+-- invisible. The thirteen rows only ever existed in a developer's live DB.
+--
+-- is_required     — does a missing copy block activating an enrollment
+-- applies_to_*    — who is asked for it at all
+--
+-- Four gating documents, scoped, rather than thirteen for everyone:
+--   continuing Grade 4 learner → 2 required (PSA, health record)
+--   Grade 7 transferee         → 4 required (+ Form 137/138, good moral)
+--   Kindergarten entrant       → 2 required
+--
+-- Optional rows stay in the catalogue: they are still tracked, uploaded and
+-- OCR-checked, they simply do not block. See
+-- scripts/2026-09-requirement-applicability.sql for the per-row reasoning.
+--
+-- DO UPDATE, not DO NOTHING: an existing database already holds these rows
+-- from before the applicability columns existed, and DO NOTHING would leave
+-- them at the "required for everyone" column defaults — i.e. change nothing.
+-- The trade-off is that re-running this file resets hand-edited flags.
+-- =====================================================
+INSERT INTO requirement_types
+  (requirement_type_id, requirement_code, requirement_name, description,
+   is_active, is_required, applies_to_levels, applies_to_entry_statuses)
+VALUES
+  -- ── Required ────────────────────────────────────────────────────────────
+  (9,  'psa_birth_certificate', 'PSA Birth Certificate',
+       'PSA-issued birth certificate. The learner''s identity document.',
+       TRUE, TRUE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (10, 'health_record', 'Health Record',
+       'Health, medical or immunization record. ECCD checklist for nursery and kindergarten.',
+       TRUE, TRUE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (12, 'form_137_or_138', 'Form 137/138',
+       'Permanent record (SF10/Form 137) or report card (SF9/Form 138) from the previous school.',
+       TRUE, TRUE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (3,  'certificate_good_moral', 'Certificate of Good Moral',
+       'Certificate of Good Moral Character from the previous school.',
+       TRUE, TRUE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+
+  -- ── Optional ────────────────────────────────────────────────────────────
+  (1,  'birth_certificate', 'Birth Certificate',
+       'Local civil registry copy. Accepted while the PSA copy is still being obtained.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (2,  'form_138', 'Form 138',
+       'Report card (SF9). Accepted in place of the permanent record.',
+       TRUE, FALSE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (4,  'ncae_result', 'NCAE Result',
+       'National Career Assessment Examination result, presented at senior high entry. Not required — the NCAE has not been administered consistently in recent years.',
+       TRUE, FALSE,
+       ARRAY['senior_highschool'],
+       ARRAY['new','transferee']),
+  (8,  'clearance_previous_school', 'Clearance from Previous School',
+       'Clearance of accountabilities. Not required — routinely withheld over unpaid fees at the previous school.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (6,  'certificate_non_sf9', 'Certificate of Non-SF9',
+       'Issued by a previous school that cannot release the SF9.',
+       TRUE, FALSE,
+       ARRAY['elementary','junior_highschool','senior_highschool'],
+       ARRAY['transferee']),
+  (5,  'esc_completers', 'ESC Completers',
+       'Educational Service Contracting certificate of junior high completion. Grantees only.',
+       TRUE, FALSE,
+       ARRAY['senior_highschool'],
+       ARRAY['new','transferee']),
+  (13, 'esc_transferee_qc', 'ESC Transferee QC',
+       'ESC transferee qualification certification. Grantees only.',
+       TRUE, FALSE,
+       ARRAY['junior_highschool'],
+       ARRAY['transferee']),
+  (11, 'alien_certificate', 'Alien Certificate',
+       'Alien Certificate of Registration. Foreign nationals only — nationality is not stored, so this cannot be scoped automatically.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing']),
+  (7,  'recommendation_letter', 'Recommendation Letter',
+       'Letter of recommendation. At the school''s discretion.',
+       TRUE, FALSE,
+       ARRAY['nursery','kindergarten','elementary','junior_highschool','senior_highschool'],
+       ARRAY['new','transferee','continuing'])
+ON CONFLICT (requirement_code) DO UPDATE SET
+  requirement_name          = EXCLUDED.requirement_name,
+  description               = EXCLUDED.description,
+  is_active                 = EXCLUDED.is_active,
+  is_required               = EXCLUDED.is_required,
+  applies_to_levels         = EXCLUDED.applies_to_levels,
+  applies_to_entry_statuses = EXCLUDED.applies_to_entry_statuses;
+
+-- Keep the sequence ahead of the explicit IDs above, or the next
+-- registrar-created requirement type collides on the primary key.
+SELECT setval('requirement_types_requirement_type_id_seq',
+              GREATEST((SELECT MAX(requirement_type_id) FROM requirement_types), 1));
+
 
 -- =====================================================
 -- ENROLLMENTS  (IDs 200–278)
@@ -354,6 +494,156 @@ OVERRIDING SYSTEM VALUE VALUES
   (267, 145, '2025-2026', 'senior_highschool','Grade 12',    'STEM-A',    'STEM', '1st', 'enrolled'),
   (268, 146, '2025-2026', 'senior_highschool','Grade 12',    'STEM-B',    'STEM', '1st', 'enrolled')
 ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- USERS
+-- Without these nobody can log in: the schema ships no rows and the README
+-- documented no createsuperuser step, so a clean install produced a system
+-- with no way in. Passwords are Django PBKDF2 hashes of 'SlisDemo2026!'.
+-- CHANGE THESE BEFORE ANY DEPLOYMENT -- they are demo credentials, published
+-- in the repo, and are only appropriate for a local evaluation copy.
+-- =====================================================
+-- Keyed on EMAIL, not on a hardcoded user_id.
+--
+-- This block used to specify user_id 1-6 explicitly with ON CONFLICT DO
+-- NOTHING. On any database that already had users -- which is every database
+-- anyone has actually been developing against -- ids 1-6 were already taken by
+-- unrelated accounts, so the PK conflicted and every documented demo account
+-- was silently skipped. The seed reported success and the credentials in the
+-- README simply did not work, with nothing to indicate why.
+--
+-- Matching on email instead means the accounts are created if absent and have
+-- their role and password reset to the documented values if present, which is
+-- what "load the demo data" is supposed to guarantee. The ids are left to the
+-- sequence, so the guardian link below resolves the account by email rather
+-- than assuming it landed on 6.
+-- Advance the sequence past whatever ids already exist BEFORE inserting.
+-- users.user_id is a plain serial (DEFAULT nextval), and the previous version
+-- of this block inserted explicit ids without touching the sequence — so on
+-- any database seeded that way the sequence still points at 1 and the first
+-- id-less INSERT here would collide with an existing row. The setval after the
+-- block stays too; this one just makes the block itself safe to run.
+SELECT setval('users_user_id_seq', GREATEST((SELECT MAX(user_id) FROM users), 1));
+
+INSERT INTO users (name, email, role, password)
+VALUES
+  ('System Administrator', 'superadmin@slis.test', 'super_admin', 'pbkdf2_sha256$1200000$Awywpt86nzezzKE544ZK9C$mdHq/AfP1gXjProkIbOlAVYAHW+ADNH7u0sEO3tKvVg='),
+  ('School Administrator', 'admin@slis.test',      'admin',       'pbkdf2_sha256$1200000$w1YJBCM8WVKq1n76785DWT$V/pdvTFxf7nlNv9Rl4GIlQd6WezfMmVu6YqBjOIrjxI='),
+  ('Registrar',            'registrar@slis.test',  'registrar',   'pbkdf2_sha256$1200000$yzMNi7tGSufZ8G9TQoyOHG$39stXhKajw8YaJVmm5vhpVfW0+zc/OiWwpXfr2OWrCU='),
+  ('Class Adviser',        'teacher@slis.test',    'teacher',     'pbkdf2_sha256$1200000$e2gDvoQBb0sQL8sUJ68pg7$oqQ8Y16lISVfyr5jCDTHPkZ68sM3lK3C8aHDH1HHxUY='),
+  ('Accounting Officer',   'accounting@slis.test', 'accounting',  'pbkdf2_sha256$1200000$MnheUmYtho5VXP0hnkOdnW$/u0WyEZKJ8zNlFThAK/HWFQNqFMXgOYX2jE8swmoeGc='),
+  -- Guardian portal account. Without a role='guardian' user linked to a
+  -- guardians row, /guardian is unreachable on a clean install -- there was
+  -- no way to open the parent portal at all, which is why it had no test
+  -- coverage. Linked to two children by the UPDATE further down.
+  ('Maribel Santos Reyes', 'maribel.reyes.seed@gmail.com', 'guardian', 'pbkdf2_sha256$1200000$8PhJ7C04i3bYIkCkx9fhsV$eFuB016SoQZFpdFgJuH5t1eb4BIZ9Mz0+bDneX4UFoM=')
+ON CONFLICT (email) DO UPDATE
+  SET role     = EXCLUDED.role,
+      password = EXCLUDED.password,
+      name     = EXCLUDED.name;
+
+SELECT setval('users_user_id_seq', GREATEST((SELECT MAX(user_id) FROM users), 1));
+
+-- =====================================================
+-- GUARDIAN PORTAL LINK
+--
+-- Resolved by email rather than a hardcoded user_id, because the USERS block
+-- above no longer assigns ids explicitly. guardians.guardian_id is generated,
+-- so the guardian rows are matched on (student_id, full_name) too.
+--
+-- guardians.user_id is deliberately NOT unique -- one parent with two children
+-- owns two rows pointing at the same account (see
+-- student-service/students/models.py). Student 100 has one enrollment and
+-- student 110 has two (2024-2025 completed + 2025-2026 enrolled), so this also
+-- exercises GuardianHomePage's one-card-per-child grouping.
+-- =====================================================
+UPDATE guardians
+   SET user_id = (SELECT user_id FROM users WHERE email = 'maribel.reyes.seed@gmail.com')
+ WHERE (student_id = 100 AND full_name = 'Maribel Santos Reyes')
+    OR (student_id = 110 AND full_name = 'Maribel Santos Reyes');
+
+-- =====================================================
+-- GRADING TEMPLATES AND COMPONENTS
+-- The score-entry block below looks up templates 2 and 3 by id, and every
+-- subject points at one. Neither table was seeded, so the lookup returned
+-- NULL and the NOT NULL on score_entries.grading_component_id aborted the
+-- whole transaction.
+--
+-- Weights follow DepEd Order No. 8, s. 2015. Note this seed carries one
+-- template per school level, not the full per-learning-area matrix the Order
+-- defines (Languages/AP/EsP 30-50-20, Science and Math 40-40-20, MAPEH/TLE
+-- 20-60-20, and the separate SHS Core/Academic/TVL splits) -- GradingTemplate
+-- is keyed only on school_level, so that matrix cannot be expressed yet.
+-- =====================================================
+INSERT INTO grading_templates (grading_template_id, template_name, description, school_level, is_active)
+OVERRIDING SYSTEM VALUE VALUES
+  (1, 'Standard Kindergarten',     'Checkpoint-based, no quarterly assessment.',   'kindergarten',      TRUE),
+  (2, 'Standard Elementary',       'DepEd Order 8 s.2015 weighting, elementary.',  'elementary',        TRUE),
+  (3, 'Standard Junior High',      'DepEd Order 8 s.2015 weighting, junior high.', 'junior_highschool', TRUE),
+  (4, 'Standard Senior High Core', 'DepEd Order 8 s.2015 weighting, SHS core.',    'senior_highschool', TRUE)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('grading_templates_grading_template_id_seq', GREATEST((SELECT MAX(grading_template_id) FROM grading_templates), 1));
+
+INSERT INTO grading_components (grading_component_id, grading_template_id, component_name, weight, sort_order)
+OVERRIDING SYSTEM VALUE VALUES
+  -- Kindergarten: no quarterly assessment.
+  (1,  1, 'Written Works',        50.00, 1),
+  (2,  1, 'Performance Tasks',    50.00, 2),
+  -- Elementary: 30 / 50 / 20.
+  (3,  2, 'Written Works',        30.00, 1),
+  (4,  2, 'Performance Tasks',    50.00, 2),
+  (5,  2, 'Quarterly Assessment', 20.00, 3),
+  -- Junior high: 30 / 50 / 20.
+  (6,  3, 'Written Works',        30.00, 1),
+  (7,  3, 'Performance Tasks',    50.00, 2),
+  (8,  3, 'Quarterly Assessment', 20.00, 3),
+  -- Senior high core: 25 / 50 / 25.
+  (9,  4, 'Written Works',        25.00, 1),
+  (10, 4, 'Performance Tasks',    50.00, 2),
+  (11, 4, 'Quarterly Assessment', 25.00, 3)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('grading_components_grading_component_id_seq', GREATEST((SELECT MAX(grading_component_id) FROM grading_components), 1));
+
+-- =====================================================
+-- SUBJECTS
+-- The grades block below references subject_id 1-20 by FK. This table was
+-- never seeded, so the very first grades row violated
+-- grades_subject_id_fkey and rolled the entire seed back.
+-- =====================================================
+INSERT INTO subjects (subject_id, subject_code, subject_name, school_level, grade_level, strand, semester, grading_template_id)
+OVERRIDING SYSTEM VALUE VALUES
+  -- Elementary Grade 4
+  (1,  'FIL4',    'Filipino 4',             'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (2,  'ENG4',    'English 4',              'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (3,  'MATH4',   'Mathematics 4',          'elementary',        'Grade 4',  NULL,   NULL,  2),
+  (4,  'SCI4',    'Science 4',              'elementary',        'Grade 4',  NULL,   NULL,  2),
+  -- Elementary Grade 6
+  (5,  'FIL6',    'Filipino 6',             'elementary',        'Grade 6',  NULL,   NULL,  2),
+  (6,  'MATH6',   'Mathematics 6',          'elementary',        'Grade 6',  NULL,   NULL,  2),
+  (7,  'SCI6',    'Science 6',              'elementary',        'Grade 6',  NULL,   NULL,  2),
+  -- Junior High Grade 7
+  (8,  'MATH7',   'Mathematics 7',          'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  (9,  'SCI7',    'Science 7',              'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  (10, 'ENG7',    'English 7',              'junior_highschool', 'Grade 7',  NULL,   NULL,  3),
+  -- Junior High Grade 8
+  (11, 'MATH8',   'Mathematics 8',          'junior_highschool', 'Grade 8',  NULL,   NULL,  3),
+  (12, 'SCI8',    'Science 8',              'junior_highschool', 'Grade 8',  NULL,   NULL,  3),
+  -- Junior High Grade 10
+  (13, 'MATH10',  'Mathematics 10',         'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  (14, 'SCI10',   'Science 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  (15, 'ENG10',   'English 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
+  -- Senior High Grade 11 (STEM, 1st semester)
+  (16, 'GENMATH', 'General Mathematics',    'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  (17, 'EARTHLI', 'Earth and Life Science', 'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  (18, 'ORALCOM', 'Oral Communication',     'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  -- Senior High Grade 12 (STEM, 1st semester)
+  (19, 'BUSFIN',  'Business Finance',       'senior_highschool', 'Grade 12', 'STEM', '1st', 4),
+  (20, 'PR2',     'Practical Research 2',   'senior_highschool', 'Grade 12', 'STEM', '1st', 4)
+ON CONFLICT DO NOTHING;
+
+SELECT setval('subjects_subject_id_seq', GREATEST((SELECT MAX(subject_id) FROM subjects), 1));
 
 -- =====================================================
 -- GRADES
@@ -599,15 +889,30 @@ ON CONFLICT (enrollment_id, subject_id, grading_period) DO NOTHING;
 -- =====================================================
 -- SCORE ENTRIES
 -- Looks up component IDs by name from actual DB data
+--
+-- score_entries has NO unique constraint, so ON CONFLICT could not protect
+-- it and every row here duplicated on a re-run. That one is worse than the
+-- guardians/previous_schools duplication: computed grades are a weighted sum
+-- over these rows, so a second seeding silently changed every elementary and
+-- JHS grade in the demo — and the analytics and at-risk scoring built on top
+-- of them — with nothing on screen to suggest the data had moved.
 -- =====================================================
+DELETE FROM score_entries WHERE enrollment_id BETWEEN 200 AND 268;
+
 DO $$
 DECLARE
-  ww_elem  BIGINT;  pt_elem  BIGINT;
+  ww_elem  BIGINT;  pt_elem  BIGINT;  qa_elem  BIGINT;
   ww_jhs   BIGINT;  pt_jhs   BIGINT;  qa_jhs   BIGINT;
 BEGIN
   -- Template 2 = Standard Elementary, Template 3 = Standard JHS
   SELECT grading_component_id INTO ww_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Written Works'       LIMIT 1;
   SELECT grading_component_id INTO pt_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Performance Tasks'   LIMIT 1;
+  -- The Elementary template carries a Quarterly Assessment weight (20%) and
+  -- this block never looked the component up, so no elementary score row ever
+  -- filled it: every seeded elementary computed grade was a weighted average
+  -- over 80% of the defined weight, which reads as a plausible-but-wrong
+  -- grade rather than as missing data.
+  SELECT grading_component_id INTO qa_elem FROM grading_components WHERE grading_template_id = 2 AND component_name = 'Quarterly Assessment' LIMIT 1;
   SELECT grading_component_id INTO ww_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Written Works'       LIMIT 1;
   SELECT grading_component_id INTO pt_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Performance Tasks'   LIMIT 1;
   SELECT grading_component_id INTO qa_jhs  FROM grading_components WHERE grading_template_id = 3 AND component_name = 'Quarterly Assessment' LIMIT 1;
@@ -618,15 +923,19 @@ BEGIN
     (210, 3, ww_elem, '1st_quarter', 'Written Work 1',     37.00, 40.00, NOW()),
     (210, 3, ww_elem, '1st_quarter', 'Written Work 2',     36.00, 40.00, NOW()),
     (210, 3, pt_elem, '1st_quarter', 'Performance Task 1', 56.00, 60.00, NOW()),
+    (210, 3, qa_elem, '1st_quarter', 'Quarterly Assessment', 46.00, 50.00, NOW()),
     (210, 3, ww_elem, '2nd_quarter', 'Written Work 1',     35.00, 40.00, NOW()),
     (210, 3, ww_elem, '2nd_quarter', 'Written Work 2',     34.00, 40.00, NOW()),
     (210, 3, pt_elem, '2nd_quarter', 'Performance Task 1', 55.00, 60.00, NOW()),
+    (210, 3, qa_elem, '2nd_quarter', 'Quarterly Assessment', 45.00, 50.00, NOW()),
     (210, 3, ww_elem, '3rd_quarter', 'Written Work 1',     34.00, 40.00, NOW()),
     (210, 3, ww_elem, '3rd_quarter', 'Written Work 2',     33.00, 40.00, NOW()),
     (210, 3, pt_elem, '3rd_quarter', 'Performance Task 1', 54.00, 60.00, NOW()),
+    (210, 3, qa_elem, '3rd_quarter', 'Quarterly Assessment', 44.00, 50.00, NOW()),
     (210, 3, ww_elem, '4th_quarter', 'Written Work 1',     38.00, 40.00, NOW()),
     (210, 3, ww_elem, '4th_quarter', 'Written Work 2',     37.00, 40.00, NOW()),
-    (210, 3, pt_elem, '4th_quarter', 'Performance Task 1', 58.00, 60.00, NOW())
+    (210, 3, pt_elem, '4th_quarter', 'Performance Task 1', 58.00, 60.00, NOW()),
+    (210, 3, qa_elem, '4th_quarter', 'Quarterly Assessment', 47.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 212, Subject 3 (Math 4 — struggling student Patrick)
@@ -635,15 +944,19 @@ BEGIN
     (212, 3, ww_elem, '1st_quarter', 'Written Work 1',     24.00, 40.00, NOW()),
     (212, 3, ww_elem, '1st_quarter', 'Written Work 2',     23.00, 40.00, NOW()),
     (212, 3, pt_elem, '1st_quarter', 'Performance Task 1', 41.00, 60.00, NOW()),
+    (212, 3, qa_elem, '1st_quarter', 'Quarterly Assessment', 29.00, 50.00, NOW()),
     (212, 3, ww_elem, '2nd_quarter', 'Written Work 1',     26.00, 40.00, NOW()),
     (212, 3, ww_elem, '2nd_quarter', 'Written Work 2',     25.00, 40.00, NOW()),
     (212, 3, pt_elem, '2nd_quarter', 'Performance Task 1', 42.00, 60.00, NOW()),
+    (212, 3, qa_elem, '2nd_quarter', 'Quarterly Assessment', 31.00, 50.00, NOW()),
     (212, 3, ww_elem, '3rd_quarter', 'Written Work 1',     28.00, 40.00, NOW()),
     (212, 3, ww_elem, '3rd_quarter', 'Written Work 2',     27.00, 40.00, NOW()),
     (212, 3, pt_elem, '3rd_quarter', 'Performance Task 1', 44.00, 60.00, NOW()),
+    (212, 3, qa_elem, '3rd_quarter', 'Quarterly Assessment', 33.00, 50.00, NOW()),
     (212, 3, ww_elem, '4th_quarter', 'Written Work 1',     29.00, 40.00, NOW()),
     (212, 3, ww_elem, '4th_quarter', 'Written Work 2',     28.00, 40.00, NOW()),
-    (212, 3, pt_elem, '4th_quarter', 'Performance Task 1', 46.00, 60.00, NOW())
+    (212, 3, pt_elem, '4th_quarter', 'Performance Task 1', 46.00, 60.00, NOW()),
+    (212, 3, qa_elem, '4th_quarter', 'Quarterly Assessment', 35.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 222, Subject 6 (Math 6 — top student Jasmine)
@@ -652,15 +965,19 @@ BEGIN
     (222, 6, ww_elem, '1st_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '1st_quarter', 'Written Work 2',     39.00, 40.00, NOW()),
     (222, 6, pt_elem, '1st_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '1st_quarter', 'Quarterly Assessment', 49.00, 50.00, NOW()),
     (222, 6, ww_elem, '2nd_quarter', 'Written Work 1',     39.00, 40.00, NOW()),
     (222, 6, ww_elem, '2nd_quarter', 'Written Work 2',     38.00, 40.00, NOW()),
     (222, 6, pt_elem, '2nd_quarter', 'Performance Task 1', 58.00, 60.00, NOW()),
+    (222, 6, qa_elem, '2nd_quarter', 'Quarterly Assessment', 48.00, 50.00, NOW()),
     (222, 6, ww_elem, '3rd_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '3rd_quarter', 'Written Work 2',     39.00, 40.00, NOW()),
     (222, 6, pt_elem, '3rd_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '3rd_quarter', 'Quarterly Assessment', 49.00, 50.00, NOW()),
     (222, 6, ww_elem, '4th_quarter', 'Written Work 1',     40.00, 40.00, NOW()),
     (222, 6, ww_elem, '4th_quarter', 'Written Work 2',     40.00, 40.00, NOW()),
-    (222, 6, pt_elem, '4th_quarter', 'Performance Task 1', 59.00, 60.00, NOW())
+    (222, 6, pt_elem, '4th_quarter', 'Performance Task 1', 59.00, 60.00, NOW()),
+    (222, 6, qa_elem, '4th_quarter', 'Quarterly Assessment', 50.00, 50.00, NOW())
   ON CONFLICT DO NOTHING;
 
   -- Enrollment 231, Subject 8 (Math 7 — JHS)
@@ -830,39 +1147,98 @@ SELECT setval(pg_get_serial_sequence('attendance_records', 'attendance_id'), (SE
 -- elementary/JHS, semesters for SHS) since the schema does not
 -- enforce this itself.
 -- =====================================================
+-- The four core values of the DepEd Order No. 8, s. 2015 Report on Learner's
+-- Observed Values. These are mandated categories, not a starter set: the
+-- previous seed invented 'Social Skills' / 'Work Habits' / 'Areas for Growth',
+-- which a registrar would not recognise on a report card.
 INSERT INTO narrative_categories (category_id, name, description, sort_order, is_active)
 OVERRIDING SYSTEM VALUE VALUES
-  (900, 'Social Skills',       'Peer interaction, cooperation, and classroom conduct.', 1, TRUE),
-  (901, 'Work Habits',         'Independence, task completion, and organization.',      2, TRUE),
-  (902, 'Areas for Growth',    'Skills or behaviors the student is still developing.',  3, TRUE)
+  (900, 'Maka-Diyos',      'Expresses spiritual beliefs while respecting the beliefs of others.',      1, TRUE),
+  (901, 'Makatao',         'Is sensitive to individual, social and cultural differences.',             2, TRUE),
+  (902, 'Makakalikasan',   'Cares for the environment and utilises resources wisely and responsibly.', 3, TRUE),
+  (903, 'Makabansa',       'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen.', 4, TRUE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO narrative_reports (report_id, enrollment_id, category_id, grading_period, rating, recorded_at)
 OVERRIDING SYSTEM VALUE VALUES
   -- Enrollment 215 (Elementary G4)
-  (900, 215, 900, '1st_quarter', 'outstanding',        NOW()),
-  (901, 215, 901, '1st_quarter', 'satisfactory',        NOW()),
+  (900, 215, 900, '1st_quarter', 'AO', NOW()),
+  (901, 215, 901, '1st_quarter', 'SO', NOW()),
   -- Enrollment 219 (Elementary G4, struggling profile)
-  (902, 219, 901, '1st_quarter', 'needs_improvement',   NOW()),
-  (903, 219, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  (902, 219, 901, '1st_quarter', 'RO', NOW()),
+  (903, 219, 902, '1st_quarter', 'RO', NOW()),
   -- Enrollment 227 (Elementary G6, top student)
-  (904, 227, 900, '1st_quarter', 'outstanding',        NOW()),
-  (905, 227, 901, '1st_quarter', 'outstanding',        NOW()),
+  (904, 227, 900, '1st_quarter', 'AO', NOW()),
+  (905, 227, 901, '1st_quarter', 'AO', NOW()),
   -- Enrollment 236 (JHS Grade 7)
-  (906, 236, 900, '1st_quarter', 'satisfactory',        NOW()),
-  (907, 236, 901, '1st_quarter', 'satisfactory',        NOW()),
+  (906, 236, 900, '1st_quarter', 'SO', NOW()),
+  (907, 236, 901, '1st_quarter', 'SO', NOW()),
   -- Enrollment 245 (JHS Grade 10, top student Natasha)
-  (908, 245, 900, '1st_quarter', 'outstanding',        NOW()),
-  (909, 245, 901, '1st_quarter', 'outstanding',        NOW()),
+  (908, 245, 900, '1st_quarter', 'AO', NOW()),
+  (909, 245, 901, '1st_quarter', 'AO', NOW()),
   -- Enrollment 249 (JHS Grade 10, struggling student Brandon)
-  (910, 249, 901, '1st_quarter', 'needs_improvement',   NOW()),
-  (911, 249, 902, '1st_quarter', 'needs_improvement',   NOW()),
+  (910, 249, 901, '1st_quarter', 'RO', NOW()),
+  (911, 249, 902, '1st_quarter', 'RO', NOW()),
   -- Enrollment 257 (SHS Grade 11 — semester period, not quarter)
-  (912, 257, 900, '1st_semester', 'satisfactory',       NOW()),
-  (913, 257, 901, '1st_semester', 'satisfactory',       NOW()),
+  (912, 257, 900, '1st_semester', 'SO', NOW()),
+  (913, 257, 901, '1st_semester', 'SO', NOW()),
   -- Enrollment 262 (SHS Grade 12 — semester period, not quarter)
-  (914, 262, 900, '1st_semester', 'outstanding',        NOW()),
-  (915, 262, 901, '1st_semester', 'outstanding',        NOW())
+  (914, 262, 900, '1st_semester', 'AO', NOW()),
+  (915, 262, 901, '1st_semester', 'AO', NOW())
 ON CONFLICT (enrollment_id, category_id, grading_period) DO NOTHING;
+
+-- =====================================================
+-- SECTION ADVISORIES
+--
+-- Without at least one of these, the seeded teacher account (user_id 4,
+-- teacher@slis.test) cannot be demonstrated at all: teacher_student_ids()
+-- resolves a teacher to the students they may touch purely through this
+-- table, and it fails closed. A teacher with no advisory row therefore sees
+-- an empty My Sections, empty grades, empty attendance and empty class lists
+-- — indistinguishable from the feature being broken.
+--
+-- The three sections below are chosen because they actually contain seeded
+-- current-year learners AND seeded score entries / attendance, so every
+-- teacher-facing page has something real to render.
+--
+-- The teacher is resolved by email, not by a hardcoded user_id, for the same
+-- reason the USERS block above stopped assigning ids: on an existing database
+-- id 4 belongs to whoever happened to be created fourth. Clearing that
+-- teacher's own rows first keeps this re-runnable; advisories belonging to any
+-- other teacher are untouched.
+-- =====================================================
+DELETE FROM section_advisories
+ WHERE teacher_user_id = (SELECT user_id FROM users WHERE email = 'teacher@slis.test');
+
+INSERT INTO section_advisories (teacher_user_id, school_year, school_level, grade_level, section, strand, created_at)
+SELECT u.user_id, v.school_year, v.school_level, v.grade_level, v.section, v.strand, NOW()
+  FROM users u
+  CROSS JOIN (VALUES
+    ('2025-2026', 'elementary',        'Grade 4', 'A',       NULL::varchar),
+    ('2025-2026', 'elementary',        'Grade 6', 'A',       NULL),
+    ('2025-2026', 'junior_highschool', 'Grade 7', 'Diamond', NULL)
+  ) AS v(school_year, school_level, grade_level, section, strand)
+ WHERE u.email = 'teacher@slis.test'
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- SCHOOL SETTINGS
+-- =====================================================
+-- Singleton row. The schema shipped none, so /api/school-settings/current/
+-- returned 404 and every caller fell back to its hardcoded default: the
+-- letterhead on SF1/SF2/SF9/SF10/CoR printed a blank school address, and
+-- SchoolYearContext derived the active school year from the calendar date
+-- instead of reading it from here. Seeding it makes both observable.
+INSERT INTO school_settings (
+  setting_id, current_school_year, sy_start_date, sy_end_date, early_bird_days,
+  school_name, school_address, contact_email, contact_phone
+) OVERRIDING SYSTEM VALUE VALUES
+  (1, '2025-2026', '2025-06-16', '2026-03-31', 7,
+   'South Lakes Integrated School',
+   '12 Lakeview Road, Brgy. San Isidro, Marikina City, Metro Manila 1800',
+   'registrar@slis.test', '(02) 8123-4567')
+ON CONFLICT DO NOTHING;
+
+SELECT setval('school_settings_setting_id_seq', GREATEST((SELECT MAX(setting_id) FROM school_settings), 1));
 
 COMMIT;

@@ -14,7 +14,6 @@ import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/Fil
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { useNavigate } from "react-router-dom";
 
 import {
   getSectionAdvisories,
@@ -284,7 +283,6 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function TeacherAdvisoriesPage() {
   usePageTitle("Teacher Advisories");
-  const navigate = useNavigate();
   const isFirstRender = useIsFirstRender();
 
   const [advisories, setAdvisories]         = useState([]);
@@ -336,8 +334,6 @@ export default function TeacherAdvisoriesPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
     fetchData(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

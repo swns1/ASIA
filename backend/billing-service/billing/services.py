@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from calendar import monthrange
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from .models import (
@@ -112,6 +112,7 @@ def compute_discount_waterfall(
     })
 
     eb_deduction = Decimal("0")
+    eb_pct = Decimal("0")
     if early_bird:
         eb_pct = _get_discount_pct("EARLY_BIRD")
         eb_deduction = _apply_pct(after_plan, eb_pct)
@@ -120,7 +121,10 @@ def compute_discount_waterfall(
         "label":       "After payment plan",
         "before":      str(after_plan),
         "deduction":   str(eb_deduction),
-        "deduction_label": "Early Bird (5%)" if early_bird else "Early Bird (not applied)",
+        # Interpolated, not hardcoded: the rate comes from the EARLY_BIRD
+        # DiscountType row, so a hardcoded "5%" here told families a
+        # different number from the one deducted the moment it was edited.
+        "deduction_label": f"Early Bird ({eb_pct}%)" if early_bird else "Early Bird (not applied)",
         "after":       str(after_eb),
     })
 
@@ -328,10 +332,45 @@ def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "mon
 
     Returns the StudentInvoice instance.
     """
-    # Idempotency check
-    existing = StudentInvoice.objects.filter(enrollment_id=enrollment_id).exclude(status="void").first()
-    if existing:
-        return existing
+    # Serialise concurrent generation for THIS enrollment before the
+    # idempotency check below. The check is a read-then-write, and there is no
+    # invoice row to lock yet -- so two requests (a double-clicked "Generate
+    # Invoice", or a retried POST) both read "none exists" and both insert,
+    # leaving the student with two invoices and two installment schedules.
+    #
+    # A transaction-scoped advisory lock is the right shape here precisely
+    # because the thing being guarded does not exist yet; it is released
+    # automatically at COMMIT or ROLLBACK, so no cleanup path can leak it.
+    # The partial unique index on (enrollment_id) WHERE status <> 'void' is
+    # the durable backstop -- uq_student_invoices_live_per_enrollment, in
+    # scripts/2026-09-integrity-hardening.sql.
+    with transaction.atomic():
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                [_INVOICE_GEN_LOCK_NAMESPACE, int(enrollment_id)],
+            )
+
+        # Idempotency check
+        existing = (
+            StudentInvoice.objects.filter(enrollment_id=enrollment_id)
+            .exclude(status="void")
+            .first()
+        )
+        if existing:
+            return existing
+
+        return _build_invoice_for_enrollment(enrollment_id, payment_plan, effective_date)
+
+
+# Arbitrary but stable namespace for pg_advisory_xact_lock's (int4, int4) form,
+# so these locks cannot collide with an advisory lock taken anywhere else.
+_INVOICE_GEN_LOCK_NAMESPACE = 8021
+
+
+def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effective_date: date = None):
+    """The actual construction, called by generate_invoice_for_enrollment()
+    once it holds the per-enrollment lock and has confirmed none exists."""
 
     # 1) Fetch enrollment + fee schedule + scholarships
     enrollment = _fetch_enrollment(enrollment_id)
@@ -460,16 +499,32 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
     if not fee_data:
         return {"updated": 0}
 
-    # Find enrollments at this level/grade
+    # Find enrollments at this level/grade IN THE CURRENT SCHOOL YEAR.
+    #
+    # Without the year this rewrote every past year's invoices at this grade
+    # as well -- charging a closed year at today's rates, and, because the
+    # schedule below is built from the CURRENT sy_start_date, moving those
+    # families' due dates into the present year. An invoice carries no school
+    # year of its own, only enrollment_id; the year lives on enrollments,
+    # which is how views.scope_invoices_to_school_year resolves it for the
+    # list and summary endpoints.
+    #
+    # Fail closed when the singleton settings row is missing: with no year
+    # there is no safe set of invoices to rewrite.
+    settings = _get_school_settings()
+    current_sy = (getattr(settings, "current_school_year", "") or "").strip()
+    if not current_sy:
+        return {"updated": 0, "skipped_no_school_year": True}
+
     from django.db import connection
     with connection.cursor() as cur:
         cur.execute(
             """
             SELECT enrollment_id
               FROM enrollments
-             WHERE school_level = %s AND grade_level = %s
+             WHERE school_level = %s AND grade_level = %s AND school_year = %s
             """,
-            [schedule.school_level, schedule.grade_level],
+            [schedule.school_level, schedule.grade_level, current_sy],
         )
         enrollment_ids = [r[0] for r in cur.fetchall()]
 
@@ -478,7 +533,20 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
     ).exclude(status="void")
 
     updated_count = 0
+    skipped_closed_out = 0
     for inv in invoices:
+        # An invoice closed out for a transfer-out is finished, and rebuilding
+        # it was actively wrong: the discounts.all().delete() below removed the
+        # compensating "Transfer-out adjustment" row that is the only thing
+        # holding the balance down (see close_out_invoice_for_transfer), and
+        # the schedule rebuild turned its voided installments back into live
+        # ones -- re-billing a family for the whole year they did not attend.
+        # The months they did attend were billed at the rates in force then,
+        # and stay that way.
+        if inv.installments.filter(status="voided").exists():
+            skipped_closed_out += 1
+            continue
+
         # Replace line items with new amounts
         inv.items.all().delete()
         for fsi in fee_data["items"]:
@@ -544,27 +612,60 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
         )
         remaining = max(new_total - already_paid, Decimal("0"))
 
-        # Rebuild from scratch
+        # Keep the EXISTING due dates and redistribute the new total over
+        # them. A fee edit changes what is owed, not when it is owed -- and
+        # regenerating the calendar reset a mid-year transfer-in's compressed
+        # schedule (generate_installment_schedule_prorated) back to a full
+        # June-March run, handing a family who arrived in December ten
+        # installments starting in a month that had already passed.
+        existing_due_dates = list(
+            inv.installments.order_by("due_date", "sequence").values_list("due_date", flat=True)
+        )
+        if existing_due_dates:
+            n = len(existing_due_dates)
+            per_inst = (new_total / Decimal(n)).quantize(Decimal("0.01"))
+            rounding_adjust = new_total - (per_inst * n)
+            schedule_data = [
+                {
+                    "sequence": idx,
+                    "due_date": due,
+                    "amount": per_inst + rounding_adjust if idx == n else per_inst,
+                }
+                for idx, due in enumerate(existing_due_dates, start=1)
+            ]
+        else:
+            sy_start = settings.sy_start_date if settings else date(timezone.now().year, 6, 1)
+            schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
+
         inv.installments.all().delete()
-        settings = _get_school_settings()
-        sy_start = settings.sy_start_date if settings else date(timezone.now().year, 6, 1)
-        schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
 
         # Distribute already_paid across installments in order
         paid_remaining = already_paid
+        created = []
         for inst in schedule_data:
             amt = Decimal(inst["amount"])
             paid_here = min(paid_remaining, amt)
             paid_remaining -= paid_here
             status = "paid" if paid_here >= amt else ("partially_paid" if paid_here > 0 else "pending")
-            InvoiceInstallment.objects.create(
+            created.append(InvoiceInstallment.objects.create(
                 invoice=inv,
                 sequence=inst["sequence"],
                 due_date=inst["due_date"],
                 amount=amt,
                 amount_paid=paid_here,
                 status=status,
-            )
+            ))
+
+        # Fees cut below what the family has already handed over. The excess
+        # used to be dropped here, so the installments under-reported what was
+        # actually paid while the invoice-level total_paid -- summed from real
+        # StudentPayment rows -- still counted it. Park it on the last
+        # installment so the two agree and the credit stays visible as a
+        # negative balance instead of quietly vanishing.
+        if paid_remaining > 0 and created:
+            last = created[-1]
+            last.amount_paid = Decimal(last.amount_paid) + paid_remaining
+            last.save(update_fields=["amount_paid"])
 
         inv.recalculated_at = timezone.now()
         inv.due_date = schedule_data[0]["due_date"] if schedule_data else None
@@ -580,7 +681,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
         inv.save()
         updated_count += 1
 
-    return {"updated": updated_count}
+    return {"updated": updated_count, "skipped_closed_out": skipped_closed_out}
 
 
 # ── Apply payment to invoice + installments ──────────────────────────────────
@@ -588,15 +689,26 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
 @transaction.atomic
 def apply_payment(invoice_id: int, amount_paid: Decimal):
     """
-    Distribute a payment across the invoice's installments in due-date order.
-    Updates installment statuses and the parent invoice status.
+    Distribute a payment across the invoice's LIVE installments in due-date
+    order. Updates installment statuses and the parent invoice status.
+
+    Voided installments are excluded. close_out_invoice_for_transfer() marks
+    the periods a transferred-out family no longer owes, but deliberately
+    leaves `amount` intact for the audit trail -- so an unfiltered pass both
+    took money for a waived period and flipped the row back to "paid",
+    silently undoing the close-out.
+
+    Ordering is by due_date (then sequence to break ties) rather than sequence
+    alone, which is what this has always claimed to do.
     """
     invoice = StudentInvoice.objects.select_for_update().filter(invoice_id=invoice_id).first()
     if not invoice:
         raise ValueError(f"Invoice #{invoice_id} not found.")
 
+    live = invoice.installments.exclude(status="voided")
+
     remaining = Decimal(amount_paid)
-    for inst in invoice.installments.order_by("sequence"):
+    for inst in live.order_by("due_date", "sequence"):
         if remaining <= 0:
             break
         outstanding = Decimal(inst.amount) - Decimal(inst.amount_paid)
@@ -611,9 +723,11 @@ def apply_payment(invoice_id: int, amount_paid: Decimal):
         inst.save(update_fields=["amount_paid", "status"])
         remaining -= applied
 
-    # Update overall invoice status
-    total_amt  = sum((Decimal(i.amount) for i in invoice.installments.all()), Decimal("0"))
-    total_paid = sum((Decimal(i.amount_paid) for i in invoice.installments.all()), Decimal("0"))
+    # Update overall invoice status -- from live rows only, matching how
+    # close_out_invoice_for_transfer() computes it. Counting voided amounts
+    # here re-inflated the total a transferred-out family appeared to owe.
+    total_amt  = sum((Decimal(i.amount) for i in live), Decimal("0"))
+    total_paid = sum((Decimal(i.amount_paid) for i in live), Decimal("0"))
     if total_paid >= total_amt:
         invoice.status = "paid"
     elif total_paid > 0:

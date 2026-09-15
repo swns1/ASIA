@@ -55,7 +55,8 @@ def _serializer_for(invoice_id, amount_paid):
 def test_overpayment_guard_locks_the_invoice_before_reading_balance(
     mock_select_for_update, mock_serializer_cls, mock_apply_payment
 ):
-    mock_select_for_update.return_value.get.return_value = SimpleNamespace(invoice_id=1)
+    mock_select_for_update.return_value.get.return_value = SimpleNamespace(
+        invoice_id=1, status="unpaid", invoice_no="INV-0001")
     mock_serializer_cls.return_value.data = {
         "net_amount": Decimal("1000.00"),
         "total_paid": Decimal("0.00"),
@@ -77,7 +78,8 @@ def test_overpayment_guard_locks_the_invoice_before_reading_balance(
 def test_a_payment_that_exactly_closes_the_balance_is_accepted(
     mock_select_for_update, mock_serializer_cls, mock_apply_payment
 ):
-    mock_select_for_update.return_value.get.return_value = SimpleNamespace(invoice_id=1)
+    mock_select_for_update.return_value.get.return_value = SimpleNamespace(
+        invoice_id=1, status="unpaid", invoice_no="INV-0001")
     mock_serializer_cls.return_value.data = {
         "net_amount": Decimal("30000.10"),
         "total_paid": Decimal("30000.00"),
@@ -97,7 +99,8 @@ def test_a_payment_that_exactly_closes_the_balance_is_accepted(
 def test_a_payment_that_exceeds_the_balance_is_still_rejected(
     mock_select_for_update, mock_serializer_cls, mock_apply_payment
 ):
-    mock_select_for_update.return_value.get.return_value = SimpleNamespace(invoice_id=1)
+    mock_select_for_update.return_value.get.return_value = SimpleNamespace(
+        invoice_id=1, status="unpaid", invoice_no="INV-0001")
     mock_serializer_cls.return_value.data = {
         "net_amount": Decimal("1000.00"),
         "total_paid": Decimal("900.00"),
@@ -109,4 +112,35 @@ def test_a_payment_that_exceeds_the_balance_is_still_rejected(
     with pytest.raises(ValidationError):
         _perform_create(view, serializer)
 
+    mock_apply_payment.assert_not_called()
+
+
+# -- a voided invoice is not collectable -------------------------------------
+# Voiding is a status flip on the parent and nothing else, so the balance --
+# computed from items minus discounts, neither of which looks at status --
+# still read as money owed. The overpayment guard therefore passed, the
+# payment was recorded, and apply_payment() finished by setting the invoice
+# back to "paid"/"partially_paid", silently un-voiding it.
+@patch("billing.views.apply_payment")
+@patch("billing.serializers.StudentInvoiceSerializer")
+@patch("billing.views.StudentInvoice.objects.select_for_update")
+def test_a_payment_against_a_void_invoice_is_rejected(
+    mock_select_for_update, mock_serializer_cls, mock_apply_payment
+):
+    mock_select_for_update.return_value.get.return_value = SimpleNamespace(
+        invoice_id=1, status="void", invoice_no="INV-0001")
+    # A healthy-looking balance: this is exactly what made the old code let it
+    # through, so the guard must not depend on the balance being zero.
+    mock_serializer_cls.return_value.data = {
+        "net_amount": Decimal("1000.00"),
+        "total_paid": Decimal("0.00"),
+    }
+
+    serializer = _serializer_for(1, Decimal("500.00"))
+
+    with pytest.raises(ValidationError) as exc:
+        _perform_create(StudentPaymentViewSet(), serializer)
+
+    assert "void" in str(exc.value).lower()
+    serializer.save.assert_not_called()
     mock_apply_payment.assert_not_called()

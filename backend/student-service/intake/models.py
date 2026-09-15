@@ -1,7 +1,7 @@
 """
 Self-service student intake: a staff-issued invite lets one named applicant
-fill in the student information form themselves (on a front-desk device
-handed over, or their own phone via a link), review it, and submit it as a
+fill in the student information form themselves on a front-desk device
+handed over to them at the school, review it, and submit it as a
 StudentApplication for a registrar to approve.
 
 Genuinely new data owned by student-service, so — like DocumentExtraction in
@@ -36,9 +36,6 @@ class ApplicationInvite(models.Model):
     not looking it up.
     """
 
-    WALK_IN, REMOTE = "walk_in", "remote"
-    MODE_CHOICES = [(WALK_IN, "walk_in"), (REMOTE, "remote")]
-
     MAX_CODE_ATTEMPTS = 5
 
     invite_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -50,8 +47,6 @@ class ApplicationInvite(models.Model):
     applicant_last_name = models.CharField(max_length=50)
     contact_email = models.EmailField(max_length=150, null=True, blank=True)
     contact_mobile = models.CharField(max_length=20, null=True, blank=True)
-
-    mode = models.CharField(max_length=10, choices=MODE_CHOICES, default=REMOTE)
 
     issued_by_user_id = models.BigIntegerField(db_index=True)
     issued_at = models.DateTimeField(default=timezone.now)

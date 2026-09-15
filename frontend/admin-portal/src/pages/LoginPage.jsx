@@ -6,6 +6,17 @@ import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
 import { setCurrentUser } from "../utils/auth";
 
+// The badge below used to read a literal "S.Y. 2025–2026", which would have
+// gone quietly wrong the moment the school year rolled over — on the one page
+// every user sees before signing in. Derived from the date instead, using the
+// same August cutover the rest of the app uses (EnrollmentFormPage's
+// defaultSchoolYear). It cannot read the configured year from school settings:
+// that endpoint requires a token, and this page is pre-authentication.
+function currentSchoolYearLabel() {
+  const d = new Date(), y = d.getFullYear();
+  return d.getMonth() >= 7 ? `${y}–${y + 1}` : `${y - 1}–${y}`;
+}
+
 export default function LoginPage() {
   usePageTitle("Login");
   const navigate = useNavigate();
@@ -26,14 +37,14 @@ export default function LoginPage() {
       const res = await login({ identifier, password, rememberMe });
       sessionStorage.setItem("access_token", res.access);
       setCurrentUser(res.user);
-      if (rememberMe) {
-        localStorage.setItem(
-          "remember_login_until",
-          String(Date.now() + 7 * 24 * 60 * 60 * 1000)
-        );
-      } else {
-        localStorage.removeItem("remember_login_until");
-      }
+      // `rememberMe` is already sent to the server in the login body above,
+      // which is what actually decides the refresh cookie's Max-Age (see
+      // identity-service LoginView). The client used to also write a
+      // `remember_login_until` timestamp to localStorage that nothing ever
+      // read — dead state behind a checkbox that is ticked by default, which
+      // read like the feature was client-side when it is not. Cleared here so
+      // any value left over from an earlier build doesn't linger.
+      localStorage.removeItem("remember_login_until");
       // Guardians land in the parent portal; staff go to the admin dashboard.
       navigate(res.user?.role === "guardian" ? "/guardian" : "/dashboard");
     } catch (err) {
@@ -191,7 +202,7 @@ export default function LoginPage() {
                 color: "rgba(255,255,255,0.72)",
               }}
             >
-              S.Y. 2025–2026 · Active
+              S.Y. {currentSchoolYearLabel()} · Active
             </span>
           </div>
           <p
@@ -321,7 +332,7 @@ export default function LoginPage() {
                   onChange={(e) => setIdentifier(e.target.value)}
                   required
                   autoComplete="username"
-                  placeholder="e.g. admin@southlakes.edu"
+                  placeholder="e.g. admin@southlakes.edu.ph"
                   style={{
                     width: "100%",
                     border: "1.5px solid #f0ceca",
@@ -539,7 +550,7 @@ export default function LoginPage() {
           >
             Need help?{" "}
             <a
-              href="mailto:admin@southlakes.edu"
+              href="mailto:admin@southlakes.edu.ph"
               style={{
                 color: "#c92a2a",
                 textDecoration: "none",

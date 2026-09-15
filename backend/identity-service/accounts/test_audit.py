@@ -5,10 +5,11 @@ service's own record_audit_event) -- previously:
 
 1. client_ip() took the left-most X-Forwarded-For value unconditionally,
    spoofable by any client since nothing in this stack strips or verifies
-   that header (no reverse proxy is in front of these services). It now
-   reads REST_FRAMEWORK["NUM_PROXIES"] (0 in every service's settings.py
-   today), matching the same trusted-proxy semantics DRF's own throttling
-   already uses.
+   that header. It now reads REST_FRAMEWORK["NUM_PROXIES"], matching the
+   same trusted-proxy semantics DRF's own throttling already uses. That
+   setting is env-driven and defaults to 0 -- no proxy is configured
+   anywhere in this repo, so trusting a hop would reintroduce the spoof it
+   was added to close. Deployments behind a load balancer set NUM_PROXIES.
 2. A failed audit write (`except DatabaseError`) was silently swallowed in
    both writers -- a schema drift or full disk lost every audit entry with
    zero signal. Both now log the failure.
@@ -31,9 +32,19 @@ class TestClientIp:
         request = factory.get("/", REMOTE_ADDR="10.0.0.1", HTTP_X_FORWARDED_FOR="1.2.3.4")
         assert client_ip(request) == "10.0.0.1"
 
-    def test_num_proxies_zero_is_the_actual_configured_default(self):
-        """Regression guard: the real settings.py value, not a value this
-        test invents, must already be safe."""
+    def test_the_actual_configured_default_does_not_trust_forwarded_for(self):
+        """
+        Regression guard on the real settings.py value, not one this test
+        invents. NUM_PROXIES is now env-driven and defaults to 0, because
+        nothing in this repo actually deploys a reverse proxy -- no Dockerfile,
+        no Procfile, no deployment manifest. Trusting a hop that isn't there
+        let any client spoof both its throttle bucket and the ip_address
+        written to the audit log.
+
+        A deployment that really does sit behind one load balancer sets
+        NUM_PROXIES=1 in its environment; the hop-counting behaviour that
+        enables is covered by the test below.
+        """
         request = factory.get("/", REMOTE_ADDR="10.0.0.1", HTTP_X_FORWARDED_FOR="1.2.3.4")
         assert client_ip(request) == "10.0.0.1"
 

@@ -101,6 +101,26 @@ class TestWhitelisting:
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
+    def test_lrn_is_optional_when_null(self):
+        payload = {"student": _valid_student_payload(lrn=None)}
+        serializer = ApplicantSubmissionSerializer(data=payload)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_twelve_digit_lrn_is_accepted(self):
+        payload = {"student": _valid_student_payload(lrn="136789012345")}
+        serializer = ApplicantSubmissionSerializer(data=payload)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_malformed_lrn_is_rejected(self):
+        """Optional is not the same as unvalidated. The 12-digit rule was
+        enforced only in the browser, so a direct POST to this public
+        endpoint could store a malformed national learner identifier."""
+        for bad in ("13678", "1367890123456", "1367-8901-2345", "13678901234X"):
+            payload = {"student": _valid_student_payload(lrn=bad)}
+            serializer = ApplicantSubmissionSerializer(data=payload)
+            assert not serializer.is_valid(), bad
+            assert "lrn" in serializer.errors["student"], bad
+
     def test_duplicate_email_does_not_block_submission(self):
         """A UniqueValidator here would 400 on a duplicate email — turning
         this public endpoint into an oracle for "does this email already
@@ -163,7 +183,7 @@ def _invite(pk=None):
     invite = ApplicationInvite(
         invite_id=pk or uuid.uuid4(),
         applicant_first_name="Juan", applicant_last_name="Dela Cruz",
-        mode=ApplicationInvite.REMOTE, issued_by_user_id=1,
+        issued_by_user_id=1,
         expires_at=timezone.now() + timedelta(days=1),
     )
     return invite
@@ -259,3 +279,110 @@ class TestApplySubmitView:
                          "display_name": "x", "student_number": "y"}])
         assert clean.keys() == flagged.keys()
         assert set(clean) == {"reference", "status", "submitted_at"}
+
+
+# ── applying_for — the one enrollment-shaped key in payload_json ──────────
+#
+# The kiosk asks what grade a family is enrolling into so the registrar
+# isn't guessing at approval time. It rides in payload_json and must stay
+# advisory: it is not student data, and an applicant must not be able to
+# name their own section (that is the registrar's decision, and the
+# `enrollments` table is read-only from this service —
+# see accounts/enrollment_mirror.py).
+
+class TestApplyingFor:
+    def test_section_and_status_are_dropped(self):
+        from .serializers import ALLOWED_APPLYING_FOR_FIELDS, whitelist
+
+        cleaned = whitelist(
+            {
+                "grade_level": "Grade 11",
+                "school_level": "senior_highschool",
+                "strand": "STEM",
+                "section": "Sampaguita",      # registrar's call, never the applicant's
+                "enrollment_status": "enrolled",  # would skip the review it exists for
+                "school_year": "2099-2100",
+            },
+            ALLOWED_APPLYING_FOR_FIELDS,
+        )
+
+        assert cleaned == {
+            "grade_level": "Grade 11",
+            "school_level": "senior_highschool",
+            "strand": "STEM",
+        }
+
+    def _submit(self, invite, application):
+        """Drives ApplySubmitView with every ORM call mocked, the same way
+        TestApplySubmitView does — see this module's docstring for why there
+        is no real database to hit."""
+        token = issue_session_token(invite, application)
+        request = factory.post(f"/api/apply/{invite.pk}/submit/", HTTP_X_APPLICANT_TOKEN=token)
+
+        with patch("intake.invites.StudentApplication.objects.select_related") as select_related,              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update,              patch("intake.views.duplicates.find_matches", return_value=[]),              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter,              patch("intake.views.transaction.atomic", return_value=nullcontext()):
+            select_related.return_value.get.return_value = application
+            select_for_update.return_value.get.return_value = application
+            application.save = MagicMock()
+            invite_filter.return_value.update = MagicMock(return_value=1)
+
+            return ApplySubmitView.as_view()(request, invite_id=invite.pk)
+
+    def test_survives_submission(self):
+        """ApplicantSubmissionSerializer declares only the five record-shaped
+        keys, so `serializer.data` drops applying_for — and submit assigns that
+        over the whole payload. Without carrying it across, the grade level the
+        family chose was destroyed at submit and the enrolment prefill the
+        registrar gets on approval was silently always empty."""
+        invite = _invite()
+        application = _draft(invite, payload={
+            "student": _valid_student_payload(),
+            "applying_for": {"grade_level": "Grade 7", "school_level": "junior_highschool"},
+        })
+
+        response = self._submit(invite, application)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert application.payload_json["applying_for"] == {
+            "grade_level": "Grade 7",
+            "school_level": "junior_highschool",
+        }
+        # The student bundle still validated and survived alongside it.
+        assert application.payload_json["student"]["first_name"] == "Juan"
+
+    def test_submission_is_no_more_permissive_than_the_draft(self):
+        """Carrying the key across must not become a hole: submit re-applies
+        the same allow-list the draft PATCH uses, so a client that posts
+        straight to submit cannot smuggle in a section or a status."""
+        invite = _invite()
+        application = _draft(invite, payload={
+            "student": _valid_student_payload(),
+            "applying_for": {
+                "grade_level": "Grade 11",
+                "strand": "STEM",
+                "section": "Sampaguita",          # registrar's call, never the applicant's
+                "enrollment_status": "enrolled",  # would skip the review it exists for
+            },
+        })
+
+        response = self._submit(invite, application)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert application.payload_json["applying_for"] == {
+            "grade_level": "Grade 11",
+            "strand": "STEM",
+        }
+
+    def test_never_reaches_the_student_bundle(self):
+        from .services import _whitelisted_bundle
+
+        student, household, guardians, siblings, schools = _whitelisted_bundle({
+            "student": {"first_name": "Juan", "last_name": "Dela Cruz"},
+            "applying_for": {"grade_level": "Grade 7", "school_level": "junior_highschool"},
+        })
+
+        # approve_application builds the real Student from this bundle, so
+        # anything applying_for leaked into here would become student data.
+        assert "grade_level" not in student
+        assert "school_level" not in student
+        assert student == {"first_name": "Juan", "last_name": "Dela Cruz"}
+        assert (household, guardians, siblings, schools) == (None, [], [], [])

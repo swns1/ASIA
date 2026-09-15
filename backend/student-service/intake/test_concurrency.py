@@ -34,7 +34,7 @@ def _invite():
     return ApplicationInvite(
         invite_id=uuid.uuid4(),
         applicant_first_name="Juan", applicant_last_name="Dela Cruz",
-        mode=ApplicationInvite.REMOTE, issued_by_user_id=1,
+        issued_by_user_id=1,
         expires_at=timezone.now() + timedelta(days=1),
     )
 

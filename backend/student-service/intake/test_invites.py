@@ -45,7 +45,6 @@ def _make_invite(**overrides):
         applicant_first_name="Maria",
         applicant_last_name="Santos",
         contact_email="maria@example.com",
-        mode=ApplicationInvite.REMOTE,
         issued_by_user_id=1,
         expires_at=timezone.now() + timedelta(days=3),
     )

@@ -13,6 +13,13 @@ from accounts.permissions import (
 )
 from enrollments.models import Enrollment
 from subjects.models import Subject
+from .deped import (
+    PASSING_GRADE,
+    descriptor,
+    percentage_score,
+    quantize,
+    transmute,
+)
 from .models import GradingTemplate, GradingComponent, ScoreEntry
 from .serializers import (
     GradingTemplateSerializer,
@@ -122,43 +129,63 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
 
         components = template.components.all().order_by("sort_order")
         component_results = []
-        final_grade = Decimal("0")
+        pending_components = []
+        weighted_total = Decimal("0")
+        encoded_weight = Decimal("0")
 
         for comp in components:
-            entries = ScoreEntry.objects.filter(
+            entries = list(ScoreEntry.objects.filter(
                 enrollment_id=enrollment_id,
                 subject_id=subject_id,
                 grading_component=comp,
                 grading_period=grading_period,
-            )
+            ))
 
-            if entries.exists():
-                percentages = [
-                    (Decimal(str(e.score)) / Decimal(str(e.max_score))) * 100
-                    for e in entries
-                ]
-                avg_pct = sum(percentages) / len(percentages)
+            # DO 8 Percentage Score, over summed raw and highest-possible
+            # scores rather than a mean of per-assessment percentages.
+            ps = percentage_score(entries)
+
+            if ps is None:
+                # A component with nothing encoded is NOT a zero. Scoring it 0
+                # and weighting it in made every learner read as failing until
+                # the last column was encoded.
+                pending_components.append(comp.component_name)
+                weighted = None
             else:
-                avg_pct = Decimal("0")
-
-            weighted = (avg_pct * comp.weight) / Decimal("100")
-            final_grade += weighted
+                weighted = (ps * comp.weight) / Decimal("100")
+                weighted_total += weighted
+                encoded_weight += Decimal(str(comp.weight))
 
             component_results.append({
                 "component_id": comp.grading_component_id,
                 "component_name": comp.component_name,
                 "weight": float(comp.weight),
-                "entries_count": entries.count(),
-                "average_percentage": round(float(avg_pct), 2),
-                "weighted_score": round(float(weighted), 2),
+                "entries_count": len(entries),
+                "is_encoded": ps is not None,
+                "average_percentage": None if ps is None else float(quantize(ps)),
+                "weighted_score": None if weighted is None else float(quantize(weighted)),
             })
 
-        final_grade = round(float(final_grade), 2)
+        is_complete = not pending_components and bool(component_results)
+
+        # While encoding is still in progress, renormalise over the components
+        # that do have scores so the running grade is meaningful instead of
+        # artificially depressed. This mirrors how the risk model renormalises
+        # over the signals actually present (ai/services.py).
+        if encoded_weight > 0:
+            initial_grade = quantize(weighted_total * 100 / encoded_weight)
+        else:
+            initial_grade = None
+
+        transmuted_grade = transmute(initial_grade)
+
+        # Pass/fail is a determination about a finished quarter, and it is made
+        # on the TRANSMUTED grade -- an Initial Grade of 74.99 transmutes to 84,
+        # which is a pass. Applying the 75 line to the initial grade, as this
+        # used to, got the determination wrong across the whole 60-99 band.
         remarks = None
-        if final_grade >= 75:
-            remarks = "passed"
-        elif final_grade > 0:
-            remarks = "failed"
+        if is_complete and transmuted_grade is not None:
+            remarks = "passed" if transmuted_grade >= PASSING_GRADE else "failed"
 
         return Response({
             "enrollment_id": int(enrollment_id),
@@ -167,6 +194,13 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
             "grading_period": grading_period,
             "template_name": template.template_name,
             "components": component_results,
-            "final_grade": final_grade,
+            "initial_grade": None if initial_grade is None else float(initial_grade),
+            "transmuted_grade": transmuted_grade,
+            # `final_grade` keeps its name for existing callers, but now holds
+            # the transmuted grade -- the number that goes on the form.
+            "final_grade": transmuted_grade,
+            "descriptor": descriptor(transmuted_grade),
+            "is_complete": is_complete,
+            "pending_components": pending_components,
             "remarks": remarks,
         })

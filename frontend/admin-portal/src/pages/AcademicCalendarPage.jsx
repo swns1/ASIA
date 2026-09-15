@@ -1495,7 +1495,6 @@ export default function AcademicCalendarPage() {
   }, []);
 
   useEffect(() => {
-    if (!sessionStorage.getItem("access_token")) { navigate("/"); return; }
     fetchEvents(schoolYear); // eslint-disable-line react-hooks/set-state-in-effect
     getSchoolSettings().then(setSchoolSettings).catch(() => {});
   }, [schoolYear, fetchEvents, navigate]);

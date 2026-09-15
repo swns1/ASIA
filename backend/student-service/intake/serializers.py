@@ -22,6 +22,7 @@ these bounds by construction alone.
 from rest_framework import serializers
 
 from students.models import Guardian, Household, Sibling, PreviousSchool, Student
+from students.validators import validate_lrn_format
 
 
 # ── Re-derivable allowlists (used again in intake/services.py at approve time) ──
@@ -40,6 +41,15 @@ ALLOWED_GUARDIAN_FIELDS = frozenset({
 })
 ALLOWED_SIBLING_FIELDS = frozenset({"full_name", "age"})
 ALLOWED_PREVIOUS_SCHOOL_FIELDS = frozenset({"school_name", "school_address"})
+
+# What the family says they are enrolling into. Deliberately NOT part of the
+# student bundle: none of these are columns on `students`, and _whitelisted_bundle
+# never looks at this key, so approving an application can't turn them into
+# student data. It is advisory input for the registrar, who creates the real
+# Enrollment in enrollment-service afterwards (that table is read-only from
+# this service — see accounts/enrollment_mirror.py). `section` is absent on
+# purpose: it depends on class sizes, so only the registrar can decide it.
+ALLOWED_APPLYING_FOR_FIELDS = frozenset({"school_level", "grade_level", "strand"})
 
 
 def whitelist(data, allowed_fields):
@@ -73,7 +83,10 @@ class ApplicantStudentSerializer(serializers.ModelSerializer):
     # Duplicate emails are surfaced to the registrar via intake/duplicates.py
     # instead, and only become a real, correctly-blocking uniqueness check
     # at approval time through BulkStudentSerializer (staff-only).
-    lrn = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    lrn = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True,
+        validators=[validate_lrn_format],
+    )
     email = serializers.EmailField(max_length=150, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
@@ -153,7 +166,6 @@ class ApplicationInviteIssueSerializer(serializers.Serializer):
     applicant_last_name = serializers.CharField(max_length=50)
     contact_email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
     contact_mobile = serializers.CharField(max_length=20, required=False, allow_null=True, allow_blank=True)
-    mode = serializers.ChoiceField(choices=ApplicationInvite.MODE_CHOICES, default=ApplicationInvite.REMOTE)
 
 
 class ApplicationInviteSerializer(serializers.ModelSerializer):
@@ -171,7 +183,7 @@ class ApplicationInviteSerializer(serializers.ModelSerializer):
         model = ApplicationInvite
         fields = (
             "invite_id", "applicant_first_name", "applicant_last_name", "applicant_full_name",
-            "contact_email", "contact_mobile", "mode",
+            "contact_email", "contact_mobile",
             "issued_by_user_id", "issued_at", "expires_at", "revoked_at",
             "consumed_at", "consumed_by_application_id", "code_attempts",
             "is_usable", "is_locked", "is_expired", "is_revoked", "is_consumed",
@@ -183,7 +195,6 @@ class StudentApplicationListSerializer(serializers.ModelSerializer):
     """Row shape for the review queue table — light enough to page through
     without pulling every application's full payload_json."""
     reference = serializers.ReadOnlyField()
-    invite_mode = serializers.CharField(source="invite.mode", read_only=True)
     invite_issued_by_user_id = serializers.IntegerField(source="invite.issued_by_user_id", read_only=True)
 
     class Meta:
@@ -193,7 +204,7 @@ class StudentApplicationListSerializer(serializers.ModelSerializer):
             "first_name", "last_name", "lrn", "birth_date",
             "submitted_at", "decided_at",
             "duplicate_of_student_id",
-            "invite_mode", "invite_issued_by_user_id",
+            "invite_issued_by_user_id",
         )
         read_only_fields = fields
 

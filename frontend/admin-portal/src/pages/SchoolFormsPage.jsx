@@ -7,6 +7,7 @@ import { getStudents } from "../api/studentApi";
 import { motion } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { pageVariants } from "../utils/motion";
+import { describeApiError } from "../utils/apiError";
 
 const C = {
   dark: "#1a0a0a", muted: "#7a5050", border: "#f5eaea", red: "#e03131",
@@ -64,15 +65,33 @@ function enrollmentLabel(enr) {
   return label;
 }
 
+// Instructional hint shown above an empty learner search. Without it the card
+// bottoms out in a bare input: nothing states what the input is for, or that a
+// print button only appears once a learner is picked. An unexplained blank
+// input reads as unfinished rather than as waiting for input.
+function SearchHint({ form }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", marginBottom: 8, background: form.bg, border: `1px solid ${form.color}26`, borderRadius: 8, fontSize: 11.5, fontWeight: 600, color: form.color, lineHeight: 1.45 }}>
+      <i className="ti ti-user-search" style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
+      <span>Search a learner to generate their {form.code} — the print button appears once one is selected.</span>
+    </div>
+  );
+}
+
 function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSelect }) {
   const [search,    setSearch]    = useState("");
   const [results,   setResults]   = useState([]);
   const [searching, setSearching] = useState(false);
+  // A swallowed failure used to render "No students found.", so an outage was
+  // indistinguishable from a learner who genuinely isn't enrolled — the same
+  // empty-vs-error conflation ui/ErrorState was introduced to stamp out.
+  const [searchError, setSearchError] = useState(null);
   const timerRef = useRef(null);
 
   function handleChange(value) {
     setSearch(value);
     if (timerRef.current) clearTimeout(timerRef.current);
+    setSearchError(null);
     if (value.trim().length < 2) { setResults([]); return; }
     timerRef.current = setTimeout(async () => {
       setSearching(true);
@@ -80,7 +99,11 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
         const data = await getStudents({ search: value.trim() });
         const list = Array.isArray(data) ? data : data.results ?? [];
         setResults(list.slice(0, 8));
-      } catch { setResults([]); }
+        setSearchError(null);
+      } catch (err) {
+        setResults([]);
+        setSearchError(err);
+      }
       finally { setSearching(false); }
     }, 350);
   }
@@ -91,7 +114,8 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
         <input
           value={search}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Search student by name…"
+          placeholder="Search by name, LRN, or student no.…"
+          aria-label="Search for a learner"
           style={{ ...inputStyle, height: 34, border: `1.5px solid ${borderColor}` }}
         />
         {searching && (
@@ -114,7 +138,19 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
           ))}
         </div>
       )}
-      {search.trim().length >= 2 && !searching && results.length === 0 && (
+      {/* A failed search must look like a failure. Error wins over empty. */}
+      {search.trim().length >= 2 && !searching && searchError && (
+        <div role="alert" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1.5px solid #f1aeae", borderRadius: 8, zIndex: 100, padding: "10px 14px", marginTop: 2, boxShadow: dropdownShadow }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#c92a2a" }}>
+            <i className="ti ti-cloud-off" style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
+            {describeApiError(searchError, { subject: "students" }).title}
+          </div>
+          <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 3, lineHeight: 1.45 }}>
+            {describeApiError(searchError, { subject: "students" }).message}
+          </div>
+        </div>
+      )}
+      {search.trim().length >= 2 && !searching && !searchError && results.length === 0 && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, padding: "10px 14px", fontSize: 12, color: "#aaa", marginTop: 2, boxShadow: dropdownShadow }}>
           No students found.
         </div>
@@ -417,12 +453,15 @@ export default function SchoolFormsPage() {
                       )}
                     </div>
                   ) : (
-                    <StudentSearch
-                      borderColor={`${form.color}40`}
-                      dropdownBorderColor={`${form.color}40`}
-                      dropdownShadow={`0 4px 16px rgba(46,107,13,0.12)`}
-                      onSelect={setSf9Student}
-                    />
+                    <>
+                      <SearchHint form={form} />
+                      <StudentSearch
+                        borderColor={`${form.color}40`}
+                        dropdownBorderColor={`${form.color}40`}
+                        dropdownShadow={`0 4px 16px rgba(46,107,13,0.12)`}
+                        onSelect={setSf9Student}
+                      />
+                    </>
                   )}
                 </div>
               )}
@@ -452,12 +491,15 @@ export default function SchoolFormsPage() {
                       </motion.button>
                     </div>
                   ) : (
-                    <StudentSearch
-                      borderColor={`${form.color}40`}
-                      dropdownBorderColor={`${form.color}40`}
-                      dropdownShadow={`0 4px 16px rgba(124,58,237,0.12)`}
-                      onSelect={setSf10Student}
-                    />
+                    <>
+                      <SearchHint form={form} />
+                      <StudentSearch
+                        borderColor={`${form.color}40`}
+                        dropdownBorderColor={`${form.color}40`}
+                        dropdownShadow={`0 4px 16px rgba(124,58,237,0.12)`}
+                        onSelect={setSf10Student}
+                      />
+                    </>
                   )}
                 </div>
               )}

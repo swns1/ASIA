@@ -1,18 +1,19 @@
 """
 Confirming a document is the right paper for the right student.
 
-Nine of the thirteen requirement types are attestations — a good-moral
-certificate, a clearance, a recommendation letter. Their content is not
-something the enrollment form holds; what matters is that the student actually
-submitted the right document, and that it names *them*.
+This is now the job for all thirteen requirement types, not just the
+attestations (see policy.py on why extraction was retired). What matters is
+that the student actually submitted the document the slot asked for, and that
+it names *them* — the identity fields on a birth certificate or a Form 137 are
+already typed by the family at the kiosk, from these same papers.
 
 That is a string-matching problem, not a model problem. Nothing in this module
 makes a network call or loads a model: it reads the text PaddleOCR already
-produced. Which is the point — it takes nine of thirteen documents off the
-paid path entirely, and stops them competing to overwrite a name the form
-already has right.
+produced. Which is the point — it takes every document off the paid path, and
+stops them competing to overwrite a name the form already has right.
 """
 
+from .policy import FAMILY_BIRTH_CERTIFICATE, FAMILY_FORM_137, FAMILY_MARKERS
 from .reconcile import normalize_text
 from .types import ParsedDocument
 
@@ -20,6 +21,18 @@ from .types import ParsedDocument
 # match downgrades to "couldn't confirm", which is a soft warning, whereas a
 # false match would tell a registrar a wrong document was correct.
 DOCUMENT_MARKERS: dict[str, tuple[str, ...]] = {
+    # Sourced from policy.py rather than retyped: these are the same phrases
+    # that used to gate whether an extraction could be trusted, already tuned
+    # against the samples in OCR_IMAGES/. Without an entry here a code falls
+    # through to "no claim either way", which would have quietly reduced these
+    # three to a name match when they stopped being extracted.
+    "psa_birth_certificate": FAMILY_MARKERS[FAMILY_BIRTH_CERTIFICATE],
+    "birth_certificate":     FAMILY_MARKERS[FAMILY_BIRTH_CERTIFICATE],
+    # The slot takes either document, so either marker set confirms it.
+    "form_137_or_138": FAMILY_MARKERS[FAMILY_FORM_137] + (
+        "report card", "form 138", "form138", "school form 9", "sf9",
+    ),
+
     "form_138": ("report card", "form 138", "form138", "progress report",
                  "school form 9", "sf9"),
     "ncae_result": ("ncae", "national career assessment"),
@@ -57,7 +70,7 @@ def verify_document(parsed: ParsedDocument, requirement_code: str,
                     first_name: str | None = None,
                     last_name: str | None = None) -> dict:
     """
-    Returns the check result for an attestation document.
+    Returns the check result for a submitted document.
 
     `is_expected_document` is False only when the code has known markers and
     none of them appear — an unrecognised requirement code produces no claim

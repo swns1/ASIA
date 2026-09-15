@@ -39,6 +39,12 @@ const baseCss = `
   @keyframes spin    { to{transform:rotate(360deg)} }
   .settings-input:focus { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; outline:none; }
   .settings-input::placeholder { color:#8a6a6a; }
+  /* A card's last field must not stack its own 18px under the card's 22px
+     padding: that left ~40px of air below the final input against 22px above
+     the first label, so every card read as if its contents sat too high. */
+  .settings-field:last-child { margin-bottom:0; }
+  /* Fields sharing one row are spaced by the row's grid gap instead. */
+  .settings-field-row .settings-field { margin-bottom:0; }
 `;
 
 const TABS = [
@@ -85,14 +91,29 @@ export default function BillingSettingsPage() {
 // GENERAL TAB — ported from the former SchoolSettingsPage.jsx
 // ════════════════════════════════════════════════════════════════════════════
 
-function SectionCard({ title, subtitle, icon, children, delay = 0 }) {
+// Cards are laid out as a flex column and left at height:auto, so the grid's
+// default `align-items:stretch` pulls each one to its row's full height and
+// the body below (flex:1) takes up the slack. Two cards side by side
+// therefore share a top *and* a bottom edge. With each column stacked
+// independently the two sides drifted apart by whatever their contents
+// happened to measure — the second row started 35px lower on the left than on
+// the right, and the shorter column ran out ~200px early. Deliberately not
+// `height:100%`: that opts the card out of stretching and asks a percentage
+// to resolve against an auto-sized row instead.
+// `span` stretches a card across every column of that grid.
+function SectionCard({ title, subtitle, icon, children, delay = 0, span = false }) {
   return (
     <motion.div
       initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.28, delay, ease: "easeOut" }}
-      style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
+      style={{
+        background: C.white, borderRadius: 16, border: `1px solid ${C.border}`,
+        overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+        display: "flex", flexDirection: "column",
+        ...(span ? { gridColumn: "1 / -1" } : null),
+      }}
     >
-      <div style={{ padding: "16px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ padding: "16px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <i className={`ti ${icon}`} style={{ fontSize: 18, color: C.red }} />
         </div>
@@ -101,14 +122,20 @@ function SectionCard({ title, subtitle, icon, children, delay = 0 }) {
           {subtitle && <div style={{ fontSize: 11, color: C.pale, marginTop: 2 }}>{subtitle}</div>}
         </div>
       </div>
-      <div style={{ padding: "22px 24px" }}>{children}</div>
+      <div style={{ padding: "22px 24px", flex: 1, display: "flex", flexDirection: "column" }}>{children}</div>
     </motion.div>
   );
 }
 
-function Field({ label, hint, children, required }) {
+// `grow` lets one field absorb whatever height its card gained from being
+// stretched to match its neighbour, so the slack shows up as a taller input
+// rather than as a gap under the last one.
+function Field({ label, hint, children, required, grow = false }) {
   return (
-    <div style={{ marginBottom: 18 }}>
+    <div
+      className="settings-field"
+      style={{ marginBottom: 18, ...(grow ? { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } : null) }}
+    >
       <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: C.muted, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
         {label}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
       </label>
@@ -305,108 +332,127 @@ function GeneralSettingsTab() {
           )}
         </AnimatePresence>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16, alignItems: "start" }}>
+        {/* One grid holding five cards — not two independently stacked
+            columns. Cards flow row by row (School Information beside School
+            Year, Contact Information beside Billing Configuration), so each
+            pair shares a top *and* a bottom edge instead of each column
+            running to whatever depth its own contents happened to measure.
+            Payment Plans spans the full width: it is reference content
+            rather than a form, and lifting it out of Billing Configuration
+            is what lets the two columns above balance, instead of the right
+            one running ~200px past the bottom of the left.
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <SectionCard title="School Information" subtitle="Basic school identity" icon="ti-school" delay={0.04}>
-              {loading ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <Sk h={42} /><Sk h={42} /><Sk h={80} />
-                </div>
-              ) : (
-                <>
-                  <Field label="School Name" required>
-                    <input className="settings-input" value={form.school_name} onChange={e => setF("school_name", e.target.value)} placeholder="South Lakes Integrated School" style={inputStyle} />
-                  </Field>
-                  <Field label="School Address">
-                    <textarea className="settings-input" value={form.school_address} onChange={e => setF("school_address", e.target.value)} placeholder="Complete address…" rows={3} style={{ ...inputStyle, resize: "vertical" }} />
-                  </Field>
-                </>
-              )}
-            </SectionCard>
+            The track floor is max(360px, half the row) rather than a plain
+            360px: a bare `auto-fit` sizes itself to the item count, and with
+            five cards in the grid instead of the two column wrappers it used
+            to hold it would open four columns on a wide screen. Half-width
+            floor caps it at two, while the 360px still drops it to one at the
+            same width the old layout did (a 736px container). */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(360px, (100% - 16px) / 2), 1fr))", gap: 16, alignItems: "stretch" }}>
 
-            <SectionCard title="Contact Information" subtitle="For official communications" icon="ti-phone" delay={0.08}>
-              {loading ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <Sk h={42} /><Sk h={42} />
-                </div>
-              ) : (
-                <>
-                  <Field label="Contact Email">
-                    <input className="settings-input" type="email" value={form.contact_email} onChange={e => setF("contact_email", e.target.value)} placeholder="admin@southlakes.edu.ph" style={inputStyle} />
-                  </Field>
-                  <Field label="Contact Phone">
-                    <input className="settings-input" value={form.contact_phone} onChange={e => setF("contact_phone", e.target.value)} placeholder="+63 998 979 1547" style={inputStyle} />
-                  </Field>
-                </>
-              )}
-            </SectionCard>
-          </div>
+          <SectionCard title="School Information" subtitle="Basic school identity" icon="ti-school" delay={0.04}>
+            {loading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <Sk h={42} /><Sk h={42} /><Sk h={80} />
+              </div>
+            ) : (
+              <>
+                <Field label="School Name" required>
+                  <input className="settings-input" value={form.school_name} onChange={e => setF("school_name", e.target.value)} placeholder="South Lakes Integrated School" style={inputStyle} />
+                </Field>
+                <Field label="School Address" grow>
+                  <textarea className="settings-input" value={form.school_address} onChange={e => setF("school_address", e.target.value)} placeholder="Complete address…" rows={3} style={{ ...inputStyle, resize: "vertical", flex: 1, minHeight: 88 }} />
+                </Field>
+              </>
+            )}
+          </SectionCard>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <SectionCard title="School Year" subtitle="Affects invoices, early bird eligibility, and reports" icon="ti-calendar" delay={0.06}>
-              {loading ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <Sk h={42} /><Sk h={7} r={99} /><Sk h={42} /><Sk h={42} />
-                </div>
-              ) : (
-                <>
-                  <Field label="Current School Year" required>
-                    <select className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                      {buildSchoolYearOptions(form.current_school_year || computeDefaultSchoolYear()).map(sy => (
-                        <option key={sy} value={sy}>{sy}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                    <Field label="S.Y. Start Date" required hint="Early bird counts from here">
-                      <input className="settings-input" type="date" value={form.sy_start_date} onChange={e => setF("sy_start_date", e.target.value)} style={inputStyle} />
-                    </Field>
-                    <Field label="S.Y. End Date" required>
-                      <input className="settings-input" type="date" value={form.sy_end_date} onChange={e => setF("sy_end_date", e.target.value)} style={inputStyle} />
-                    </Field>
-                  </div>
-                </>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Billing Configuration" subtitle="Discount and payment settings" icon="ti-cash" delay={0.1}>
-              {loading ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <Sk h={42} />
-                  {[1,2,3,4].map(i => <Sk key={i} h={52} r={10} />)}
-                </div>
-              ) : (
-                <>
-                  <Field label="Early Bird Window" required hint="Days from S.Y. start date during which early bird discount applies">
-                    <div style={{ position: "relative" }}>
-                      <input className="settings-input" type="number" min="1" max="365" value={form.early_bird_days} onChange={e => setF("early_bird_days", e.target.value)} style={{ ...inputStyle, paddingRight: 50 }} />
-                      <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: C.pale, fontWeight: 600, pointerEvents: "none" }}>days</span>
-                    </div>
-                  </Field>
-
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.micro, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>Payment Plans</div>
-                  <motion.div
-                    variants={listVariants.container} initial="hidden" animate="visible"
-                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                  >
-                    {PAYMENT_PLANS.map(p => (
-                      <motion.div key={p.label} variants={listVariants.item}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: p.bg, borderRadius: 10, border: `1px solid ${p.color}22` }}
-                      >
-                        <i className="ti ti-calendar-due" style={{ fontSize: 15, color: p.color, flexShrink: 0 }} />
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.label}</div>
-                          <div style={{ fontSize: 11, color: p.color, opacity: 0.75, marginTop: 1 }}>{p.detail}</div>
-                        </div>
-                      </motion.div>
+          <SectionCard title="School Year" subtitle="Affects invoices, early bird eligibility, and reports" icon="ti-calendar" delay={0.06}>
+            {loading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <Sk h={42} /><Sk h={7} r={99} /><Sk h={42} /><Sk h={42} />
+              </div>
+            ) : (
+              <>
+                <Field label="Current School Year" required>
+                  <select className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
+                    {buildSchoolYearOptions(form.current_school_year || computeDefaultSchoolYear()).map(sy => (
+                      <option key={sy} value={sy}>{sy}</option>
                     ))}
+                  </select>
+                </Field>
+                <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
+                <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                  <Field label="S.Y. Start Date" required hint="Early bird counts from here">
+                    <input className="settings-input" type="date" value={form.sy_start_date} onChange={e => setF("sy_start_date", e.target.value)} style={inputStyle} />
+                  </Field>
+                  <Field label="S.Y. End Date" required>
+                    <input className="settings-input" type="date" value={form.sy_end_date} onChange={e => setF("sy_end_date", e.target.value)} style={inputStyle} />
+                  </Field>
+                </div>
+              </>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Contact Information" subtitle="For official communications" icon="ti-phone" delay={0.08}>
+            {loading ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                <Sk h={68} /><Sk h={68} />
+              </div>
+            ) : (
+              // Paired on one row, like the S.Y. dates above: two short
+              // fields stacked made this card overshoot the one beside it and
+              // left ~55px of dead space under its neighbour's single field.
+              <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                <Field label="Contact Email">
+                  <input className="settings-input" type="email" value={form.contact_email} onChange={e => setF("contact_email", e.target.value)} placeholder="admin@southlakes.edu.ph" style={inputStyle} />
+                </Field>
+                <Field label="Contact Phone">
+                  <input className="settings-input" value={form.contact_phone} onChange={e => setF("contact_phone", e.target.value)} placeholder="+63 998 979 1547" style={inputStyle} />
+                </Field>
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Billing Configuration" subtitle="Discount and payment settings" icon="ti-cash" delay={0.1}>
+            {loading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <Sk h={42} />
+              </div>
+            ) : (
+              <Field label="Early Bird Window" required hint="Days from S.Y. start date during which early bird discount applies">
+                <div style={{ position: "relative" }}>
+                  <input className="settings-input" type="number" min="1" max="365" value={form.early_bird_days} onChange={e => setF("early_bird_days", e.target.value)} style={{ ...inputStyle, paddingRight: 50 }} />
+                  <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: C.pale, fontWeight: 600, pointerEvents: "none" }}>days</span>
+                </div>
+              </Field>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Payment Plans" subtitle="Installment schedules available at enrollment" icon="ti-calendar-due" delay={0.12} span>
+            {loading ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+                {[1, 2, 3, 4].map(i => <Sk key={i} h={58} r={10} />)}
+              </div>
+            ) : (
+              <motion.div
+                variants={listVariants.container} initial="hidden" animate="visible"
+                style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}
+              >
+                {PAYMENT_PLANS.map(p => (
+                  <motion.div key={p.label} variants={listVariants.item}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: p.bg, borderRadius: 10, border: `1px solid ${p.color}22` }}
+                  >
+                    <i className="ti ti-calendar-due" style={{ fontSize: 16, color: p.color, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.label}</div>
+                      <div style={{ fontSize: 11, color: p.color, opacity: 0.75, marginTop: 1 }}>{p.detail}</div>
+                    </div>
                   </motion.div>
-                </>
-              )}
-            </SectionCard>
-          </div>
+                ))}
+              </motion.div>
+            )}
+          </SectionCard>
         </div>
       </div>
     </motion.div>

@@ -61,7 +61,12 @@ describe("App routes", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Student Information Form")).toBeTruthy();
+    // Every post-login page is lazyRoute()d, so this assertion waits on a
+    // dynamic import as well as a render. findByText's 1s default is a
+    // transform-speed measurement, not a routing one: under the full suite
+    // it expires purely because other files are being transformed in
+    // parallel, and it got tighter every time a page module grew.
+    expect(await screen.findByText("Student Information Form", {}, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByText("Welcome back")).toBeNull();
   });
 });

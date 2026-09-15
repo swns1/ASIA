@@ -39,6 +39,7 @@ Use the DepEd grading scale:
 - Below 75: Did Not Meet Expectations (failing)
 
 Be concise, encouraging, and practical. Address the interpretation to a teacher or parent.
+The student is not named in the data - refer to them as "the student", never as a placeholder.
 Keep the total response under 300 words.
 
 Student Data:
@@ -96,6 +97,24 @@ Student Data:
 """,
 }
 
+# Only these payload keys are forwarded to the AI provider, per context. The
+# payload is built in the browser, so the filter lives here rather than in the
+# client: anything not listed - student names, LRNs, database ids - is dropped
+# before it can reach a third-party API. A context with no entry is rejected, so
+# adding a prompt forces a deliberate decision about what may leave the system.
+ALLOWED_PAYLOAD_FIELDS = {
+    "grade_report": {
+        "grade_level", "school_level", "section", "school_year",
+        "overall_average", "passed_subjects", "failed_subjects",
+        "total_grades", "grades_by_subject",
+    },
+    "clustering_insights": {
+        "school_year", "grading_period", "grade_level", "subject",
+        "total_students", "n_clusters", "cluster_details",
+        "include_recommendations",
+    },
+}
+
 
 class GeminiInterpretView(APIView):
     permission_classes = [HasRole]
@@ -110,6 +129,21 @@ class GeminiInterpretView(APIView):
                 {"detail": f"Unknown context_type '{context_type}'. Valid: {list(PROMPTS.keys())}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        allowed = ALLOWED_PAYLOAD_FIELDS.get(context_type)
+        if allowed is None:
+            return Response(
+                {"detail": f"context_type '{context_type}' declares no payload fields."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(payload, dict):
+            return Response(
+                {"detail": "payload must be an object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = {k: v for k, v in payload.items() if k in allowed}
 
         if not payload:
             return Response(

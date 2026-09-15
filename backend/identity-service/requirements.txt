@@ -6,6 +6,14 @@ djangorestframework-simplejwt==5.5.1
 # ── Database ──────────────────────────────────────────────────────────────────
 psycopg2-binary==2.9.12
 
+# ── Deployment ────────────────────────────────────────────────────────────────
+# gunicorn for a Linux host; waitress because it is the one of the two that
+# runs on Windows, which is where the LAN testing deployment is served from.
+# Both stay pinned so either target works without editing this file.
+gunicorn==23.0.0
+waitress==3.0.2
+whitenoise==6.11.0
+
 # ── API Utilities ─────────────────────────────────────────────────────────────
 django-cors-headers==4.9.0
 

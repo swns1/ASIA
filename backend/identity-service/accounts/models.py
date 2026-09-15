@@ -17,7 +17,12 @@ VALID_ROLES = {"super_admin", "admin", "registrar", "teacher", "accounting", "gu
 class User(models.Model):
     user_id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
+    # max_length must match the column (users.email is varchar(150)).
+    # EmailField defaults to 254, so a 151-254 character address passed
+    # Django's validation and then blew up on INSERT with "value too long for
+    # type character varying(150)" — a 500 where the user should have seen a
+    # 400 naming the field.
+    email = models.EmailField(max_length=150, unique=True)
     role = models.CharField(max_length=30)
     password = models.CharField(max_length=255)
     profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist

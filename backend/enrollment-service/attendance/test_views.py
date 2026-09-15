@@ -9,14 +9,17 @@ self.request.user.user_id, matching the pattern already used correctly
 elsewhere in this service.
 """
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+from rest_framework.exceptions import PermissionDenied
 
 from attendance.views import AttendanceViewSet
 
 
-def _view_with_user(user_id):
+def _view_with_user(user_id, role="teacher"):
     view = AttendanceViewSet()
-    view.request = SimpleNamespace(user=SimpleNamespace(user_id=user_id, role="teacher"))
+    view.request = SimpleNamespace(user=SimpleNamespace(user_id=user_id, role=role))
     return view
 
 
@@ -24,9 +27,31 @@ def test_perform_create_attributes_the_real_user_id():
     view = _view_with_user(11)
     serializer = MagicMock()
 
-    view.perform_create(serializer)
+    # The roster guard is exercised by its own tests below; this one is only
+    # about recorded_by attribution, and resolving a roster would need the DB.
+    with patch("attendance.views.assert_teacher_may_write_enrollment"):
+        view.perform_create(serializer)
 
     serializer.save.assert_called_once_with(recorded_by=11)
+
+
+def test_perform_create_is_refused_for_a_student_outside_the_teachers_roster():
+    """
+    has_object_permission never runs on create, so POST /api/attendance/ used
+    to let any teacher record attendance for any student in the school. The
+    bulk action already guarded this; the single-record path did not.
+    """
+    view = _view_with_user(11)
+    serializer = MagicMock()
+
+    with patch(
+        "attendance.views.assert_teacher_may_write_enrollment",
+        side_effect=PermissionDenied("nope"),
+    ):
+        with pytest.raises(PermissionDenied):
+            view.perform_create(serializer)
+
+    serializer.save.assert_not_called()
 
 
 def test_perform_update_attributes_the_real_user_id():

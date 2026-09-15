@@ -30,6 +30,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
+def _env_int(name: str, default: int) -> int:
+    """Read a whole number from the environment, falling back on anything unparseable."""
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
 
 SECRET_KEY = _required_env("SECRET_KEY")
 
@@ -79,6 +86,7 @@ MIDDLEWARE = [
     "axes.middleware.AxesMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -123,13 +131,25 @@ REST_FRAMEWORK = {
         "login": "10/minute",
     },
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 0 (never trust X-Forwarded-For) until a real reverse proxy sits in
-    # front of this service and is configured to strip/set it correctly --
-    # there isn't one today (see README), so this header is currently
-    # attacker-controlled end to end. Governs both DRF throttling's client
-    # identification (SimpleRateThrottle.get_ident) and the audit log's
-    # recorded IP (shared.audit.client_ip reads this same setting).
-    "NUM_PROXIES": 0,
+    # 1: exactly one reverse proxy sits in front of this service in every
+    # deployed environment (Render's load balancer). Governs both DRF
+    # throttling's client identification (SimpleRateThrottle.get_ident) and
+    # the audit log's recorded IP (shared.audit.client_ip reads this same
+    # setting) — at 0, every client resolves to the proxy's IP, collapsing
+    # AnonRateThrottle into one shared bucket and making the audit trail
+    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    # How many reverse proxies sit in front of this service. Env-driven for
+    # the same reason DEBUG and the SECURE_* flags are: the right value is a
+    # property of the deployment, not of the code.
+    #
+    # Defaults to 0 -- the local/demo posture, where nothing proxies these
+    # services. That matters because DRF trusts the client-supplied
+    # X-Forwarded-For for exactly NUM_PROXIES hops: with a non-zero value and
+    # no real proxy, an attacker rotating that header gets an unlimited number
+    # of throttle buckets, and the audit log's recorded ip_address becomes
+    # attacker-controlled. Set NUM_PROXIES=1 in the environment when deploying
+    # behind a single load balancer.
+    "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
 
 # ✅ Token signed with this config
@@ -148,6 +168,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# Lock out on the (ip, username) pair, not the IP alone. Axes 8 defaults to
+# ip_address only, which fails both ways: password-spraying one account from
+# rotating IPs never trips the limit, and one bad actor on the school's shared
+# NAT locks out everyone else in the building.
+AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
 AXES_FAILURE_LIMIT = 5
 AXES_LOCK_OUT_AT_FAILURE = True
 AXES_COOLOFF_TIME = 1
@@ -161,6 +186,15 @@ DATABASES = {
         "PASSWORD": _required_env("DB_PASSWORD"),
         "HOST":     os.environ.get("DB_HOST",     "localhost"),
         "PORT":     os.environ.get("DB_PORT",     "5432"),
+        # Both required against Supabase's Supavisor pooler in transaction
+        # mode (port 6543): it multiplexes many clients over few real
+        # backend connections and doesn't hold one open per session, so a
+        # server-side cursor opened on one logical connection can vanish
+        # before a later query on the "same" connection tries to read it.
+        # CONN_MAX_AGE also matters even without a pooler — this app makes a
+        # fresh Postgres connection per request otherwise, ×4 services.
+        "CONN_MAX_AGE": 600,
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 }
 
@@ -192,6 +226,19 @@ TIME_ZONE = 'Asia/Manila'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+# Django 5.1 removed STATICFILES_STORAGE in favour of STORAGES, and Django 6
+# ignores the old name in silence -- so this service read as "configured for
+# whitenoise's compressed manifest storage" while actually getting plain
+# StaticFilesStorage: no compression, no cache-busting hashes. Declared here it
+# takes effect, which makes `collectstatic` mandatory before serving, since
+# manifest storage raises on any static file it holds no hash for.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # DRF throttling (see DEFAULT_THROTTLE_CLASSES above) reads/writes through
 # this cache. Without an explicit CACHES setting Django falls back to
@@ -202,9 +249,16 @@ STATIC_URL = 'static/'
 # (the only deployment shape this project currently has — see README) with
 # no extra infrastructure (no Redis, no DB migration). It is not suitable
 # across multiple machines; revisit if this ever runs load-balanced.
+#
+# The backend is shared.cache.ResilientFileBasedCache, not Django's own
+# FileBasedCache: Django's set() has no atomic overwrite on Windows, so it
+# truncates and re-streams the live cache file in place. A worker reading
+# that file mid-write gets a half-written pickle, and the exception escapes
+# the cache layer and 500s the request from inside DRF's throttle check.
+# See shared/cache.py.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "BACKEND": "shared.cache.ResilientFileBasedCache",
         "LOCATION": str(BASE_DIR / "cache"),
     }
 }

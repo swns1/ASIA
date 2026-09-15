@@ -1,9 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import ConfirmModal from "../components/ConfirmModal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import ConfirmModal from "../components/ConfirmModal";
 import Card, { StatCard, Panel } from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
@@ -15,8 +15,8 @@ import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/Fil
 import { getAvatarPalette } from "../utils/avatarPalette";
 import { StatusBadge as StudentStatusBadge } from "../components/ui/Badge";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
-import { useNavigate } from "react-router-dom";
-import { getStudents } from "../api/studentApi";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { getStudent, getStudents } from "../api/studentApi";
 import {
   fetchRequirementSummary,
   removeRequirement,
@@ -72,6 +72,18 @@ const REQUIREMENT_COLUMNS = [
 
 function reqIcon(code) { return REQ_ICONS[code] || "ti-file"; }
 
+// Document download URLs are now signed API links (…/file/?token=…), not
+// plain media paths, so they no longer end in a file extension the way
+// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
+// derived server-side from the stored file's real extension) is the
+// reliable signal; the extension regex on `req.image_url` only remains as
+// a fallback for the brief window before both sides deploy together.
+function isImageUrl(req) {
+  if (!req) return false;
+  if (req.file_kind) return req.file_kind === "image";
+  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
+}
+
 // ── Filter constants ──────────────────────────────────────────────────────────
 // `tone` names the shared ChipGroup palette entry; the categorical school-level
 // tones are the same ones EnrollmentsPage uses, so a level reads the same colour
@@ -94,17 +106,6 @@ const GRADE_LEVELS_BY_LEVEL = {
   senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
 };
 
-// Document download URLs are now signed API links (…/file/?token=…), not
-// plain media paths, so they no longer end in a file extension the way
-// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
-// derived server-side from the stored file's real extension) is the
-// reliable signal; the extension regex on `req.image_url` only remains as
-// a fallback for the brief window before both sides deploy together.
-function isImageUrl(req) {
-  if (!req) return false;
-  if (req.file_kind) return req.file_kind === "image";
-  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
-}
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -351,6 +352,25 @@ export default function RequirementsPage() {
   useEffect(() => {
     if (!sessionStorage.getItem("access_token")) navigate("/");
   }, [navigate]);
+
+  // Deep link: /requirements?student=123.
+  //
+  // This page used to take no parameters at all, so the only way in was the
+  // sidebar followed by re-searching for a student by name. That is the whole
+  // reason a registrar blocked by "missing required documents" on an
+  // enrollment had nowhere to go — the enrollment pages now link straight
+  // here for the learner already on screen.
+  const [searchParams] = useSearchParams();
+  const deepLinkId = searchParams.get("student");
+  useEffect(() => {
+    if (!deepLinkId) return;
+    let cancelled = false;
+    getStudent(deepLinkId)
+      .then((student) => { if (!cancelled && student) selectStudent(student); })
+      .catch(() => { /* a bad id just leaves the picker empty */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkId]);
 
   // Load recent students — re-fetches when filters or page change
   const fetchRecentStudents = useCallback((page = 1) => {
@@ -607,45 +627,12 @@ export default function RequirementsPage() {
               );
             })()}
 
-            {/* ── Document completeness bar ── */}
-            {selectedStudent && !reqLoading && requirements.length > 0 && (
-              <div style={{
-                background: submitted === requirements.length ? "#f0fdf4" : "#fef9ec",
-                border: `1px solid ${submitted === requirements.length ? "#bbf7d0" : "#fde68a"}`,
-                borderRadius: 12, padding: "14px 20px", display: "flex", alignItems: "center", gap: 16,
-              }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: submitted === requirements.length ? "#15803d" : "#92400e" }}>
-                      {submitted === requirements.length
-                        ? "All documents submitted — student is ready to be activated to Enrolled."
-                        : `${requirements.length - submitted} of ${requirements.length} document(s) still missing.`}
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: submitted === requirements.length ? "#16a34a" : "#d97706" }}>
-                      {submitted} / {requirements.length}
-                    </span>
-                  </div>
-                  <div style={{ height: 8, background: "#e5e7eb", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${requirements.length > 0 ? Math.round((submitted / requirements.length) * 100) : 0}%`,
-                      background: submitted === requirements.length
-                        ? "linear-gradient(to right,#16a34a,#22c55e)"
-                        : "linear-gradient(to right,#d97706,#f59e0b)",
-                      borderRadius: 99, transition: "width .4s ease",
-                    }} />
-                  </div>
-                </div>
-                {submitted < requirements.length && (
-                  <div style={{ fontSize: 11, color: "#92400e", textAlign: "center", flexShrink: 0, maxWidth: 160, lineHeight: 1.5 }}>
-                    <i className="ti ti-info-circle" style={{ fontSize: 13, display: "block", marginBottom: 2 }} />
-                    Enrollment can be created as <strong>Pending</strong>. All docs required to activate.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Requirements grid ── */}
+            {/* The document checklist itself lives in a shared panel so the
+                enrollment pages can embed the same thing — that is where the
+                completeness gate blocks a registrar, and where fixing it
+                belongs. This page keeps the search, the level/grade filters
+                and the recent-students table; only the per-student document
+                block moved. */}
             {selectedStudent && (
               <Panel
                 padding="none"
@@ -859,6 +846,7 @@ export default function RequirementsPage() {
               </>
             )}
           </div>
+
       {/* ── Modals ── */}
       {uploadModal && (
         <UploadModal

@@ -10,6 +10,7 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card, { StatCard } from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
+import { useSchoolYear } from "../context/SchoolYearContext";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
@@ -95,6 +96,12 @@ export default function StudentsPage() {
   const [sexFilter, setSexFilter] = useState("");
   const [ordering, setOrdering]   = useState(DEFAULT_ORDERING);
   const [isRecents, setIsRecents] = useState(false);
+  // Students registered but never enrolled for the active year. Both the
+  // registration and enrolment forms tell the registrar that someone must
+  // "enrol them later"; until this filter existed nothing in the app could
+  // say who, so a learner could sit with no section and no grades unnoticed.
+  const [isUnenrolled, setIsUnenrolled] = useState(false);
+  const { schoolYear } = useSchoolYear();
   const [statusCounts, setStatusCounts] = useState({});
   const [deletingStudent, setDeletingStudent] = useState(false);
 
@@ -107,6 +114,7 @@ export default function StudentsPage() {
     status = statusFilter,
     sex = sexFilter,
     ord = ordering,
+    unenrolled = isUnenrolled,
   ) => {
     setLoading(true);
     setLoadError(null);
@@ -118,6 +126,7 @@ export default function StudentsPage() {
         status: status === "all" ? "" : status,
         sex,
         ordering: ord,
+        unenrolled: unenrolled && schoolYear ? schoolYear : undefined,
       });
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
@@ -197,10 +206,17 @@ export default function StudentsPage() {
     }
   };
 
+  const handleUnenrolled = () => {
+    const next = !isUnenrolled;
+    setIsUnenrolled(next);
+    fetchStudents(1, search, statusFilter, sexFilter, ordering, next);
+  };
+
   const handleClearAll = () => {
     setInputVal(""); setSearch(""); setStatus("all");
     setSexFilter(""); setOrdering(DEFAULT_ORDERING); setIsRecents(false);
-    fetchStudents(1, "", "all", "", DEFAULT_ORDERING);
+    setIsUnenrolled(false);
+    fetchStudents(1, "", "all", "", DEFAULT_ORDERING, false);
     searchRef.current?.focus();
   };
 
@@ -231,7 +247,7 @@ export default function StudentsPage() {
   };
 
   const hasActiveFilters =
-    search || statusFilter !== "all" || sexFilter || ordering !== DEFAULT_ORDERING;
+    search || statusFilter !== "all" || sexFilter || ordering !== DEFAULT_ORDERING || isUnenrolled;
 
   // Derived so the header caret always reflects the ordering actually in use.
   const sortKey = ordering.replace(/^-/, "");
@@ -326,6 +342,13 @@ export default function StudentsPage() {
                 options={[{ value: "recents", label: "Recents", icon: "ti-clock" }]}
                 value={isRecents ? "recents" : null}
                 onChange={handleRecents}
+              />
+              <span className="h-4 w-px bg-neutral-300" aria-hidden="true" />
+              <ChipGroup
+                label={`Show students with no enrollment for ${schoolYear || "the active school year"}`}
+                options={[{ value: "unenrolled", label: "Not enrolled", icon: "ti-user-exclamation" }]}
+                value={isUnenrolled ? "unenrolled" : null}
+                onChange={handleUnenrolled}
               />
             </div>
           </FilterRow>

@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { getEnrollment, getSubjects, getGrades } from "../../api/enrollmentApi";
+import {
+  getEnrollment,
+  getSubjects,
+  getGrades,
+  getNarrativeCategories,
+  getNarrativeReports,
+} from "../../api/enrollmentApi";
 import { getStudent } from "../../api/studentApi";
 import { getAttendance } from "../../api/attendanceApi";
 import { getSchoolSettings } from "../../api/billingApi";
@@ -26,6 +32,7 @@ export default function SF9PrintPage() {
   const [subjects,       setSubjects]       = useState([]);
   const [gradeMap,       setGradeMap]       = useState({});
   const [attRecs,        setAttRecs]        = useState([]);
+  const [observedValues, setObservedValues] = useState([]);
   const [schoolName,     setSchoolName]     = useState("South Lakes Integrated School");
   const [schoolAddress,  setSchoolAddress]  = useState("");
   const [loading,        setLoading]        = useState(true);
@@ -39,7 +46,7 @@ export default function SF9PrintPage() {
         setEnrollment(enr);
         const studentId = enr.student_detail?.student_id ?? enr.student;
 
-        const [stu, subs, allGrades, recs, settings] = await Promise.all([
+        const [stu, subs, allGrades, recs, settings, valueCats, valueReports] = await Promise.all([
           getStudent(studentId),
           getSubjects({
             school_level: enr.school_level,
@@ -49,6 +56,8 @@ export default function SF9PrintPage() {
           getGrades({ enrollment: enrollmentId }),
           getAttendance({ enrollment: enrollmentId, page_size: 500 }).catch(() => []),
           getSchoolSettings().catch(() => null),
+          getNarrativeCategories({ is_active: true }).catch(() => []),
+          getNarrativeReports({ enrollment: enrollmentId }).catch(() => []),
         ]);
 
         setStudent(stu);
@@ -56,14 +65,39 @@ export default function SF9PrintPage() {
 
         const grades = Array.isArray(allGrades) ? allGrades : allGrades.results ?? [];
         const gm = {};
+        // GradeSerializer emits `numeric_grade` — reading `g.grade` here left
+        // every subject, quarter, remark and the general average printing "—"
+        // on an otherwise complete report card.
         grades.forEach(g => {
           const key = g.subject ?? g.subject_id;
           if (!gm[key]) gm[key] = {};
-          if (g.grade != null) gm[key][g.grading_period] = parseFloat(g.grade);
+          if (g.numeric_grade != null) gm[key][g.grading_period] = parseFloat(g.numeric_grade);
         });
         setGradeMap(gm);
 
         setAttRecs(Array.isArray(recs) ? recs : recs.results ?? []);
+
+        // Report on Learner's Observed Values (DepEd Order 8, s.2015). SF9
+        // never fetched these, so the mandated half of the report card was
+        // simply absent from the printed form.
+        const cats    = Array.isArray(valueCats) ? valueCats : valueCats.results ?? [];
+        const reports = Array.isArray(valueReports) ? valueReports : valueReports.results ?? [];
+        const byCategory = {};
+        reports.forEach(r => {
+          const key = r.category ?? r.category_id;
+          if (!byCategory[key]) byCategory[key] = {};
+          byCategory[key][r.grading_period] = r.rating;
+        });
+        setObservedValues(
+          cats
+            .slice()
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+            .map(c => ({
+              id:     c.category_id,
+              name:   c.name,
+              marks:  byCategory[c.category_id] ?? {},
+            })),
+        );
         if (settings?.school_name) setSchoolName(settings.school_name);
         if (settings?.school_address) setSchoolAddress(settings.school_address);
       } catch (e) {
@@ -218,10 +252,10 @@ export default function SF9PrintPage() {
             <tr style={{ background: C.redBg }}>
               <td colSpan={cfg.cols.length + (isAnnual ? 0 : 1)}
                 style={TD({ textAlign: "right", fontWeight: 800, fontSize: 11 })}>
-                General Average (GWA)
+                General Average
               </td>
               <td style={TD({ textAlign: "center", fontWeight: 900, fontSize: 13, color: gwa != null ? gradeColor(gwa) : "#aaa" })}>
-                {gwa != null ? gwa.toFixed(2) : "—"}
+                {gwa != null ? Math.round(gwa) : "—"}
               </td>
               <td style={TD({ textAlign: "center", fontWeight: 700 })}>
                 {gwa != null ? (gwa >= 75 ? "Passed" : "Failed") : ""}
@@ -251,6 +285,68 @@ export default function SF9PrintPage() {
                 <td style={TD({ textAlign: "center", fontWeight: 800 })}>
                   {data.reduce((a, b) => a + b, 0)}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Report on Learner's Observed Values — DepEd Order No. 8, s. 2015.
+            Marked AO / SO / RO / NO, one column per grading period. */}
+        <SectionBar>Report on Learner&apos;s Observed Values</SectionBar>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+          <thead>
+            <tr>
+              <th style={TH({ textAlign: "left", width: "40%" })}>Core Values</th>
+              {cfg.cols.map(c => <th key={c} style={TH({ textAlign: "center" })}>{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {observedValues.length === 0 ? (
+              <tr>
+                <td colSpan={cfg.cols.length + 1} style={TD({ textAlign: "center", color: "#aaa" })}>
+                  No observed values recorded for this enrolment.
+                </td>
+              </tr>
+            ) : observedValues.map((v, ri) => (
+              <tr key={v.id} style={{ background: ri % 2 === 0 ? "white" : C.bg }}>
+                <td style={TD({ fontWeight: 600 })}>{v.name}</td>
+                {cfg.periods.map((p, i) => (
+                  <td key={i} style={TD({ textAlign: "center", fontWeight: 700 })}>
+                    {v.marks[p] ?? "—"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ fontSize: 9, color: C.muted, marginBottom: 12 }}>
+          <b>Marking:</b> AO — Always Observed &nbsp;·&nbsp; SO — Sometimes Observed
+          &nbsp;·&nbsp; RO — Rarely Observed &nbsp;·&nbsp; NO — Not Observed
+        </div>
+
+        {/* The descriptor table is mandated on the report card itself; it used
+            to live only as a legend on the admin Grades page. */}
+        <SectionBar>Learner Progress and Achievement</SectionBar>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+          <thead>
+            <tr>
+              <th style={TH({ textAlign: "left" })}>Descriptor</th>
+              <th style={TH({ textAlign: "center" })}>Grading Scale</th>
+              <th style={TH({ textAlign: "center" })}>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["Outstanding",               "90 – 100",   "Passed"],
+              ["Very Satisfactory",         "85 – 89",    "Passed"],
+              ["Satisfactory",              "80 – 84",    "Passed"],
+              ["Fairly Satisfactory",       "75 – 79",    "Passed"],
+              ["Did Not Meet Expectations", "Below 75",   "Failed"],
+            ].map(([label, scale, remark], ri) => (
+              <tr key={label} style={{ background: ri % 2 === 0 ? "white" : C.bg }}>
+                <td style={TD({ fontWeight: 600 })}>{label}</td>
+                <td style={TD({ textAlign: "center" })}>{scale}</td>
+                <td style={TD({ textAlign: "center" })}>{remark}</td>
               </tr>
             ))}
           </tbody>

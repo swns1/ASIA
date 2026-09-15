@@ -20,6 +20,7 @@ import {
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
+import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 
 const SCHOOL_LEVEL_LABELS = {
   nursery: "Nursery",
@@ -58,7 +59,7 @@ const PERIOD_LABELS = {
   "2nd_semester": "2nd Semester",
 };
 
-const PASS_THRESHOLD = 75;
+const PASS_THRESHOLD = GRADE_PASSING;
 
 // Same palette as GradesPage.jsx's NarrativeSection, so a rating reads the
 // same color whether it's set here or on the per-student Grades page.
@@ -130,7 +131,7 @@ function sectionLabel(advisory) {
 function gradeColor(g) {
   if (g === null || g === undefined || g === "") return { color: "#7a5050", bg: "#f9f4f4" };
   const n = parseFloat(g);
-  if (n >= 90) return { color: "#1455a0", bg: "#e3f0fd" };
+  if (n >= GRADE_OUTSTANDING) return { color: "#1455a0", bg: "#e3f0fd" };
   if (n >= PASS_THRESHOLD) return { color: "#2e6b0d", bg: "#e8f5e0" };
   return { color: "#9b2020", bg: "#fde8e8" };
 }
@@ -1010,7 +1011,10 @@ function DailyBarChart({ daily }) {
 
 function StudentRateRow({ row }) {
   const rate = row.attendance_rate;
-  const meterColor = rate === null ? "#e0d0d0" : rate >= 90 ? "#2e6b0d" : rate >= 75 ? "#b45309" : "#9b2020";
+  const meterColor = rate === null ? "#e0d0d0"
+    : rate >= GRADE_OUTSTANDING ? "#2e6b0d"
+    : rate >= GRADE_PASSING ? "#b45309"
+    : "#9b2020";
   return (
     <tr>
       <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
@@ -1425,8 +1429,6 @@ export default function TeacherSectionsPage() {
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/"); return; }
 
     if (isTeacher) {
       fetchSections();

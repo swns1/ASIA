@@ -24,6 +24,51 @@ export const minLength = (value, n, label = "This field") => {
   return v.length >= n ? null : `${label} must be at least ${n} characters.`;
 };
 
+// ── Student-record field rules ────────────────────────────────────────────────
+// These three were hand-rolled separately in StudentFormPage and in the public
+// ApplicantFormPage, with the same regexes and byte-identical messages -- and
+// they had drifted: the applicant form checked the LRN and the staff form did
+// not, while the staff form checked the email and a 1970 birth-year floor that
+// the applicant form did not. Two paths write the same `students` row, so they
+// need one set of rules.
+
+export const LRN_RE = /^\d{12}$/;
+
+/** A DepEd Learner Reference Number: exactly 12 digits.
+ *  Mirrored server-side by students/validators.py so it holds for any caller. */
+export const lrn = (value) => {
+  const v = String(value ?? "").trim();
+  if (!v) return null; // may legitimately be unassigned — see the intake flow
+  return LRN_RE.test(v)
+    ? null
+    : "LRN must be exactly 12 digits — leave it blank if one hasn't been assigned yet.";
+};
+
+export const MOBILE_RE = /^09\d{9}$/;
+
+/** A Philippine mobile number as DepEd forms expect it: 09 + 9 digits. */
+export const mobileNumber = (value) => {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  return MOBILE_RE.test(v)
+    ? null
+    : "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX).";
+};
+
+/** Earliest year a learner's birth date could plausibly be. Guards against a
+ *  mistyped year (e.g. 0215) landing in a permanent record. */
+export const EARLIEST_BIRTH_YEAR = 1970;
+
+export const birthDate = (value) => {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "Please enter a valid birth date.";
+  if (d > new Date()) return "Birth date cannot be in the future.";
+  if (d.getFullYear() < EARLIEST_BIRTH_YEAR) return "Please enter a valid birth date.";
+  return null;
+};
+
 /**
  * Build an error map, dropping empty entries.
  *   collect({ name: required(name, "Full name"), email: email(email) })

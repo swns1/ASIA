@@ -1,12 +1,18 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getReportCard } from "../api/enrollmentApi";
 import { getAttendanceSummary } from "../api/attendanceApi";
 import { getStudentLedger } from "../api/billingApi";
 import { fetchRequirementSummary } from "../api/requirementApi";
 import { attendanceRate } from "../utils/attendance";
+// Shared so the 90/75 cut-offs live in one place — this page used to
+// re-encode both of them.
+import { gradeBand as gradeVariant, attendanceBand as attendanceVariant } from "../utils/grading";
+// This page composes dates into sentences rather than table cells, so it asks
+// for a null fallback instead of the shared em dash.
+import { peso, fmtDate, todayISO } from "../utils/format";
 import Button from "../components/ui/Button";
 import Card, { StatCard, Panel } from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
@@ -15,31 +21,50 @@ import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
 
-const peso = (v) => `₱${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Semantic variant instead of a raw hex string — the thresholds themselves
-// (90/75) are unchanged, only what they render through.
-function gradeVariant(avg) {
-  if (avg == null) return "muted";
-  if (avg >= 90) return "success";
-  if (avg >= 75) return "info";
-  return "error";
-}
 const GRADE_TEXT_CLASS = {
   success: "text-success-500", info: "text-info-500", error: "text-error-500", muted: "text-neutral-400",
 };
 
-function attendanceVariant(rate) {
-  if (rate == null) return "muted";
-  if (rate >= 90) return "success";
-  if (rate >= 75) return "warning";
-  return "error";
+
+// ── Section state ─────────────────────────────────────────────────────────────
+// Each independent fetch owns one of these. Keeping `failed` next to `data`
+// is the whole point: every one of these fetches used to collapse into a bare
+// `null`, which is indistinguishable from "loaded, and there is nothing here"
+// -- so a 403 on the ledger rendered as "No billing records found" to a parent
+// who actually owed money.
+const SECTION_INIT = { data: null, loading: true, failed: false };
+const SECTION_UNAVAILABLE = { data: null, loading: false, failed: true };
+
+/**
+ * Drives one section's fetch through its own loading/failed lifecycle.
+ *
+ * These used to be chained after `await getReportCard(...)` inside the same
+ * `try`, so a report-card rejection jumped to `catch` before their
+ * `.finally(...)` handlers were ever created -- leaving three unrelated tabs
+ * as skeletons for the life of the page.
+ */
+function runSection(promise, set) {
+  set(SECTION_INIT);
+  return promise.then(
+    (data) => set({ data, loading: false, failed: false }),
+    () => set(SECTION_UNAVAILABLE),
+  );
 }
 
-const fmtDate = (d) =>
-  d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" }) : null;
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
+/** Stands in for a section's body when its fetch failed. */
+function LoadFailed({ message, onRetry }) {
+  return (
+    <Card className="text-center">
+      <div className="text-sm font-semibold text-neutral-900">This section couldn't be loaded</div>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-neutral-500">{message}</p>
+      {onRetry && (
+        <Button variant="secondary" size="sm" icon="ti-refresh" className="mt-3.5" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </Card>
+  );
+}
 
 // ── Derived signals ───────────────────────────────────────────────────────────
 // A parent opening this page wants "what should I do about this child right
@@ -136,7 +161,7 @@ function AttendanceRingTile({ rate, loading }) {
 }
 
 /** The strip under the child's name: four "should I act on this" answers. */
-function StatusStrip({ report, attendance, ledger, requirements, loadingAny }) {
+function StatusStrip({ report, attendance, ledger, requirements, reportLoading, attLoading, ledgerLoading, reqLoading }) {
   const period = latestPostedPeriod(report);
   const rate = attendanceRate(attendance?.totals || {});
   const due = nextDue(ledger);
@@ -151,16 +176,16 @@ function StatusStrip({ report, attendance, ledger, requirements, loadingAny }) {
         icon="ti-chart-bar"
         iconTone={period ? "info" : "muted"}
         layout="horizontal"
-        loading={loadingAny && !period}
+        loading={reportLoading}
       />
-      <AttendanceRingTile rate={rate} loading={loadingAny && rate == null} />
+      <AttendanceRingTile rate={rate} loading={attLoading} />
       <StatCard
         label={due.overdueCount ? "Overdue" : "Next payment"}
-        value={due.next ? `${peso(due.next.balance)} · ${fmtDate(due.next.due_date)}` : balance > 0 ? peso(balance) : "Nothing due"}
+        value={due.next ? `${peso(due.next.balance)} · ${fmtDate(due.next.due_date, null)}` : balance > 0 ? peso(balance) : "Nothing due"}
         icon="ti-receipt"
         iconTone={due.overdueCount ? "error" : due.next ? "warning" : "success"}
         layout="horizontal"
-        loading={loadingAny && !due.next && balance === 0}
+        loading={ledgerLoading}
       />
       <StatCard
         label="Documents"
@@ -172,17 +197,22 @@ function StatusStrip({ report, attendance, ledger, requirements, loadingAny }) {
         icon="ti-file-text"
         iconTone={missing == null ? "muted" : missing === 0 ? "success" : "warning"}
         layout="horizontal"
-        loading={loadingAny && missing == null}
+        loading={reqLoading}
       />
     </div>
   );
 }
 
 // ── Requirements tab ──────────────────────────────────────────────────────────
-function RequirementsTab({ requirements, loading }) {
+function RequirementsTab({ requirements, loading, failed, onRetry }) {
   if (loading) return <Card><Skeleton height={120} radius={12} /></Card>;
-  if (!Array.isArray(requirements)) {
-    return <Card className="text-center text-sm text-neutral-500">Requirements could not be loaded.</Card>;
+  if (failed || !Array.isArray(requirements)) {
+    return (
+      <LoadFailed
+        message="We couldn't reach the document checklist for this child. This is a problem on our side, not a sign that anything is missing."
+        onRetry={onRetry}
+      />
+    );
   }
   if (requirements.length === 0) {
     return <Card className="text-center text-sm text-neutral-500">No documents are being asked for at the moment.</Card>;
@@ -215,7 +245,7 @@ function RequirementsTab({ requirements, loading }) {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-neutral-900">{r.requirement_name}</div>
               {r.is_submitted && r.submitted_at && (
-                <div className="mt-0.5 text-xs text-neutral-500">Received {fmtDate(r.submitted_at)}</div>
+                <div className="mt-0.5 text-xs text-neutral-500">Received {fmtDate(r.submitted_at, null)}</div>
               )}
               {!r.is_submitted && r.description && (
                 <div className="mt-0.5 text-xs text-neutral-500">{r.description}</div>
@@ -237,8 +267,26 @@ function RequirementsTab({ requirements, loading }) {
 }
 
 // ── Report card tab ───────────────────────────────────────────────────────────
-function ReportCardTab({ data }) {
-  if (!data) return null;
+function ReportCardTab({ data, error }) {
+  // `return null` here left the default tab's body completely empty whenever
+  // the report card failed to load — the banner above said something went
+  // wrong, then the page showed nothing at all under it.
+  if (!data) {
+    return (
+      <Panel title="Report Card">
+        <div className="px-4 py-10 text-center">
+          <div className="text-sm font-semibold text-neutral-900">
+            {error ? "Grades couldn't be loaded" : "No report card yet"}
+          </div>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-neutral-500">
+            {error
+              ? "We couldn't reach the grading records for this child. Please try again in a moment."
+              : "Grades will appear here once the school has posted them for this enrolment."}
+          </p>
+        </div>
+      </Panel>
+    );
+  }
   const periods = data.grading_periods || [];
   return (
     <Panel
@@ -296,7 +344,15 @@ const ATTENDANCE_CATEGORIES = [
   { key: "excused", label: "Excused", icon: "ti-file-check",  iconTone: "info"    },
 ];
 
-function AttendanceTab({ summary, loading }) {
+function AttendanceTab({ summary, loading, failed, onRetry }) {
+  if (failed) {
+    return (
+      <LoadFailed
+        message="We couldn't reach the attendance records for this child. Please try again in a moment."
+        onRetry={onRetry}
+      />
+    );
+  }
   const totals = summary?.totals || {};
   const total = totals.total || 0;
   const rate = attendanceRate(totals);
@@ -326,8 +382,16 @@ function AttendanceTab({ summary, loading }) {
 }
 
 // ── Billing tab ───────────────────────────────────────────────────────────────
-function BillingTab({ ledger, loading }) {
+function BillingTab({ ledger, loading, failed, onRetry }) {
   if (loading) return <Card><Skeleton height={120} radius={12} /></Card>;
+  if (failed) {
+    return (
+      <LoadFailed
+        message="We couldn't reach the billing records for this child. Do not treat this as a zero balance — please try again, or contact the accounting office."
+        onRetry={onRetry}
+      />
+    );
+  }
   if (!ledger) return <Card className="text-center text-sm text-neutral-500">No billing records found.</Card>;
 
   const balance = Number(ledger.total_balance || 0);
@@ -386,7 +450,7 @@ function BillingTab({ ledger, loading }) {
                     <div key={inst.installment_id} className="flex items-center gap-3 px-5 py-2 text-sm">
                       <span className="w-6 shrink-0 text-neutral-500">#{inst.sequence}</span>
                       <span className={`min-w-0 flex-1 ${late ? "font-bold text-error-500" : "text-neutral-900"}`}>
-                        {fmtDate(inst.due_date) || "No due date"}
+                        {fmtDate(inst.due_date, null) || "No due date"}
                       </span>
                       <span className="text-neutral-700">{peso(inst.amount)}</span>
                       <Badge variant={variant} size="sm">{label}</Badge>
@@ -410,49 +474,53 @@ function BillingTab({ ledger, loading }) {
 export default function GuardianChildPage() {
   usePageTitle("Child Records");
   const { enrollmentId } = useParams();
-  const navigate = useNavigate();
 
-  const [report, setReport]     = useState(null);
-  const [attendance, setAttend] = useState(null);
-  const [ledger, setLedger]     = useState(null);
-  const [requirements, setRequirements] = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [attLoading, setAttLoading] = useState(true);
-  const [ledgerLoading, setLedgerLoading] = useState(true);
-  const [reqLoading, setReqLoading] = useState(true);
-  const [error, setError]       = useState("");
+  const [report, setReport]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+
+  // One entry per independent fetch: { data, loading, failed }.
+  const [att, setAtt]       = useState(SECTION_INIT);
+  const [ledger, setLedger] = useState(SECTION_INIT);
+  const [reqs, setReqs]     = useState(SECTION_INIT);
 
   const load = useCallback(async () => {
+    // Clearing up front matters when `enrollmentId` changes under a mounted
+    // component: without it the previous child's grades, attendance, bills and
+    // documents stay on screen looking freshly loaded.
     setLoading(true);
     setError("");
+    setReport(null);
+
+    // Attendance is keyed off the enrollment we already have, so it starts
+    // straight away — it never needed the report card at all.
+    runSection(getAttendanceSummary({ enrollment: enrollmentId }), setAtt);
+
+    let studentId;
     try {
       const rc = await getReportCard(enrollmentId);
       setReport(rc);
-      const studentId = rc?.student?.student_id;
-
-      // Attendance + billing depend on the report card (for student_id).
-      getAttendanceSummary({ enrollment: enrollmentId })
-        .then(setAttend).catch(() => setAttend(null)).finally(() => setAttLoading(false));
-
-      if (studentId) {
-        getStudentLedger(studentId)
-          .then(setLedger).catch(() => setLedger(null)).finally(() => setLedgerLoading(false));
-        fetchRequirementSummary(studentId)
-          .then(setRequirements).catch(() => setRequirements(null)).finally(() => setReqLoading(false));
-      } else {
-        setLedgerLoading(false);
-        setReqLoading(false);
-      }
+      studentId = rc?.student?.student_id;
     } catch (e) {
       setError(e.message || "Failed to load this child's records.");
     } finally {
       setLoading(false);
     }
+
+    // Billing and documents are keyed off student_id, which only the report
+    // card carries — so if that call failed they genuinely can't be fetched.
+    // They still have to leave their loading state, which is exactly what the
+    // old control flow skipped.
+    if (studentId) {
+      runSection(getStudentLedger(studentId), setLedger);
+      runSection(fetchRequirementSummary(studentId), setReqs);
+    } else {
+      setLedger(SECTION_UNAVAILABLE);
+      setReqs(SECTION_UNAVAILABLE);
+    }
   }, [enrollmentId]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
-    if (!token) { navigate("/login"); return; }
     load(); // eslint-disable-line react-hooks/set-state-in-effect
   }, [enrollmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -460,7 +528,7 @@ export default function GuardianChildPage() {
   const enrollment = report?.enrollment;
   const fullName = student ? [student.first_name, student.middle_name, student.last_name, student.suffix].filter(Boolean).join(" ") : "";
 
-  const missingDocs = missingRequirements(requirements);
+  const missingDocs = missingRequirements(reqs.data);
 
   const TABS = [
     { id: "grades",       label: "Report Card", icon: "ti-chart-bar" },
@@ -475,8 +543,10 @@ export default function GuardianChildPage() {
   return (
     <>
       {error && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-error-500/30 bg-error-50 px-4 py-3 text-sm text-error-500">
-          <i className="ti ti-alert-circle text-base" aria-hidden="true" />{error}
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-error-500/30 bg-error-50 px-4 py-3 text-sm text-error-500">
+          <i className="ti ti-alert-circle text-base" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button variant="secondary" size="sm" icon="ti-refresh" onClick={load}>Try again</Button>
         </div>
       )}
 
@@ -520,20 +590,23 @@ export default function GuardianChildPage() {
       {!loading && (
         <StatusStrip
           report={report}
-          attendance={attendance}
-          ledger={ledger}
-          requirements={requirements}
-          loadingAny={attLoading || ledgerLoading || reqLoading}
+          attendance={att.data}
+          ledger={ledger.data}
+          requirements={reqs.data}
+          reportLoading={loading}
+          attLoading={att.loading}
+          ledgerLoading={ledger.loading}
+          reqLoading={reqs.loading}
         />
       )}
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-[18px]" />
 
       <TabPanel id={tab} direction={direction}>
-        {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} />)}
-        {tab === "attendance" && <AttendanceTab summary={attendance} loading={attLoading} />}
-        {tab === "billing" && <BillingTab ledger={ledger} loading={ledgerLoading} />}
-        {tab === "requirements" && <RequirementsTab requirements={requirements} loading={reqLoading} />}
+        {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} error={error} />)}
+        {tab === "attendance" && <AttendanceTab summary={att.data} loading={att.loading} failed={att.failed} onRetry={load} />}
+        {tab === "billing" && <BillingTab ledger={ledger.data} loading={ledger.loading} failed={ledger.failed} onRetry={load} />}
+        {tab === "requirements" && <RequirementsTab requirements={reqs.data} loading={reqs.loading} failed={reqs.failed} onRetry={load} />}
       </TabPanel>
     </>
   );

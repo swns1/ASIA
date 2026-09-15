@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
-import ConfirmModal from "../components/ConfirmModal";
-import { modalVariants, springTransition } from "../utils/motion";
+import { mobileNumber, birthDate, email as emailCheck } from "../utils/validation";
 import { getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
@@ -31,20 +30,11 @@ import {
   updateHousehold,
 } from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
-import {
-  fetchRequirementTypes,
-  fetchRequirementSummary,
-  uploadRequirement,
-  replaceRequirement,
-  removeRequirement,
-  resolveMediaUrl,
-} from "../api/requirementApi";
-import { scanDocument } from "../api/ocrApi";
-import OcrReviewModal from "./ocr/OcrReviewModal";
+import { ConfirmDialog } from "../components/ui/Modal";
 
 import {
   STEPS, C, cardStyle,
-  nullify, emptyStudent, emptyHousehold, emptyGuardian, emptySchool,
+  nullify, emptyStudent, emptyHousehold,
 } from "./student-form/formShapes";
 import {
   StepBar,
@@ -54,689 +44,10 @@ import {
 
 // ─── Documents step helpers (mirrors RequirementsPage design) ────────────────
 
-const REQ_ICONS = {
-  birth_certificate:          "ti-certificate",
-  form_138:                   "ti-file-description",
-  certificate_good_moral:     "ti-rosette",
-  ncae_result:                "ti-chart-bar",
-  esc_completers:             "ti-school",
-  certificate_non_sf9:        "ti-file-check",
-  recommendation_letter:      "ti-mail",
-  clearance_previous_school:  "ti-building",
-  psa_birth_certificate:      "ti-id",
-  health_record:              "ti-heart-rate-monitor",
-  alien_certificate:          "ti-world",
-  form_137_or_138:            "ti-files",
-  esc_transferee_qc:          "ti-arrows-transfer",
-};
-const reqIcon = (code) => REQ_ICONS[code] || "ti-file";
-// Document download URLs are now signed API links (…/file/?token=…), not
-// plain media paths, so they no longer end in a file extension the way
-// resolveMediaUrl()'s old targets did. `req.file_kind` (from the backend,
-// derived server-side from the stored file's real extension) is the
-// reliable signal; the extension regex on `req.image_url` only remains as
-// a fallback for the brief window before both sides deploy together.
-const isImageUrl = (req) => {
-  if (!req) return false;
-  if (req.file_kind) return req.file_kind === "image";
-  return !!req.image_url && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(req.image_url);
-};
 
-const DC = {
-  green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
-  border: "#f5eaea", softBorder: "#f9f0f0", pale: "#8a6a6a",
-};
 
-function DocStatusBadge({ submitted }) {
-  return submitted ? (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: DC.greenLight, color: DC.green, fontSize: 11, fontWeight: 700, border: `1px solid ${DC.greenBorder}` }}>
-      <i className="ti ti-circle-check" style={{ fontSize: 12 }} />Submitted
-    </span>
-  ) : (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 99, padding: "3px 9px", background: "#f5f5f5", color: "#5c5752", fontSize: 11, fontWeight: 700, border: "1px solid #e0e0e0" }}>
-      <i className="ti ti-clock" style={{ fontSize: 12 }} />Pending
-    </span>
-  );
-}
 
-function DocRemoveModal({ name, onConfirm, onCancel }) {
-  return (
-    <ConfirmModal
-      icon="ti-trash"
-      title="Remove document?"
-      message={<>You're about to remove <strong style={{ color: C.dark }}>{name}</strong>. This cannot be undone.</>}
-      confirmLabel="Yes, remove"
-      onConfirm={onConfirm}
-      onCancel={onCancel}
-    />
-  );
-}
 
-function DocUploadModal({ req, isEdit, pendingEntry, onClose, onFileSelected }) {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [remarks, setRemarks] = useState("");
-  const fileInputRef = useRef(null);
-  const isReplace = isEdit && !!req?.submission_id;
-  const currentImageUrl = isReplace && req.image_url ? resolveMediaUrl(req.image_url) : null;
-  const hasPending = !isEdit && !!pendingEntry;
-
-  function handleFileChange(e) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    if (f.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setPreview(ev.target.result);
-      reader.readAsDataURL(f);
-    } else { setPreview(null); }
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    setFile(f);
-    if (f.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setPreview(ev.target.result);
-      reader.readAsDataURL(f);
-    } else { setPreview(null); }
-  }
-
-  function handleConfirm() {
-    if (!file) return;
-    onFileSelected(req.requirement_type_id, req.requirement_code, req.requirement_name, file, remarks);
-    onClose();
-  }
-
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1099, padding: 16 }}>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        onClick={onClose}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.45)", backdropFilter: "blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ position: "relative", background: C.white, borderRadius: 20, width: "100%", maxWidth: 500, boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex", flexDirection: "column", maxHeight: "90vh", overflow: "hidden" }}
-      >
-        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${DC.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>
-              {isReplace ? "Replace" : hasPending ? "Replace" : "Upload"} Document
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{req?.requirement_name}</div>
-          </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>
-            <i className="ti ti-x" style={{ fontSize: 14 }} />
-          </button>
-        </div>
-
-        <div style={{ padding: "20px 24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-          {currentImageUrl && !preview && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
-              <img src={currentImageUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${DC.border}`, background: "#fafafa" }} />
-            </div>
-          )}
-          {hasPending && pendingEntry.previewUrl && !preview && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
-              {pendingEntry.file.type.startsWith("image/") ? (
-                <img src={pendingEntry.previewUrl} alt="current" style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10, border: `1px solid ${DC.border}`, background: "#fafafa" }} />
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: `1px solid ${DC.border}`, borderRadius: 10, background: "#fafafa" }}>
-                  <i className="ti ti-file-description" style={{ fontSize: 22, color: C.red }} />
-                  <span style={{ fontSize: 13, color: C.dark, fontWeight: 600 }}>{pendingEntry.file.name}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ border: `2px dashed ${file ? C.redBorder : "#e0d0d0"}`, borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: file ? C.redLight : "#fafafa", transition: "all 0.15s" }}
-          >
-            <input ref={fileInputRef} type="file" accept="image/*,.pdf" capture="environment" style={{ display: "none" }} onChange={handleFileChange} />
-            {preview ? (
-              <img src={preview} alt="preview" style={{ maxHeight: 180, maxWidth: "100%", objectFit: "contain", borderRadius: 8 }} />
-            ) : file ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-file-description" style={{ fontSize: 32, color: C.red }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{file.name}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>Click to change file</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
-                  {isReplace || hasPending ? "Drop new file or click to browse" : "Drop file here or click to browse"}
-                </div>
-                <div style={{ fontSize: 11, color: DC.pale }}>Images (JPG, PNG, GIF) or PDF</div>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
-              Remarks <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span>
-            </label>
-            <textarea
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={2}
-              placeholder="Add any notes about this document…"
-              style={{ width: "100%", border: `1.5px solid ${C.redMid}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", resize: "vertical", outline: "none", color: C.dark, background: "#fffbfb", boxSizing: "border-box" }}
-            />
-          </div>
-        </div>
-
-        <div style={{ padding: "16px 24px", borderTop: `1px solid ${DC.border}`, display: "flex", gap: 10 }}>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={onClose} style={{ flex: 1, height: 42, border: `1.5px solid ${C.redMid}`, borderRadius: 10, background: C.white, fontSize: 13, color: C.muted, cursor: "pointer", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Cancel</motion.button>
-          <motion.button
-            whileTap={file ? { scale: 0.97 } : {}}
-            onClick={handleConfirm}
-            disabled={!file}
-            style={{ flex: 2, height: 42, border: "none", borderRadius: 10, background: !file ? "#f0dada" : C.red, color: !file ? C.muted : C.white, fontSize: 13, fontWeight: 700, cursor: !file ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            <i className="ti ti-upload" style={{ fontSize: 14 }} />
-            {isReplace || hasPending ? "Replace Document" : "Upload Document"}
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function DocViewModal({ url, name, onClose }) {
-  const isPdf = /\.pdf(\?.*)?$/i.test(url);
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(10,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200, padding: 24 }} onClick={onClose}>
-      <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} style={{ position: "absolute", top: -14, right: -14, width: 36, height: 36, borderRadius: "50%", background: C.white, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", zIndex: 1 }}>
-          <i className="ti ti-x" style={{ fontSize: 16, color: C.dark }} />
-        </button>
-        {isPdf
-          ? <iframe src={url} title={name} style={{ width: "80vw", height: "80vh", border: "none", borderRadius: 12 }} />
-          : <img src={url} alt={name} style={{ maxWidth: "86vw", maxHeight: "86vh", objectFit: "contain", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
-        }
-        <div style={{ position: "absolute", bottom: -32, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{name}</div>
-      </div>
-    </div>
-  );
-}
-
-function EnrollmentPromptModal({ studentName, onSkip, onProceed }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={onSkip}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.5)", backdropFilter: "blur(4px)" }}
-      />
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
-        style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#c92a2a" }} />
-          </div>
-          <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Enrollment?</h3>
-          <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
-            <strong>{studentName || "The student"}</strong> has been added. Would you like to proceed to enrollment now?
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-            onClick={onSkip} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Skip for Now
-          </motion.button>
-          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-            onClick={onProceed} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Proceed to Enrollment
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function DocCard({ req, pendingEntry, isEdit, onUpload, onView, onRemove, ocrState, ocrResult, ocrError, ocrAppliedCount, onRetryOcr, onApplyOcr, onDiscardOcr }) {
-  const icon = reqIcon(req.requirement_code);
-
-  const resolvedUrl = isEdit
-    ? resolveMediaUrl(req.image_url)
-    : (pendingEntry?.previewUrl || null);
-
-  const hasImage = isEdit
-    ? (req.is_submitted && resolvedUrl && isImageUrl(req))
-    : (pendingEntry && pendingEntry.file?.type.startsWith("image/") && pendingEntry.previewUrl);
-
-  const isSubmitted = isEdit ? req.is_submitted : !!pendingEntry;
-  const isScanningOcr = ocrState === "scanning";
-
-  return (
-    <motion.div
-      whileHover={{ y: -2, boxShadow: isSubmitted ? "0 4px 20px rgba(46,125,50,0.14)" : "0 4px 20px rgba(224,49,49,0.10)" }}
-      transition={{ duration: 0.15 }}
-      style={{
-        background: C.white,
-        border: `1.5px solid ${isSubmitted ? DC.greenBorder : DC.border}`,
-        borderRadius: 16,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        boxShadow: isSubmitted ? "0 2px 16px rgba(46,125,50,0.08)" : "0 2px 12px rgba(224,49,49,0.05)",
-      }}
-    >
-      <div style={{ height: 4, background: isSubmitted ? `linear-gradient(90deg,${DC.green},#43a047)` : `linear-gradient(90deg,#e0d0d0,#f0e4e4)` }} />
-
-      <div
-        style={{ height: 120, background: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderBottom: `1px solid ${DC.softBorder}`, cursor: (hasImage && !isScanningOcr) ? "pointer" : "default" }}
-        onClick={() => hasImage && !isScanningOcr && onView(resolvedUrl, req.requirement_name)}
-      >
-        {isScanningOcr ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className="ti ti-loader-2" style={{ fontSize: 28, color: C.red, animation: "spin 0.8s linear infinite" }} />
-            <span style={{ fontSize: 11, color: C.muted }}>Scanning…</span>
-          </div>
-        ) : hasImage ? (
-          <img src={resolvedUrl} alt={req.requirement_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : isSubmitted ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className="ti ti-file-check" style={{ fontSize: 34, color: DC.green }} />
-            <span style={{ fontSize: 11, color: DC.green, fontWeight: 600 }}>Document on file</span>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <i className={`ti ${icon}`} style={{ fontSize: 34, color: "#8a6a6a" }} />
-            <span style={{ fontSize: 11, color: DC.pale }}>No document yet</span>
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, lineHeight: 1.35 }}>{req.requirement_name}</div>
-          <DocStatusBadge submitted={isSubmitted} />
-        </div>
-        {ocrState === "done" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: DC.green }}>
-            <i className="ti ti-check" style={{ fontSize: 12 }} />
-            {ocrAppliedCount
-              ? `${ocrAppliedCount} field${ocrAppliedCount !== 1 ? "s" : ""} added to the form`
-              : "Reviewed — nothing added"}
-          </div>
-        )}
-        {/* An attestation document has no fields to add. The only question it
-            answers is whether it is the right paper for the right student, so
-            that answer IS the result -- there is nothing to review or apply. */}
-        {ocrState === "checked" && ocrResult?.check && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, color: ocrResult.check.names_student === false || !ocrResult.is_expected_document ? "#b45309" : DC.green }}>
-              <i className={`ti ${ocrResult.check.names_student === false || !ocrResult.is_expected_document ? "ti-alert-triangle" : "ti-shield-check"}`} style={{ fontSize: 12 }} />
-              {ocrResult.check.names_student === false || !ocrResult.is_expected_document
-                ? "Needs a second look"
-                : "Checked — looks right"}
-            </div>
-            {(ocrResult.warnings || []).map((w) => (
-              <div key={w} style={{ color: "#b45309", paddingLeft: 17, lineHeight: 1.4 }}>{w}</div>
-            ))}
-          </div>
-        )}
-        {ocrState === "error" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            <div style={{ fontSize: 11, color: "#b91c1c", display: "flex", alignItems: "flex-start", gap: 4, lineHeight: 1.4 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 12, marginTop: 1, flexShrink: 0 }} />
-              {/* The server says whether this was a rate limit, an oversized
-                  image or a missing key; showing it beats one generic line. */}
-              <span>{ocrError || "Could not read this document."}</span>
-            </div>
-            {onRetryOcr && (
-              <button type="button" onClick={onRetryOcr}
-                style={{ alignSelf: "flex-start", height: 26, padding: "0 10px", border: `1px solid ${DC.border}`, borderRadius: 7, background: C.white, color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                <i className="ti ti-refresh" style={{ fontSize: 11, marginRight: 4 }} />Try again
-              </button>
-            )}
-          </div>
-        )}
-        {ocrState === "review" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.muted }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: DC.green }} />
-              Read {Object.keys(ocrResult?.extracted || {}).length} field
-              {Object.keys(ocrResult?.extracted || {}).length !== 1 ? "s" : ""} — nothing added yet
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" onClick={onDiscardOcr}
-                style={{ flex: 1, height: 30, border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Discard
-              </button>
-              <button type="button" onClick={onApplyOcr}
-                style={{ flex: 1, height: 30, border: "none", borderRadius: 8, background: C.red, color: C.white, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                Review
-              </button>
-            </div>
-          </div>
-        )}
-        {isEdit && req.submitted_at && (
-          <div style={{ fontSize: 10.5, color: DC.pale, marginTop: 2 }}>
-            <i className="ti ti-calendar" style={{ fontSize: 11 }} />{" "}
-            {new Date(req.submitted_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "2-digit" })}
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: "0 16px 14px", display: "flex", gap: 8 }}>
-        {isSubmitted ? (
-          <>
-            {hasImage && !isScanningOcr && (
-              <button onClick={() => onView(resolvedUrl, req.requirement_name)}
-                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                <i className="ti ti-eye" style={{ fontSize: 13 }} />View
-              </button>
-            )}
-            <button onClick={() => onUpload(req)}
-              style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${DC.border}`, borderRadius: 8, background: C.white, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              <i className="ti ti-replace" style={{ fontSize: 13 }} />Replace
-            </button>
-            <button onClick={() => onRemove(req)} title="Remove"
-              style={{ width: 34, height: 34, border: `1px solid ${C.redMid}`, borderRadius: 8, background: C.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.red, flexShrink: 0 }}>
-              <i className="ti ti-trash" style={{ fontSize: 13 }} />
-            </button>
-          </>
-        ) : (
-          <button onClick={() => onUpload(req)}
-            style={{ flex: 1, height: 34, border: "none", borderRadius: 8, background: C.red, color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-            <i className="ti ti-upload" style={{ fontSize: 13 }} />Upload Document
-          </button>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function DocumentsStep({
-  isEdit, requirementTypes,
-  pendingUploads, setPendingUploads,
-  existingDocs, setExistingDocs,
-  ocrStates, setOcrStates,
-  studentId, onOcrExtracted, onViewDoc,
-  // The review modal shows each incoming value against what the form already
-  // holds, and the server needs the current name to answer "does this document
-  // actually name this student?" for the attestation documents.
-  student, guardians,
-}) {
-  const [uploadModal, setUploadModal] = useState(null);
-  const [removeModal, setRemoveModal] = useState(null);
-  const [reviewing, setReviewing] = useState(null);
-  const [editLoading, setEditLoading] = useState(false);
-  const [docError, setDocError] = useState("");
-
-  async function handleFileSelected(reqTypeId, reqCode, reqName, file, remarks) {
-    const previewUrl = URL.createObjectURL(file);
-    const isImage = file.type.startsWith("image/");
-
-    async function runOcr() {
-      try {
-        const data = await scanDocument(file, {
-          requirementCode: reqCode,
-          studentId: isEdit ? studentId : undefined,
-          firstName: student.first_name,
-          lastName: student.last_name,
-        });
-        if (!data.success) {
-          setOcrStates((prev) => ({
-            ...prev,
-            [reqTypeId]: { state: "error", error: data.error || "", result: null },
-          }));
-          return;
-        }
-        // An attestation document has nothing to fill in -- it either names
-        // this student or it does not, and that answer is the whole result.
-        const isCheckOnly =
-          data.policy === "verify" || !Object.keys(data.extracted || {}).length;
-        setOcrStates((prev) => ({
-          ...prev,
-          [reqTypeId]: {
-            state: isCheckOnly ? "checked" : "review",
-            result: data,
-            documentName: reqName,
-            error: "",
-          },
-        }));
-      } catch (err) {
-        // The server's own message says whether this was a rate limit, an
-        // oversized image or a missing key; the old bare catch threw it away
-        // and showed one generic line with no way to retry.
-        setOcrStates((prev) => ({
-          ...prev,
-          [reqTypeId]: {
-            state: "error",
-            error: err?.response?.data?.error || err?.message || "",
-            result: null,
-            retry: () => runOcr(),
-          },
-        }));
-      }
-    }
-
-    if (!isEdit) {
-      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null, extracted: null } }));
-      setPendingUploads((prev) => {
-        const old = prev.find((p) => p.requirementTypeId === reqTypeId);
-        if (old) URL.revokeObjectURL(old.previewUrl);
-        return [
-          ...prev.filter((p) => p.requirementTypeId !== reqTypeId),
-          { requirementTypeId: reqTypeId, requirementCode: reqCode, requirementName: reqName, file, previewUrl, remarks: remarks || "" },
-        ];
-      });
-
-      if (isImage) await runOcr();
-    } else {
-      setEditLoading(true);
-      setDocError("");
-      setOcrStates((prev) => ({ ...prev, [reqTypeId]: { state: isImage ? "scanning" : "idle", confidence: null, extracted: null } }));
-      try {
-        const existingEntry = existingDocs.find((d) => d.requirement_type_id === reqTypeId);
-        if (existingEntry?.submission_id) {
-          await replaceRequirement({ submissionId: existingEntry.submission_id, file, remarks });
-        } else {
-          await uploadRequirement({ studentId, requirementTypeId: reqTypeId, file, remarks });
-        }
-        const refreshed = await fetchRequirementSummary(studentId);
-        setExistingDocs(Array.isArray(refreshed) ? refreshed : []);
-      } catch (err) {
-        setDocError(err?.message || "Upload failed. Please try again.");
-      } finally {
-        setEditLoading(false);
-      }
-
-      if (isImage) await runOcr();
-      URL.revokeObjectURL(previewUrl);
-    }
-  }
-
-  // Review gate: a successful scan lands in "review" with its result stashed,
-  // never applied. Opening the modal is the only path to the form, and inside
-  // it every field is ticked individually -- see pages/ocr/OcrReviewModal.
-  function handleApplyOcr(reqTypeId) {
-    const entry = ocrStates[reqTypeId];
-    if (!entry?.result?.extracted) return;
-    setReviewing({ reqTypeId, ...entry.result, documentName: entry.documentName });
-  }
-
-  function handleReviewApplied(reqTypeId, fields, acceptedKeys) {
-    onOcrExtracted(fields, acceptedKeys);
-    setOcrStates((prev) => ({
-      ...prev,
-      [reqTypeId]: { ...prev[reqTypeId], state: "done", appliedCount: acceptedKeys.length },
-    }));
-    setReviewing(null);
-  }
-
-  function handleDiscardOcr(reqTypeId) {
-    setOcrStates((prev) => ({ ...prev, [reqTypeId]: { ...prev[reqTypeId], state: "discarded" } }));
-  }
-
-  async function handleRemoveConfirm() {
-    if (!removeModal) return;
-    const req = removeModal;
-    setRemoveModal(null);
-    if (!isEdit) {
-      setPendingUploads((prev) => {
-        const old = prev.find((p) => p.requirementTypeId === req.requirement_type_id);
-        if (old) URL.revokeObjectURL(old.previewUrl);
-        return prev.filter((p) => p.requirementTypeId !== req.requirement_type_id);
-      });
-      setOcrStates((prev) => { const n = { ...prev }; delete n[req.requirement_type_id]; return n; });
-    } else {
-      if (req.submission_id) {
-        try {
-          await removeRequirement(req.submission_id);
-          const refreshed = await fetchRequirementSummary(studentId);
-          setExistingDocs(Array.isArray(refreshed) ? refreshed : []);
-        } catch (err) {
-          setDocError(err?.message || "Could not remove document. Please try again.");
-        }
-      }
-    }
-  }
-
-  // Merge requirementTypes with existing/pending data into a unified list
-  const cards = requirementTypes.map((rt) => {
-    if (isEdit) {
-      const existing = existingDocs.find((d) => d.requirement_type_id === rt.requirement_type_id);
-      return existing
-        ? { ...existing }
-        : { requirement_type_id: rt.requirement_type_id, requirement_code: rt.requirement_code, requirement_name: rt.requirement_name, is_submitted: false, image_url: null, submission_id: null };
-    } else {
-      const pending = pendingUploads.find((p) => p.requirementTypeId === rt.requirement_type_id);
-      return {
-        requirement_type_id: rt.requirement_type_id,
-        requirement_code: rt.requirement_code,
-        requirement_name: rt.requirement_name,
-        is_submitted: !!pending,
-        image_url: null,
-        submission_id: null,
-        _pending: pending || null,
-      };
-    }
-  });
-
-  const submitted = cards.filter((c) => c.is_submitted).length;
-
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h3 style={{ color: C.dark, margin: 0 }}>Requirement Documents</h3>
-          <p style={{ fontSize: 13, color: C.muted, margin: "4px 0 0" }}>
-            Upload student documents — OCR will auto-fill form fields from images.
-          </p>
-        </div>
-        {cards.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ height: 8, width: 100, borderRadius: 99, background: C.redMid, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${cards.length ? (submitted / cards.length) * 100 : 0}%`, background: DC.green, borderRadius: 99, transition: "width 0.4s" }} />
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: DC.green }}>{submitted}/{cards.length}</span>
-          </div>
-        )}
-      </div>
-
-      {editLoading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.redLight, borderRadius: 10, marginBottom: 16, fontSize: 13, color: C.red }}>
-          <i className="ti ti-loader-2" style={{ animation: "spin 0.8s linear infinite" }} />Uploading document…
-        </div>
-      )}
-
-      {docError && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#b91c1c" }}>
-          <i className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{docError}</span>
-          <button type="button" onClick={() => setDocError("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", padding: 0 }}>
-            <i className="ti ti-x" style={{ fontSize: 13 }} />
-          </button>
-        </div>
-      )}
-
-      {requirementTypes.length === 0 ? (
-        <div style={{ padding: "40px 0", textAlign: "center", color: DC.pale }}>
-          <i className="ti ti-file-search" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
-          No requirement types configured.
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
-          {cards.map((req) => {
-            const ocr = ocrStates[req.requirement_type_id] || { state: "idle", confidence: null, extracted: null };
-            return (
-              <DocCard
-                key={req.requirement_type_id}
-                req={req}
-                pendingEntry={req._pending || null}
-                isEdit={isEdit}
-                onUpload={(r) => setUploadModal(r)}
-                onView={(url, name) => onViewDoc(url, name)}
-                onRemove={(r) => setRemoveModal(r)}
-                ocrState={ocr.state}
-                ocrResult={ocr.result}
-                ocrError={ocr.error}
-                ocrAppliedCount={ocr.appliedCount}
-                onRetryOcr={ocr.retry}
-                onApplyOcr={() => handleApplyOcr(req.requirement_type_id)}
-                onDiscardOcr={() => handleDiscardOcr(req.requirement_type_id)}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      <AnimatePresence>
-        {uploadModal && (
-          <DocUploadModal
-            key="upload-modal"
-            req={uploadModal}
-            isEdit={isEdit}
-            studentId={studentId}
-            pendingEntry={pendingUploads.find((p) => p.requirementTypeId === uploadModal.requirement_type_id) || null}
-            onClose={() => setUploadModal(null)}
-            onFileSelected={(tid, code, name, file, remarks) => {
-              handleFileSelected(tid, code, name, file, remarks);
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {reviewing && (
-        <OcrReviewModal
-          documentName={reviewing.documentName || "this document"}
-          result={reviewing}
-          student={student}
-          guardians={guardians}
-          onApply={(fields, keys) => handleReviewApplied(reviewing.reqTypeId, fields, keys)}
-          onClose={() => setReviewing(null)}
-        />
-      )}
-
-      {removeModal && (
-          <DocRemoveModal
-            key="remove-modal"
-            name={removeModal.requirement_name}
-            onConfirm={handleRemoveConfirm}
-            onCancel={() => setRemoveModal(null)}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // DEBUG AUTOFILL  (only active in dev — stripped from production builds)
@@ -841,15 +152,14 @@ export default function StudentFormPage() {
   const [siblings, setSiblings] = useState([]);
   const [schools, setSchools] = useState([]);
 
-  // ── Documents step ──────────────────────────────────────────────────────────
-  const [requirementTypes, setRequirementTypes] = useState([]);
-  const [existingDocs,     setExistingDocs]     = useState([]);
-  const [pendingUploads,   setPendingUploads]   = useState([]);
-  const [docViewModal,     setDocViewModal]     = useState(null); // { url, name }
-  // Lifted (not local to DocumentsStep) so a pending OCR review survives the
-  // user navigating to another step and back -- DocumentsStep unmounts when
-  // step !== 0, which would otherwise silently drop the stashed extraction.
-  const [ocrStates,        setOcrStates]        = useState({}); // { [reqTypeId]: { state, confidence, extracted } }
+  // Documents are no longer collected here. The step existed so OCR could
+  // extract a PSA birth certificate and prefill these fields; every
+  // requirement type is VERIFY now (backend ocr/policy.py), so it prefilled
+  // nothing, parked files against a student that did not exist yet, and
+  // swallowed any upload failure into a console warning while telling the
+  // user the student had been created. Documents now live on the enrollment,
+  // where the completeness gate actually blocks a registrar, and on
+  // /requirements — both through RequirementDocumentsPanel.
 
   // Track which existing records were removed in edit mode (so we can DELETE them on submit)
   const [removedGuardianIds, setRemovedGuardianIds] = useState([]);
@@ -860,7 +170,7 @@ export default function StudentFormPage() {
   const [householdId, setHouseholdId] = useState(null);
 
   // Shown after successfully creating a new student, offering to jump straight into enrollment
-  const [enrollPrompt, setEnrollPrompt] = useState(null); // { studentId, studentName }
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
 
   const DRAFT_KEY = "student_form_draft";
   const isNewStudent = !id;
@@ -878,7 +188,10 @@ export default function StudentFormPage() {
       if (draft.guardians) setGuardians(draft.guardians);
       if (draft.siblings)  setSiblings(draft.siblings);
       if (draft.schools)   setSchools(draft.schools);
-      if (draft.step != null) setStep(draft.step);
+      // Clamp: a draft saved before the Documents step was removed can
+      // carry a step index this form no longer has, which would render
+      // a blank card with no way forward.
+      if (draft.step != null) setStep(Math.min(draft.step, STEPS.length - 1));
     } catch { /* ignore corrupted draft */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -895,94 +208,6 @@ export default function StudentFormPage() {
     sessionStorage.removeItem(DRAFT_KEY);
   }
 
-  // Applies ONLY the fields the reviewer ticked. It used to take the whole
-  // scan result and spread it over form state, so a second document silently
-  // overwrote the first -- and in edit mode, where the form is pre-filled from
-  // the database, one click could replace a saved LRN, name and birth date
-  // with no way back.
-  function handleOcrExtracted(fields, acceptedKeys) {
-    const accepted = new Set(acceptedKeys ?? Object.keys(fields ?? {}));
-    const take = (key) => (accepted.has(key) ? fields[key] : undefined);
-
-    const studentFields = {};
-    [
-      "lrn", "first_name", "middle_name", "last_name", "suffix", "birth_date",
-      "sex", "religion", "email", "mobile_number", "current_address",
-      "permanent_address",
-    ].forEach((key) => {
-      const value = take(key);
-      if (value !== undefined && value !== null && value !== "") {
-        studentFields[key] = value;
-      }
-    });
-    if (Object.keys(studentFields).length) {
-      setStudent((prev) => ({ ...prev, ...studentFields }));
-    }
-
-    const incomingGuardians = accepted.has("guardians") ? fields.guardians : null;
-    if (Array.isArray(incomingGuardians) && incomingGuardians.length > 0) {
-      setGuardians((prev) => {
-        const updated = [...prev];
-        // Match each incoming parent to an existing card by relationship, so a
-        // birth certificate's mother and father land as two guardians rather
-        // than one overwriting the other.
-        //
-        // `consumed` is what fixes the collapse bug: findIndex used to run
-        // against the array being mutated, so two incoming entries that both
-        // normalised to "guardian" merged into one -- the second matched the
-        // row the first had just pushed. Each slot can now be claimed once.
-        const consumed = new Set();
-        incomingGuardians.forEach((incoming) => {
-          if (!incoming?.full_name) return;
-          const idx = updated.findIndex(
-            (g, i) => !consumed.has(i) && g.relationship === incoming.relationship
-          );
-          const base = idx >= 0 ? updated[idx] : { ...emptyGuardian };
-          const merged = {
-            ...base,
-            full_name:     incoming.full_name,
-            relationship:  incoming.relationship  || base.relationship,
-            mobile_number: incoming.mobile_number || base.mobile_number,
-            email_address: incoming.email         || base.email_address,
-          };
-          if (idx >= 0) {
-            updated[idx] = merged;
-            consumed.add(idx);
-          } else {
-            updated.push(merged);
-            consumed.add(updated.length - 1);
-          }
-        });
-        return updated;
-      });
-    }
-
-    const schoolName = take("previous_school_name");
-    const schoolAddress = take("previous_school_address");
-    if (schoolName || schoolAddress) {
-      setSchools((prev) => {
-        const updated = [...prev];
-        if (updated.length === 0) updated.push({ ...emptySchool });
-        updated[0] = {
-          ...updated[0],
-          school_name:    schoolName || updated[0].school_name,
-          school_address: schoolAddress || updated[0].school_address,
-        };
-        return updated;
-      });
-    }
-  }
-
-  // ── Load requirement types (both modes) ──
-  useEffect(() => {
-    fetchRequirementTypes().then(setRequirementTypes).catch(() => {});
-  }, []);
-
-  // ── Revoke pending upload object URLs on unmount ──
-  useEffect(() => {
-    const uploads = pendingUploads;
-    return () => uploads.forEach((p) => URL.revokeObjectURL(p.previewUrl));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load existing data for edit mode ──
   useEffect(() => {
@@ -1027,12 +252,6 @@ export default function StudentFormPage() {
         try {
           const ps = await getPreviousSchoolsByStudent(id);
           setSchools(Array.isArray(ps) ? ps : (ps?.results || []));
-        } catch { /* none */ }
-
-        // Existing requirement submissions
-        try {
-          const docs = await fetchRequirementSummary(id);
-          setExistingDocs(Array.isArray(docs) ? docs : []);
         } catch { /* none */ }
       } catch {
         setError("Failed to load student data.");
@@ -1121,39 +340,43 @@ export default function StudentFormPage() {
     const s = student;
 
     // Step 1 — Student
+    // Kept granular rather than folded into validation.js's `lrn` helper:
+    // staff typing at the counter get told which part is wrong. Same rule as
+    // LRN_RE there and as students/validators.py server-side.
     if (!s.lrn?.trim())
-      return { step: 1, message: "LRN is required." };
+      return { step: 0, message: "LRN is required." };
     if (!/^\d+$/.test(s.lrn.trim()))
-      return { step: 1, message: "LRN must contain only numbers." };
+      return { step: 0, message: "LRN must contain only numbers." };
     if (s.lrn.trim().length !== 12)
-      return { step: 1, message: "LRN must be exactly 12 digits." };
+      return { step: 0, message: "LRN must be exactly 12 digits." };
     if (!s.first_name?.trim())
-      return { step: 1, message: "First name is required." };
+      return { step: 0, message: "First name is required." };
     if (!s.last_name?.trim())
-      return { step: 1, message: "Last name is required." };
+      return { step: 0, message: "Last name is required." };
     if (!s.birth_date)
-      return { step: 1, message: "Birth date is required." };
-    if (new Date(s.birth_date) > new Date())
-      return { step: 1, message: "Birth date cannot be in the future." };
-    if (new Date(s.birth_date).getFullYear() < 1970)
-      return { step: 1, message: "Please enter a valid birth date." };
+      return { step: 0, message: "Birth date is required." };
     if (!s.current_address?.trim())
-      return { step: 1, message: "Current address is required." };
+      return { step: 0, message: "Current address is required." };
     if (!s.permanent_address?.trim())
-      return { step: 1, message: "Permanent address is required." };
-    if (s.mobile_number?.trim() && !/^09\d{9}$/.test(s.mobile_number.trim()))
-      return { step: 1, message: "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX)." };
-    if (s.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email.trim()))
-      return { step: 1, message: "Please enter a valid email address." };
+      return { step: 0, message: "Permanent address is required." };
+
+    // Shared with the public ApplicantFormPage — both write the same
+    // `students` row, and the LRN rule in particular used to exist only on
+    // that side, so a staff member at the counter could save a malformed
+    // national learner identifier that a self-filling parent could not.
+    const shapeError = birthDate(s.birth_date)
+      || mobileNumber(s.mobile_number)
+      || emailCheck(s.email);
+    if (shapeError) return { step: 0, message: shapeError };
 
     // Step 2 — Household
     if (household.is_4ps_beneficiary && !household.four_ps_id?.trim())
-      return { step: 2, message: "4Ps ID is required when 4Ps beneficiary is enabled." };
+      return { step: 1, message: "4Ps ID is required when 4Ps beneficiary is enabled." };
 
     // Step 3 — Guardians
     for (let i = 0; i < guardians.length; i++) {
       if (!guardians[i].full_name?.trim())
-        return { step: 3, message: `Guardian ${i + 1} has no name — fill it in or remove it.` };
+        return { step: 2, message: `Guardian ${i + 1} has no name — fill it in or remove it.` };
     }
 
     return null;
@@ -1216,8 +439,16 @@ export default function StudentFormPage() {
             await createGuardian(payload);
           }
         }
+        // Removal failures are collected rather than swallowed. A failed
+        // delete means the record the user just removed from the form is
+        // still attached to the student — silently ignoring that told them
+        // the save had succeeded and left a guardian, sibling or previous
+        // school on the record that they believe is gone. Saving continues so
+        // a single failure doesn't abandon the rest of a non-transactional
+        // multi-request save half-done; the user is told at the end.
+        const failedRemovals = [];
         for (const gid of removedGuardianIds) {
-          try { await deleteGuardian(gid); } catch { /* ignore */ }
+          try { await deleteGuardian(gid); } catch { failedRemovals.push("guardian"); }
         }
 
         // 4) Siblings — update existing, create new, delete removed
@@ -1235,7 +466,7 @@ export default function StudentFormPage() {
           }
         }
         for (const sid of removedSiblingIds) {
-          try { await deleteSibling(sid); } catch { /* ignore */ }
+          try { await deleteSibling(sid); } catch { failedRemovals.push("sibling"); }
         }
 
         // 5) Previous schools — update existing, create new, delete removed
@@ -1253,58 +484,43 @@ export default function StudentFormPage() {
           }
         }
         for (const psid of removedSchoolIds) {
-          try { await deletePreviousSchool(psid); } catch { /* ignore */ }
+          try { await deletePreviousSchool(psid); } catch { failedRemovals.push("previous school"); }
+        }
+
+        if (failedRemovals.length) {
+          const unique = [...new Set(failedRemovals)].join(", ");
+          toast.error(
+            `Saved, but ${failedRemovals.length} removed record(s) could not be deleted (${unique}). ` +
+            `They are still attached to this student — please try removing them again.`,
+            { duration: 8000 }
+          );
         }
       } else {
         // ════════════════════════════════════════════════════════
         // CREATE MODE — use the bulk endpoint
         // ════════════════════════════════════════════════════════
+        // One call, one transaction. Siblings and previous schools used to be
+        // created here in a client-side loop *after* the student existed, so a
+        // failure partway through saved the student, lost the siblings, and --
+        // because `lrn` is UNIQUE -- left a retry that could never succeed.
+        // The endpoint now writes all of it atomically, so a failure means
+        // nothing was created and pressing Save again simply works.
         const bulkPayload = {
           student: studentPayload,
           household: householdHasContent(household)
             ? nullify(household, nullableHouseholdFields)
             : null,
           guardians: guardians.filter((g) => g.full_name?.trim()).map((g) => nullify(g, nullableGuardianFields)),
+          siblings: siblings
+            .filter((s) => s.full_name?.trim())
+            .map((s) => ({ full_name: s.full_name, age: s.age ? parseInt(s.age) : null })),
+          previous_schools: schools
+            .filter((s) => s.school_name?.trim())
+            .map((s) => ({ school_name: s.school_name, school_address: s.school_address })),
         };
 
         const result = await bulkCreateStudent(bulkPayload);
         newStudentId = result.student.student_id;
-
-        // siblings
-        for (const s of siblings) {
-          if (s.full_name.trim()) {
-            await createSibling({
-              student: newStudentId,
-              full_name: s.full_name,
-              age: s.age ? parseInt(s.age) : null,
-            });
-          }
-        }
-
-        // previous schools
-        for (const s of schools) {
-          if (s.school_name.trim()) {
-            await createPreviousSchool({
-              student: newStudentId,
-              school_name: s.school_name,
-              school_address: s.school_address,
-            });
-          }
-        }
-
-        // pending requirement documents
-        for (const pu of pendingUploads) {
-          try {
-            await uploadRequirement({
-              studentId: newStudentId,
-              requirementTypeId: pu.requirementTypeId,
-              file: pu.file,
-              remarks: pu.remarks || "",
-            });
-          } catch (uploadErr) {
-            console.warn(`Failed to upload ${pu.requirementCode}:`, uploadErr);
-          }
-        }
       }
 
       clearDraft();
@@ -1312,11 +528,14 @@ export default function StudentFormPage() {
         toast.success("Student updated.");
         navigate("/students");
       } else {
-        toast.success("Student created.");
-        setEnrollPrompt({
-          studentId: newStudentId,
-          studentName: [student.first_name, student.last_name].filter(Boolean).join(" ").trim(),
-        });
+        // Registration and enrolment are one process, not two errands. A
+        // student with no enrolment has no section, appears in no SF1 or SF2
+        // and can be given no grades -- and nothing else in the app says so,
+        // which is exactly how one gets forgotten. `replace` because the form
+        // behind us has already been submitted: Back must reach /students, not
+        // a filled-in form that would create a second record.
+        toast.success("Student created — now enroll them.");
+        navigate(`/enrollments/new?student=${newStudentId}&continuing=1`, { replace: true });
       }
     } catch (err) {
       const data = err?.response?.data;
@@ -1381,7 +600,7 @@ export default function StudentFormPage() {
             transition={{ duration: 0.2, delay: isFirstRender ? 0.06 : 0 }}
             whileHover={{ x: -2 }}
             whileTap={{ scale: 0.96 }}
-            onClick={() => { clearDraft(); navigate("/students"); }}
+            onClick={() => setLeaveConfirm(true)}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
           >
             ← Back to Students
@@ -1548,35 +767,15 @@ export default function StudentFormPage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 style={{ padding: "24px 28px" }}
               >
-              {step === 0 && (
-                <DocumentsStep
-                  isEdit={!!id}
-                  requirementTypes={requirementTypes}
-                  pendingUploads={pendingUploads}
-                  setPendingUploads={setPendingUploads}
-                  existingDocs={existingDocs}
-                  setExistingDocs={setExistingDocs}
-                  ocrStates={ocrStates}
-                  setOcrStates={setOcrStates}
-                  studentId={id}
-                  onOcrExtracted={handleOcrExtracted}
-                  onViewDoc={(url, name) => setDocViewModal({ url, name })}
-                  student={student}
-                  guardians={guardians}
-                />
-              )}
-              {step === 1 && <StudentStep data={student} onChange={setStudent} />}
-              {step === 2 && <HouseholdStep data={household} onChange={setHousehold} />}
-              {step === 3 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
-              {step === 4 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
-              {step === 5 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
-              {step === 6 && (
+              {step === 0 && <StudentStep data={student} onChange={setStudent} />}
+              {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
+              {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+              {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+              {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
+              {step === 5 && (
                 <ReviewStep
                   student={student} household={household}
                   guardians={guardians} siblings={siblings} schools={schools}
-                  pendingUploads={pendingUploads}
-                  existingDocs={existingDocs}
-                  isEdit={!!id}
                 />
               )}
               </motion.div>
@@ -1586,24 +785,20 @@ export default function StudentFormPage() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {docViewModal && (
-          <DocViewModal
-            key="doc-view"
-            url={docViewModal.url}
-            name={docViewModal.name}
-            onClose={() => setDocViewModal(null)}
-          />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
-        {enrollPrompt && (
-          <EnrollmentPromptModal
-            key="enroll-prompt"
-            studentName={enrollPrompt.studentName}
-            onSkip={() => { setEnrollPrompt(null); navigate("/students"); }}
-            onProceed={() => navigate(`/enrollments/new?student=${enrollPrompt.studentId}`)}
+        {leaveConfirm && (
+          <ConfirmDialog
+            icon="ti-arrow-left"
+            danger={false}
+            title="Leave this registration?"
+            message={id
+              ? "Your changes to this student have not been saved yet."
+              : "Nothing has been saved yet, and the draft held on this device will be cleared."}
+            confirmLabel="Yes, leave"
+            cancelLabel="Keep filling in"
+            onConfirm={() => { clearDraft(); navigate("/students"); }}
+            onCancel={() => setLeaveConfirm(false)}
           />
         )}
       </AnimatePresence>

@@ -172,3 +172,40 @@ class IsStaffOrOwnerGuardianReadOnly(BasePermission):
                 and _resolve_student_id(view, obj) in teacher_student_ids(request.user)
             )
         return True
+
+
+def assert_teacher_may_write_enrollment(user, enrollment):
+    """
+    Guard the CREATE path for records that hang off an Enrollment.
+
+    DRF only calls `has_object_permission` for detail routes, so a plain
+    `POST /api/grades/` or `POST /api/attendance/` never reached
+    IsAdvisoryTeacherOrStaff's object check -- any teacher could post a grade
+    or an attendance record for any student in the school. The `bulk`
+    attendance action already guarded this (attendance/views.py); this is the
+    same rule for the single-record paths.
+
+    Staff roles pass through untouched. Raises PermissionDenied for a teacher
+    writing outside their advisory roster, and fails closed on an unresolvable
+    enrollment.
+    """
+    from rest_framework.exceptions import PermissionDenied
+
+    if getattr(user, "role", None) != "teacher":
+        return
+
+    student_id = getattr(enrollment, "student_id", None)
+    if student_id is None:
+        from enrollments.models import Enrollment
+
+        enrollment_id = getattr(enrollment, "enrollment_id", enrollment)
+        student_id = (
+            Enrollment.objects.filter(enrollment_id=enrollment_id)
+            .values_list("student_id", flat=True)
+            .first()
+        )
+
+    if student_id is None or student_id not in teacher_student_ids(user):
+        raise PermissionDenied(
+            "You can only record this for students in your own advisory section."
+        )

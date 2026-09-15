@@ -1,10 +1,9 @@
 // ApplicantFormPage — the public student information form an applicant
-// fills in themselves, on a front-desk device handed over ("walk_in") or
-// their own phone/laptop via a link ("remote"). Access is gated by a
-// staff-issued invite (link) + a separately-delivered access code — see
-// backend intake/views.py and the plan. Nothing here writes to the student
-// master directly: submission produces a StudentApplication for a
-// registrar to review at /student-applications.
+// fills in themselves on a front-desk device handed over to them at the
+// school. Access is gated by a staff-issued invite (link) + a separately
+// delivered access code — see backend intake/views.py and the plan. Nothing
+// here writes to the student master directly: submission produces a
+// StudentApplication for a registrar to review at /student-applications.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,20 +13,24 @@ import Button from "../../components/ui/Button";
 import Alert from "../../components/ui/Alert";
 import FullPageMessage from "../../components/ui/FullPageMessage";
 import { ConfirmDialog } from "../../components/ui/Modal";
-import { Field, Input } from "../../components/FormField";
+import { Field, Input, Select } from "../../components/FormField";
 import {
   StepBar, StudentStep, HouseholdStep, GuardiansStep, SiblingsStep, SchoolsStep, ReviewStep,
 } from "../student-form/StudentFormSteps";
 import { emptyStudent, emptyHousehold } from "../student-form/formShapes";
+import {
+  GRADE_LEVELS_BY_LEVEL, LEVEL_LABELS, SHS_STRANDS, schoolLevelForGrade,
+} from "../../constants/schoolLevels";
 import { verifyApplicantCode, saveApplicationDraft, submitApplication } from "../../api/applyApi";
 import useIdleReset from "../../hooks/useIdleReset";
 import { clearAuthSession } from "../../utils/auth";
+import { lrn as lrnCheck, mobileNumber, birthDate } from "../../utils/validation";
 
-// Deliberately its own list, NOT StudentFormSteps.jsx's exported STEPS —
-// that one includes "documents", and there is no document upload here in
-// v1 (the applicant is physically at the school for anything that needs a
-// paper original; see the plan's decision 6). Same {id, label, icon} shape,
-// passed to StepBar via its `steps` prop.
+// Its own list rather than StudentFormSteps.jsx's exported STEPS. The two
+// happen to match today (STEPS used to carry a "documents" step, which is why
+// they were split), but they are free to diverge: there is no document upload
+// here, because an applicant is physically at the school for anything needing
+// a paper original. Same {id, label, icon} shape, passed to StepBar as `steps`.
 const APPLICANT_STEPS = [
   { id: "student",   label: "Student",       icon: "ti-user" },
   { id: "household", label: "Household",     icon: "ti-home" },
@@ -41,20 +44,17 @@ const APPLICANT_STEPS = [
 // hits 60-90s; 3 minutes with a 30s warning gives real room without
 // leaving a device tied up indefinitely between applicants.
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+// Used instead while an autosave is failing — see the useIdleReset call.
+const IDLE_TIMEOUT_UNSAVED_MS = 10 * 60 * 1000;
 const IDLE_WARN_MS = 30 * 1000;
 // How long the success screen shows the reference before clearing itself
-// for the next family — walk-in only; a remote applicant isn't handing the
-// device to anyone.
+// for the next family walking up to the device.
 const SUCCESS_RETURN_SECONDS = 20;
 const AUTOSAVE_DEBOUNCE_MS = 3000;
 // Five taps on the header within this window un-kiosks the device without
 // needing to clear site data by hand.
 const EXIT_TAP_COUNT = 5;
 const EXIT_TAP_WINDOW_MS = 2500;
-
-function sessionKey(inviteId) {
-  return `applicant_session_${inviteId}`;
-}
 
 function fromPayload(payload) {
   const p = payload || {};
@@ -64,7 +64,60 @@ function fromPayload(payload) {
     guardians: p.guardians || [],
     siblings: p.siblings || [],
     schools: p.previous_schools || [],
+    applyingFor: { ...emptyApplyingFor, ...(p.applying_for || {}) },
   };
+}
+
+// `section` is deliberately not asked for: it depends on class sizes, so
+// the registrar assigns it when they create the real Enrollment. school_level
+// isn't asked for either — it's derived from the grade, since a parent knows
+// "Grade 7" but shouldn't have to know it's called junior high school here.
+const emptyApplyingFor = { school_level: "", grade_level: "", strand: "" };
+
+// The one enrollment-shaped question on an otherwise purely demographic form.
+// Nothing here becomes student data (see intake/serializers.py's
+// ALLOWED_APPLYING_FOR_FIELDS) — it rides along in payload_json so the
+// registrar isn't left guessing which grade to enrol the learner into.
+function ApplyingForStep({ data, onChange }) {
+  const isSHS = data.school_level === "senior_highschool";
+
+  const setGrade = (grade) => onChange({
+    ...data,
+    grade_level: grade,
+    school_level: schoolLevelForGrade(grade) || "",
+    // A strand only exists for senior high; drop a stale one if the family
+    // corrects an SHS pick back down to, say, Grade 10.
+    strand: schoolLevelForGrade(grade) === "senior_highschool" ? data.strand : "",
+  });
+
+  return (
+    <div>
+      <h2 className="mb-1 text-base font-bold text-[#1a0a0a]">What are you enrolling into?</h2>
+      <p className="mb-4 text-sm text-[#7a5050]">
+        The school will confirm the section after reviewing this form.
+      </p>
+
+      <Field label="Grade level applying for">
+        <Select value={data.grade_level} onChange={(e) => setGrade(e.target.value)}>
+          <option value="">Select a grade level…</option>
+          {Object.entries(GRADE_LEVELS_BY_LEVEL).map(([level, grades]) => (
+            <optgroup key={level} label={LEVEL_LABELS[level]}>
+              {grades.map((g) => <option key={g} value={g}>{g}</option>)}
+            </optgroup>
+          ))}
+        </Select>
+      </Field>
+
+      {isSHS && (
+        <Field label="Strand" hint="Ask a staff member if you're not sure which strand to choose.">
+          <Select value={data.strand} onChange={(e) => onChange({ ...data, strand: e.target.value })}>
+            <option value="">Select a strand…</option>
+            {SHS_STRANDS.map((st) => <option key={st} value={st}>{st}</option>)}
+          </Select>
+        </Field>
+      )}
+    </div>
+  );
 }
 
 // Fixed offsets rather than randomized on each mount — this is a one-time
@@ -84,7 +137,7 @@ const CONFETTI = [
 // finishing an application — rather than the generic app-wide
 // FullPageMessage card, so it stays inside this page's cream/red identity
 // instead of switching to neutral chrome for one screen.
-function KioskSuccessScreen({ reference, mode, countdown, onDone }) {
+function KioskSuccessScreen({ reference, countdown, onDone }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="relative w-full max-w-md rounded-3xl border border-[#fde2de] bg-white p-9 text-center shadow-2xl">
@@ -127,18 +180,16 @@ function KioskSuccessScreen({ reference, mode, countdown, onDone }) {
           member, who will review your application and follow up with next steps.
         </p>
 
-        {mode === "walk_in" && (
-          <div className="mt-6 flex flex-col items-center gap-2">
-            <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
-            <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
-              <div
-                className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
-                style={{ width: `${(countdown / SUCCESS_RETURN_SECONDS) * 100}%` }}
-              />
-            </div>
-            <Button variant="secondary" onClick={onDone} className="mt-3">Done</Button>
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
+          <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
+            <div
+              className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
+              style={{ width: `${(countdown / SUCCESS_RETURN_SECONDS) * 100}%` }}
+            />
           </div>
-        )}
+          <Button variant="secondary" onClick={onDone} className="mt-3">Done</Button>
+        </div>
       </div>
     </div>
   );
@@ -148,8 +199,8 @@ export default function ApplicantFormPage() {
   const { inviteId } = useParams();
   const navigate = useNavigate();
 
-  // gate: entering the access code. handover: walk-in confirm before
-  // handing the device over. form: the six steps. success: submitted.
+  // gate: entering the access code. handover: staff confirm before handing
+  // the device over. form: the six steps. success: submitted.
   // expired: the session token was rejected (revoked invite, TTL, etc).
   const [phase, setPhase] = useState("gate");
 
@@ -157,7 +208,6 @@ export default function ApplicantFormPage() {
   const [gateError, setGateError] = useState("");
   const [gateBusy, setGateBusy] = useState(false);
   const [applicantName, setApplicantName] = useState("");
-  const [mode, setMode] = useState("remote");
   const [token, setToken] = useState(null);
 
   const [step, setStep] = useState(0);
@@ -166,6 +216,7 @@ export default function ApplicantFormPage() {
   const [guardians, setGuardians] = useState([]);
   const [siblings, setSiblings] = useState([]);
   const [schools, setSchools] = useState([]);
+  const [applyingFor, setApplyingFor] = useState(emptyApplyingFor);
   const [revision, setRevision] = useState(0);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const [confirmed, setConfirmed] = useState(false);
@@ -173,6 +224,7 @@ export default function ApplicantFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reference, setReference] = useState("");
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [countdown, setCountdown] = useState(SUCCESS_RETURN_SECONDS);
 
   const submittingRef = useRef(false);
@@ -195,6 +247,7 @@ export default function ApplicantFormPage() {
     setGuardians(shaped.guardians);
     setSiblings(shaped.siblings);
     setSchools(shaped.schools);
+    setApplyingFor(shaped.applyingFor);
     setRevision(rev || 0);
   }, []);
 
@@ -208,14 +261,16 @@ export default function ApplicantFormPage() {
       const res = await verifyApplicantCode(inviteId, code.trim());
       setToken(res.token);
       setApplicantName(res.applicant_full_name || "");
-      setMode(res.mode || "remote");
-      sessionStorage.setItem(sessionKey(inviteId), JSON.stringify({ token: res.token, mode: res.mode }));
       hydrateFrom(res.payload, res.revision);
       setStep(0);
       setConfirmed(false);
 
+      // The token stays in React state only. Persisting it would let the
+      // next family land in this one's half-filled form by refreshing the
+      // tab; resuming is meant to go back through the code gate, which
+      // re-hydrates the draft server-side (see the `expired` screen).
       const staffLoggedIn = !!sessionStorage.getItem("access_token");
-      setPhase(res.mode === "walk_in" && staffLoggedIn ? "handover" : "form");
+      setPhase(staffLoggedIn ? "handover" : "form");
     } catch (err) {
       const errCode = err.response?.data?.code;
       if (errCode === "invite_locked") {
@@ -236,9 +291,9 @@ export default function ApplicantFormPage() {
   };
 
   const confirmHandover = () => {
-    // decision 5: arming a walk-in device signs the staff member out on
-    // it — a parent left alone with the tablet must land on /login, not
-    // inside the admin portal, if they poke at the browser chrome.
+    // decision 5: arming the device signs the staff member out on it — a
+    // parent left alone with the tablet must land on /login, not inside the
+    // admin portal, if they poke at the browser chrome.
     clearAuthSession();
     setPhase("form");
   };
@@ -246,7 +301,8 @@ export default function ApplicantFormPage() {
   // ── Autosave ───────────────────────────────────────────────────────────
   const currentPayload = useMemo(() => ({
     student, household, guardians, siblings, previous_schools: schools,
-  }), [student, household, guardians, siblings, schools]);
+    applying_for: applyingFor,
+  }), [student, household, guardians, siblings, schools, applyingFor]);
 
   useEffect(() => {
     if (phase !== "form") return undefined;
@@ -282,7 +338,6 @@ export default function ApplicantFormPage() {
 
   // ── Reset back to the welcome/gate screen ─────────────────────────────
   const resetToGate = useCallback(() => {
-    sessionStorage.removeItem(sessionKey(inviteId));
     clearTimeout(autosaveTimer.current);
     setToken(null);
     setPhase("gate");
@@ -294,18 +349,24 @@ export default function ApplicantFormPage() {
     setGuardians([]);
     setSiblings([]);
     setSchools([]);
+    setApplyingFor(emptyApplyingFor);
     setStep(0);
     setConfirmed(false);
     setSubmitError("");
-  }, [inviteId]);
+    setSaveState("idle");
+  }, []);
 
-  // ── Idle reset — walk-in only; never enabled in remote mode (see the
-  // hook's own docstring: timing someone out on their own sofa is just
-  // data loss). ──
+  // ── Idle reset ─────────────────────────────────────────────────────────
+  // While an autosave is failing, everything typed since the last good save
+  // exists only in this tab — so the reset would throw it away rather than
+  // merely clear the screen. That earns a longer window for a family who is
+  // still here to fetch a staff member (the hook re-arms when timeoutMs
+  // changes), but not an indefinite one: a device abandoned mid-form must
+  // still clear itself rather than sit in the lobby showing their details.
   useIdleReset({
-    timeoutMs: IDLE_TIMEOUT_MS,
+    timeoutMs: saveState === "error" ? IDLE_TIMEOUT_UNSAVED_MS : IDLE_TIMEOUT_MS,
     warnMs: IDLE_WARN_MS,
-    enabled: phase === "form" && mode === "walk_in" && !submitting,
+    enabled: phase === "form" && !submitting,
     onWarn: () => setShowIdleWarning(true),
     onResume: () => setShowIdleWarning(false),
     onReset: () => {
@@ -314,9 +375,9 @@ export default function ApplicantFormPage() {
     },
   });
 
-  // ── Success screen countdown (walk-in only) ───────────────────────────
+  // ── Success screen countdown ──────────────────────────────────────────
   useEffect(() => {
-    if (phase !== "success" || mode !== "walk_in") return undefined;
+    if (phase !== "success") return undefined;
     setCountdown(SUCCESS_RETURN_SECONDS);
     const interval = setInterval(() => {
       setCountdown((c) => {
@@ -330,7 +391,7 @@ export default function ApplicantFormPage() {
     }, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, mode]);
+  }, [phase]);
 
   // ── Hidden exit gesture ────────────────────────────────────────────────
   const handleHeaderTap = () => {
@@ -338,8 +399,11 @@ export default function ApplicantFormPage() {
     exitTaps.current = [...exitTaps.current, now].filter((t) => now - t < EXIT_TAP_WINDOW_MS);
     if (exitTaps.current.length >= EXIT_TAP_COUNT) {
       exitTaps.current = [];
-      sessionStorage.removeItem(sessionKey(inviteId));
-      navigate("/login", { replace: true });
+      // Ask first. Five taps is a deliberate gesture, but it is five taps on a
+      // header an applicant may well be touching, and leaving abandons whatever
+      // has not autosaved in the last few seconds. The gate below is the same
+      // one the handover and idle dialogs use.
+      setShowExitConfirm(true);
     }
   };
 
@@ -349,17 +413,20 @@ export default function ApplicantFormPage() {
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
   const validate = () => {
+    if (!applyingFor.grade_level) return "Please choose the grade level you're enrolling into.";
+    if (applyingFor.school_level === "senior_highschool" && !applyingFor.strand) {
+      return "Please choose a strand for senior high school.";
+    }
     if (!student.first_name?.trim()) return "First name is required.";
     if (!student.last_name?.trim()) return "Last name is required.";
     if (!student.sex) return "Sex is required.";
     if (!student.birth_date) return "Birth date is required.";
-    if (new Date(student.birth_date) > new Date()) return "Birth date cannot be in the future.";
-    if (student.lrn?.trim() && !/^\d{12}$/.test(student.lrn.trim())) {
-      return "LRN must be exactly 12 digits — leave it blank if one hasn't been assigned yet.";
-    }
-    if (student.mobile_number?.trim() && !/^09\d{9}$/.test(student.mobile_number.trim())) {
-      return "Mobile number must start with 09 and be 11 digits (e.g. 09XXXXXXXXX).";
-    }
+    // Shared with StudentFormPage — the two paths write the same `students`
+    // row and had drifted apart on which of these they each checked.
+    const shapeError = birthDate(student.birth_date)
+      || lrnCheck(student.lrn)
+      || mobileNumber(student.mobile_number);
+    if (shapeError) return shapeError;
     if (!student.current_address?.trim()) return "Current address is required.";
     if (!student.permanent_address?.trim()) return "Permanent address is required.";
     return null;
@@ -408,7 +475,6 @@ export default function ApplicantFormPage() {
 
       const res = await submitApplication(inviteId, token);
       setReference(res.reference);
-      sessionStorage.removeItem(sessionKey(inviteId));
       setPhase("success");
     } catch (err) {
       if (err.response?.data?.code === "applicant_token_invalid") {
@@ -505,11 +571,19 @@ export default function ApplicantFormPage() {
 
           <StepBar current={step} onStepClick={setStep} size="lg" steps={APPLICANT_STEPS} />
 
-          <div className="mb-3 flex items-center justify-end gap-1.5 text-xs text-[#7a5050]">
+          <div className="mb-3 flex items-center justify-end gap-1.5 text-xs text-[#7a5050]" aria-live="polite">
             {saveState === "saving" && (<><i className="ti ti-loader-2 animate-spin" /> Saving…</>)}
             {saveState === "saved" && (<><i className="ti ti-check text-[#2e7d32]" /> Saved</>)}
-            {saveState === "error" && (<><i className="ti ti-alert-triangle text-[#c62828]" /> Couldn't save — check your connection</>)}
           </div>
+
+          {saveState === "error" && (
+            <div className="mb-3">
+              <Alert variant="error">
+                Your answers aren't being saved right now — please tell a staff member before
+                continuing. Nothing typed since the last save is stored yet, so don't close this page.
+              </Alert>
+            </div>
+          )}
 
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fde2de", padding: "24px 28px", boxShadow: "0 4px 24px rgba(224,49,49,0.10)" }}>
             <AnimatePresence mode="wait">
@@ -521,7 +595,11 @@ export default function ApplicantFormPage() {
                 transition={{ duration: 0.18 }}
               >
                 {stepId === "student" && (
-                  <StudentStep data={student} onChange={setStudent} showStatus={false} lrnRequired={false} />
+                  <>
+                    <ApplyingForStep data={applyingFor} onChange={setApplyingFor} />
+                    <div className="my-6 border-t border-[#fde2de]" />
+                    <StudentStep data={student} onChange={setStudent} showStatus={false} lrnRequired={false} />
+                  </>
                 )}
                 {stepId === "household" && <HouseholdStep data={household} onChange={setHousehold} />}
                 {stepId === "guardians" && <GuardiansStep data={guardians} onChange={setGuardians} />}
@@ -529,10 +607,19 @@ export default function ApplicantFormPage() {
                 {stepId === "schools" && <SchoolsStep data={schools} onChange={setSchools} />}
                 {stepId === "review" && (
                   <div>
+                    {/* Not folded into ReviewStep: that component is shared
+                        with the staff student form, which has nothing to do
+                        with enrolling into a grade. */}
+                    <div className="mb-5 rounded-xl border border-[#fde2de] bg-[#fff8f6] px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#7a5050]">Enrolling into</p>
+                      <p className="mt-0.5 text-sm font-semibold text-[#1a0a0a]">
+                        {applyingFor.grade_level || "Not selected"}
+                        {applyingFor.strand ? ` — ${applyingFor.strand}` : ""}
+                      </p>
+                    </div>
                     <ReviewStep
                       student={student} household={household} guardians={guardians}
                       siblings={siblings} schools={schools}
-                      pendingUploads={[]} existingDocs={[]} isEdit={false}
                     />
                     <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[#fde2de] p-4">
                       <input
@@ -573,6 +660,19 @@ export default function ApplicantFormPage() {
         </div>
       )}
 
+      {showExitConfirm && (
+        <ConfirmDialog
+          icon="ti-door-exit"
+          title="Leave the applicant form?"
+          message="This returns the device to the staff login. Anything typed since the last save is not stored yet."
+          confirmLabel="Yes, leave"
+          cancelLabel="Stay on the form"
+          danger={false}
+          onConfirm={() => navigate("/login", { replace: true })}
+          onCancel={() => setShowExitConfirm(false)}
+        />
+      )}
+
       {showIdleWarning && phase === "form" && (
         <ConfirmDialog
           icon="ti-clock"
@@ -587,7 +687,7 @@ export default function ApplicantFormPage() {
       )}
 
       {phase === "success" && (
-        <KioskSuccessScreen reference={reference} mode={mode} countdown={countdown} onDone={resetToGate} />
+        <KioskSuccessScreen reference={reference} countdown={countdown} onDone={resetToGate} />
       )}
 
       {phase === "expired" && (

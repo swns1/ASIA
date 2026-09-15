@@ -29,6 +29,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
+def _env_int(name: str, default: int) -> int:
+    """Read a whole number from the environment, falling back on anything unparseable."""
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -68,6 +75,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Required by the RequirementType mirror's ArrayField columns. Contributes
+    # no models and no migrations — Django's postgres.E005 system check simply
+    # refuses ArrayField unless the app is installed.
+    'django.contrib.postgres',
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
@@ -85,8 +96,16 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "student_service.audit.AuditLogMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    # This service was the only one of the four without CsrfViewMiddleware.
+    # The DRF endpoints authenticate with a Bearer token rather than the
+    # session cookie, so nothing here was exploitable — but /admin/ is mounted
+    # and session-authenticated, and an unexplained asymmetry between four
+    # otherwise-identical stacks is exactly the kind of thing that gets
+    # copied forward into whichever service is added next.
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -129,18 +148,15 @@ from corsheaders.defaults import default_headers  # noqa: E402 — grouped with 
 
 CORS_ALLOW_HEADERS = (*default_headers, "x-applicant-token")
 
-# The applicant intake flow can be served remotely (a link opened on the
-# applicant's own phone, not just a front-desk device on localhost), so its
-# origin isn't necessarily one of the admin-portal origins above. Used to
-# build the /apply/<invite_id> link handed back when a staff member issues
-# an invite (see intake/views.py::_build_apply_url).
+# Used to build the /apply/<invite_id> link handed back when a staff member
+# issues an invite (see intake/views.py::_build_apply_url). The kiosk device
+# won't always be the host the SPA is served from, so this can't be assumed
+# to be one of the admin-portal origins above.
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:5173")
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-
 # How long an issued invite (link + access code) stays usable before a
-# registrar has to re-issue it. 3 days covers both a walk-in applicant
-# finishing the same visit and a remote applicant who needs a day or two.
+# registrar has to re-issue it. 3 days covers an applicant finishing during
+# the same visit and one who has to come back to the school another day.
 APPLICATION_INVITE_TTL_SECONDS = int(os.environ.get("APPLICATION_INVITE_TTL_SECONDS", 3 * 24 * 3600))
 
 # How long the token minted at the code gate (X-Applicant-Token) stays valid
@@ -164,6 +180,12 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "120/minute",
         "ocr":  "10/minute",
+        # Signed document downloads (students/views.py::file). Loaded by
+        # <img>/<iframe> with no Authorization header, so they landed on the
+        # 30/min anon bucket and a single document panel could exhaust it for
+        # everyone sharing the building's public IP. The signed token is the
+        # access control; this bound only exists to stop a runaway loop.
+        "document_download": "240/minute",
         # Public applicant-facing endpoints (intake/throttles.py) — each is
         # keyed per-invite, not per-IP, so these rates bound one applicant's
         # own traffic rather than the whole building's. A real form takes
@@ -176,13 +198,25 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "student_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 0 (never trust X-Forwarded-For) until a real reverse proxy sits in
-    # front of this service and is configured to strip/set it correctly --
-    # there isn't one today (see README), so this header is currently
-    # attacker-controlled end to end. Governs both DRF throttling's client
-    # identification (SimpleRateThrottle.get_ident) and the audit log's
-    # recorded IP (shared.audit.client_ip reads this same setting).
-    "NUM_PROXIES": 0,
+    # 1: exactly one reverse proxy sits in front of this service in every
+    # deployed environment (Render's load balancer). Governs both DRF
+    # throttling's client identification (SimpleRateThrottle.get_ident) and
+    # the audit log's recorded IP (shared.audit.client_ip reads this same
+    # setting) — at 0, every client resolves to the proxy's IP, collapsing
+    # AnonRateThrottle into one shared bucket and making the audit trail
+    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    # How many reverse proxies sit in front of this service. Env-driven for
+    # the same reason DEBUG and the SECURE_* flags are: the right value is a
+    # property of the deployment, not of the code.
+    #
+    # Defaults to 0 -- the local/demo posture, where nothing proxies these
+    # services. That matters because DRF trusts the client-supplied
+    # X-Forwarded-For for exactly NUM_PROXIES hops: with a non-zero value and
+    # no real proxy, an attacker rotating that header gets an unlimited number
+    # of throttle buckets, and the audit log's recorded ip_address becomes
+    # attacker-controlled. Set NUM_PROXIES=1 in the environment when deploying
+    # behind a single load balancer.
+    "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
 
 SIMPLE_JWT = {
@@ -197,6 +231,15 @@ DATABASES = {
         "PASSWORD": _required_env("DB_PASSWORD"),
         "HOST":     os.environ.get("DB_HOST",     "localhost"),
         "PORT":     os.environ.get("DB_PORT",     "5432"),
+        # Both required against Supabase's Supavisor pooler in transaction
+        # mode (port 6543): it multiplexes many clients over few real
+        # backend connections and doesn't hold one open per session, so a
+        # server-side cursor opened on one logical connection can vanish
+        # before a later query on the "same" connection tries to read it.
+        # CONN_MAX_AGE also matters even without a pooler — this app makes a
+        # fresh Postgres connection per request otherwise, ×4 services.
+        "CONN_MAX_AGE": 600,
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 }
 
@@ -216,6 +259,19 @@ TIME_ZONE = 'Asia/Manila'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+# Django 5.1 removed STATICFILES_STORAGE in favour of STORAGES, and Django 6
+# ignores the old name in silence -- so this service read as "configured for
+# whitenoise's compressed manifest storage" while actually getting plain
+# StaticFilesStorage: no compression, no cache-busting hashes. Declared here it
+# takes effect, which makes `collectstatic` mandatory before serving, since
+# manifest storage raises on any static file it holds no hash for.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -229,9 +285,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 # (the only deployment shape this project currently has — see README) with
 # no extra infrastructure (no Redis, no DB migration). It is not suitable
 # across multiple machines; revisit if this ever runs load-balanced.
+#
+# The backend is shared.cache.ResilientFileBasedCache, not Django's own
+# FileBasedCache: Django's set() has no atomic overwrite on Windows, so it
+# truncates and re-streams the live cache file in place. A worker reading
+# that file mid-write gets a half-written pickle, and the exception escapes
+# the cache layer and 500s the request from inside DRF's throttle check.
+# See shared/cache.py.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "BACKEND": "shared.cache.ResilientFileBasedCache",
         "LOCATION": str(BASE_DIR / "cache"),
     }
 }
