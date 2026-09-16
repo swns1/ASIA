@@ -6,7 +6,7 @@ from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.filters import OrderingFilter
 
 from accounts.permissions import (
     BILLING_ROLES,
@@ -106,6 +106,61 @@ class DiscountTypeViewSet(viewsets.ModelViewSet):
     filterset_fields = ("discount_mode",)
 
 
+# ── Cross-service lookups ────────────────────────────────────────────────────
+#
+# Neither an invoice nor a payment carries a student name or a school year:
+# both live in enrollment-service's tables, which billing reads read-only
+# through the mirrors. Every caller that wants to filter on one of them has to
+# resolve it to a set of enrollment_ids first, so those two resolutions live
+# here once rather than being re-derived per view.
+
+def enrollment_ids_for_school_year(school_year):
+    """enrollment_ids belonging to one school year, or None for "all years"."""
+    year = (school_year or "").strip()
+    if not year:
+        return None
+
+    from .enrollment_mirror import EnrollmentMirror
+
+    return (
+        EnrollmentMirror.objects
+        .filter(school_year=year)
+        .values_list("enrollment_id", flat=True)
+    )
+
+
+def enrollment_ids_matching_student(term):
+    """enrollment_ids whose student matches `term` by name or LRN.
+
+    Returns None for a blank term so callers can tell "no filter asked for"
+    apart from "filter asked for, nothing matched" — the latter must yield an
+    empty result, not an unfiltered one.
+    """
+    term = (term or "").strip()
+    if not term:
+        return None
+
+    from django.db.models import Q
+
+    from .enrollment_mirror import EnrollmentMirror, StudentMirror
+
+    matched_student_ids = (
+        StudentMirror.objects
+        .filter(
+            Q(first_name__icontains=term) |
+            Q(last_name__icontains=term) |
+            Q(middle_name__icontains=term) |
+            Q(lrn__icontains=term)
+        )
+        .values_list("student_id", flat=True)
+    )
+    return (
+        EnrollmentMirror.objects
+        .filter(student_id__in=matched_student_ids)
+        .values_list("enrollment_id", flat=True)
+    )
+
+
 # ── Invoices ─────────────────────────────────────────────────────────────────
 
 def scope_invoices_to_school_year(queryset, school_year):
@@ -121,19 +176,10 @@ def scope_invoices_to_school_year(queryset, school_year):
     A blank or missing `school_year` returns the queryset untouched, which is
     what renders the "All years" view.
     """
-    year = (school_year or "").strip()
-    if not year:
+    enrollment_ids = enrollment_ids_for_school_year(school_year)
+    if enrollment_ids is None:
         return queryset
-
-    from .enrollment_mirror import EnrollmentMirror
-
-    return queryset.filter(
-        enrollment_id__in=(
-            EnrollmentMirror.objects
-            .filter(school_year=year)
-            .values_list("enrollment_id", flat=True)
-        )
-    )
+    return queryset.filter(enrollment_id__in=enrollment_ids)
 
 
 def school_years_with_invoices():
@@ -154,6 +200,37 @@ def school_years_with_invoices():
         .distinct()
     )
     return sorted({y for y in years if y}, reverse=True)
+
+
+def payment_counts_by_school_year():
+    """
+    How many payments fall in each school year, keyed by year.
+
+    A payment is two hops from a year — payment -> invoice -> enrollment — and
+    the middle hop is a cross-service id rather than a real FK, so this walks
+    it explicitly rather than annotating over a join.
+    """
+    from .enrollment_mirror import EnrollmentMirror
+
+    # invoice_id -> enrollment_id for every invoice that has been paid against.
+    invoice_enrollments = dict(
+        StudentInvoice.objects
+        .filter(invoice_id__in=StudentPayment.objects.values_list("invoice_id", flat=True))
+        .values_list("invoice_id", "enrollment_id")
+    )
+    year_by_enrollment = dict(
+        EnrollmentMirror.objects
+        .filter(enrollment_id__in=set(invoice_enrollments.values()))
+        .values_list("enrollment_id", "school_year")
+    )
+
+    counts = {}
+    for invoice_id in StudentPayment.objects.values_list("invoice_id", flat=True):
+        enrollment_id = invoice_enrollments.get(invoice_id)
+        year = year_by_enrollment.get(enrollment_id)
+        if year:
+            counts[year] = counts.get(year, 0) + 1
+    return counts
 
 
 class StudentInvoiceViewSet(viewsets.ModelViewSet):
@@ -199,25 +276,10 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         term = self.request.query_params.get("search", "").strip()
         if term:
             from django.db.models import Q
-            from .enrollment_mirror import EnrollmentMirror, StudentMirror
-            matched_student_ids = (
-                StudentMirror.objects
-                .filter(
-                    Q(first_name__icontains=term) |
-                    Q(last_name__icontains=term) |
-                    Q(middle_name__icontains=term) |
-                    Q(lrn__icontains=term)
-                )
-                .values_list("student_id", flat=True)
-            )
-            matched_enrollment_ids = (
-                EnrollmentMirror.objects
-                .filter(student_id__in=matched_student_ids)
-                .values_list("enrollment_id", flat=True)
-            )
+
             queryset = queryset.filter(
                 Q(invoice_no__icontains=term) |
-                Q(enrollment_id__in=matched_enrollment_ids)
+                Q(enrollment_id__in=enrollment_ids_matching_student(term))
             )
         return queryset
 
@@ -602,15 +664,21 @@ class StudentPaymentViewSet(
       date_to               — YYYY-MM-DD  (payment_date <=)
       amount_min            — decimal     (amount_paid >=)
       amount_max            — decimal     (amount_paid <=)
-      search                — student name substring (via invoice_detail)
+      search                — student name / LRN / invoice no. substring
+      student_name          — alias of `search`, kept for existing callers
+      school_year           — YYYY-YYYY   (via invoice -> enrollment)
       ordering              — payment_date | amount_paid | -payment_date | -amount_paid
     """
     serializer_class = StudentPaymentSerializer
     permission_classes = [HasRole]
     required_roles = BILLING_ROLES
-    filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
+    # No SearchFilter: `search` is handled in _apply_filters() so the list and
+    # /summary/ resolve it identically. Leaving it in the backends would ALSO
+    # apply it as an icontains against invoice__enrollment_id — an integer
+    # column — and the two filters AND together, so every name search returned
+    # nothing.
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("invoice", "payment_method")
-    search_fields = ("invoice__enrollment_id",)
     ordering_fields = ("payment_date", "amount_paid", "payment_id")
     ordering = ("-payment_id",)
 
@@ -625,7 +693,10 @@ class StudentPaymentViewSet(
         date_to    = params.get("date_to")
         amount_min = params.get("amount_min")
         amount_max = params.get("amount_max")
-        student    = params.get("student_name", "").strip()
+        # `search` is the name the shared FilterBar sends; `student_name` is
+        # kept as an alias so existing callers of this endpoint don't break.
+        student    = (params.get("search") or params.get("student_name") or "").strip()
+        school_year = params.get("school_year")
 
         if date_from:
             qs = qs.filter(payment_date__gte=date_from)
@@ -642,10 +713,23 @@ class StudentPaymentViewSet(
             except Exception:
                 pass
         if student:
-            # student_name lives in a cross-service call (not a DB column), so we
-            # match against invoice_no as a practical proxy until the name is
-            # denormalized onto the invoice model.
-            qs = qs.filter(invoice__invoice_no__icontains=student)
+            # Previously this matched invoice_no as a stand-in for the student
+            # name, so typing a name found nothing — the one thing the field
+            # was for. The name lives in enrollment-service's tables, which
+            # billing reads through the mirrors; resolving it to enrollment_ids
+            # is the same hop the invoice list already makes.
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(invoice__invoice_no__icontains=student) |
+                Q(invoice__enrollment_id__in=enrollment_ids_matching_student(student))
+            )
+
+        # A payment has no school year of its own, and neither does its
+        # invoice — it is two hops away, on the enrollment.
+        enrollment_ids = enrollment_ids_for_school_year(school_year)
+        if enrollment_ids is not None:
+            qs = qs.filter(invoice__enrollment_id__in=enrollment_ids)
 
         return qs
 
@@ -677,6 +761,18 @@ class StudentPaymentViewSet(
             grand += amount
 
         result["total"] = grand
+
+        # The year picker's list and its per-year counts, deliberately NOT
+        # scoped by the active school_year — narrowing them would collapse the
+        # picker to the one year already selected and strand the user there
+        # (same reasoning as school_years_with_invoices for invoices).
+        #
+        # These count PAYMENTS per year. The frontend previously had to blank
+        # the picker's counts out, because the only numbers available were the
+        # enrollment counts from the global context — "2025-2026 · 68" beside a
+        # payments filter reads as 68 payments, not 68 enrolments.
+        result["year_counts"] = payment_counts_by_school_year()
+        result["school_years"] = sorted(result["year_counts"], reverse=True)
         return Response(result)
 
     @transaction.atomic

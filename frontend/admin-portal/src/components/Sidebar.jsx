@@ -7,6 +7,7 @@ import {
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { groupYears, yearLabel } from "../utils/schoolYear";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { ConfirmDialog } from "./ui/Modal";
 import { Select } from "./FormField";
@@ -17,36 +18,17 @@ import logo from "../assets/logo.png";
 // module (Dashboard, Enrollments, Grades, Attendance, Analytics,
 // Scholarships, Academic Calendar, Teacher Advisories) opens to. Individual
 // pages may still switch to a different year locally without affecting this.
-// How many non-current years stay in the "Recent" group before the rest fall
-// into "Earlier". A school gains one year per year, so this only ever grows
-// slowly — the grouping exists to make the list scannable, not to hide data.
-const RECENT_YEARS = 4;
-
-function SchoolYearPicker() {
+// Named for what it is in the sidebar — the GLOBAL year selector — to keep it
+// distinct from ui/SchoolYearPicker, the per-page filter combobox. Both group
+// and label years through utils/schoolYear so they can never disagree about
+// which year is "Recent"; only the widget differs, and deliberately so: this
+// one is a single line of chrome that sets a default, not a filter.
+function GlobalSchoolYearSelect() {
   const { schoolYear, setSchoolYear, options, currentYear, yearCounts } = useSchoolYear();
 
-  // Grouped so the year you're working in is always the first thing under the
-  // cursor, and a decade of history stays reachable without a second click.
-  // With only two or three years on file the groups collapse to almost nothing,
-  // so this doesn't add ceremony to a young school.
-  const groups = useMemo(() => {
-    const rest = options.filter((y) => y !== currentYear);
-    return [
-      ["Current", options.filter((y) => y === currentYear)],
-      ["Recent", rest.slice(0, RECENT_YEARS)],
-      ["Earlier", rest.slice(RECENT_YEARS)],
-    ].filter(([, years]) => years.length > 0);
-  }, [options, currentYear]);
+  const groups = useMemo(() => groupYears(options, currentYear), [options, currentYear]);
 
   if (!schoolYear) return null; // still resolving the default on first load
-
-  // The count distinguishes a year with real data from one that's empty — the
-  // noun is left off because this picker also governs Grades, Attendance and
-  // Analytics, where "enrollments" would be the wrong word.
-  const labelFor = (y) => {
-    const n = yearCounts[y];
-    return n == null ? y : `${y} · ${n}`;
-  };
 
   return (
     <div className="border-b border-neutral-200 px-3.5 pb-2.5 pt-3">
@@ -66,7 +48,7 @@ function SchoolYearPicker() {
         {groups.map(([label, years]) => (
           <optgroup key={label} label={label}>
             {years.map((y) => (
-              <option key={y} value={y}>{labelFor(y)}</option>
+              <option key={y} value={y}>{yearLabel(y, yearCounts)}</option>
             ))}
           </optgroup>
         ))}
@@ -209,7 +191,7 @@ export default function Sidebar({
           )}
         </div>
 
-        {showLabels && <SchoolYearPicker />}
+        {showLabels && <GlobalSchoolYearSelect />}
 
         {/* The landmark name belongs on <nav>, not the <aside> wrapper —
             <aside> exposes a "complementary" role, so labelling it there left

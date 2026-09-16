@@ -11,6 +11,7 @@ import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
@@ -339,14 +340,13 @@ export default function TeacherAdvisoriesPage() {
 
   // "All" first, then each year present in the data. Counts ride along so the
   // selected chip can show how many assignments it's narrowing to.
-  const yearOptions = useMemo(() => {
-    const counts = new Map();
-    advisories.forEach((a) => counts.set(a.school_year, (counts.get(a.school_year) ?? 0) + 1));
-    const years = Array.from(counts.keys()).sort().reverse();
-    return [
-      { value: "all", label: "All", count: advisories.length },
-      ...years.map((y) => ({ value: y, label: y, count: counts.get(y) })),
-    ];
+  // Years and counts come from the advisories actually loaded, not from the
+  // global year list: this page only ever shows years that have an advisory,
+  // and the per-year tallies are exact rather than enrollment-derived.
+  const { yearList, yearCounts } = useMemo(() => {
+    const counts = {};
+    advisories.forEach((a) => { counts[a.school_year] = (counts[a.school_year] ?? 0) + 1; });
+    return { yearList: Object.keys(counts).sort().reverse(), yearCounts: counts };
   }, [advisories]);
 
   const filtered = useMemo(() => {
@@ -410,16 +410,19 @@ export default function TeacherAdvisoriesPage() {
           onClearFilters={() => { setYearFilter("all"); setSearch(""); }}
           animate={isFirstRender}
           animateDelay={0.18}
-        >
-          <FilterRow label="School Year">
-            <ChipGroup
-              options={yearOptions}
-              value={yearFilter}
-              onChange={setYearFilter}
-              label="Filter by school year"
+          // This page's "show everything" sentinel is the string "all", not the
+          // empty string the picker uses, so it's mapped at the boundary rather
+          // than changing the filter logic below.
+          scope={
+            <SchoolYearPicker
+              value={yearFilter === "all" ? "" : yearFilter}
+              onChange={(y) => setYearFilter(y === "" ? "all" : y)}
+              options={yearList}
+              counts={yearCounts}
+              allYearsCount={advisories.length}
             />
-          </FilterRow>
-        </FilterBar>
+          }
+        />
 
         {/* Table */}
         <motion.div

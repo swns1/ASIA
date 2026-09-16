@@ -11,6 +11,7 @@ import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Button from "../components/ui/Button";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import toast from "react-hot-toast";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
@@ -103,7 +104,9 @@ const OVERVIEW_COLUMNS = [
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
 
-  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  // SchoolYearPicker reads the option list and per-year counts from the context
+  // itself, so only the global year is needed here.
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
   const [schoolYear,    setSchoolYear]    = useState(globalSchoolYear || "");
   useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
   const [schoolLevel,   setSchoolLevel]   = useState("");
@@ -132,7 +135,6 @@ function OverviewTab({ onNavigate }) {
     return () => clearTimeout(t);
   }, [search]);
 
-  const schoolYearOptions = [{ value: "", label: "All Years" }, ...globalYearOptions.map((y) => ({ value: y, label: y }))];
   const gradeLevelOptions = schoolLevel ? (OVERVIEW_GRADE_LEVELS[schoolLevel] ?? []) : [];
   const periodOptions     = schoolLevel
     ? (GRADING_PERIODS_BY_LEVEL[schoolLevel] ?? [])
@@ -251,16 +253,8 @@ function OverviewTab({ onNavigate }) {
         onClearFilters={clearFilters}
         animate={isFirstRender}
         animateDelay={0.28}
+        scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} />}
       >
-        <FilterRow label="School Year">
-          <ChipGroup
-            options={schoolYearOptions.map((o) => ({ ...o, icon: "ti-calendar" }))}
-            value={schoolYear}
-            onChange={setSchoolYear}
-            label="Filter by school year"
-          />
-        </FilterRow>
-
         <FilterRow label="School Level">
           <ChipGroup
             options={OVERVIEW_SCHOOL_LEVELS}

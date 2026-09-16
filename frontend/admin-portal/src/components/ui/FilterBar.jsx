@@ -76,6 +76,13 @@ export default function FilterBar({
   searchLabel = "Search",
   searchInputId,
   searchRef,
+  // `scope` is for a filter that isn't a facet but the frame the other facets
+  // narrow within — school year, in practice. It sits immediately right of the
+  // search field, ahead of `extraControls`, so it lands in the same place on
+  // every page. Kept separate from the chip rows because a scope whose option
+  // list grows without bound (one entry per school year, forever) can't live
+  // in a wrapping row without pushing the table down the page.
+  scope,
   extraControls,
   hasFilters = false,
   onClearFilters,
@@ -101,10 +108,13 @@ export default function FilterBar({
     >
       <style>{SEARCH_FOCUS_CSS}</style>
 
-      {/* Row 1: search + any page-specific controls + Search/Clear */}
+      {/* Row 1: scope + search + any page-specific controls + Search/Clear.
+          The search field carries basis-64 rather than a bare flex-1: with a
+          `scope` pill alongside it, flex-1/min-w-0 lets the pill's intrinsic
+          width win the negotiation and squeeze the field to just its icon. */}
       <div className="flex items-center gap-2.5">
         {showSearch && (
-          <div className="filterbar-search flex h-[42px] flex-1 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
+          <div className="filterbar-search flex h-[42px] flex-1 basis-64 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
             <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
             <label htmlFor={searchInputId} className="sr-only">
               {searchLabel}
@@ -131,6 +141,8 @@ export default function FilterBar({
             )}
           </div>
         )}
+
+        {scope}
 
         {extraControls}
 
