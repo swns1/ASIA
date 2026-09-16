@@ -836,6 +836,11 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         from django.db.models import Count
 
+        # The viewset's permission class lets guardians read, but these are
+        # school-wide counts and the guardian portal has no picker to feed.
+        if getattr(request.user, "role", None) == "guardian":
+            return Response({"detail": "You do not have access to this record."}, status=403)
+
         # Deliberately not self.get_queryset(): the picker is staff-facing
         # chrome and should list the same years regardless of who is looking,
         # rather than narrowing to one teacher's advisory sections.

@@ -32,7 +32,7 @@ function readCollapsed() {
 
 export default function AppLayout({ children }) {
   const alreadyInside = useContext(InsideAppLayout);
-  const { ensureDefault } = useSchoolYear();
+  const { ensureDefault, ensureYears } = useSchoolYear();
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -40,10 +40,12 @@ export default function AppLayout({ children }) {
   // AppLayout is the first thing to mount once a user is actually
   // authenticated (SchoolYearProvider itself mounts before login, when there's
   // no token yet to resolve a default against) — retry here so the global
-  // school year gets its backend-sourced default right after login.
+  // school year gets its backend-sourced default (and the picker its real
+  // year list) right after login.
   useEffect(() => {
     ensureDefault();
-  }, [ensureDefault]);
+    ensureYears();
+  }, [ensureDefault, ensureYears]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {

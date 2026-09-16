@@ -39,11 +39,16 @@ export function SchoolYearProvider({ children }) {
   // Per-year enrollment counts, keyed by year. Separate from `options` so the
   // existing consumers keep receiving a plain string array.
   const [yearCounts, setYearCounts] = useState({});
-  // The year the backend considers current — drives the "Current" group in the
-  // picker. Falls back to the computed one until the fetch lands.
+  // The current year — drives the "Current" group in the picker. The configured
+  // settings year wins, then the enrollment service's date-based one, then the
+  // computed fallback shown until either fetch lands.
   const [currentYear, setCurrentYear] = useState(() => computeDefaultSchoolYear());
   const fetchedDefault = useRef(false);
   const fetchedYears = useRef(false);
+  // The year configured in school settings, once known. It outranks the
+  // backend's date-based `current`: the configured year is what the app opens
+  // on, so it is what the picker's "Current" group must show.
+  const settingsYear = useRef(null);
 
   // Only used to seed a default the *first* time (no persisted user choice
   // yet) — never overrides a selection already made this session or before.
@@ -68,6 +73,11 @@ export function SchoolYearProvider({ children }) {
       .then((s) => {
         const backendYear = s?.current_school_year?.trim();
         const resolved = backendYear || computeDefaultSchoolYear();
+        if (backendYear) {
+          settingsYear.current = backendYear;
+          setCurrentYear(backendYear);
+          setOptions((prev) => withYearIncluded(prev, backendYear));
+        }
         setSchoolYearState((prev) => prev || resolved);
         persist(resolved);
       })
@@ -86,22 +96,41 @@ export function SchoolYearProvider({ children }) {
   // that function returns early once a year is already chosen (the common case
   // for any returning user, since the choice is persisted), which would leave
   // the picker permanently showing the computed fallback instead of real years.
-  useEffect(() => {
+  // Like ensureDefault, it is retried from AppLayout: this provider mounts on
+  // the login page, before there is a token to fetch with.
+  const ensureYears = useCallback(() => {
     if (fetchedYears.current || !isTokenValid()) return;
     if (getCurrentUser()?.role === "guardian") return; // no picker for guardians
     fetchedYears.current = true;
 
-    getSchoolYears()
-      .then((data) => {
+    // Settings are read here too, not only in ensureDefault(): that one is
+    // skipped for anyone with a persisted year, and they need the configured
+    // year in "Current" just the same.
+    Promise.all([
+      getSchoolYears(),
+      getSchoolSettings().catch(() => null),
+    ])
+      .then(([data, settings]) => {
+        const configured = settings?.current_school_year?.trim();
+        if (configured) settingsYear.current = configured;
         const rows = data?.results ?? [];
         if (!rows.length) return;
-        if (data.current) setCurrentYear(data.current);
+        setCurrentYear(settingsYear.current || data.current || computeDefaultSchoolYear());
         setYearCounts(Object.fromEntries(rows.map((r) => [r.school_year, r.count])));
-        setOptions(withYearIncluded(rows.map((r) => r.school_year), readPersisted()));
+        setOptions(
+          withYearIncluded(
+            withYearIncluded(rows.map((r) => r.school_year), settingsYear.current),
+            readPersisted(),
+          ),
+        );
       })
       // Non-fatal: the computed window stays in place so the picker still works.
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    ensureYears();
+  }, [ensureYears]);
 
   const setSchoolYear = useCallback((year) => {
     setSchoolYearState(year);
@@ -110,7 +139,7 @@ export function SchoolYearProvider({ children }) {
   }, []);
 
   return (
-    <SchoolYearContext.Provider value={{ schoolYear, setSchoolYear, options, currentYear, yearCounts, ensureDefault }}>
+    <SchoolYearContext.Provider value={{ schoolYear, setSchoolYear, options, currentYear, yearCounts, ensureDefault, ensureYears }}>
       {children}
     </SchoolYearContext.Provider>
   );
