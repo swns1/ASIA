@@ -227,8 +227,8 @@ class EnrollmentTransfer(models.Model):
 class EmailDeliveryFailure(models.Model):
     """
     Written whenever an outbound email exhausts its retries (see
-    email_views.py). There's only one email provider (Resend) configured in
-    this codebase and no task queue to retry through later, so this is the
+    email_views.py). There's only one outbound mail path (SMTP) in this
+    codebase and no task queue to retry through later, so this is the
     fallback for "the send failed": instead of the error vanishing into an
     HTTP response nobody reads, it's durable and visible here (and in the
     Django admin) so a failed enrollment confirmation can be noticed and

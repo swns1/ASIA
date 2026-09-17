@@ -21,7 +21,7 @@ import {
 const getSubjects   = (p = {}) => _getSubjects(p);
 const createSubject = (p)      => _createSubject(p);
 const updateSubject = (id, p)  => _updateSubject(id, p);
-const deleteSubject = (id)     => _deleteSubject(id).catch(() => null);
+const deleteSubject = (id)     => _deleteSubject(id);
 const getTemplates  = ()       => _getTemplates({ is_active: true });
 
 // ── Constants ─────────────────────────────────────────────────────────────────

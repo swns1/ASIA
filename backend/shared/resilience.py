@@ -1,6 +1,6 @@
 """
 Generic retry-with-backoff and multi-provider fallback for outbound calls
-that can fail transiently — AI providers (Groq, Gemini) and email (Resend)
+that can fail transiently — AI providers (Groq, Gemini) and outbound email
 all share the same failure shape: a timeout, a rate limit, or an upstream
 5xx that might succeed on retry, versus a bad key or bad request that will
 fail identically no matter how many times it's retried.
@@ -29,10 +29,9 @@ def is_transient_error(exc: Exception) -> bool:
     problem (bad API key, bad request) that will fail identically on retry.
 
     Duck-types on a `.code` attribute for provider SDK errors (google-genai's
-    ClientError/ServerError and resend's ResendError subclasses both carry
-    one) rather than importing those packages here — this module is shared
-    by services that each only use one of Groq/Gemini/Resend, never all
-    three at once.
+    ClientError/ServerError carry one) rather than importing those packages
+    here — this module is shared by services that each only use some of
+    them. SMTP errors have their own rule in enrollments/email_views.py.
     """
     if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
         return True

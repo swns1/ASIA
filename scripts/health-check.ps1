@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Polls /health/ on all four SLIS services.
+    Polls /health/ on all four SLIS services (and the frontend, if serving).
 
 .DESCRIPTION
     Each service exposes GET /health/ (backend/shared/health.py): no auth, and
@@ -8,25 +8,25 @@
     than the service being down. Checking all four at once is the fastest way
     to tell "the stack is up" from "one service failed to start".
 
+    Exits 1 if anything is unhealthy, so it can be used from Task Scheduler.
+
 .PARAMETER HostName
-    Address to poll. Defaults to localhost; pass the LAN IP to verify the
-    deployment the way another device on the network will see it.
+    Address to poll. Defaults to this machine's LAN address -- the same one
+    other devices use, and the one ALLOWED_HOSTS lists. (localhost is rejected
+    with a 400 once ALLOWED_HOSTS names only the LAN IP.)
 
 .EXAMPLE
     .\scripts\health-check.ps1
-    .\scripts\health-check.ps1 -HostName 192.168.1.42
+    .\scripts\health-check.ps1 -HostName localhost
 #>
-param([string]$HostName = 'localhost')
+param([string]$HostName)
 
-$services = @(
-    @{ Name = 'student';    Port = 8000 }
-    @{ Name = 'identity';   Port = 8001 }
-    @{ Name = 'billing';    Port = 8002 }
-    @{ Name = 'enrollment'; Port = 8003 }
-)
+. (Join-Path $PSScriptRoot '_common.ps1')
+if (-not $HostName) { $HostName = Get-LanIp }
 
+Write-Host "Checking $HostName"
 $failed = 0
-foreach ($s in $services) {
+foreach ($s in $SlisServices | Sort-Object { $_.Port }) {
     $url = "http://${HostName}:$($s.Port)/health/"
     try {
         $r = Invoke-WebRequest -Uri $url -TimeoutSec 5 -UseBasicParsing
@@ -35,7 +35,10 @@ foreach ($s in $services) {
     catch {
         $failed++
         $code = $_.Exception.Response.StatusCode.value__
-        if ($code) {
+        if ($code -eq 400) {
+            Write-Host ("{0,-11} 400  rejected -- is $HostName in this service's ALLOWED_HOSTS?" -f $s.Name) -ForegroundColor Yellow
+        }
+        elseif ($code) {
             # 503 is the service answering honestly that it cannot reach the DB.
             Write-Host ("{0,-11} {1}  {2}" -f $s.Name, $code, $_.Exception.Message) -ForegroundColor Yellow
         }
@@ -45,6 +48,19 @@ foreach ($s in $services) {
     }
 }
 
+# The frontend is optional (serve-lan.ps1 -Frontend); only report it if
+# something is listening on its port.
+if (Get-NetTCPConnection -LocalPort $FrontendPort -State Listen -ErrorAction SilentlyContinue) {
+    try {
+        $r = Invoke-WebRequest -Uri "http://${HostName}:$FrontendPort/" -TimeoutSec 5 -UseBasicParsing
+        Write-Host ("{0,-11} {1}  serving the app" -f 'frontend', $r.StatusCode) -ForegroundColor Green
+    }
+    catch {
+        $failed++
+        Write-Host ("{0,-11} DOWN  {1}" -f 'frontend', $_.Exception.Message) -ForegroundColor Red
+    }
+}
+
 Write-Host ""
-if ($failed) { Write-Host "$failed of $($services.Count) not healthy." -ForegroundColor Red; exit 1 }
-Write-Host "All $($services.Count) services healthy." -ForegroundColor Green
+if ($failed) { Write-Host "$failed check(s) failed." -ForegroundColor Red; exit 1 }
+Write-Host "All checks passed." -ForegroundColor Green

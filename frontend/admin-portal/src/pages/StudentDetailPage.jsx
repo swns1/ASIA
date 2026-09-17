@@ -490,6 +490,12 @@ export default function StudentDetailPage() {
   const [ledger,        setLedger]        = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [loading,       setLoading]       = useState(true);
+  // loadError: the student record itself failed (distinct from "not found").
+  // partialFailures: sections that fell back to empty, named so an empty
+  // card is never mistaken for "this student has no guardians".
+  const [loadError,       setLoadError]       = useState("");
+  const [partialFailures, setPartialFailures] = useState([]);
+  const [reloadKey,       setReloadKey]       = useState(0);
   const [linkGuardian,  setLinkGuardian]  = useState(null); // guardian being linked to an account
   // Siblings who attend this school, derived from a shared household — distinct
   // from `siblings` above, which is the free-text list typed at intake and may
@@ -513,13 +519,17 @@ export default function StudentDetailPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    setLoadError("");
+    const failed = [];
+    const soft = (promise, label, fallback) =>
+      promise.catch(() => { failed.push(label); return fallback; });
     Promise.all([
       getStudent(id),
-      getGuardiansByStudent(id).catch(() => []),
-      getSiblingsByStudent(id).catch(() => []),
-      getPreviousSchoolsByStudent(id).catch(() => []),
-      getEnrollments({ student: id, page_size: 100, ordering: "-school_year,-enrollment_id" }).catch(() => ({})),
-      getSiblingStudents(id).catch(() => []),
+      soft(getGuardiansByStudent(id), "guardians", []),
+      soft(getSiblingsByStudent(id), "siblings", []),
+      soft(getPreviousSchoolsByStudent(id), "previous schools", []),
+      soft(getEnrollments({ student: id, page_size: 100, ordering: "-school_year,-enrollment_id" }), "enrollments", {}),
+      soft(getSiblingStudents(id), "enrolled siblings", []),
     ]).then(([s, g, sib, sch, enrData, enrolledSibs]) => {
       setStudent(s);
       setGuardians(Array.isArray(g) ? g : g?.results ?? []);
@@ -527,8 +537,14 @@ export default function StudentDetailPage() {
       setSchools(Array.isArray(sch) ? sch : sch?.results ?? []);
       setEnrollments(Array.isArray(enrData) ? enrData : enrData?.results ?? []);
       setEnrolledSiblings(enrolledSibs);
+      setPartialFailures(failed);
+    }).catch((e) => {
+      // A 404 is a genuinely missing student; anything else is a load failure
+      // that must not be reported as "Student not found".
+      if (e?.response?.status === 404) { setStudent(null); return; }
+      setLoadError(e?.message || "Could not load this student.");
     }).finally(() => setLoading(false));
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function reloadSiblings() {
     try {
@@ -627,12 +643,31 @@ export default function StudentDetailPage() {
                   </div>
                 ))}
               </div>
+            ) : loadError ? (
+              <div style={{ padding:"48px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}>
+                <Alert variant="error">{loadError}</Alert>
+                <Button variant="secondary" icon="ti-refresh" onClick={() => setReloadKey((k) => k + 1)}>
+                  Try again
+                </Button>
+              </div>
             ) : !student ? (
               <div style={{ textAlign:"center", padding:"80px 0", color:"#8a6a6a", fontSize:15 }}>
                 Student not found.
               </div>
             ) : (
               <>
+                {partialFailures.length > 0 && (
+                  <Alert variant="warning">
+                    Could not load: {partialFailures.join(", ")}. Those sections may look empty —{" "}
+                    <button
+                      type="button"
+                      onClick={() => setReloadKey((k) => k + 1)}
+                      className="font-semibold underline"
+                    >
+                      reload
+                    </button>.
+                  </Alert>
+                )}
                 {/* ── Hero profile card + tab bar ──
                     Grouped in one non-animated wrapper with no gap between
                     them so they read as a single card with the tabs as its

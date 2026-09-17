@@ -1,7 +1,8 @@
 // ApplicantFormPage — the public student information form an applicant
-// fills in themselves on a front-desk device handed over to them at the
-// school. Access is gated by a staff-issued invite (link) + a separately
-// delivered access code — see backend intake/views.py and the plan. Nothing
+// fills in themselves: on their own phone (on the school Wi-Fi, after
+// scanning the QR code the registrar shows them) or on a front-desk device a
+// registrar hands over. Access is gated by a staff-issued invite (link) + a
+// separately delivered access code — see backend intake/views.py. Nothing
 // here writes to the student master directly: submission produces a
 // StudentApplication for a registrar to review at /student-applications.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +56,23 @@ const AUTOSAVE_DEBOUNCE_MS = 3000;
 // needing to clear site data by hand.
 const EXIT_TAP_COUNT = 5;
 const EXIT_TAP_WINDOW_MS = 2500;
+
+// Kiosk behaviour (idle reset, success countdown, "hand the device back")
+// belongs on a school device a staff member armed, not on a parent's own
+// phone. A device counts as armed once staff confirmed a hand-over on it, and
+// stays armed for the tab's life: the hand-over signs staff out, so the next
+// family's session on the same device would otherwise look like a phone.
+// The five-tap exit disarms it.
+const KIOSK_FLAG = "slis.kioskDevice";
+function readKioskFlag() {
+  try { return sessionStorage.getItem(KIOSK_FLAG) === "1"; } catch { return false; }
+}
+function writeKioskFlag(on) {
+  try {
+    if (on) sessionStorage.setItem(KIOSK_FLAG, "1");
+    else sessionStorage.removeItem(KIOSK_FLAG);
+  } catch { /* storage unavailable: kiosk mode just lasts for this page */ }
+}
 
 function fromPayload(payload) {
   const p = payload || {};
@@ -137,7 +155,7 @@ const CONFETTI = [
 // finishing an application — rather than the generic app-wide
 // FullPageMessage card, so it stays inside this page's cream/red identity
 // instead of switching to neutral chrome for one screen.
-function KioskSuccessScreen({ reference, countdown, onDone }) {
+function KioskSuccessScreen({ reference, countdown, onDone, kiosk }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="relative w-full max-w-md rounded-3xl border border-[#fde2de] bg-white p-9 text-center shadow-2xl">
@@ -175,21 +193,30 @@ function KioskSuccessScreen({ reference, countdown, onDone }) {
         </motion.div>
 
         <h1 className="text-2xl font-bold text-[#1a0a0a]">Application submitted</h1>
-        <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
-          Reference <strong className="text-[#1a0a0a]">{reference}</strong>. Please hand the device back to a staff
-          member, who will review your application and follow up with next steps.
-        </p>
+        {kiosk ? (
+          <>
+            <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
+              Reference <strong className="text-[#1a0a0a]">{reference}</strong>. Please hand the device back to a staff
+              member, who will review your application and follow up with next steps.
+            </p>
 
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
-          <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
-            <div
-              className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
-              style={{ width: `${(countdown / SUCCESS_RETURN_SECONDS) * 100}%` }}
-            />
-          </div>
-          <Button variant="secondary" onClick={onDone} className="mt-3">Done</Button>
-        </div>
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
+              <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
+                <div
+                  className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
+                  style={{ width: `${(countdown / SUCCESS_RETURN_SECONDS) * 100}%` }}
+                />
+              </div>
+              <Button variant="secondary" onClick={onDone} className="mt-3">Done</Button>
+            </div>
+          </>
+        ) : (
+          <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
+            Reference <strong className="text-[#1a0a0a]">{reference}</strong>. The Registrar will review your
+            application and follow up with next steps. You can keep this screen as proof, then close this page.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -226,6 +253,7 @@ export default function ApplicantFormPage() {
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [countdown, setCountdown] = useState(SUCCESS_RETURN_SECONDS);
+  const [kioskMode, setKioskMode] = useState(readKioskFlag);
 
   const submittingRef = useRef(false);
   const autosaveTimer = useRef(null);
@@ -295,6 +323,8 @@ export default function ApplicantFormPage() {
     // parent left alone with the tablet must land on /login, not inside the
     // admin portal, if they poke at the browser chrome.
     clearAuthSession();
+    writeKioskFlag(true);
+    setKioskMode(true);
     setPhase("form");
   };
 
@@ -366,7 +396,7 @@ export default function ApplicantFormPage() {
   useIdleReset({
     timeoutMs: saveState === "error" ? IDLE_TIMEOUT_UNSAVED_MS : IDLE_TIMEOUT_MS,
     warnMs: IDLE_WARN_MS,
-    enabled: phase === "form" && !submitting,
+    enabled: kioskMode && phase === "form" && !submitting,
     onWarn: () => setShowIdleWarning(true),
     onResume: () => setShowIdleWarning(false),
     onReset: () => {
@@ -377,7 +407,7 @@ export default function ApplicantFormPage() {
 
   // ── Success screen countdown ──────────────────────────────────────────
   useEffect(() => {
-    if (phase !== "success") return undefined;
+    if (phase !== "success" || !kioskMode) return undefined;
     setCountdown(SUCCESS_RETURN_SECONDS);
     const interval = setInterval(() => {
       setCountdown((c) => {
@@ -391,7 +421,7 @@ export default function ApplicantFormPage() {
     }, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, kioskMode]);
 
   // ── Hidden exit gesture ────────────────────────────────────────────────
   const handleHeaderTap = () => {
@@ -668,7 +698,7 @@ export default function ApplicantFormPage() {
           confirmLabel="Yes, leave"
           cancelLabel="Stay on the form"
           danger={false}
-          onConfirm={() => navigate("/login", { replace: true })}
+          onConfirm={() => { writeKioskFlag(false); navigate("/login", { replace: true }); }}
           onCancel={() => setShowExitConfirm(false)}
         />
       )}
@@ -687,7 +717,7 @@ export default function ApplicantFormPage() {
       )}
 
       {phase === "success" && (
-        <KioskSuccessScreen reference={reference} countdown={countdown} onDone={resetToGate} />
+        <KioskSuccessScreen reference={reference} countdown={countdown} onDone={resetToGate} kiosk={kioskMode} />
       )}
 
       {phase === "expired" && (

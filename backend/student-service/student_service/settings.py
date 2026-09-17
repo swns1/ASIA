@@ -198,13 +198,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "student_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 1: exactly one reverse proxy sits in front of this service in every
-    # deployed environment (Render's load balancer). Governs both DRF
-    # throttling's client identification (SimpleRateThrottle.get_ident) and
-    # the audit log's recorded IP (shared.audit.client_ip reads this same
-    # setting) — at 0, every client resolves to the proxy's IP, collapsing
-    # AnonRateThrottle into one shared bucket and making the audit trail
-    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    # NUM_PROXIES governs both DRF throttling's client identification
+    # (SimpleRateThrottle.get_ident) and the audit log's recorded IP
+    # (shared.audit.client_ip reads this same setting).
     # How many reverse proxies sit in front of this service. Env-driven for
     # the same reason DEBUG and the SECURE_* flags are: the right value is a
     # property of the deployment, not of the code.
@@ -274,7 +270,11 @@ STORAGES = {
 }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# MEDIA_ROOT may be set in .env. Student- and enrollment-service both write
+# rows to student_requirement_submissions, so pointing both at one shared
+# folder keeps every stored path readable by either service. A relative value
+# is resolved against this service's folder; an absolute one is used as-is.
+MEDIA_ROOT = BASE_DIR / os.environ.get("MEDIA_ROOT", "media")
 
 # DRF throttling (see DEFAULT_THROTTLE_CLASSES above) reads/writes through
 # this cache. Without an explicit CACHES setting Django falls back to

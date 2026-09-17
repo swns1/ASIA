@@ -28,8 +28,8 @@ python-dotenv==1.2.2
 requests==2.33.1
 
 # ── AI & External APIs ────────────────────────────────────────────────────────
+# Email goes out over SMTP via django.core.mail, so it needs no package here.
 google-genai==2.2.0
-resend==2.30.0
 
 # ── Data Science (analytics) ──────────────────────────────────────────────────
 numpy==2.4.4

@@ -14,7 +14,7 @@ import { downloadAsPDF } from "../../utils/pdfExport";
 import { levelConfig, attIndex, gradeColor, GRADE_ORDER } from "../../utils/grading";
 import { PRINT_COLORS as C } from "../../components/print/theme";
 import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
-import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
+import { PrintShell, PrintLoading, PrintError, PrintIncompleteWarning } from "../../components/print/PrintShell";
 import { PrintLetterhead } from "../../components/print/PrintLetterhead";
 import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
@@ -37,10 +37,16 @@ export default function SF9PrintPage() {
   const [schoolAddress,  setSchoolAddress]  = useState("");
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
+  const [incomplete,     setIncomplete]     = useState([]);
   const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => {
     (async () => {
+      // Optional sections still fall back to empty so the rest of the card
+      // renders, but each fallback is recorded and shown above the form.
+      const failed = [];
+      const soft = (promise, label, fallback) =>
+        promise.catch(() => { failed.push(label); return fallback; });
       try {
         const enr = await getEnrollment(enrollmentId);
         setEnrollment(enr);
@@ -54,10 +60,10 @@ export default function SF9PrintPage() {
             ...(enr.semester ? { semester: enr.semester } : {}),
           }),
           getGrades({ enrollment: enrollmentId }),
-          getAttendance({ enrollment: enrollmentId, page_size: 500 }).catch(() => []),
+          soft(getAttendance({ enrollment: enrollmentId, page_size: 500 }), "attendance", []),
           getSchoolSettings().catch(() => null),
-          getNarrativeCategories({ is_active: true }).catch(() => []),
-          getNarrativeReports({ enrollment: enrollmentId }).catch(() => []),
+          soft(getNarrativeCategories({ is_active: true }), "observed values", []),
+          soft(getNarrativeReports({ enrollment: enrollmentId }), "observed values", []),
         ]);
 
         setStudent(stu);
@@ -100,6 +106,7 @@ export default function SF9PrintPage() {
         );
         if (settings?.school_name) setSchoolName(settings.school_name);
         if (settings?.school_address) setSchoolAddress(settings.school_address);
+        setIncomplete([...new Set(failed)]);
       } catch (e) {
         setError(e.message || "Failed to load data.");
       } finally {
@@ -187,6 +194,8 @@ export default function SF9PrintPage() {
           </>
         }
       />
+
+      <PrintIncompleteWarning sections={incomplete} />
 
       <PrintShell id="sf9-doc" maxWidth={720} orientation="portrait">
         <PrintLetterhead

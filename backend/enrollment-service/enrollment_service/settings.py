@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
-load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,20 +21,11 @@ sys.path.insert(0, str(BASE_DIR.parent))
 from shared.logging_config import build_logging  # noqa: E402 — needs the sys.path insert above
 
 
-# ─── tiny .env loader (no external dep) ─────────────────────────────────────
-def _load_env(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key, val = key.strip(), val.strip().strip('"').strip("'")
-        os.environ.setdefault(key, val)
-
-
-_load_env(BASE_DIR / ".env")
+# Explicit path, like the other three services: load_dotenv() with no
+# argument searches upward from the calling file and would silently pick
+# up a stray .env from a parent folder. Values already set in the
+# environment win (scripts/setup-db.ps1 relies on that for DB_NAME).
+load_dotenv(BASE_DIR / ".env")
 
 
 def env(name: str, default: str = "") -> str:
@@ -222,13 +212,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "enrollment_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 1: exactly one reverse proxy sits in front of this service in every
-    # deployed environment (Render's load balancer). Governs both DRF
-    # throttling's client identification (SimpleRateThrottle.get_ident) and
-    # the audit log's recorded IP (shared.audit.client_ip reads this same
-    # setting) — at 0, every client resolves to the proxy's IP, collapsing
-    # AnonRateThrottle into one shared bucket and making the audit trail
-    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    # NUM_PROXIES governs both DRF throttling's client identification
+    # (SimpleRateThrottle.get_ident) and the audit log's recorded IP
+    # (shared.audit.client_ip reads this same setting).
     # How many reverse proxies sit in front of this service. Env-driven for
     # the same reason DEBUG and the SECURE_* flags are: the right value is a
     # property of the deployment, not of the code.
@@ -266,7 +252,12 @@ CORS_ALLOW_CREDENTIALS = True
 
 
 # ─── Misc ───────────────────────────────────────────────────────────────────
-AUTH_PASSWORD_VALIDATORS = []
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Manila"
 USE_I18N = True
@@ -316,11 +307,36 @@ CACHES = {
 # (this app's own source folder), which is why dozens of uploaded files ended
 # up committed inside requirements/. See requirements/serializers.py::_save_file.
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# MEDIA_ROOT may be set in .env. Student- and enrollment-service both write
+# rows to student_requirement_submissions, so pointing both at one shared
+# folder keeps every stored path readable by either service. A relative value
+# is resolved against this service's folder; an absolute one is used as-is.
+MEDIA_ROOT = BASE_DIR / os.environ.get("MEDIA_ROOT", "media")
 
+
+# ─── Outbound email ──────────────────────────────────────────────────────────
+# Plain SMTP through Django's own mail module (a wrapper over Python's
+# smtplib), so any mailbox can send — a school Gmail/Workspace account with an
+# App Password by default. This replaced Resend, whose shared test sender only
+# delivers to the Resend account owner, so confirmations never reached real
+# families. Leaving EMAIL_HOST_USER blank switches sending off cleanly (the
+# endpoint answers 503) instead of failing at the SMTP login. For development,
+# EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend prints the
+# message to the terminal instead of sending it.
+EMAIL_BACKEND       = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST          = env("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT          = _env_int("EMAIL_PORT", 587)
+EMAIL_USE_TLS       = _env_bool("EMAIL_USE_TLS", True)
+EMAIL_USE_SSL       = _env_bool("EMAIL_USE_SSL", False)
+EMAIL_HOST_USER     = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_TIMEOUT       = _env_int("EMAIL_TIMEOUT", 10)
+DEFAULT_FROM_EMAIL  = env(
+    "DEFAULT_FROM_EMAIL",
+    f"South Lakes Integrated School <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "webmaster@localhost",
+)
 
 # ─── External APIs ───────────────────────────────────────────────────────────
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 

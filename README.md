@@ -16,21 +16,40 @@ JWTs are issued by identity-service and verified by every other service using th
 
 ## Prerequisites
 
-- Python 3.11+ and a virtualenv tool
-- Node.js 18+
-- PostgreSQL, with a database named `SLIS THESIS FINAL` (or override `DB_NAME` in each service's `.env`)
+- Python 3.12+ (Django 6 requires it; CI runs 3.12) and a virtualenv tool
+- Node.js 20.19+ or 22.12+ (required by Vite 8)
+- PostgreSQL (the scripts find `psql`/`pg_dump` under `C:\Program Files\PostgreSQL` even when they are not on `PATH`). The database is named `SLIS THESIS FINAL` unless `DB_NAME` in each service's `.env` says otherwise.
 
 ## Setup
 
 ### 1. Database
 
-Create the database, load the schema, then the seed data:
+Fill in `backend/identity-service/.env` first (see Backend below) — the script
+reads the database connection from it. Then, from the repository root:
 
-```sh
-psql -U postgres -c 'CREATE DATABASE "SLIS THESIS FINAL"'
-psql -U postgres -d "SLIS THESIS FINAL" -f schema.sql
-psql -U postgres -d "SLIS THESIS FINAL" -f seed_data.sql
+```powershell
+.\scripts\setup-db.ps1 -Demo     # development / demo: schema + reference data + demo data
+.\scripts\setup-db.ps1           # real install: schema + reference data only
 ```
+
+What it does, in order — the manual equivalent if you cannot run it:
+
+1. `CREATE DATABASE` (it refuses to touch a database that already exists; pass `-DbName` to rehearse on a throwaway one).
+2. Loads `schema.sql`.
+3. Runs `manage.py migrate --fake` in every service. `schema.sql` already contains every table Django's migrations would create, but a schema-only dump leaves `django_migrations` empty, so a plain `migrate` stops with *relation already exists*. Because all four services have an app labelled `accounts` sharing that one table (see *Known in-progress work*), identity's `accounts 0001_create_audit_log` and student's `accounts 0001_initial` are faked **first**, then all four services in full — any other order fails with `InconsistentMigrationHistory`.
+4. Loads `scripts/reference_data.sql` — the requirement catalogue, grading templates, the DepEd observed-value categories and a default school-settings row. A real install needs these; nothing else creates them.
+5. With `-Demo` only: loads `seed_data.sql` (demo learners, grades, attendance and the six accounts below). It includes `reference_data.sql` itself, so `psql -f seed_data.sql` alone also still works on a database that already has the schema.
+
+`scripts/2026-09-*.sql` are **not** part of a fresh install — `schema.sql` already contains both. They exist only to upgrade a database created before September 2026; run them there once, in date order.
+
+For a real install, create the first account afterwards (there is no `createsuperuser`: accounts live in identity-service's own `users` table):
+
+```powershell
+cd backend\identity-service
+..\..\.venv\Scripts\python.exe manage.py manage_accounts create-admin --email you@school.edu.ph --name "Your Name"
+```
+
+Then set the school address and school-year dates on **Billing Settings**, and add the curriculum on **Subjects** — the demo's twenty subjects are demo data, not a full curriculum.
 
 #### Demo accounts
 
@@ -52,13 +71,21 @@ version pinned them to ids 1-6, which meant that on any database that already
 had users the ids collided, `ON CONFLICT DO NOTHING` skipped every row, and
 these credentials silently did not exist.
 
-> These are evaluation credentials committed to a public repo. Change or delete
-> them before the system is deployed anywhere real.
+> These are evaluation credentials committed to a public repo. On any database
+> that holds real data, lock them (this replaces their passwords with an
+> unusable hash and signs them out; re-running `seed_data.sql` unlocks them):
+>
+> ```powershell
+> cd backend\identity-service
+> ..\..\.venv\Scripts\python.exe manage.py manage_accounts lock-demo
+> ```
+>
+> `manage_accounts set-password --email ...` changes any single account's password instead.
 
-The seed also populates `subjects`, `grading_templates`, `grading_components`
-and `users` — without those, the `grades` rows violate their subject foreign
-key, the opening `BEGIN;` rolls the whole file back, and there is no account to
-log in with.
+The seed also populates `subjects` and `users` (and, through
+`scripts/reference_data.sql`, `grading_templates` and `grading_components`) —
+without those, the `grades` rows violate their subject foreign key, the opening
+`BEGIN;` rolls the whole file back, and there is no account to log in with.
 
 **Demo data lives in SY 2025-2026, 1st Quarter.** Analytics and the class lists
 default to the current school year, which has no seeded data; select
@@ -87,7 +114,7 @@ Then, for each of the 4 services:
 ```sh
 cd backend/<service-name>
 copy .env.example .env        # then fill in real values — see below
-python manage.py migrate
+python manage.py migrate      # after setup-db.ps1 this applies nothing; it picks up migrations added later
 python manage.py runserver <port from the table above>
 ```
 
@@ -97,7 +124,9 @@ Each service still needs its own `.env` (see `.env.example` in each service dire
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
 
-`enrollment-service` additionally needs `GEMINI_API_KEY`, `GROQ_API_KEY`, and `RESEND_API_KEY`; `student-service` needs `GROQ_API_KEY`. Ask a teammate for current values or provision your own at Google AI Studio / Groq / Resend.
+`enrollment-service` additionally needs `GEMINI_API_KEY` and `GROQ_API_KEY`; `student-service` needs `GROQ_API_KEY`. Ask a teammate for current values or provision your own at Google AI Studio / Groq.
+
+The enrollment confirmation email goes out over plain SMTP (`django.core.mail`, i.e. Python's `smtplib`) using the `EMAIL_*` settings in `enrollment-service/.env` — by default a Gmail or Google Workspace mailbox with an **App Password** (turn on 2-Step Verification, then Google Account → Security → App passwords). That reaches any recipient, up to about 500 messages a day on Gmail or 2,000 on Workspace, and the machine needs internet access on port 587. Leave `EMAIL_HOST_USER` blank to switch email off: enrollment still saves, and staff are told the confirmation was not sent. For development, `EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend` prints messages to the terminal instead. (This replaced Resend, whose shared test sender only delivers to the Resend account owner — confirmations never reached real families.)
 
 `DEBUG` and `ALLOWED_HOSTS` are also read from `.env` now rather than hardcoded — `.env.example` already sets `DEBUG=1` and `ALLOWED_HOSTS=*` for local development (the `*` is what lets a phone on the same LAN reach a service by IP address during testing). Leaving either unset defaults to the safe, production-appropriate value (`DEBUG=False`, no hosts allowed), so a real deployment needs to set both explicitly — along with `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, and `SECURE_HSTS_SECONDS`, all opt-in and off by default because nothing in this stack terminates TLS yet. Each service also exposes `GET /health/` (checks DB connectivity, no auth required) and caches DRF throttle counters to a local `cache/` directory (`django.core.cache.backends.filebased.FileBasedCache`) instead of the previous per-process in-memory default, so rate limits hold up across more than one worker process on the same machine.
 
@@ -164,36 +193,61 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 ## Deployment
 
 There is no Dockerfile, PaaS config, or reverse proxy in this repo. What is
-documented here is a **LAN testing deployment**: the four services plus the
-built frontend running on one Windows machine, reachable from other devices on
-the same network. That is enough for demos and panel testing. It is not a public
-production deployment — nothing in this stack terminates TLS.
+documented here is a **LAN deployment**: the four services plus the built
+frontend running on one Windows machine at the school, reachable from staff
+computers and from phones on the school Wi-Fi. It is not a public internet
+deployment — nothing in this stack terminates TLS, and nothing outside the
+school network can reach it.
+
+Every script below is in `scripts\` and run from the repository root in
+PowerShell.
+
+| Script | What it does |
+|---|---|
+| `setup-db.ps1` | Builds a new database (see Setup → Database). |
+| `serve-lan.ps1` | Preflight checks, then starts the services (`-Frontend` adds the app, `-Background` runs hidden with output in `logs\`, `-Check` only checks). |
+| `stop-lan.ps1` | Stops whatever `serve-lan.ps1` started. |
+| `health-check.ps1` | Polls every service (and the app, if served) on the LAN address. |
+| `backup.ps1` / `restore.ps1` | Database dump plus uploaded documents; restore into a new database or `-Replace`. |
+| `install-startup-task.ps1` | Run as administrator once: start on boot, nightly jobs, firewall rule. |
 
 ### Before the first deploy
 
 1. **Rotate the Gemini API key** — a live one is in git history (commit `5bcd352`).
-2. **Change the demo account passwords** listed above; they are published in this repo.
-3. Keep the repo private until the documents noted under *Known in-progress work* are purged from history.
+2. **Lock the demo accounts** if the database was loaded with `-Demo` (`manage_accounts lock-demo`, see Setup), and create a real super admin.
+3. Keep the repo private until the files noted under *Known in-progress work* are purged from history.
 
 ### 1. Environment
 
-In each `backend/*/.env`:
+Find the machine's LAN address with `.\scripts\serve-lan.ps1 -Check` (it picks
+the adapter with the default route, skipping Hyper-V/WSL/VPN adapters). Give the
+machine a **fixed** address (a DHCP reservation on the router): the address is
+baked into the frontend build and into every QR code the registrar prints.
+
+In **each** `backend/*/.env` (example address `192.168.1.42`):
 
 ```ini
 DEBUG=0
-ALLOWED_HOSTS=192.168.1.42                      # this machine's LAN IP
-CORS_ALLOWED_ORIGINS=http://192.168.1.42:4173   # where the frontend is served
+ALLOWED_HOSTS=192.168.1.42,localhost
+CORS_ALLOWED_ORIGINS=http://192.168.1.42:4173
 ```
+
+Additionally:
+
+| File | Setting | Why |
+|---|---|---|
+| `student-service/.env` | `FRONTEND_BASE_URL=http://192.168.1.42:4173` | The applicant QR code and link are built from it. Left at the default (localhost), a parent's phone opens nothing — the invite window warns about this. |
+| `enrollment-service/.env` | `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` (and optionally `DEFAULT_FROM_EMAIL`) | Enrollment confirmation email; see Backend setup. Blank = email off. |
+| `student-service/.env` and `enrollment-service/.env` | `MEDIA_ROOT=C:\SLIS-Data\media` (same value in both) | Both services store requirement documents; one shared folder keeps every document readable by either. Optional — the default is each service's own `media\`. |
 
 `SECRET_KEY` must still be identical across all four. Leave every `SECURE_*`
 flag **off** for a plain-HTTP LAN run — `SECURE_SSL_REDIRECT=1` without HTTPS
 makes every page unreachable. `NUM_PROXIES` stays `0` with no proxy in front.
 
 `ALLOWED_HOSTS` is not optional once `DEBUG=0`: an empty list rejects every
-request, which looks exactly like the service being down.
-
-Find the LAN IP with `ipconfig`, or run `.\scripts\serve-lan.ps1 -Check`, which
-prints it along with the URLs.
+request, which looks exactly like the service being down. `serve-lan.ps1`
+warns about `DEBUG=1`, `ALLOWED_HOSTS=*`, a missing LAN address in
+`ALLOWED_HOSTS`/`CORS_ALLOWED_ORIGINS`, and a localhost `FRONTEND_BASE_URL`.
 
 ### 2. Collect static files
 
@@ -209,27 +263,7 @@ Required, not optional. Static files go through whitenoise's
 `CompressedManifestStaticFilesStorage`, which raises on any file it has no hash
 for — skip this and `/admin/` and the DRF browsable API break at request time.
 
-### 3. Start the services
-
-```powershell
-.\scripts\serve-lan.ps1
-```
-
-waitress, not gunicorn: gunicorn stays pinned for a future Linux host but does
-not run on Windows. Each service binds `0.0.0.0` (not `127.0.0.1`) so the LAN
-can reach it, and opens in its own window — close the windows to stop the stack.
-The script refuses to start if a `.env` or a static manifest is missing.
-
-Verify from the host, then from another device:
-
-```powershell
-.\scripts\health-check.ps1 -HostName 192.168.1.42
-```
-
-All four must return `{"status": "ok"}`. A `503` means the service is up but the
-shared database is unreachable.
-
-### 4. Build and serve the frontend
+### 3. Build the frontend
 
 The production build **must** be given the API URLs — `vite build` aborts
 without them rather than silently baking in `localhost`:
@@ -241,34 +275,140 @@ $env:VITE_STUDENT_API_URL    = "http://192.168.1.42:8000/api"
 $env:VITE_BILLING_API_URL    = "http://192.168.1.42:8002/api"
 $env:VITE_ENROLLMENT_API_URL = "http://192.168.1.42:8003/api"
 npm run build
-npm run preview -- --host 0.0.0.0 --port 4173
+cd ..\..
 ```
 
-Confirm the URLs were actually used — the count must be **0**:
+Rebuild whenever the code or the machine's address changes — `serve-lan.ps1
+-Frontend` warns when `dist\` is older than `src\` or still calls localhost.
+
+### 4. Start and verify
 
 ```powershell
-(Select-String -Path dist\assets\*.js -Pattern "localhost:80").Count
+.\scripts\serve-lan.ps1 -Frontend
+.\scripts\health-check.ps1
 ```
 
-Whatever serves `dist/` must fall back to `index.html` for unknown paths, or
-refreshing on any route 404s. `vercel.json` does this on Vercel only.
+waitress, not gunicorn: gunicorn stays pinned for a future Linux host but does
+not run on Windows. Each service binds `0.0.0.0` so the LAN can reach it. The
+app is served by `vite preview` on port 4173 (configured in `vite.config.js` to
+listen on every interface, accept the machine's name as well as its IP, and
+fall back to `index.html` so refreshing any page works). Each process opens in
+its own window; close them, or run `.\scripts\stop-lan.ps1`, to stop.
 
-### 5. Schedule the overdue-installments job
+`health-check.ps1` must report every service `{"status": "ok"}` and the
+frontend `200`. A `503` means the service is up but the database is
+unreachable; a `400` means the address is missing from `ALLOWED_HOSTS`. Then
+open `http://192.168.1.42:4173` from another computer and from a phone on the
+school Wi-Fi, and log in.
 
-Nothing invokes this automatically:
+### 5. Run it unattended
+
+From an **elevated** PowerShell, once:
 
 ```powershell
-cd backend\billing-service
-..\..\.venv\Scripts\python.exe manage.py flag_overdue_installments
+.\scripts\install-startup-task.ps1
 ```
 
-Register it daily in Windows Task Scheduler, or installments stay `pending` past
-their due date.
+This registers, under Task Scheduler's `SLIS` folder, tasks that run as SYSTEM
+(no one needs to be logged in):
 
-### Firewall
+| Task | When | Runs |
+|---|---|---|
+| `SLIS\Start` | at boot, after 1 minute | `serve-lan.ps1 -Frontend -Background` (output in `logs\`) |
+| `SLIS\Overdue` | daily, 1:00 | billing `manage.py flag_overdue_installments` — without it, unpaid installments never turn `overdue` |
+| `SLIS\Backup` | daily, 2:00 | `backup.ps1` |
+| `SLIS\Cleanup` | Sundays, 3:00 | identity `manage.py clearsessions` and `axes_reset_logs --age 90` |
 
-Windows Firewall blocks inbound connections on these ports by default. Allow
-8000-8003 and the frontend port for **Private** networks only — never Public.
+It also adds the inbound firewall rule **SLIS (LAN)** for TCP 8000-8003 and
+4173 on **Private** networks only, and warns if the current network is
+classified as Public (in which case the rule does not apply — set the school
+network to Private). Start immediately with
+`Start-ScheduledTask -TaskPath '\SLIS\' -TaskName Start`; remove everything
+with `-Uninstall`.
+
+### 6. Backups
+
+`backup.ps1` writes `backups\<timestamp>\` containing `database.dump`
+(`pg_dump` custom format) and a zip of the uploaded documents, and deletes
+backup folders older than 14 days (`-KeepDays`). **Copy `backups\` to another
+drive or machine regularly** — a backup on the same disk does not survive that
+disk failing. `backups\` is gitignored; it holds every student's data.
+
+Restoring:
+
+```powershell
+# Into a new database, leaving the live one untouched (check it first):
+.\scripts\restore.ps1 -BackupFolder backups\2026-09-17_020000
+# Over the live database and document folders (stop the services first):
+.\scripts\stop-lan.ps1
+.\scripts\restore.ps1 -BackupFolder backups\2026-09-17_020000 -Replace
+```
+
+### Applicant form: parent's phone or school device
+
+Families fill in the student information form themselves. There is no app to
+install and no email involved:
+
+1. The registrar opens **Student Applications → issue invite**. The window shows
+   a large **QR code**, the one-time **access code**, and the link as a backup.
+2. The parent joins **the same network as the SLIS machine** — normally the
+   school Wi-Fi — and scans the QR code with their camera; the form opens in
+   the phone's browser.
+3. The registrar reads out (or writes down) the access code; the parent enters
+   it and fills in the form. The link alone opens nothing — the code is the
+   second factor, and it locks after five wrong attempts.
+
+If the camera can't scan, the registrar copies the link and sends it by
+Messenger or SMS — never together with the code. **Print slip** prints the QR
+code, code and expiry (invites last 3 days) for a family that will finish
+another day; the code is shown only once, so the slip is how they keep it.
+
+For a family without a phone, **Open form on this device** opens the form on
+the school's own tablet or PC. After the code, the registrar confirms the
+hand-over, which signs the staff account out on that device. A device handed
+over this way behaves as a kiosk until the five-tap exit on the form header: the
+form resets itself after 3 minutes idle and after each submission. On a
+parent's own phone neither happens — the draft autosaves and stays.
+
+To lock a school device to the form, run the browser in kiosk mode, e.g.
+`msedge --kiosk http://192.168.1.42:4173/login --edge-kiosk-type=fullscreen`,
+or use screen pinning on an Android tablet.
+
+#### Trying the QR before there is a school network
+
+The QR needs a shared network, not the school's specifically. Two ways to test
+it anywhere, including from a laptop with no LAN:
+
+- **Phone hotspot.** Turn on the phone's hotspot and connect the SLIS machine
+  to it. Both are then on one network and the QR works as it will at the
+  school. Re-check the address afterwards: it changes with the network.
+- **Home Wi-Fi**, exactly as the school one is described above.
+
+Either way, **open the portal by the machine's network address**, e.g.
+`http://192.168.1.42:5173` (dev) or `:4173` (built) rather than `localhost`,
+and the QR follows that address automatically — the invite window rewrites a
+`localhost` link onto whatever address staff are using, so testing needs no
+`.env` change. Serve the dev server on the network with
+`npm run dev -- --host`, and add that origin to `CORS_ALLOWED_ORIGINS` in all
+four `.env` files, or the app loads on the phone and every request fails.
+
+Opening the portal on `localhost` leaves the QR pointing at `localhost`, which
+only that computer can open; the invite window says so. Use **Open form on this
+device** to try the form there instead.
+
+A phone on **mobile data** cannot reach the system at all, wherever it is:
+nothing here is on the internet. Publishing it would mean a public host or a
+tunnel, and all four APIs with it — worth doing only if remote, at-home
+applications become a requirement.
+
+**If a phone can't open the link**, every one of these must hold — the phone
+loads the page from port 4173 and then calls the APIs on 8000-8003 directly:
+
+- the phone and the SLIS machine are on the same Wi-Fi / router (or hotspot);
+- the router's *AP isolation* / *client isolation* (common on guest Wi-Fi) is off;
+- the SLIS machine's network is set to **Private**, and the firewall rule exists (`install-startup-task.ps1`);
+- `FRONTEND_BASE_URL`, `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` use the LAN address, and the frontend was built with it;
+- a phone on mobile data cannot reach the system at all — by design.
 
 ## Known in-progress work
 
@@ -278,19 +418,24 @@ Windows Firewall blocks inbound connections on these ports by default. Allow
 - **Flipping the remaining `managed = False` models to `managed = True` needs the `accounts` app-label collision resolved first — not a decision to make in passing.** All four services independently define a local app named `accounts` (their own `User` stub, hand-copied per service — see `backend/shared/`'s notes above), but Django's migration bookkeeping (`django_migrations`) is keyed by `(app_label, migration_name)` in the **one shared database**, not per-service. Checked directly against the real DB: `accounts.0001_initial` is recorded **once**, even though all four services carry a file by that name with different `CreateModel` contents — whichever service happened to migrate first "claimed" that row, and the other three's `0001_initial.py` has never actually executed. Harmless today only because every current `accounts` migration is `managed = False` (a no-op either way). It stops being harmless the moment any service's `accounts` app gets a real, executed migration: a same-named migration in a *different* service would read as "already applied" and silently skip its own `CREATE TABLE`, even against a genuinely empty database. Fix first (e.g. a distinct `AppConfig.label` per service), independently of and before any `managed = True` conversion work.
 - **`schema.sql`** (repo root) is a `pg_dump --schema-only` snapshot of the real schema — see the Database setup section above. Verified by loading it into a throwaway database from scratch (0 errors, exact table/view count match). It's a complete, working substitute for `manage.py migrate` today, but doesn't by itself fix `pytest-django`'s automatic test-database creation, which still drives Django's own migration executor and hits the `django.contrib.admin` → `AUTH_USER_MODEL` wall documented in `enrollment-service/ai/test_risk_assessment.py`'s module docstring (that FK requires `users` to exist, and no *migration* creates it in student-service, billing-service, or enrollment-service). Closing that gap for real integration testing — without re-triggering the collision above — most likely means point pytest-django's `django_db_setup` fixture at `schema.sql` directly instead of at `manage.py migrate`, rather than converting all 55 tables to `managed = True`.
 
-- **Sensitive documents in git history** — *needs a decision, not more code.* `ff09988 "final fixes before demo"` committed a real scanned PSA birth certificate of a named minor (`OCR_IMAGES/4a4e4ed6-….jpg`) plus `students/fixtures/_test_doc.jpg`, and both are reachable from `origin/main`. Under RA 10173 that is sensitive personal information. Nothing new is being added — `OCR_IMAGES/` and `students/fixtures/*.jpg` are gitignored and later commits removed the files from the tree — but **removal from the tree is not removal from history**. Purging them requires:
+- **Sensitive documents in git history** — *needs a decision, not more code.* Removal from the tree is not removal from history, and these are all still reachable:
+  - `ff09988 "final fixes before demo"`: a real scanned PSA birth certificate of a named minor (`OCR_IMAGES/4a4e4ed6-….jpg`) and a test document.
+  - Real-looking uploads committed back when `MEDIA_ROOT` was unset and files landed in the source folder: `backend/enrollment-service/requirements/Salapare, Sean Wesley.png`, `pic_20260515181008_0*.jpg` and `c0ebea5a-….jpg`.
+  - `backend/student-service/_test_doc.jpg`.
+
+  Under RA 10173 these are sensitive personal information. `OCR_IMAGES/`, `media/` and `students/fixtures/*.jpg` are gitignored now, so nothing new is being added. Purging them (together with the leaked key below) requires:
 
   ```sh
-  git filter-repo --path OCR_IMAGES                   --path backend/student-service/students/fixtures/_test_doc.jpg                   --invert-paths
+  git filter-repo --invert-paths     --path OCR_IMAGES     --path backend/student-service/_test_doc.jpg     --path backend/student-service/students/fixtures/_test_doc.jpg     --path "backend/enrollment-service/requirements/Salapare, Sean Wesley.png"     --path-glob "backend/enrollment-service/requirements/*.jpg"     --path backend/enrollment-service/.env
   ```
 
-  followed by a force-push to `main`, after which **every holder of `matres` / `niru` / `niel` must re-clone** — merging an old clone silently reintroduces the blobs. That coordination cost is why this has not been done unilaterally.
+  followed by a force-push of every branch, after which **every holder of `matres` / `niru` / `niel` must re-clone** — merging an old clone silently reintroduces the blobs. That coordination cost is why this has not been done unilaterally. (History also carries a committed `frontend/node_modules/`; adding `--path frontend/node_modules` to the same run shrinks the repository considerably.)
 
 - **A live Gemini API key is also in git history** — same category as the birth certificate above, found during a later audit and not yet acted on. Commit `5bcd352 "AI Integration"` added `backend/enrollment-service/.env` containing a real `GEMINI_API_KEY`; `d802b93 "Remove .env from tracking"` removed the file from the tree but not from history, and the commit is still reachable from `origin/main`, `wes`, and every other remote branch. **Rotate this key at Google AI Studio** — that step doesn't wait on the `git filter-repo` purge above, though the two should happen in the same coordinated window since both need the same force-push-and-re-clone step.
 
 - **Uploaded requirement documents used to be served unauthenticated** — fixed. `student_service/urls.py` and `enrollment_service/urls.py` no longer mount Django's public `static(MEDIA_URL, ...)` route (it served every file under `MEDIA_ROOT` to anyone, no login required, whenever `DEBUG` was on — which was always, since `DEBUG` was hardcoded). Documents are now served through an authenticated action gated by a short-lived, submission-scoped signed token (`backend/shared/uploads.py`), and uploads are validated by extension *and* magic bytes rather than trusting the filename. `DEBUG`/`ALLOWED_HOSTS`/the `SECURE_*` settings are now read from `.env` instead of being hardcoded — see the Backend setup section above.
 
-- **`billing-service` needs a scheduled task, or overdue installments stop updating.** Flagging past-due installments used to run as a side effect of every `GET /api/installments/` — including a guardian just viewing their own child's account — which meant an unscoped, table-wide `UPDATE` ran on every page load, racing with `StudentPaymentViewSet`'s row lock during payment processing. It's now `python manage.py flag_overdue_installments`, a standalone management command with no side effects on read. **Nothing currently invokes it** — there is no cron/Celery/scheduler anywhere in this project yet — so whoever deploys this needs to run it periodically (daily is enough) via cron, Windows Task Scheduler, or equivalent, or installments will stay "pending" past their due date until it's run by hand.
+- **Overdue installments are flagged by a scheduled job, not on read.** Flagging past-due installments used to run as a side effect of every `GET /api/installments/` — including a guardian just viewing their own child's account — which meant an unscoped, table-wide `UPDATE` ran on every page load, racing with `StudentPaymentViewSet`'s row lock during payment processing. It's now `python manage.py flag_overdue_installments`, which `install-startup-task.ps1` schedules daily (see Deployment). On a machine where that script has not been run, nothing invokes it and installments stay "pending" past their due date.
 
 ## Testing
 

@@ -84,10 +84,24 @@ function tablerIconsWoff2Only() {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  if (mode === 'production') assertApiUrlsConfigured(mode)
+export default defineConfig(({ command, mode }) => {
+  // Build only: `vite preview` also loads this config in production mode, but
+  // it serves an already-built dist/ whose URLs were fixed at build time, so
+  // requiring the vars again there only stopped the LAN server from starting.
+  if (command === 'build' && mode === 'production') assertApiUrlsConfigured(mode)
 
   return {
     plugins: [react(), tablerIconsWoff2Only()],
+    // `vite preview` serves the built app on the LAN deployment (see
+    // scripts/serve-lan.ps1 -Frontend). Listen on every interface so phones on
+    // the school Wi-Fi reach it, and accept any Host header: devices may use
+    // this PC's IP or its network name, and Vite otherwise answers 403 to a
+    // hostname it doesn't recognise.
+    preview: {
+      host: true,
+      port: 4173,
+      strictPort: true,
+      allowedHosts: true,
+    },
   }
 })

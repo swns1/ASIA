@@ -162,13 +162,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "billing_service.pagination.StandardPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
-    # 1: exactly one reverse proxy sits in front of this service in every
-    # deployed environment (Render's load balancer). Governs both DRF
-    # throttling's client identification (SimpleRateThrottle.get_ident) and
-    # the audit log's recorded IP (shared.audit.client_ip reads this same
-    # setting) — at 0, every client resolves to the proxy's IP, collapsing
-    # AnonRateThrottle into one shared bucket and making the audit trail
-    # useless. Revisit if a second proxy (e.g. a CDN) is ever added in front.
+    # NUM_PROXIES governs both DRF throttling's client identification
+    # (SimpleRateThrottle.get_ident) and the audit log's recorded IP
+    # (shared.audit.client_ip reads this same setting).
     # How many reverse proxies sit in front of this service. Env-driven for
     # the same reason DEBUG and the SECURE_* flags are: the right value is a
     # property of the deployment, not of the code.
@@ -197,6 +193,16 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# Billing sets no passwords itself (identity-service does), but a
+# service with django.contrib.auth installed should not accept any
+# password through a path added later.
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 LANGUAGE_CODE = "en-us"
 # All four services share one database; this used to be the only one of the

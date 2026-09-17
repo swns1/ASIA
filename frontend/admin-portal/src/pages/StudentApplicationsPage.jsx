@@ -4,9 +4,10 @@
 // approves (creating the real student record) or rejects them. See the
 // plan: this is the counterpart to pages/apply/ApplicantFormPage.jsx.
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { QRCodeSVG } from "qrcode.react";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
@@ -21,6 +22,7 @@ import { Field, Input, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
+import { isLocalOnlyUrl, resolveApplyUrl } from "../utils/applyLink";
 import {
   createApplicationInvite,
   getStudentApplications,
@@ -102,40 +104,7 @@ function IssueInviteModal({ onClose, onIssued }) {
   };
 
   if (issued) {
-    return (
-      <Modal onClose={onClose} size="md" icon="ti-link" title="Invite issued" showClose>
-        <Alert variant="warning" className="mb-4">
-          The access code is shown once and cannot be retrieved later — re-issue if it's lost.
-        </Alert>
-
-        <Field label="Applicant">
-          <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm">
-            {issued.applicant_full_name}
-          </div>
-        </Field>
-
-        <Field label="Form link">
-          <div className="flex gap-2">
-            <Input value={issued.apply_url} readOnly onFocus={(e) => e.target.select()} />
-            <Button type="button" variant="secondary" onClick={() => copy("link", issued.apply_url)}>
-              {copied === "link" ? "Copied" : "Copy"}
-            </Button>
-          </div>
-        </Field>
-
-        <Field label="Access code">
-          <div className="flex gap-2">
-            <Input value={issued.access_code} readOnly onFocus={(e) => e.target.select()}
-              style={{ fontWeight: 700, letterSpacing: "0.1em" }} />
-            <Button type="button" variant="secondary" onClick={() => copy("code", issued.access_code)}>
-              {copied === "code" ? "Copied" : "Copy"}
-            </Button>
-          </div>
-        </Field>
-
-        <Button fullWidth onClick={onClose} className="mt-2">Done</Button>
-      </Modal>
-    );
+    return <IssuedInvite issued={issued} copied={copied} onCopy={copy} onClose={onClose} />;
   }
 
   return (
@@ -161,6 +130,144 @@ function IssueInviteModal({ onClose, onIssued }) {
 
         <Button type="submit" fullWidth loading={saving} className="mt-2">Issue invite</Button>
       </form>
+    </Modal>
+  );
+}
+
+// ── Issued invite: QR first, link as backup ─────────────────────────────
+//
+// The parent scans the QR with their own phone and the registrar gives them
+// the access code in person. Both devices must be on one network -- this is a
+// LAN deployment, so the link opens nowhere else -- but any shared network
+// works: the school Wi-Fi, or a phone hotspot the machine is joined to.
+//
+// The link and code stay separate factors; the code is never put in the QR,
+// the link, or the navigation state. The URL itself comes from
+// utils/applyLink.js, which falls back to the address staff are using when the
+// backend still has its localhost default.
+
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}
+
+function printSlip({ issued, qrSvg }) {
+  const win = window.open("", "_blank", "width=480,height=720");
+  if (!win) {
+    toast.error("The slip window was blocked — allow pop-ups for this site and try again.");
+    return;
+  }
+  const expires = issued.expires_at ? fmtDate(issued.expires_at) : "—";
+  const applyUrl = resolveApplyUrl(issued.apply_url, window.location.origin);
+  win.document.write(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Application slip</title>
+<style>
+  @page { size: A6 portrait; margin: 8mm; }
+  body { font-family: Arial, sans-serif; color: #1a0a0a; margin: 0; padding: 16px; text-align: center; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  .sub { font-size: 11px; color: #7a5050; margin-bottom: 12px; }
+  .name { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .qr svg { width: 180px; height: 180px; }
+  .code { font-size: 26px; font-weight: 700; letter-spacing: 0.18em; border: 2px dashed #1a0a0a;
+          border-radius: 8px; padding: 6px 12px; display: inline-block; margin: 6px 0 10px; }
+  .steps { text-align: left; font-size: 12px; line-height: 1.5; margin: 10px auto; max-width: 300px; padding-left: 18px; }
+  .link { font-size: 9px; color: #555; word-break: break-all; margin-top: 8px; }
+  .muted { font-size: 11px; color: #7a5050; }
+</style></head><body>
+  <h1>South Lakes Integrated School</h1>
+  <div class="sub">Student Information Form</div>
+  <div class="name">${escapeHtml(issued.applicant_full_name)}</div>
+  <div class="qr">${qrSvg}</div>
+  <div class="muted">Access code</div>
+  <div class="code">${escapeHtml(issued.access_code)}</div>
+  <ol class="steps">
+    <li>Connect your phone to the <strong>school Wi-Fi</strong>.</li>
+    <li>Scan the QR code with your phone camera and open the link.</li>
+    <li>Enter the access code above, then fill in the form.</li>
+  </ol>
+  <div class="muted">Valid until ${escapeHtml(expires)}. Keep this slip — the code cannot be shown again.
+  If it is lost, ask the Registrar for a new one.</div>
+  <div class="link">Can't scan? ${escapeHtml(applyUrl)}</div>
+</body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function IssuedInvite({ issued, copied, onCopy, onClose }) {
+  const navigate = useNavigate();
+  const qrRef = useRef(null);
+  // The address the parent's phone should open, which is not always the one
+  // the backend built (see utils/applyLink.js).
+  const applyUrl = resolveApplyUrl(issued.apply_url, window.location.origin);
+  const localOnly = isLocalOnlyUrl(applyUrl);
+
+  const handlePrint = () => {
+    const qrSvg = qrRef.current?.querySelector("svg")?.outerHTML ?? "";
+    printSlip({ issued, qrSvg });
+  };
+
+
+  // For a family without a phone: open the form here, on the school's own
+  // device. The applicant page asks for the code, then for the hand-over,
+  // which signs the staff member out before the family takes the device.
+  const openHere = () => navigate(`/apply/${issued.invite_id}`);
+
+  return (
+    <Modal onClose={onClose} size="md" icon="ti-qrcode" title="Invite issued" showClose>
+      {localOnly && (
+        <Alert variant="warning" className="mb-4">
+          Only this computer can open this link — it points to <strong>localhost</strong>.
+          To try it from a phone, open this portal by the computer's network address
+          instead (for example <code>http://192.168.1.42:5173</code>) and issue the invite
+          again; the QR then points there. For the real deployment, set{" "}
+          <code>FRONTEND_BASE_URL</code> in the student-service <code>.env</code>.
+        </Alert>
+      )}
+
+      <div className="mb-4 flex flex-col items-center gap-2 text-center">
+        <div className="text-sm font-semibold text-neutral-900">{issued.applicant_full_name}</div>
+        <div ref={qrRef} className="rounded-xl border border-neutral-200 bg-white p-3">
+          <QRCodeSVG value={applyUrl} size={208} marginSize={1} title="Application form link" />
+        </div>
+        <div className="text-[13px] text-neutral-700">
+          Scan with a phone on the <strong>same network as this computer</strong>
+        </div>
+      </div>
+
+      <Field label="Access code" hint="Read it out or write it down — the parent types it after scanning.">
+        <div className="flex gap-2">
+          <Input value={issued.access_code} readOnly onFocus={(e) => e.target.select()}
+            style={{ fontWeight: 700, letterSpacing: "0.1em", fontSize: 18 }} />
+          <Button type="button" variant="secondary" onClick={() => onCopy("code", issued.access_code)}>
+            {copied === "code" ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      </Field>
+
+      <Field label="Can't scan? Send this link instead" hint="Paste it into Messenger or SMS. Never send the code with it.">
+        <div className="flex gap-2">
+          <Input value={applyUrl} readOnly onFocus={(e) => e.target.select()} />
+          <Button type="button" variant="secondary" onClick={() => onCopy("link", applyUrl)}>
+            {copied === "link" ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      </Field>
+
+      <Alert variant="warning" className="mb-4">
+        The access code is shown once and cannot be retrieved later — print the slip if
+        the family may finish another day, or re-issue if it's lost.
+      </Alert>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" variant="secondary" icon="ti-printer" onClick={handlePrint}>
+          Print slip
+        </Button>
+        <Button type="button" variant="secondary" icon="ti-device-tablet" onClick={openHere}>
+          Open form on this device
+        </Button>
+      </div>
+      <Button fullWidth onClick={onClose} className="mt-2">Done</Button>
     </Modal>
   );
 }

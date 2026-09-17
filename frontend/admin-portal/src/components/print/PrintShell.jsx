@@ -105,3 +105,27 @@ export function PrintError({ message }) {
     </div>
   );
 }
+
+// On-screen only: names the sections that failed to load, so a form with a
+// silently-empty attendance or grades block is never printed as if complete.
+export function PrintIncompleteWarning({ sections }) {
+  if (!sections?.length) return null;
+  return (
+    <div
+      className="no-print"
+      role="alert"
+      style={{
+        maxWidth: 900, margin: "16px auto 0", padding: "10px 16px",
+        border: "1px solid #fca5a5", borderRadius: 10, background: "#fef2f2",
+        color: "#b91c1c", fontSize: 13, fontFamily: PRINT_FONT,
+        display: "flex", alignItems: "center", gap: 8,
+      }}
+    >
+      <i className="ti ti-alert-triangle" style={{ fontSize: 16 }} />
+      <span>
+        Could not load: <strong>{sections.join(", ")}</strong>. Those parts of
+        this form are blank — reload the page before printing.
+      </span>
+    </div>
+  );
+}

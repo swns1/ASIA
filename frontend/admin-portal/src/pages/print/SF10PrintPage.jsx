@@ -9,7 +9,7 @@ import { downloadAsPDF } from "../../utils/pdfExport";
 import { levelConfig, attIndex, gradeColor, GRADE_ORDER, promotionRemark } from "../../utils/grading";
 import { PRINT_COLORS as C } from "../../components/print/theme";
 import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
-import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
+import { PrintShell, PrintLoading, PrintError, PrintIncompleteWarning } from "../../components/print/PrintShell";
 import { PrintLetterhead } from "../../components/print/PrintLetterhead";
 import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
@@ -33,16 +33,23 @@ export default function SF10PrintPage() {
   const [schoolAddress,  setSchoolAddress]  = useState("");
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
+  const [incomplete,     setIncomplete]     = useState([]);
   const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => {
     (async () => {
+      // Optional sections still fall back to empty so the rest of the record
+      // renders, but each fallback is recorded and shown above the form.
+      const failed = [];
+      const soft = (promise, label, fallback) =>
+        promise.catch(() => { failed.push(label); return fallback; });
       try {
         const [stu, gds, enrData, settings] = await Promise.all([
           getStudent(studentId),
-          getGuardiansByStudent(studentId)
-            .then(d => Array.isArray(d) ? d : d.results ?? [])
-            .catch(() => []),
+          soft(
+            getGuardiansByStudent(studentId).then(d => Array.isArray(d) ? d : d.results ?? []),
+            "guardians", [],
+          ),
           getEnrollments({ student: studentId, page_size: 100 }),
           getSchoolSettings().catch(() => null),
         ]);
@@ -62,16 +69,26 @@ export default function SF10PrintPage() {
         const built = await Promise.all(
           enrollments.map(async (enr) => {
             const cfg = levelConfig(enr.school_level);
+            const year = `SY ${enr.school_year}`;
             const [subs, allGrades, attData] = await Promise.all([
-              getSubjects({
-                school_level: enr.school_level,
-                ...(enr.strand   ? { strand:   enr.strand   } : {}),
-                ...(enr.semester ? { semester: enr.semester } : {}),
-              }).then(d => Array.isArray(d) ? d : d.results ?? []).catch(() => []),
-              getGrades({ enrollment: enr.enrollment_id })
-                .then(d => Array.isArray(d) ? d : d.results ?? []).catch(() => []),
-              getAttendance({ enrollment: enr.enrollment_id, page_size: 500 })
-                .then(d => Array.isArray(d) ? d : d.results ?? []).catch(() => []),
+              soft(
+                getSubjects({
+                  school_level: enr.school_level,
+                  ...(enr.strand   ? { strand:   enr.strand   } : {}),
+                  ...(enr.semester ? { semester: enr.semester } : {}),
+                }).then(d => Array.isArray(d) ? d : d.results ?? []),
+                `subjects (${year})`, [],
+              ),
+              soft(
+                getGrades({ enrollment: enr.enrollment_id })
+                  .then(d => Array.isArray(d) ? d : d.results ?? []),
+                `grades (${year})`, [],
+              ),
+              soft(
+                getAttendance({ enrollment: enr.enrollment_id, page_size: 500 })
+                  .then(d => Array.isArray(d) ? d : d.results ?? []),
+                `attendance (${year})`, [],
+              ),
             ]);
 
             // GradeSerializer emits `numeric_grade` — reading `g.grade` here
@@ -99,6 +116,7 @@ export default function SF10PrintPage() {
         );
 
         setRecords(built);
+        setIncomplete([...new Set(failed)]);
       } catch (e) {
         setError(e.message || "Failed to load data.");
       } finally {
@@ -144,6 +162,8 @@ export default function SF10PrintPage() {
           </>
         }
       />
+
+      <PrintIncompleteWarning sections={incomplete} />
 
       <PrintShell id="sf10-doc" maxWidth={820} orientation="portrait">
         <PrintLetterhead
