@@ -13,10 +13,12 @@ import Card, { Panel } from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Badge from "../components/ui/Badge";
+import Alert from "../components/ui/Alert";
 import { Field, Select, Textarea } from "../components/FormField";
 import ConfirmModal from "../components/ConfirmModal";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { todayISO } from "../utils/format";
+import fetchAllPages from "../utils/fetchAllPages";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -750,6 +752,10 @@ function EligibilityTab({ scholarshipTypes }) {
   const [schoolYear,    setSchoolYear]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [scanned,       setScanned]       = useState(false);
+  // Learners whose grades couldn't be read. They are not in the list, and
+  // that must not look like "not eligible".
+  const [unchecked,     setUnchecked]     = useState(0);
+  const [scanError,     setScanError]     = useState("");
   const [applyModal,    setApplyModal]    = useState(false);
   const [, setSavedCount] = useState(0);
 
@@ -760,10 +766,13 @@ function EligibilityTab({ scholarshipTypes }) {
 
   const handleScan = async () => {
     if (!schoolYear) return;
-    setLoading(true); setScanned(false); setEligible([]);
+    setLoading(true); setScanned(false); setEligible([]); setUnchecked(0); setScanError("");
     try {
-      const enrData = await getEnrollments({ school_year:schoolYear, enrollment_status:"enrolled", page_size:200 });
-      const enrs = Array.isArray(enrData) ? enrData : enrData?.results ?? [];
+      // Every enrolled learner, not the first 200: the scan is meant to be
+      // school-wide, and a larger school's remaining learners were never
+      // considered.
+      const enrs = await fetchAllPages(getEnrollments, { school_year:schoolYear, enrollment_status:"enrolled" });
+      let failures = 0;
       const results = await Promise.all(
         enrs.map(async (en) => {
           try {
@@ -786,14 +795,18 @@ function EligibilityTab({ scholarshipTypes }) {
               avg:            avg,
               grades_count:   grades.length,
             };
-          } catch { return null; }
+          } catch { failures += 1; return null; }
         })
       );
       const eligibleList = results.filter(Boolean);
       eligibleList.sort((a, b) => b.avg - a.avg);
       setEligible(eligibleList);
+      setUnchecked(failures);
       setScanned(true);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setScanError(e.message || "The scan couldn't load the enrolled students. Try again.");
+    }
     finally { setLoading(false); }
   };
 
@@ -839,6 +852,12 @@ function EligibilityTab({ scholarshipTypes }) {
         <Button icon="ti-scan" loading={loading} onClick={handleScan}>
           {loading ? "Scanning…" : "Scan Now"}
         </Button>
+        {scanError && <Alert variant="error" className="mt-3">{scanError}</Alert>}
+        {scanned && unchecked > 0 && (
+          <Alert variant="warning" className="mt-3">
+            {unchecked} student{unchecked === 1 ? "" : "s"} couldn&apos;t be checked because their grades didn&apos;t load. Scan again before awarding.
+          </Alert>
+        )}
       </Panel>
 
       {/* Results */}

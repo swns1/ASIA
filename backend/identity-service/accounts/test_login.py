@@ -188,3 +188,37 @@ def test_successful_login_resets_the_failure_counter(mock_stamp_session_id, sett
         assert _post_login(password=CORRECT_PASSWORD).status_code == 200
 
     assert not AccessAttempt.objects.filter(username="teacher@example.com").exists()
+
+
+@pytest.mark.django_db
+@patch("accounts.views.stamp_session_id")
+def test_successful_logins_from_one_address_are_not_rate_limited(mock_stamp_session_id, settings):
+    """
+    A school's staff, or parents at an orientation, reach a hosted SLIS from
+    one public address. Only failed sign-ins count toward the "login" rate,
+    so the whole building can sign in within the same minute.
+    """
+    user = _fake_user()
+    with _mock_user_lookup(user):
+        codes = [_post_login().status_code for _ in range(15)]
+
+    assert codes == [200] * 15
+
+
+@pytest.mark.django_db
+def test_failed_logins_from_one_address_are_rate_limited():
+    """
+    Ten wrong passwords across different accounts from one address (a
+    password-guessing sweep axes' per-account lockout does not see), then
+    even a correct sign-in from that address waits out the window.
+    """
+    with _mock_user_lookup(None):
+        for n in range(10):
+            assert _post_login(identifier=f"guess{n}@example.com").status_code == 400
+
+    user = _fake_user()
+    with _mock_user_lookup(user):
+        blocked = _post_login()
+
+    assert blocked.status_code == 429
+    assert "Retry-After" in blocked

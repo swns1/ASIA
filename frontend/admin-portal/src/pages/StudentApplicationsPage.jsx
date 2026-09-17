@@ -23,6 +23,7 @@ import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
 import { isLocalOnlyUrl, isPrivateNetworkUrl, resolveApplyUrl } from "../utils/applyLink";
+import fetchAllPages from "../utils/fetchAllPages";
 import {
   createApplicationInvite,
   getStudentApplications,
@@ -481,13 +482,19 @@ export default function StudentApplicationsPage() {
   const [showIssue, setShowIssue] = useState(false);
   const [openApplicationId, setOpenApplicationId] = useState(null);
 
+  // Every application in the tab, not the first 100 -- the rest used to be
+  // left out with nothing on screen saying so. And only the newest request
+  // fills the table, so switching tabs quickly can't show one tab's
+  // applications under another's heading.
+  const loadSeq = useRef(0);
   const load = () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
-    getStudentApplications({ status: active, page_size: 100 })
-      .then((data) => setRows(Array.isArray(data) ? data : data?.results ?? []))
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
+    fetchAllPages(getStudentApplications, { status: active }, { pageSize: 100 })
+      .then((list) => { if (seq === loadSeq.current) setRows(list); })
+      .catch((err) => { if (seq === loadSeq.current) setError(err); })
+      .finally(() => { if (seq === loadSeq.current) setLoading(false); });
   };
 
   useEffect(load, [active]);

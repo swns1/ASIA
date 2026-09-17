@@ -68,6 +68,7 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
+            LoginRateThrottle.record_failure(request, self)
             detail = serializer.errors.get("non_field_errors", serializer.errors)
             if isinstance(detail, list) and detail:
                 detail = detail[0]

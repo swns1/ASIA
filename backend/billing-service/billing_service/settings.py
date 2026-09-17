@@ -262,6 +262,12 @@ CACHES = {
     "default": {
         "BACKEND": "shared.cache.ResilientFileBasedCache",
         "LOCATION": str(BASE_DIR / "cache"),
+        # One entry per signed-in user (and per address for anonymous
+        # calls). Django's default of 300 is below this school's head count:
+        # past it, every write deletes a random third of the entries, so
+        # rate-limit counters were being wiped and the limits stopped
+        # holding once more than ~300 people had used the system recently.
+        "OPTIONS": {"MAX_ENTRIES": 10000},
     }
 }
 

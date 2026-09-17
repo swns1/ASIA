@@ -126,7 +126,12 @@ export default function PaymentsPage() {
   const [tilesLoading, setTilesLoading] = useState(true);
   const [methodTotals, setMethodTotals] = useState({});
 
+  // Only the newest request may fill the page: filters fire requests back to
+  // back, and an older one landing last showed its list and totals under the
+  // newer filter's labels.
+  const fetchSeq = useRef(0);
   const fetchPayments = useCallback(async (p = 1, overrides = {}) => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -134,18 +139,20 @@ export default function PaymentsPage() {
         getPayments(buildParams(p, overrides)),
         getPaymentSummary(buildSummaryParams(overrides)),
       ]);
+      if (seq !== fetchSeq.current) return;
       setPayments(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
       setMethodTotals(summary ?? {});
       setTilesLoading(false);
     } catch (e) {
+      if (seq !== fetchSeq.current) return;
       console.error(e);
       setLoadError(e);
       setPayments([]);
       setPageMeta({ count: 0, next: null, previous: null });
     }
-    finally { setLoading(false); }
+    finally { if (seq === fetchSeq.current) setLoading(false); }
   }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter]);
 
   // The global year resolves after first paint, so seeding useState with it is
@@ -154,9 +161,12 @@ export default function PaymentsPage() {
   // themselves, so this can't yank a deliberate "All years" back.
   const yearTouched = useRef(false);
   useEffect(() => {
-    if (yearTouched.current || !globalSchoolYear) return;
+    if (yearTouched.current || !globalSchoolYear || globalSchoolYear === yearFilter) return;
     setYearFilter(globalSchoolYear);
-  }, [globalSchoolYear]);
+    // Reload too. Setting the filter alone moved the picker but kept the
+    // all-years list and totals from the first load underneath it.
+    fetchPayments(1, { yearFilter: globalSchoolYear });
+  }, [globalSchoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPayments();

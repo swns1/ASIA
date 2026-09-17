@@ -31,6 +31,25 @@
     Start hidden, writing each process's output to logs\<name>.out.log and
     logs\<name>.err.log in the repository.
 
+.PARAMETER Threads
+    Worker threads per service (waitress default: 4). Measured with 400
+    parent accounts and 50 staff on school-sized data: at 4, requests queued
+    behind the enrollment service and a burst of logins waited in line.
+    Each thread keeps one PostgreSQL connection open, so 4 services x 16
+    threads = 64 of PostgreSQL's default 100.
+
+.PARAMETER ConnectionLimit
+    Open connections per service (waitress default: 100). Browsers hold idle
+    connections open between clicks, so 50 staff alone filled 100 on the
+    enrollment service and parents' pages failed to connect (44% of requests
+    in the test). Keep it under 500: Python on Windows cannot watch more than
+    512 sockets at once.
+
+.PARAMETER ChannelTimeout
+    Seconds before an idle connection is closed (waitress default: 120), so
+    connections left open by browsers are handed back quickly. A request that
+    is still being processed is never cut off by this.
+
 .EXAMPLE
     .\scripts\serve-lan.ps1 -Check
     .\scripts\serve-lan.ps1 -Frontend
@@ -39,7 +58,10 @@
 param(
     [switch]$Check,
     [switch]$Frontend,
-    [switch]$Background
+    [switch]$Background,
+    [int]$Threads = 16,
+    [int]$ConnectionLimit = 450,
+    [int]$ChannelTimeout = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -167,7 +189,14 @@ foreach ($s in $SlisServices) {
         continue
     }
     Start-SlisProcess -Name $s.Name -Exe $waitress `
-        -Arguments @("--listen=0.0.0.0:$($s.Port)", "$($s.Module).wsgi:application") `
+        -Arguments @(
+            "--listen=0.0.0.0:$($s.Port)",
+            "--threads=$Threads",
+            "--connection-limit=$ConnectionLimit",
+            "--channel-timeout=$ChannelTimeout",
+            "--cleanup-interval=10",
+            "$($s.Module).wsgi:application"
+        ) `
         -WorkDir (Join-Path $RepoRoot $s.Dir)
     Write-Host "started $($s.Name) on $($s.Port)" -ForegroundColor Green
 }

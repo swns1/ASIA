@@ -113,6 +113,15 @@ class ResilientFileBasedCache(FileBasedCache):
     replace_attempts = 8
     replace_backoff = 0.003
 
+    # Django lists the whole cache directory on every set() to decide whether
+    # to cull. With an entry per signed-in user, that listing was the costliest
+    # part of a throttled request -- about 10 ms per request at 2,000 entries
+    # on Windows -- so it runs at most this often per cache instance. Between
+    # checks the directory can run a little past MAX_ENTRIES, which costs a
+    # few kilobytes of disk and nothing else.
+    cull_interval = 30.0
+    _last_cull = float("-inf")
+
     def _sleep(self, backoff, attempt):
         time.sleep(backoff * (attempt + 1) * (0.5 + random.random()))
 
@@ -226,6 +235,13 @@ class ResilientFileBasedCache(FileBasedCache):
                     os.remove(tmp_path)
                 except OSError:
                     logger.debug("cache: leaked temp file %s", tmp_path)
+
+    def _cull(self):
+        now = time.monotonic()
+        if now - self._last_cull < self.cull_interval:
+            return
+        self._last_cull = now
+        super()._cull()
 
     def _replace_atomic(self, tmp_path, fname):
         """

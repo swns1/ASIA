@@ -6,7 +6,7 @@ import { getGuardiansByStudent } from "../../api/guardianApi";
 import { downloadAsPDF } from "../../utils/pdfExport";
 import { PRINT_COLORS as C, PRINT_FONT } from "../../components/print/theme";
 import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
-import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
+import { PrintShell, PrintLoading, PrintError, PrintIncompleteWarning } from "../../components/print/PrintShell";
 import { PrintLetterhead } from "../../components/print/PrintLetterhead";
 import { InfoStrip, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
@@ -94,6 +94,7 @@ export default function SF1PrintPage() {
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
   const [downloading,   setDownloading]   = useState(false);
+  const [incomplete,    setIncomplete]    = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -116,14 +117,23 @@ export default function SF1PrintPage() {
           e.student_id ?? e.student ?? e.student_detail?.student_id
         );
 
+        // A failed lookup still yields [] so the rest of the register prints,
+        // but it is counted: blank parent and contact columns are otherwise
+        // indistinguishable from a learner with none on file.
+        let guardianFailures = 0;
         const guardiansArr = await Promise.all(
           studentIds.map((id) =>
             id
               ? getGuardiansByStudent(id)
                   .then((d) => Array.isArray(d) ? d : d.results ?? [])
-                  .catch(() => [])
+                  .catch(() => { guardianFailures += 1; return []; })
               : Promise.resolve([])
           )
+        );
+        setIncomplete(
+          guardianFailures
+            ? [`parent/guardian details for ${guardianFailures} learner${guardianFailures === 1 ? "" : "s"}`]
+            : []
         );
 
         setRows(
@@ -170,6 +180,8 @@ export default function SF1PrintPage() {
           </ToolbarButton>
         }
       />
+
+      <PrintIncompleteWarning sections={incomplete} />
 
       <PrintShell id="sf1-doc" maxWidth={1200} orientation="landscape" pageMargin="8mm" padding="24px 28px" backdrop>
         <PrintLetterhead

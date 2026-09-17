@@ -162,8 +162,9 @@ def test_delete_tolerates_a_file_another_reader_has_open(cache):
 
 
 def test_cull_tolerates_open_files(cache):
-    """_cull() runs on every set(); one locked file must not fail the write."""
+    """A cull that meets a locked file must not fail the write."""
     cache._max_entries = 4
+    cache.cull_interval = 0  # cull on every set(), as Django does
     for i in range(6):
         cache.set(f"key-{i}", [i], 60)
 
@@ -224,3 +225,28 @@ def test_entries_written_by_djangos_own_backend_still_read(cache, tmp_path):
     stock.set(KEY, ["written-by-django"], 60)
 
     assert cache.get(KEY) == ["written-by-django"]
+
+
+def test_culling_is_not_checked_on_every_write(cache, monkeypatch):
+    """
+    Checking means listing the whole directory, which cost ~10 ms per
+    request with an entry per user. It runs once per interval instead.
+    """
+    listings = []
+    real = cache._list_cache_files
+    monkeypatch.setattr(cache, "_list_cache_files", lambda: listings.append(1) or real())
+
+    for i in range(50):
+        cache.set(f"user-{i}", [i], 60)
+
+    assert len(listings) == 1
+
+
+def test_culling_still_bounds_the_directory(cache):
+    cache._max_entries = 10
+    cache.cull_interval = 0
+    for i in range(40):
+        cache.set(f"user-{i}", [i], 60)
+
+    assert len(cache._list_cache_files()) <= 10
+

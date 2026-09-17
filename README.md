@@ -192,12 +192,12 @@ See `students/ocr/reconcile.py` and `frontend/admin-portal/src/pages/ocr/`.
 
 ## Deployment
 
-There is no Dockerfile, PaaS config, or reverse proxy in this repo. What is
-documented here is a **LAN deployment**: the four services plus the built
-frontend running on one Windows machine at the school, reachable from staff
-computers and from phones on the school Wi-Fi. It is not a public internet
-deployment — nothing in this stack terminates TLS, and nothing outside the
-school network can reach it.
+What is documented here is a **LAN deployment**: the four services plus the
+built frontend running on one Windows machine at the school, reachable from
+staff computers and from phones on the school Wi-Fi. It is not a public
+internet deployment — nothing in this stack terminates TLS, and nothing
+outside the school network can reach it. For access from outside the school,
+see [Deploying to Railway](#deploying-to-railway).
 
 Every script below is in `scripts\` and run from the repository root in
 PowerShell.
@@ -300,6 +300,37 @@ frontend `200`. A `503` means the service is up but the database is
 unreachable; a `400` means the address is missing from `ALLOWED_HOSTS`. Then
 open `http://192.168.1.42:4173` from another computer and from a phone on the
 school Wi-Fi, and log in.
+
+#### How many users it handles
+
+Measured with a load test on a Ryzen 5 5600 (6 cores, 16 GB) running the
+services and PostgreSQL 17 together. The test used school-sized data: 652
+learners, a full year of attendance (186,000 rows), grades, invoices, 400
+parent accounts and 50 staff. A parent's visit is the portal home page plus
+one child's page (five requests). A staff visit is the dashboard (six or
+seven).
+
+| Scenario | Result |
+|---|---|
+| 400 parents open the portal over 2 minutes, while 50 staff reload the dashboard every 10 seconds | 0 errors; a parent's page loads in 0.07 s (95% within 0.10 s) |
+| All 400 parents within 30 seconds, same staff | 0 errors; 0.08 s (95% within 0.11 s) |
+| 100 parents sign in at the same moment | all 100 succeed within 8 s |
+| Load until it gives | about 250 requests a second — roughly 50 parent page loads a second |
+
+`serve-lan.ps1` starts waitress with 16 threads, 450 connections and a
+20-second idle timeout (`-Threads`, `-ConnectionLimit`, `-ChannelTimeout`).
+With waitress's defaults (4 threads, 100 connections), 44% of requests in the
+first scenario failed: browsers keep connections open between clicks, and 50
+staff alone nearly filled the enrollment service's 100. Each thread holds a
+PostgreSQL connection — 4 services × 16 = 64 of PostgreSQL's default 100 — so
+raise `max_connections` before raising `-Threads`. `-ConnectionLimit` must
+stay under 500; Python on Windows cannot watch more sockets than that.
+
+**Parents at home.** The numbers above assume everyone can reach this
+machine, which on the LAN means being on the school network. For parents to
+use the portal from home, use the hosted copy
+([Deploying to Railway](#deploying-to-railway)); it runs the same code, with
+gunicorn sized the same way.
 
 ### 5. Run it unattended
 
@@ -412,10 +443,17 @@ loads the page from port 4173 and then calls the APIs on 8000-8003 directly:
 
 ## Deploying to Railway
 
-For a public copy — remote demos, or access from outside the school. The
-school's own system is better on the LAN (above): no monthly cost, and
-student records stay on school property. On Railway's Hobby plan this setup
-costs roughly $10–15 a month in usage.
+For access from outside the school, which the guardian portal needs:
+parents sign in from home. The LAN setup (above) costs nothing a month and
+keeps student records on school property, but only devices on the school
+network can reach it. On Railway's Hobby plan this setup costs roughly
+$10–15 a month in usage.
+
+Hosting changes who can *reach* the app, not who can use each part of it.
+Staff pages still need a staff account, and a parent sees only their own
+children. The applicant form still opens only with a link that staff issue,
+plus the access code they give in person; the code expires in 3 days and
+locks after 5 wrong tries.
 
 Everything the platform needs is in the repository:
 
@@ -432,6 +470,8 @@ broken image fails CI rather than a deploy.
 ### What behaves differently on Railway (already handled)
 
 - **No SMTP.** Railway blocks outbound SMTP on the Free, Trial and Hobby plans, so the Gmail setup cannot connect. Use the HTTPS email backend, `shared.email_backends.BrevoEmailBackend`. Brevo's free plan needs no domain — verify a single sender address in its dashboard and use it as `DEFAULT_FROM_EMAIL`.
+- **Everyone at the school shares one public address.** Once signed in, rate limits count per account, and the sign-in limit counts only *failed* attempts per address. So all the staff, or a room of parents at an orientation, can sign in at once, while a password-guessing sweep from one address is still stopped after ten misses a minute.
+- **Each service runs 2 gunicorn processes × 8 threads** (`WEB_CONCURRENCY`, `GUNICORN_THREADS`). That is 64 database connections across the four services, within PostgreSQL's 100.
 - **Everything arrives through a proxy.** With `NUM_PROXIES=1`, the services read the visitor's real address, which is used for rate limits, the audit log and login lockouts. They also treat the proxy's HTTPS as HTTPS. Without that setting, five wrong passwords from anyone would lock out everybody.
 - **The app and the APIs are different sites** (separate `*.up.railway.app` names). The login cookie therefore needs `REFRESH_COOKIE_SAMESITE=None` on identity. The refresh endpoint then also refuses origins that aren't in `CORS_ALLOWED_ORIGINS`.
 - **Health checks come over plain HTTP** from `healthcheck.railway.app`. That name must be in `ALLOWED_HOSTS`, and `/health/` is exempt from the HTTPS redirect.

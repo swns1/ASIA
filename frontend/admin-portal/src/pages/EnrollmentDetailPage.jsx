@@ -81,6 +81,9 @@ export default function EnrollmentDetailPage() {
   // would not actually block on.
   const [entryStatus, setEntryStatus] = useState(null);
   const [invoice, setInvoice] = useState(null);
+  // Kept apart from `invoice` so a failed load isn't shown as "No invoice
+  // generated yet." -- which invites generating a second one.
+  const [invoiceFailed, setInvoiceFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [completing, setCompleting] = useState(false);
@@ -110,7 +113,10 @@ export default function EnrollmentDetailPage() {
           getGrades({ enrollment: id, page_size: 200 }),
           getEnrollmentScholarships({ enrollment: id, page_size: 50 }),
           canViewBilling
-            ? getInvoices({ enrollment_id: id, page_size: 5 }).catch(() => null)
+            ? getInvoices({ enrollment_id: id, page_size: 5 }).catch(() => {
+                setInvoiceFailed(true);
+                return null;
+              })
             : Promise.resolve(null),
           getEnrollmentEligibility(enr.student_id ?? enr.student, {
             schoolLevel: enr.school_level,
@@ -148,6 +154,24 @@ export default function EnrollmentDetailPage() {
     }
   }
 
+  async function closeOutTransferredInvoice() {
+    const failed = () =>
+      setError("Enrollment transferred out, but closing out the invoice's remaining installments failed — review it manually on the Invoices page.");
+    try {
+      let target = invoice;
+      if (!target) {
+        const data = await getInvoices({ enrollment_id: id, page_size: 5 });
+        const list = Array.isArray(data) ? data : data?.results ?? [];
+        target = list.find((inv) => inv.status !== "void") ?? null;
+      }
+      if (!target) return; // genuinely never invoiced
+      const updated = await closeOutInvoiceForTransfer(target.invoice_id, { effective_date: transferEffectiveDate });
+      if (canViewBilling) setInvoice(updated);
+    } catch {
+      failed();
+    }
+  }
+
   async function handleTransferOut() {
     setTransferring(true);
     setTransferError("");
@@ -163,15 +187,16 @@ export default function EnrollmentDetailPage() {
       setTransferDestSchool("");
 
       // Close out any existing invoice's remaining installments — same
-      // frontend-orchestration approach as the status flip below. Only
-      // attempted when an invoice actually exists for this enrollment.
-      if (invoice) {
-        closeOutInvoiceForTransfer(invoice.invoice_id, { effective_date: transferEffectiveDate })
-          .then(setInvoice)
-          .catch(() =>
-            setError("Enrollment transferred out, but closing out the invoice's remaining installments failed — review it manually on the Invoices page.")
-          );
-      }
+      // frontend-orchestration approach as the status flip below.
+      //
+      // The invoice is looked up here rather than taken from the panel: the
+      // panel only loads it for BILLING_ROLES, which in this app excludes the
+      // registrar -- the person who usually records a transfer -- and a failed
+      // load leaves it empty too. Either way the close-out used to be skipped
+      // without a word, and the family's remaining installments went on
+      // falling overdue after the student had left. billing-service accepts
+      // this call from registrars.
+      closeOutTransferredInvoice();
 
       // Flip the student's overall status separately — this codebase
       // orchestrates cross-service writes from the frontend rather than
@@ -328,6 +353,10 @@ export default function EnrollmentDetailPage() {
               {!canViewBilling ? (
                 <p style={{ margin: 0, fontSize: 12, color: C.muted, fontStyle: "italic" }}>
                   Invoice details are only visible to billing staff.
+                </p>
+              ) : invoiceFailed && !invoice ? (
+                <p style={{ margin: 0, fontSize: 12, color: C.red }}>
+                  Couldn&apos;t load the invoice. Reload the page before generating one.
                 </p>
               ) : invoice ? (
                 <div>
