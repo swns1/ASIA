@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "backend/Dockerfile",
+    "watchPatterns": ["/backend/identity-service/**", "/backend/shared/**", "/deploy/railway/**"]
+  },
+  "deploy": {
+    "startCommand": "sh -c 'sh /app/start-backend.sh python manage.py clearsessions && sh /app/start-backend.sh python manage.py axes_reset_logs --age 90'",
+    "cronSchedule": "0 19 * * 0",
+    "restartPolicyType": "NEVER"
+  }
+}

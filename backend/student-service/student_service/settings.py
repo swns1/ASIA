@@ -62,6 +62,10 @@ ALLOWED_HOSTS = [
 # working in front of this process breaks *all* access, not just insecure
 # access — only enable these once a real HTTPS-terminating deployment exists.
 SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", False)
+# Health checks arrive over plain HTTP from inside the platform (Railway
+# calls /health/ without X-Forwarded-Proto); redirecting them to HTTPS
+# answers 301, which the platform reads as a failed deploy.
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
 CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", False)
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
@@ -214,6 +218,15 @@ REST_FRAMEWORK = {
     # behind a single load balancer.
     "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
+
+# Behind a hosting proxy (NUM_PROXIES >= 1, e.g. Railway) TLS ends at the
+# proxy, which reports the original scheme in X-Forwarded-Proto. Trusting it is
+# what lets request.is_secure() -- and with it SECURE_SSL_REDIRECT and the
+# admin's CSRF origin check -- see HTTPS instead of looping or rejecting. Only
+# safe when such a proxy really is in front, which a non-zero NUM_PROXIES is
+# the assertion of; the LAN deployment leaves it at 0 and this stays unset.
+if REST_FRAMEWORK["NUM_PROXIES"]:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 SIMPLE_JWT = {
     "USER_ID_FIELD": "user_id",

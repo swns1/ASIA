@@ -1,0 +1,6 @@
+# Files that run inside Linux containers must keep LF line endings, even in a
+# Windows checkout with core.autocrlf=true -- a CRLF shell script fails with
+# "set: illegal option -" and a CRLF Caddyfile can fail to parse.
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+Caddyfile    text eol=lf

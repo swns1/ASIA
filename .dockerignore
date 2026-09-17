@@ -1,0 +1,25 @@
+# Build context for backend/Dockerfile and frontend/admin-portal/Dockerfile is
+# the repository root. Keep secrets, local data and heavy local folders out.
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+
+# Secrets and machine-specific settings
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.phone-test
+
+# Local data -- never ship student documents or backups into an image
+backups
+OCR_IMAGES
+**/media
+**/logs
+**/cache
+**/staticfiles
+
+# Frontend build output and dependencies are rebuilt inside the image
+**/node_modules
+frontend/admin-portal/dist

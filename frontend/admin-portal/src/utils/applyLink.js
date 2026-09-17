@@ -21,6 +21,29 @@ export function isLocalOnlyUrl(url) {
   }
 }
 
+// True when only devices on the same network can open the link: a private
+// IPv4 range, a local-only name, or a bare machine name. That is the LAN
+// deployment, where the parent has to join the school Wi-Fi first. A public
+// address (the hosted copy on Railway) opens from any network, mobile data
+// included, and the instructions should not send parents looking for Wi-Fi.
+export function isPrivateNetworkUrl(url) {
+  let hostname;
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (LOCAL_HOSTNAMES.includes(hostname)) return true;
+  const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  if (!hostname.includes(".")) return true;
+  return /\.(local|lan|home|internal|localdomain)$/.test(hostname);
+}
+
 export function resolveApplyUrl(applyUrl, origin) {
   if (!applyUrl) return applyUrl;
   if (!isLocalOnlyUrl(applyUrl)) return applyUrl;

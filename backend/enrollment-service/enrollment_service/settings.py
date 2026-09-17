@@ -75,6 +75,10 @@ ALLOWED_HOSTS = [h.strip() for h in env("ALLOWED_HOSTS", "").split(",") if h.str
 # working in front of this process breaks *all* access, not just insecure
 # access — only enable these once a real HTTPS-terminating deployment exists.
 SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", False)
+# Health checks arrive over plain HTTP from inside the platform (Railway
+# calls /health/ without X-Forwarded-Proto); redirecting them to HTTPS
+# answers 301, which the platform reads as a failed deploy.
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
 CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", False)
 SECURE_HSTS_SECONDS = int(env("SECURE_HSTS_SECONDS", "0"))
@@ -229,6 +233,15 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
 
+# Behind a hosting proxy (NUM_PROXIES >= 1, e.g. Railway) TLS ends at the
+# proxy, which reports the original scheme in X-Forwarded-Proto. Trusting it is
+# what lets request.is_secure() -- and with it SECURE_SSL_REDIRECT and the
+# admin's CSRF origin check -- see HTTPS instead of looping or rejecting. Only
+# safe when such a proxy really is in front, which a non-zero NUM_PROXIES is
+# the assertion of; the LAN deployment leaves it at 0 and this stays unset.
+if REST_FRAMEWORK["NUM_PROXIES"]:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 # ─── SimpleJWT (mirrors identity-service) ───────────────────────────────────
 SIMPLE_JWT = {
@@ -331,6 +344,9 @@ EMAIL_USE_SSL       = _env_bool("EMAIL_USE_SSL", False)
 EMAIL_HOST_USER     = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 EMAIL_TIMEOUT       = _env_int("EMAIL_TIMEOUT", 10)
+# HTTPS alternative for hosts that block SMTP (Railway's Free/Trial/Hobby
+# plans): EMAIL_BACKEND=shared.email_backends.BrevoEmailBackend. See there.
+BREVO_API_KEY       = env("BREVO_API_KEY")
 DEFAULT_FROM_EMAIL  = env(
     "DEFAULT_FROM_EMAIL",
     f"South Lakes Integrated School <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "webmaster@localhost",

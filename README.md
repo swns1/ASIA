@@ -410,6 +410,135 @@ loads the page from port 4173 and then calls the APIs on 8000-8003 directly:
 - `FRONTEND_BASE_URL`, `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` use the LAN address, and the frontend was built with it;
 - a phone on mobile data cannot reach the system at all — by design.
 
+## Deploying to Railway
+
+For a public copy — remote demos, or access from outside the school. The
+school's own system is better on the LAN (above): no monthly cost, and
+student records stay on school property. On Railway's Hobby plan this setup
+costs roughly $10–15 a month in usage.
+
+Everything the platform needs is in the repository:
+
+| File | Used by |
+|---|---|
+| `backend/Dockerfile` | the four API services and both scheduled jobs (`SLIS_SERVICE` picks which) |
+| `frontend/admin-portal/Dockerfile` + `deploy/railway/Caddyfile` | the app, served by Caddy |
+| `deploy/railway/backend.json`, `frontend.json` | build and health-check settings |
+| `deploy/railway/overdue-cron.json`, `cleanup-cron.json` | the nightly and weekly jobs |
+
+CI builds all of these images and starts each one the way Railway does, so a
+broken image fails CI rather than a deploy.
+
+### What behaves differently on Railway (already handled)
+
+- **No SMTP.** Railway blocks outbound SMTP on the Free, Trial and Hobby plans, so the Gmail setup cannot connect. Use the HTTPS email backend, `shared.email_backends.BrevoEmailBackend`. Brevo's free plan needs no domain — verify a single sender address in its dashboard and use it as `DEFAULT_FROM_EMAIL`.
+- **Everything arrives through a proxy.** With `NUM_PROXIES=1`, the services read the visitor's real address, which is used for rate limits, the audit log and login lockouts. They also treat the proxy's HTTPS as HTTPS. Without that setting, five wrong passwords from anyone would lock out everybody.
+- **The app and the APIs are different sites** (separate `*.up.railway.app` names). The login cookie therefore needs `REFRESH_COOKIE_SAMESITE=None` on identity. The refresh endpoint then also refuses origins that aren't in `CORS_ALLOWED_ORIGINS`.
+- **Health checks come over plain HTTP** from `healthcheck.railway.app`. That name must be in `ALLOWED_HOSTS`, and `/health/` is exempt from the HTTPS redirect.
+- **Only enrollment-service stores uploaded documents**, so one volume is enough. Mount it at `/data` and set `MEDIA_ROOT=/data/media`. A service with a volume has a few seconds of downtime on each redeploy.
+- **The local OCR scanner is not installed** in these images (it needs about 1 GB). Document checks use the Groq cloud path when `GROQ_API_KEY` is set.
+
+### 1. Create the services
+
+In one Railway project:
+
+1. **Add PostgreSQL** and keep its name, `Postgres`.
+2. **Add six services from this GitHub repository.** Leave *Root Directory* empty, so the build context is the repository root. Name them exactly as below, because the variable references in step 2 use these names:
+
+   | Service | Settings → *Config file path* | Variables | Public domain |
+   |---|---|---|---|
+   | `identity` | `/deploy/railway/backend.json` | `SLIS_SERVICE=identity` | yes |
+   | `student` | `/deploy/railway/backend.json` | `SLIS_SERVICE=student` | yes |
+   | `billing` | `/deploy/railway/backend.json` | `SLIS_SERVICE=billing` | yes |
+   | `enrollment` | `/deploy/railway/backend.json` | `SLIS_SERVICE=enrollment` | yes |
+   | `frontend` | `/deploy/railway/frontend.json` | see step 2 | yes |
+   | `overdue` | `/deploy/railway/overdue-cron.json` | `SLIS_SERVICE=billing` | no |
+
+   Optionally add `cleanup` (`/deploy/railway/cleanup-cron.json`, `SLIS_SERVICE=identity`, no domain). It clears old sessions and login logs weekly.
+3. **On `enrollment`, add a volume** mounted at `/data`.
+4. **Generate a public domain** for the five services marked *yes*.
+
+### 2. Set the variables
+
+**Shared variables** — referenced by every API service and both jobs:
+
+```ini
+SECRET_KEY=<one long random value; python -c "import secrets; print(secrets.token_urlsafe(50))">
+DB_HOST=${{Postgres.PGHOST}}
+DB_PORT=${{Postgres.PGPORT}}
+DB_NAME=${{Postgres.PGDATABASE}}
+DB_USER=${{Postgres.PGUSER}}
+DB_PASSWORD=${{Postgres.PGPASSWORD}}
+DEBUG=0
+NUM_PROXIES=1
+SECURE_SSL_REDIRECT=1
+SESSION_COOKIE_SECURE=1
+CSRF_COOKIE_SECURE=1
+```
+
+**Every API service** (`identity`, `student`, `billing`, `enrollment`), in addition:
+
+```ini
+ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}},healthcheck.railway.app
+CORS_ALLOWED_ORIGINS=https://${{frontend.RAILWAY_PUBLIC_DOMAIN}}
+```
+
+**Per service:**
+
+| Service | Variables |
+|---|---|
+| `identity` | `REFRESH_COOKIE_SAMESITE=None` |
+| `student` | `FRONTEND_BASE_URL=https://${{frontend.RAILWAY_PUBLIC_DOMAIN}}`, `GROQ_API_KEY`, `GEMINI_API_KEY` |
+| `enrollment` | `MEDIA_ROOT=/data/media`, `EMAIL_BACKEND=shared.email_backends.BrevoEmailBackend`, `BREVO_API_KEY`, `DEFAULT_FROM_EMAIL=South Lakes Integrated School <your-verified-sender@...>`, `GROQ_API_KEY`, `GEMINI_API_KEY` |
+| `frontend` | the four API addresses, baked in when it builds (below) |
+
+```ini
+VITE_IDENTITY_API_URL=https://${{identity.RAILWAY_PUBLIC_DOMAIN}}/api/auth
+VITE_STUDENT_API_URL=https://${{student.RAILWAY_PUBLIC_DOMAIN}}/api
+VITE_BILLING_API_URL=https://${{billing.RAILWAY_PUBLIC_DOMAIN}}/api
+VITE_ENROLLMENT_API_URL=https://${{enrollment.RAILWAY_PUBLIC_DOMAIN}}/api
+```
+
+The frontend's addresses are fixed at build time, so **redeploy `frontend`**
+whenever an API service's domain changes.
+
+### 3. Load the database (once)
+
+Railway's database already exists and is empty. From this PC, copy the Postgres
+service's `DATABASE_PUBLIC_URL` and run:
+
+```powershell
+.\scripts\setup-db.ps1 -DatabaseUrl "postgresql://postgres:...@....proxy.rlwy.net:12345/railway"          # real data
+.\scripts\setup-db.ps1 -DatabaseUrl "postgresql://postgres:...@....proxy.rlwy.net:12345/railway" -Demo    # demo copy
+```
+
+It does the same five steps as a local install, and refuses a database that
+already has tables. When it finishes, it prints the command that creates the
+first admin against that database. For a demo copy, run
+`manage_accounts lock-demo` the same way before sharing the link, since the demo
+password is published here.
+
+### 4. Deploy and check
+
+Deploy the services. Each API service must pass its `/health/` check, and
+`https://<frontend domain>` must show the login page. Log in, issue an
+applicant invite, and scan the QR code from a phone **on mobile data**.
+On Railway that works from any network.
+
+**Backups:** Railway keeps the database, but a copy you hold yourself is
+cheap:
+
+```powershell
+& "C:\Program Files\PostgreSQL\17\bin\pg_dump.exe" -Fc -f slis-railway.dump "<DATABASE_PUBLIC_URL>"
+```
+
+Uploaded documents live on the `enrollment` volume.
+
+**Your own domain (optional):** give the app `app.<domain>` and the APIs
+`identity.<domain>` etc. The app and APIs then share one site, so identity can
+keep `REFRESH_COOKIE_SAMESITE=Lax`. Update `ALLOWED_HOSTS`,
+`CORS_ALLOWED_ORIGINS`, `FRONTEND_BASE_URL` and the four `VITE_*` URLs to match.
+
 ## Known in-progress work
 
 - **RBAC**: backend endpoints (billing, grades, student records, etc.) and frontend routes are now role-gated per-page, with sensitive actions on shared pages (e.g. delete/promote) also hidden per-role at the button level. `HasRole` (both the shared copy used by billing/enrollment/student and identity-service's own) now fails closed if a view omits `required_roles` — it used to silently allow any authenticated user, guardians included; a view that genuinely wants that must set `ALLOW_ANY_AUTHENTICATED_ROLE = True` explicitly. `backend/shared/` now also holds `authentication.py` (`SingleSessionJWTAuthentication`, de-duplicated from three per-service copies) and `health.py`; `user_stub.py` remains unused dead code (see git history/audit notes for why).

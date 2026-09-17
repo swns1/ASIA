@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isLocalOnlyUrl, resolveApplyUrl } from "./applyLink";
+import { isLocalOnlyUrl, isPrivateNetworkUrl, resolveApplyUrl } from "./applyLink";
 
 const INVITE = "/apply/2f6c1f84-0f3d-4d4f-9a1a-1b2c3d4e5f60";
 
@@ -39,5 +39,37 @@ describe("isLocalOnlyUrl", () => {
     expect(isLocalOnlyUrl("http://127.0.0.1:4173/apply/x")).toBe(true);
     expect(isLocalOnlyUrl("http://192.168.1.42:4173/apply/x")).toBe(false);
     expect(isLocalOnlyUrl("https://slis.example.edu.ph/apply/x")).toBe(false);
+  });
+});
+
+describe("isPrivateNetworkUrl", () => {
+  it("treats LAN addresses as same-network-only", () => {
+    for (const url of [
+      "http://192.168.100.9:4173/apply/x",
+      "http://10.0.0.5:4173/apply/x",
+      "http://172.16.4.2/apply/x",
+      "http://172.31.255.1/apply/x",
+      "http://localhost:5173/apply/x",
+      "http://slis-pc:4173/apply/x",
+      "http://slis-pc.local:4173/apply/x",
+    ]) {
+      expect(isPrivateNetworkUrl(url), url).toBe(true);
+    }
+  });
+
+  it("treats a hosted address as reachable from any network", () => {
+    for (const url of [
+      "https://frontend-production-1a2b.up.railway.app/apply/x",
+      "https://app.southlakes.edu.ph/apply/x",
+      "http://172.32.0.1/apply/x",
+      "http://8.8.8.8/apply/x",
+    ]) {
+      expect(isPrivateNetworkUrl(url), url).toBe(false);
+    }
+  });
+
+  it("does not throw on garbage", () => {
+    expect(isPrivateNetworkUrl("not a url")).toBe(false);
+    expect(isPrivateNetworkUrl("")).toBe(false);
   });
 });

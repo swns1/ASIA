@@ -43,6 +43,23 @@ MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
 REFRESH_COOKIE_PATH = "/api/auth/"
 
 
+def _origin_allowed(request):
+    """
+    The refresh endpoint is the one place a cookie alone authorizes a request,
+    so a cross-site page could make a victim's browser call it. CORS already
+    stops that page reading the new token; this also refuses to act for an
+    origin the frontend was never served from. It matters once
+    REFRESH_COOKIE_SAMESITE=None lets the browser send the cookie cross-site.
+    A request with no Origin header is not a browser cross-origin call and
+    carries no ambient cookie, so it is allowed.
+    """
+    origin = request.META.get("HTTP_ORIGIN")
+    if not origin:
+        return True
+    allowed = {o.rstrip("/") for o in settings.CORS_ALLOWED_ORIGINS}
+    return origin.rstrip("/") in allowed
+
+
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -120,8 +137,8 @@ class LoginView(APIView):
             "refresh",
             str(refresh),
             httponly=True,
-            samesite="Lax",
-            secure=settings.SESSION_COOKIE_SECURE,  # off by default; see settings.py
+            samesite=settings.REFRESH_COOKIE_SAMESITE,  # see settings.py
+            secure=settings.REFRESH_COOKIE_SECURE,
             path=REFRESH_COOKIE_PATH,
             max_age=cookie_max_age,
         )
@@ -141,6 +158,9 @@ class RefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        if not _origin_allowed(request):
+            return Response({"detail": "Origin not allowed."}, status=403)
+
         refresh_token = request.COOKIES.get("refresh")
         if not refresh_token:
             return Response({"detail": "Refresh token missing."}, status=401)
@@ -189,7 +209,11 @@ class LogoutView(APIView):
             details="Admin portal logout completed.",
         )
         response = Response({"message": "Logged out."}, status=200)
-        response.delete_cookie("refresh", path=REFRESH_COOKIE_PATH)
+        # Same attributes as set_cookie(): a SameSite=None cookie is only
+        # replaced by a deletion that is also SameSite=None (and Secure).
+        response.delete_cookie(
+            "refresh", path=REFRESH_COOKIE_PATH, samesite=settings.REFRESH_COOKIE_SAMESITE,
+        )
         return response
 
 

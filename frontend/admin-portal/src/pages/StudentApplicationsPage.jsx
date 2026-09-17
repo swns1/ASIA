@@ -22,7 +22,7 @@ import { Field, Input, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
-import { isLocalOnlyUrl, resolveApplyUrl } from "../utils/applyLink";
+import { isLocalOnlyUrl, isPrivateNetworkUrl, resolveApplyUrl } from "../utils/applyLink";
 import {
   createApplicationInvite,
   getStudentApplications,
@@ -137,9 +137,10 @@ function IssueInviteModal({ onClose, onIssued }) {
 // ── Issued invite: QR first, link as backup ─────────────────────────────
 //
 // The parent scans the QR with their own phone and the registrar gives them
-// the access code in person. Both devices must be on one network -- this is a
-// LAN deployment, so the link opens nowhere else -- but any shared network
-// works: the school Wi-Fi, or a phone hotspot the machine is joined to.
+// the access code in person. On the LAN deployment the link only opens on the
+// same network (the school Wi-Fi, or a hotspot the machine is joined to); on
+// the hosted copy it opens from anywhere. The instructions follow whichever
+// the link actually is (utils/applyLink.js isPrivateNetworkUrl).
 //
 // The link and code stay separate factors; the code is never put in the QR,
 // the link, or the navigation state. The URL itself comes from
@@ -159,6 +160,9 @@ function printSlip({ issued, qrSvg }) {
   }
   const expires = issued.expires_at ? fmtDate(issued.expires_at) : "—";
   const applyUrl = resolveApplyUrl(issued.apply_url, window.location.origin);
+  const wifiStep = isPrivateNetworkUrl(applyUrl)
+    ? "<li>Connect your phone to the <strong>school Wi-Fi</strong>.</li>"
+    : "";
   win.document.write(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Application slip</title>
 <style>
@@ -181,7 +185,7 @@ function printSlip({ issued, qrSvg }) {
   <div class="muted">Access code</div>
   <div class="code">${escapeHtml(issued.access_code)}</div>
   <ol class="steps">
-    <li>Connect your phone to the <strong>school Wi-Fi</strong>.</li>
+    ${wifiStep}
     <li>Scan the QR code with your phone camera and open the link.</li>
     <li>Enter the access code above, then fill in the form.</li>
   </ol>
@@ -201,6 +205,7 @@ function IssuedInvite({ issued, copied, onCopy, onClose }) {
   // the backend built (see utils/applyLink.js).
   const applyUrl = resolveApplyUrl(issued.apply_url, window.location.origin);
   const localOnly = isLocalOnlyUrl(applyUrl);
+  const sameNetworkOnly = isPrivateNetworkUrl(applyUrl);
 
   const handlePrint = () => {
     const qrSvg = qrRef.current?.querySelector("svg")?.outerHTML ?? "";
@@ -231,7 +236,9 @@ function IssuedInvite({ issued, copied, onCopy, onClose }) {
           <QRCodeSVG value={applyUrl} size={208} marginSize={1} title="Application form link" />
         </div>
         <div className="text-[13px] text-neutral-700">
-          Scan with a phone on the <strong>same network as this computer</strong>
+          {sameNetworkOnly
+            ? <>Scan with a phone on the <strong>same network as this computer</strong></>
+            : <>Scan with any phone camera — Wi-Fi or mobile data</>}
         </div>
       </div>
 

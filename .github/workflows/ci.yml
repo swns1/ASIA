@@ -130,3 +130,80 @@ jobs:
             exit 1
           fi
           echo "OK: no localhost URLs in dist/"
+
+  backend-image:
+    # The Railway deployment builds backend/Dockerfile (deploy/railway/). Nothing
+    # else exercises it, so a broken image would only surface as a failed
+    # deploy. This builds each service and starts it the way Railway does --
+    # gunicorn on $PORT behind a proxy, production settings -- then requires
+    # Railway's own health check request to answer exactly 200 (a 301 from the
+    # HTTPS redirect would fail every real deploy).
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [identity, student, billing, enrollment]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f backend/Dockerfile --build-arg SLIS_SERVICE=${{ matrix.service }} -t slis-${{ matrix.service }} .
+
+      - name: Start like Railway and pass its health check
+        run: |
+          docker run -d --name app --network host \
+            -e PORT=8080 \
+            -e SECRET_KEY=ci-only-secret-key-not-for-production \
+            -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASSWORD=postgres \
+            -e DB_HOST=localhost -e DB_PORT=5432 \
+            -e DEBUG=0 -e NUM_PROXIES=1 -e SECURE_SSL_REDIRECT=1 \
+            -e ALLOWED_HOSTS=healthcheck.railway.app,localhost \
+            slis-${{ matrix.service }}
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: healthcheck.railway.app" http://localhost:8080/health/ || true)
+            if [ "$code" = "200" ]; then echo "health check: 200"; exit 0; fi
+            echo "attempt $i: $code"; sleep 2
+          done
+          docker logs app
+          exit 1
+
+  frontend-image:
+    # frontend/admin-portal/Dockerfile: Vite build + Caddy, as deployed on
+    # Railway. Checks the image serves the app on a client-side route, which
+    # is what breaks when the SPA fallback is wrong.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -f frontend/admin-portal/Dockerfile \
+            --build-arg VITE_IDENTITY_API_URL=https://ci.example.invalid/api/auth \
+            --build-arg VITE_STUDENT_API_URL=https://ci.example.invalid/students/api \
+            --build-arg VITE_BILLING_API_URL=https://ci.example.invalid/billing/api \
+            --build-arg VITE_ENROLLMENT_API_URL=https://ci.example.invalid/enrollment/api \
+            -t slis-frontend .
+
+      - name: Serve a client-side route
+        run: |
+          docker run -d --name web -p 8080:8080 -e PORT=8080 slis-frontend
+          for i in $(seq 1 15); do
+            if curl -fsS http://localhost:8080/requirements | grep -q '<div id="root">'; then
+              echo "SPA fallback: ok"; exit 0
+            fi
+            sleep 1
+          done
+          docker logs web
+          exit 1

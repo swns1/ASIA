@@ -58,6 +58,10 @@ ALLOWED_HOSTS = [
 # working in front of this process breaks *all* access, not just insecure
 # access — only enable these once a real HTTPS-terminating deployment exists.
 SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", False)
+# Health checks arrive over plain HTTP from inside the platform (Railway
+# calls /health/ without X-Forwarded-Proto); redirecting them to HTTPS
+# answers 301, which the platform reads as a failed deploy.
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
 CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", False)
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
@@ -148,6 +152,15 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": _env_int("NUM_PROXIES", 0),
 }
 
+# Behind a hosting proxy (NUM_PROXIES >= 1, e.g. Railway) TLS ends at the
+# proxy, which reports the original scheme in X-Forwarded-Proto. Trusting it is
+# what lets request.is_secure() -- and with it SECURE_SSL_REDIRECT and the
+# admin's CSRF origin check -- see HTTPS instead of looping or rejecting. Only
+# safe when such a proxy really is in front, which a non-zero NUM_PROXIES is
+# the assertion of; the LAN deployment leaves it at 0 and this stays unset.
+if REST_FRAMEWORK["NUM_PROXIES"]:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # ✅ Token signed with this config
 SIMPLE_JWT = {
     "USER_ID_FIELD": "user_id",
@@ -164,15 +177,35 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# Lock out on the (ip, username) pair, not the IP alone. Axes 8 defaults to
-# ip_address only, which fails both ways: password-spraying one account from
-# rotating IPs never trips the limit, and one bad actor on the school's shared
-# NAT locks out everyone else in the building.
-AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
+# The refresh-token cookie (accounts/views.py). "Lax" suits every deployment
+# where the app and this service share a *site*: the LAN setup (same host,
+# different port) or app.<domain> + api.<domain>. When they sit on different
+# sites -- two *.up.railway.app names are two sites -- browsers withhold a Lax
+# cookie from the app's requests and every silent refresh fails, so set
+# REFRESH_COOKIE_SAMESITE=None there. None is only accepted over HTTPS, so it
+# always carries the Secure flag.
+REFRESH_COOKIE_SAMESITE = os.environ.get("REFRESH_COOKIE_SAMESITE", "Lax").strip().capitalize()
+if REFRESH_COOKIE_SAMESITE not in {"Lax", "Strict", "None"}:
+    raise RuntimeError("REFRESH_COOKIE_SAMESITE must be Lax, Strict or None.")
+REFRESH_COOKIE_SECURE = SESSION_COOKIE_SECURE or REFRESH_COOKIE_SAMESITE == "None"
+
+# Lock out on the (ip, username) pair, not the IP alone: one person mistyping
+# on the school's shared connection -- or behind a hosting proxy, where every
+# request arrives from the proxy -- must not lock out everyone else in the
+# building. The nested list is what makes it a pair: a flat
+# ["ip_address", "username"] means "IP *or* username", which is exactly the
+# shared-address lockout this is meant to avoid (axes logged "blocking by
+# ip_address or username"). Spraying from many addresses is still slowed by
+# LoginRateThrottle, and the login view resets exactly this pair on success.
+AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
 AXES_FAILURE_LIMIT = 5
 AXES_LOCK_OUT_AT_FAILURE = True
 AXES_COOLOFF_TIME = 1
 AXES_RESET_ON_SUCCESS = True
+# The client address the same proxy-aware way throttling and the audit log
+# resolve it. Without this, axes reads REMOTE_ADDR, which behind a hosting
+# proxy is the proxy itself for every visitor.
+AXES_CLIENT_IP_CALLABLE = "shared.audit.client_ip"
 
 DATABASES = {
     "default": {

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "backend/Dockerfile",
+    "watchPatterns": ["/backend/billing-service/**", "/backend/shared/**", "/deploy/railway/**"]
+  },
+  "deploy": {
+    "startCommand": "sh /app/start-backend.sh python manage.py flag_overdue_installments",
+    "cronSchedule": "0 17 * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

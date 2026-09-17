@@ -2,10 +2,10 @@
 Throttles for the public applicant-facing endpoints, keyed on the invite id
 rather than IP.
 
-Why per-invite: NUM_PROXIES is 0 in every service's settings (see
-student_service/settings.py) — there is no reverse proxy today, so
-REMOTE_ADDR is trustworthy for now, but a per-IP-only limit still has two
-problems this project cares about. First, a shared LAN/NAT (a school's own
+Why per-invite: NUM_PROXIES defaults to 0 (the LAN deployment, where
+REMOTE_ADDR is the client) and is 1 on Railway, where a proxy sits in
+front. A per-IP-only limit has two problems this project cares about
+either way. First, a shared LAN/NAT (a school's own
 wifi, a mall, a barangay hall with a public terminal) collapses every
 applicant behind it into one IP, so one slow/bad actor can lock out
 everyone else trying to apply from the same place. Second — and this is

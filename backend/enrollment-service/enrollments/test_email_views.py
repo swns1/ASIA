@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import requests
 from django.core import mail
 from django.test import override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -149,3 +150,68 @@ def test_transient_classification():
     assert not is_transient_smtp_error(smtplib.SMTPAuthenticationError(535, b"no"))
     assert not is_transient_smtp_error(smtplib.SMTPRecipientsRefused({}))
     assert not is_transient_smtp_error(ValueError())
+
+
+# -- HTTPS backend (Brevo), for hosts that block SMTP ------------------------
+
+BREVO = "shared.email_backends.BrevoEmailBackend"
+
+
+@override_settings(EMAIL_BACKEND=BREVO, BREVO_API_KEY="", EMAIL_HOST_USER="")
+def test_brevo_without_a_key_answers_503():
+    with _setup(_enrollment()) as failures, \
+         patch("shared.email_backends.requests.post") as post:
+        response = _post()
+
+    assert response.status_code == 503
+    post.assert_not_called()
+    failures.create.assert_not_called()
+
+
+@override_settings(EMAIL_BACKEND=BREVO, BREVO_API_KEY="xkeysib-test",
+                   DEFAULT_FROM_EMAIL="South Lakes <registrar@example.com>")
+def test_brevo_posts_the_message_over_https():
+    with _setup(_enrollment()), \
+         patch("shared.email_backends.requests.post") as post:
+        post.return_value.raise_for_status.return_value = None
+        response = _post()
+
+    assert response.status_code == 200
+    url = post.call_args.args[0]
+    body = post.call_args.kwargs["json"]
+    assert url == "https://api.brevo.com/v3/smtp/email"
+    assert post.call_args.kwargs["headers"]["api-key"] == "xkeysib-test"
+    assert body["sender"] == {"email": "registrar@example.com", "name": "South Lakes"}
+    assert body["to"] == [{"email": "parent@example.com"}]
+    assert "Grade 7" in body["textContent"]
+    assert "Diamond" in body["htmlContent"]
+
+
+def _http_error(status):
+    response = requests.Response()
+    response.status_code = status
+    return requests.exceptions.HTTPError(response=response)
+
+
+@override_settings(EMAIL_BACKEND=BREVO, BREVO_API_KEY="xkeysib-test")
+def test_brevo_rate_limit_is_retried_then_logged():
+    with _setup(_enrollment()) as failures, \
+         patch("shared.email_backends.requests.post") as post:
+        post.return_value.raise_for_status.side_effect = _http_error(429)
+        response = _post()
+
+    assert response.status_code == 502
+    assert post.call_count == 3
+    failures.create.assert_called_once()
+
+
+@override_settings(EMAIL_BACKEND=BREVO, BREVO_API_KEY="xkeysib-wrong")
+def test_brevo_bad_key_is_not_retried():
+    with _setup(_enrollment()) as failures, \
+         patch("shared.email_backends.requests.post") as post:
+        post.return_value.raise_for_status.side_effect = _http_error(401)
+        response = _post()
+
+    assert response.status_code == 502
+    assert post.call_count == 1
+    failures.create.assert_called_once()

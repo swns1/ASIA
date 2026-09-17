@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
-from shared.resilience import retry_with_backoff
+from shared.resilience import is_transient_error, retry_with_backoff
 
 from .models import EmailDeliveryFailure, Enrollment
 
@@ -30,6 +30,24 @@ def is_transient_smtp_error(exc: Exception) -> bool:
         return False
     # socket timeouts and connection resets surface as OSError subclasses.
     return isinstance(exc, (TimeoutError, ConnectionError))
+
+
+def is_transient_send_error(exc: Exception) -> bool:
+    """SMTP rules for the SMTP backend, shared.resilience's HTTP rules
+    (timeouts, connection errors, 429/5xx) for the HTTPS backend."""
+    return is_transient_smtp_error(exc) or is_transient_error(exc)
+
+
+def email_configured() -> bool:
+    """False when the chosen backend has no credentials, so nothing would
+    be sent. Backends that don't deliver anywhere (console, locmem) count
+    as configured."""
+    backend = settings.EMAIL_BACKEND
+    if backend.endswith("smtp.EmailBackend"):
+        return bool(settings.EMAIL_HOST_USER)
+    if backend.endswith("BrevoEmailBackend"):
+        return bool(getattr(settings, "BREVO_API_KEY", ""))
+    return True
 
 
 def _render(student_name, school_level, grade_level, section, school_year):
@@ -127,7 +145,7 @@ def send_enrollment_email(request):
 
     # Not a delivery failure: nothing was attempted, so nothing is logged for
     # follow-up. The school simply hasn't set up a mailbox (see .env.example).
-    if not settings.EMAIL_HOST_USER and settings.EMAIL_BACKEND.endswith("smtp.EmailBackend"):
+    if not email_configured():
         return Response(
             {"detail": "Email is not configured on the server, so no confirmation was sent."},
             status=503,
@@ -158,8 +176,8 @@ def send_enrollment_email(request):
         retry_with_backoff(
             message.send,
             attempts=3,
-            is_transient=is_transient_smtp_error,
-            label="smtp",
+            is_transient=is_transient_send_error,
+            label="email",
         )
         return Response({"success": True})
     except Exception as e:
