@@ -15,6 +15,7 @@ import Card, { StatCard, Panel } from "../components/ui/Card";
 import Tabs from "../components/ui/Tabs";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import ErrorState from "../components/ui/ErrorState";
 import Pagination from "../components/Pagination";
 import Badge, { StatusBadge } from "../components/ui/Badge";
@@ -758,17 +759,6 @@ export default function InvoicesPage() {
     })),
   ];
 
-  // Years that actually have invoices, from /summary/. "All years" last, so the
-  // default (a real year) reads as the primary choice rather than an opt-in.
-  const yearChipOptions = [
-    ...(summary.school_years ?? []).map((y) => ({
-      value: y,
-      label: y === schoolYear ? `${y} (current)` : y,
-      tone: y === schoolYear ? "brand" : "muted",
-    })),
-    { value: "", label: "All years", tone: "muted" },
-  ];
-
   const planChipOptions = [
     { value: "all", label: "All", tone: "brand" },
     ...Object.entries(PLAN_META).map(([value, m]) => ({
@@ -834,6 +824,19 @@ export default function InvoicesPage() {
           onClearSearch={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering, yearFilter); }}
           hasFilters={Boolean(hasActiveFilters)}
           onClearFilters={handleClearAll}
+          // Years come from /summary/ — years that have *invoices*, which is not
+          // the same set as years that have enrollments, so the context's list
+          // would offer years with nothing to bill. The summary tallies by
+          // status rather than by year, so these rows carry no per-year count.
+          scope={
+            <SchoolYearPicker
+              value={yearFilter}
+              onChange={handleYear}
+              options={summary.school_years ?? []}
+              counts={{}}
+              allYearsCount={countsLoading ? undefined : summary.total}
+            />
+          }
           extraControls={
             <div className="shrink-0">
               <label htmlFor="invoice-sort" className="sr-only">Sort invoices</label>
@@ -850,15 +853,6 @@ export default function InvoicesPage() {
             </div>
           }
         >
-          <FilterRow label="School Year">
-            <ChipGroup
-              label="Filter by school year"
-              options={yearChipOptions}
-              value={yearFilter}
-              onChange={handleYear}
-            />
-          </FilterRow>
-
           <FilterRow label="Status">
             <ChipGroup
               label="Filter by status"

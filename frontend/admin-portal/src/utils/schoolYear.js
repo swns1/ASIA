@@ -19,3 +19,78 @@ export function buildSchoolYearOptions(centerYear, { past = 3, future = 1 } = {}
     return `${y}-${y + 1}`;
   });
 }
+
+
+// ── Picker presentation ──────────────────────────────────────────────────────
+//
+// Two controls present school years, and they are deliberately different
+// widgets: the sidebar's is a native <select> (the global default), while
+// ui/SchoolYearPicker is a combobox with type-to-filter and keyboard
+// navigation (a per-page filter whose list can run to dozens of entries).
+// What they must NOT differ on is which year lands in which group and how a
+// year reads once grouped — the same year sitting under "Recent" in one and
+// "Earlier" in the other would be one dataset telling two stories. Both kept
+// their own copy of this until it moved here.
+
+// How many non-current years stay in "Recent" before the rest fall into
+// "Earlier". A school gains one year per year, so this only ever grows slowly;
+// the grouping exists to make the list scannable, not to hide data.
+export const RECENT_YEARS = 4;
+
+/**
+ * Group years so the one you're working in is first, recent history next, and
+ * the long tail still reachable without a second click. Empty groups are
+ * dropped, so a school with two years on file sees almost no grouping rather
+ * than three headers over one entry each.
+ *
+ * @param {string[]} options      every year to offer, newest first
+ * @param {string}   currentYear  the year treated as "Current"
+ * @returns {Array<[string, string[]]>} [groupLabel, years] pairs, in order
+ */
+export function groupYears(options, currentYear) {
+  const rest = options.filter((y) => y !== currentYear);
+  return [
+    ["Current", options.filter((y) => y === currentYear)],
+    ["Recent", rest.slice(0, RECENT_YEARS)],
+    ["Earlier", rest.slice(RECENT_YEARS)],
+  ].filter(([, years]) => years.length > 0);
+}
+
+/**
+ * Label a year with its count: "2025-2026 · 68".
+ *
+ * The noun is deliberately omitted: the sidebar's picker governs Grades,
+ * Attendance and Analytics as well as Enrollments, so "enrollments" would be
+ * wrong in most of those contexts. A year with no count available renders
+ * bare rather than as "· 0", which would claim the year is empty when the
+ * truth is that nothing was counted.
+ */
+export function yearLabel(year, counts = {}) {
+  const n = counts[year];
+  return n == null ? year : `${year} · ${n}`;
+}
+
+/**
+ * The year list for a form that ENROLLS INTO a year, rather than filtering
+ * years that already have data — an enrollment form, or a promotion's target.
+ *
+ * Those forms need next year before it exists in any record (you enrol for
+ * September in March), so the real list alone would leave the year you
+ * actually want unofferable. They previously each built a rolling window off
+ * `new Date()` instead — 4 years in one place, 5 in another, on the same page
+ * — which ignored the real data entirely and went stale exactly the way the
+ * old sidebar window did.
+ *
+ * @param {string[]} options      years that exist in the data
+ * @param {string}   currentYear  the active year
+ */
+export function yearOptionsForEntry(options = [], currentYear) {
+  const base = currentYear || computeDefaultSchoolYear();
+  const startYear = parseInt(String(base).slice(0, 4), 10);
+  const next = Number.isNaN(startYear) ? null : `${startYear + 1}-${startYear + 2}`;
+
+  const all = new Set(options.filter(Boolean));
+  all.add(base);
+  if (next) all.add(next);
+  return [...all].sort().reverse();
+}

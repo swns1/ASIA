@@ -1,5 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { useState, useEffect, useCallback, useRef } from "react";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +14,7 @@ import Badge from "../components/ui/Badge";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 
 import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
 import { fmtDate } from "../utils/format";
@@ -51,6 +54,7 @@ export default function PaymentsPage() {
   usePageTitle("Payments");
   const navigate    = useNavigate();
   const [searchParams] = useSearchParams();
+  const isFirstRender = useIsFirstRender();
   const preloadedInvoiceId = searchParams.get("invoice") ? parseInt(searchParams.get("invoice")) : null;
 
   const [payments,   setPayments]   = useState([]);
@@ -67,27 +71,37 @@ export default function PaymentsPage() {
   const [amountMin,    setAmountMin]    = useState("");
   const [amountMax,    setAmountMax]    = useState("");
   const [sortField,    setSortField]    = useState("-payment_date");
+  const [search,       setSearch]       = useState("");
+  // Defaults to the global school year, the way Enrollments and Grades do —
+  // opening on "All years" made this the one year-scoped page that started
+  // unscoped, and left its picker sitting grey while theirs read as active.
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
+  const [yearFilter,   setYearFilter]   = useState(globalSchoolYear ?? "");
 
   const hasDateOrAmount  = dateFrom || dateTo || amountMin || amountMax;
-  const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount || sortField !== "-payment_date";
+  const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount ||
+    sortField !== "-payment_date" || search.trim() !== "" || yearFilter !== "";
 
   const clearFilters = () => {
     setMethodFilter("all");
     setDateFrom(""); setDateTo("");
     setAmountMin(""); setAmountMax("");
     setSortField("-payment_date");
+    setSearch(""); setYearFilter("");
   };
 
   const totalCollected = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
 
   const buildParams = (p = 1, overrides = {}) => {
-    const f = { methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, ...overrides };
+    const f = { methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter, ...overrides };
     const params = { page: p, ordering: f.sortField };
     if (f.methodFilter !== "all") params.payment_method = f.methodFilter;
     if (f.dateFrom)  params.date_from  = f.dateFrom;
     if (f.dateTo)    params.date_to    = f.dateTo;
     if (f.amountMin) params.amount_min = f.amountMin;
     if (f.amountMax) params.amount_max = f.amountMax;
+    if (f.search?.trim()) params.search = f.search.trim();
+    if (f.yearFilter) params.school_year = f.yearFilter;
     return params;
   };
 
@@ -132,11 +146,33 @@ export default function PaymentsPage() {
       setPageMeta({ count: 0, next: null, previous: null });
     }
     finally { setLoading(false); }
-  }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField]);
+  }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter]);
+
+  // The global year resolves after first paint, so seeding useState with it is
+  // not enough on a cold load — adopt it when it arrives, the way Enrollments
+  // and TeacherAdvisories do. Only while the user hasn't chosen a year
+  // themselves, so this can't yank a deliberate "All years" back.
+  const yearTouched = useRef(false);
+  useEffect(() => {
+    if (yearTouched.current || !globalSchoolYear) return;
+    setYearFilter(globalSchoolYear);
+  }, [globalSchoolYear]);
 
   useEffect(() => {
     fetchPayments();
   }, [refreshKey]);
+
+  // Search fires on a delay so typing a name doesn't hit the endpoint per
+  // keystroke — every other control here fetches immediately on change, which
+  // is right for a click but wrong for a text field. Skipped on first render,
+  // where the effect above already loads page 1.
+  const searchDebounce = useRef(null);
+  const searchMounted  = useRef(false);
+  useEffect(() => {
+    if (!searchMounted.current) { searchMounted.current = true; return; }
+    searchDebounce.current = setTimeout(() => fetchPayments(1), 400);
+    return () => clearTimeout(searchDebounce.current);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
@@ -177,7 +213,7 @@ export default function PaymentsPage() {
 
         {/* ── Method stat cards ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
-          {PAYMENT_METHODS.map((pm) => {
+          {PAYMENT_METHODS.map((pm, i) => {
             const isActive = methodFilter === pm.value;
             return (
               <StatCard
@@ -189,6 +225,8 @@ export default function PaymentsPage() {
                 layout="horizontal"
                 loading={tilesLoading}
                 active={isActive}
+                animate={isFirstRender}
+                animateDelay={isFirstRender ? i * 0.06 : 0}
                 onClick={() => {
                   const next = isActive ? "all" : pm.value;
                   setMethodFilter(next);
@@ -201,10 +239,34 @@ export default function PaymentsPage() {
 
         {/* ── Filter panel ───────────────────────────────────────────────── */}
         <FilterBar
+          animate={isFirstRender}
+          animateDelay={isFirstRender ? 0.22 : 0}
+          searchInputId="payment-search"
+          searchValue={search}
+          onSearchChange={setSearch}
+          onClearSearch={() => setSearch("")}
+          onSearch={() => fetchPayments(1)}
+          searchPlaceholder="Search by student name, LRN, or invoice no.…"
+          searchLabel="Search payments by student name, LRN, or invoice number"
+          scope={
+            // Years and counts come from /payments/summary/, not the global
+            // context: the context counts ENROLMENTS per year, so "2025-2026 ·
+            // 68" beside a payments filter would read as 68 payments. Both are
+            // computed unscoped by the active year, so selecting one can't
+            // collapse the picker to that single option.
+            <SchoolYearPicker
+              value={yearFilter}
+              onChange={(v) => { yearTouched.current = true; setYearFilter(v); fetchPayments(1, { yearFilter: v }); }}
+              options={methodTotals.school_years ?? []}
+              counts={methodTotals.year_counts ?? {}}
+              allYearsCount={tilesLoading ? undefined : pageMeta.count}
+            />
+          }
           hasFilters={hasActiveFilters}
           onClearFilters={() => {
+            yearTouched.current = true;
             clearFilters();
-            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date" });
+            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date", search:"", yearFilter:"" });
           }}
           advanced={
             <>

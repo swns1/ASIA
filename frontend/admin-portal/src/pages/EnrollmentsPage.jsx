@@ -1,6 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -8,6 +8,7 @@ import Button from "../components/ui/Button";
 import Card, { StatCard } from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
@@ -28,6 +29,7 @@ import {
 import { getStudents as apiGetStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { yearOptionsForEntry } from "../utils/schoolYear";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -110,6 +112,16 @@ const sel = { ...inp, cursor:"pointer" };
 const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#855c5c", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
 
 function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
+  // Years that exist in the data, plus next year — you enrol into September
+  // from March, before that year has a single record. This used to be a
+  // 4-year window generated from new Date(), which ignored the real list and
+  // went stale the same way the old sidebar window did.
+  const { options: yearOptions, currentYear } = useSchoolYear();
+  const yearOpts = useMemo(
+    () => yearOptionsForEntry(yearOptions, currentYear),
+    [yearOptions, currentYear],
+  );
+
   const [schoolYear,  setSchoolYear]  = useState(initSchoolYear  || "");
   const [schoolLevel, setSchoolLevel] = useState(initSchoolLevel || "elementary");
   const [gradeLevel,  setGradeLevel]  = useState(initGradeLevel  || "Grade 1");
@@ -359,11 +371,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
               <label style={lbl}>School Year</label>
               <select value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} style={sel}>
                 <option value="">— Select year —</option>
-                {(() => {
-                  const d = new Date();
-                  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-                  return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y+1}`; });
-                })().map((y) => <option key={y} value={y}>{y}</option>)}
+                {yearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>
@@ -663,11 +671,15 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
   // Auto-populate toSection when fromSection changes (can be overridden)
   useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
 
-  const schoolYearOpts = (() => {
-    const d = new Date();
-    const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-    return Array.from({ length: 5 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
-  })();
+  // Same list as the enrolment form: a promotion's target year is next year,
+  // which by definition has no records yet. This was a *5*-year new Date()
+  // window while the form above used 4 — two different answers to the same
+  // question, on the same page.
+  const { options: promoteYearOptions, currentYear: promoteCurrentYear } = useSchoolYear();
+  const schoolYearOpts = useMemo(
+    () => yearOptionsForEntry(promoteYearOptions, promoteCurrentYear),
+    [promoteYearOptions, promoteCurrentYear],
+  );
 
   const allGrades = [
     "Nursery","Kindergarten",
@@ -1076,7 +1088,9 @@ export default function EnrollmentsPage() {
 
   // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered,
   // falling back to the global school-year selector (Sidebar) rather than "All Years".
-  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  // Only the global year itself is needed here now — SchoolYearPicker reads the
+  // option list and per-year counts from the context directly.
+  const { schoolYear: globalSchoolYear } = useSchoolYear();
   const [schoolYear,   setSchoolYear]   = useState(() => searchParams.get("school_year") ?? globalSchoolYear ?? "");
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
@@ -1093,7 +1107,6 @@ export default function EnrollmentsPage() {
     setSchoolYear(globalSchoolYear);
   }, [globalSchoolYear]);
 
-  const schoolYearOptions = [{ value: "", label: "All Years" }, ...globalYearOptions.map((y) => ({ value: y, label: y }))];
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
 
   // Reset grade when level changes — but not on the initial mount, so a URL-seeded
@@ -1241,20 +1254,8 @@ export default function EnrollmentsPage() {
               onClearSearch={() => { setSearchInput(""); setSearch(""); }}
               hasFilters={Boolean(hasFilters)}
               onClearFilters={clearFilters}
+              scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} />}
             >
-              <FilterRow label="School Year">
-                <ChipGroup
-                  label="Filter by school year"
-                  value={schoolYear}
-                  onChange={setSchoolYear}
-                  options={schoolYearOptions.map((o) => ({
-                    ...o,
-                    icon: "ti-calendar",
-                    count: o.value !== "" && !loading ? pageMeta.count : null,
-                  }))}
-                />
-              </FilterRow>
-
               <FilterRow label="School Level">
                 <ChipGroup
                   label="Filter by school level"

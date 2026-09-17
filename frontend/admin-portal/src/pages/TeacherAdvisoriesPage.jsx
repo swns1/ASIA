@@ -1,11 +1,20 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import Alert from "../components/ui/Alert";
+import Badge from "../components/ui/Badge";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Modal from "../components/ui/Modal";
+import ChipGroup from "../components/ui/ChipGroup";
+import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { listVariants, modalVariants, springTransition } from "../utils/motion";
 
 import {
   getSectionAdvisories,
@@ -17,12 +26,16 @@ import { getUsers } from "../api/identityApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
+// `tone` names the shared ChipGroup/Badge palette entry, so a school level
+// reads the same colour here as it does on Subjects, Enrollments and
+// Requirements. `chip` is spelled out rather than interpolated: Tailwind
+// extracts class names statically, so `bg-${tone}-50` would never ship.
 const SCHOOL_LEVELS = [
-  { value: "nursery",           label: "Nursery",            icon: "ti-baby-carriage" },
-  { value: "kindergarten",      label: "Kindergarten",       icon: "ti-star"          },
-  { value: "elementary",        label: "Elementary",         icon: "ti-book"          },
-  { value: "junior_highschool", label: "Junior High School", icon: "ti-school"        },
-  { value: "senior_highschool", label: "Senior High School", icon: "ti-certificate"   },
+  { value: "nursery",           label: "Nursery",            icon: "ti-baby-carriage", tone: "nursery",      chip: "bg-nursery-50 text-nursery-500" },
+  { value: "kindergarten",      label: "Kindergarten",       icon: "ti-star",          tone: "kindergarten", chip: "bg-kindergarten-50 text-kindergarten-500" },
+  { value: "elementary",        label: "Elementary",         icon: "ti-book",          tone: "elementary",   chip: "bg-elementary-50 text-elementary-500" },
+  { value: "junior_highschool", label: "Junior High School", icon: "ti-school",        tone: "juniorhigh",   chip: "bg-juniorhigh-50 text-juniorhigh-500" },
+  { value: "senior_highschool", label: "Senior High School", icon: "ti-certificate",   tone: "seniorhigh",   chip: "bg-seniorhigh-50 text-seniorhigh-500" },
 ];
 
 const GRADE_LEVELS_BY_LEVEL = {
@@ -37,12 +50,16 @@ const SHS_STRANDS = [
   "STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports",
 ];
 
-const SCHOOL_LEVEL_LABELS = Object.fromEntries(SCHOOL_LEVELS.map((l) => [l.value, l.label]));
+const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? null;
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-);
+const TABLE_COLUMNS = [
+  { key: "teacher", label: "Teacher",         width: "26%" },
+  { key: "year",    label: "School Year",     width: "14%" },
+  { key: "level",   label: "School Level",    width: "18%" },
+  { key: "section", label: "Grade & Section", width: "18%" },
+  { key: "strand",  label: "Strand",          width: "14%" },
+  { key: "actions", label: "",                width: "10%" },
+];
 
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
 function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSaved }) {
@@ -96,157 +113,98 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
     }
   };
 
-  const inp = {
-    width: "100%", border: "1.5px solid #fde2de", borderRadius: 10,
-    padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif",
-    color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box",
-  };
-
-  const lbl = {
-    display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050",
-    letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6,
-  };
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-    >
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ background: "white", borderRadius: 20, width: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(224,49,49,0.18)" }}
-      >
-        {/* Header */}
-        <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-user-check" style={{ fontSize: 20, color: "#c92a2a" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>
-                {isEdit ? "Edit Advisory Assignment" : "New Advisory Assignment"}
-              </div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>
-                {isEdit ? "Update which section this teacher advises" : "Assign a teacher as adviser of a section"}
-              </div>
-            </div>
-          </div>
-          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
-            <i className="ti ti-x" />
-          </motion.button>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: "22px 28px" }}>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
-                style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Teacher */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Teacher *</label>
-            <select value={form.teacher_user_id} onChange={(e) => setF("teacher_user_id", e.target.value)} style={inp}>
-              <option value="">Select a teacher…</option>
-              {teachers.map((t) => (
-                <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
-              ))}
-            </select>
-            {teachersUnavailable && (
-              <div style={{ fontSize: 11, color: "#854f0b", marginTop: 5 }}>
-                <i className="ti ti-alert-triangle" style={{ fontSize: 11, marginRight: 3 }} />
-                Teacher list unavailable — listing users requires admin access.
-              </div>
-            )}
-          </div>
-
-          {/* School year */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>School Year *</label>
-            <input value={form.school_year} onChange={(e) => setF("school_year", e.target.value)}
-              placeholder="e.g. 2025-2026" style={inp} />
-          </div>
-
-          {/* School level */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>School Level *</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {SCHOOL_LEVELS.map((lvl) => {
-                const active = form.school_level === lvl.value;
-                return (
-                  <button key={lvl.value} type="button"
-                    onClick={() => setForm((f) => ({ ...f, school_level: lvl.value, grade_level: "", strand: "" }))}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px",
-                      borderRadius: 10, border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                      background: active ? "#fff0f0" : "white", cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: active ? 700 : 500,
-                      color: active ? "#c92a2a" : "#7a5050",
-                    }}>
-                    <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Grade level + Section */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Grade Level *</label>
-              <select value={form.grade_level} onChange={(e) => setF("grade_level", e.target.value)} style={inp}>
-                <option value="">Select grade…</option>
-                {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Section *</label>
-              <input value={form.section} onChange={(e) => setF("section", e.target.value)}
-                placeholder="e.g. Rizal" style={inp} />
-            </div>
-          </div>
-
-          {/* Strand (SHS only) */}
-          {isSHS && (
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Strand</label>
-              <select value={form.strand} onChange={(e) => setF("strand", e.target.value)} style={inp}>
-                <option value="">None</option>
-                {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
-          <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
-            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-user-check"
+      title={isEdit ? "Edit Advisory Assignment" : "New Advisory Assignment"}
+      description={isEdit ? "Update which section this teacher advises" : "Assign a teacher as adviser of a section"}
+      // A part-filled form shouldn't be lost to a stray backdrop click.
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
-          </motion.button>
-          <motion.button onClick={handleSave} disabled={saving}
-            whileHover={!saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
-            whileTap={!saving ? { scale: 0.96 } : {}}
-            style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Saving…</>
-              : <><i className="ti ti-check" style={{ fontSize: 13 }} />{isEdit ? "Update" : "Create Assignment"}</>
-            }
-          </motion.button>
+          </Button>
+          <Button icon="ti-check" loading={saving} onClick={handleSave}>
+            {saving ? "Saving…" : isEdit ? "Update" : "Create Assignment"}
+          </Button>
         </div>
-      </motion.div>
-    </motion.div>
+      }
+    >
+      <AnimatePresence>
+        {error && (
+          <Alert variant="error" className="mb-4">
+            {error}
+          </Alert>
+        )}
+      </AnimatePresence>
+
+      <Field label="Teacher" required>
+        <Select value={form.teacher_user_id} onChange={(e) => setF("teacher_user_id", e.target.value)}>
+          <option value="">Select a teacher…</option>
+          {teachers.map((t) => (
+            <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+          ))}
+        </Select>
+        {/* A warning rather than a Field `hint`: this explains why the picker
+            above is empty, so it has to carry more weight than grey helper
+            text — it's the same amber notice the pre-migration page showed. */}
+        {teachersUnavailable && (
+          <Alert variant="warning" className="mt-2">
+            Teacher list unavailable — listing users requires admin access.
+          </Alert>
+        )}
+      </Field>
+
+      <Field label="School Year" required>
+        <Input
+          value={form.school_year}
+          onChange={(e) => setF("school_year", e.target.value)}
+          placeholder="e.g. 2025-2026"
+        />
+      </Field>
+
+      <FilterRow label="School Level *">
+        <ChipGroup
+          options={SCHOOL_LEVELS}
+          value={form.school_level}
+          onChange={(v) => setForm((f) => ({ ...f, school_level: v, grade_level: "", strand: "" }))}
+          label="School level"
+          className="mb-3.5"
+        />
+      </FilterRow>
+
+      <div className="grid gap-x-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+        <Field label="Grade Level" required>
+          <Select value={form.grade_level} onChange={(e) => setF("grade_level", e.target.value)}>
+            <option value="">Select grade…</option>
+            {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+          </Select>
+        </Field>
+        <Field label="Section" required>
+          <Input
+            value={form.section}
+            onChange={(e) => setF("section", e.target.value)}
+            placeholder="e.g. Rizal"
+          />
+        </Field>
+      </div>
+
+      {/* Strand is Senior High only, but stays mounted and animates open so
+          picking SHS slides it in rather than shoving the footer down. */}
+      <CollapsibleFilterRow open={isSHS} maxHeight={110}>
+        <Field label="Strand">
+          <Select value={form.strand} onChange={(e) => setF("strand", e.target.value)}>
+            <option value="">None</option>
+            {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        </Field>
+      </CollapsibleFilterRow>
+    </Modal>
   );
 }
 
@@ -266,47 +224,58 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
 
 // ── Table Row ─────────────────────────────────────────────────────────────────
 function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
+  const lvlMeta = getLevelMeta(advisory.school_level);
+
   return (
-    <motion.tr variants={listVariants.item}>
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-user-check" style={{ fontSize: 15, color: "#c92a2a" }} />
+    <TableRow onClick={() => onEdit(advisory)}>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${lvlMeta?.chip ?? "bg-brand-100 text-brand-600"}`}>
+            <i className="ti ti-user-check text-[15px]" aria-hidden="true" />
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a0a" }}>{teacherName}</div>
+          <div className="text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+            {teacherName}
+          </div>
         </div>
-      </td>
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle", fontSize: 13, color: "#5a4a4a" }}>
-        {advisory.school_year}
-      </td>
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ fontSize: 12.5, color: "#7a5050" }}>{SCHOOL_LEVEL_LABELS[advisory.school_level] || advisory.school_level}</span>
-      </td>
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#e3f0fd", color: "#1455a0" }}>
+      </TableCell>
+
+      <TableCell className="text-[13px] text-neutral-700">{advisory.school_year}</TableCell>
+
+      <TableCell>
+        {lvlMeta ? (
+          <Badge variant={lvlMeta.tone} icon={lvlMeta.icon} size="sm">
+            {lvlMeta.label}
+          </Badge>
+        ) : (
+          <span className="text-[12.5px] text-neutral-700">{advisory.school_level}</span>
+        )}
+      </TableCell>
+
+      <TableCell>
+        <Badge variant="info" size="sm">
           {advisory.grade_level} · {advisory.section}
-        </span>
-      </td>
-      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle", fontSize: 12.5, color: "#7a5050" }}>
-        {advisory.strand || "—"}
-      </td>
-      <td style={{ padding: "13px 14px", borderBottom: "1px solid #f9f0f0", verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", gap: 4 }}>
-          <motion.button title="Edit" onClick={() => onEdit(advisory)}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-            whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
-            <i className="ti ti-pencil" style={{ fontSize: 13 }} />
-          </motion.button>
-          <motion.button title="Delete" onClick={() => onDelete(advisory)}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-            whileTap={{ scale: 0.93 }}
-            style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
-            <i className="ti ti-trash" style={{ fontSize: 13 }} />
-          </motion.button>
+        </Badge>
+      </TableCell>
+
+      <TableCell className="text-[12.5px] text-neutral-700">
+        {advisory.strand || <span className="italic text-neutral-500">—</span>}
+      </TableCell>
+
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost" size="sm" icon="ti-pencil"
+            aria-label={`Edit ${teacherName}'s advisory`}
+            onClick={() => onEdit(advisory)}
+          />
+          <Button
+            variant="ghost" size="sm" icon="ti-trash"
+            aria-label={`Remove ${teacherName}'s advisory`}
+            onClick={() => onDelete(advisory)}
+          />
         </div>
-      </td>
-    </motion.tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -315,6 +284,7 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function TeacherAdvisoriesPage() {
   usePageTitle("Teacher Advisories");
+  const isFirstRender = useIsFirstRender();
 
   const [advisories, setAdvisories]         = useState([]);
   const [teachers,   setTeachers]           = useState([]);
@@ -330,9 +300,6 @@ export default function TeacherAdvisoriesPage() {
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
-
-  const [animated] = useState(false);
-  const isFirstRender = !animated;
 
   const teacherMap = useMemo(() => {
     const map = new Map();
@@ -371,9 +338,15 @@ export default function TeacherAdvisoriesPage() {
     fetchData(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const schoolYears = useMemo(() => {
-    const unique = Array.from(new Set(advisories.map((a) => a.school_year)));
-    return unique.sort().reverse();
+  // "All" first, then each year present in the data. Counts ride along so the
+  // selected chip can show how many assignments it's narrowing to.
+  // Years and counts come from the advisories actually loaded, not from the
+  // global year list: this page only ever shows years that have an advisory,
+  // and the per-year tallies are exact rather than enrollment-derived.
+  const { yearList, yearCounts } = useMemo(() => {
+    const counts = {};
+    advisories.forEach((a) => { counts[a.school_year] = (counts[a.school_year] ?? 0) + 1; });
+    return { yearList: Object.keys(counts).sort().reverse(), yearCounts: counts };
   }, [advisories]);
 
   const filtered = useMemo(() => {
@@ -425,155 +398,68 @@ export default function TeacherAdvisoriesPage() {
       />
 
       {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
 
-        {/* Filter panel */}
-        <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.18, ease: "easeOut" }}
-          style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
-        >
-          <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box", transition: "border .15s, box-shadow .15s" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by teacher name, grade level, or section…"
-              style={{ border: "none", outline: "none", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "transparent", width: "100%" }}
+        {/* Filters */}
+        <FilterBar
+          searchValue={search}
+          onSearchChange={setSearch}
+          onClearSearch={() => setSearch("")}
+          searchPlaceholder="Search by teacher name, grade level, or section…"
+          hasFilters={hasFilters}
+          onClearFilters={() => { setYearFilter("all"); setSearch(""); }}
+          animate={isFirstRender}
+          animateDelay={0.18}
+          // This page's "show everything" sentinel is the string "all", not the
+          // empty string the picker uses, so it's mapped at the boundary rather
+          // than changing the filter logic below.
+          scope={
+            <SchoolYearPicker
+              value={yearFilter === "all" ? "" : yearFilter}
+              onChange={(y) => setYearFilter(y === "" ? "all" : y)}
+              options={yearList}
+              counts={yearCounts}
+              allYearsCount={advisories.length}
             />
-            <AnimatePresence>
-              {search && (
-                <motion.button
-                  initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
-                  onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
-                  <i className="ti ti-x" style={{ fontSize: 12 }} />
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>School Year</span>
-              {["all", ...schoolYears].map((y) => {
-                const active = yearFilter === y;
-                return (
-                  <motion.button
-                    key={y}
-                    onClick={() => setYearFilter(y)}
-                    style={{
-                      height: 32, padding: "0 14px", borderRadius: 99,
-                      border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                      background: active ? "#fff0f0" : "white",
-                      color: active ? "#c92a2a" : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                    }}
-                  >
-                    {y === "all" ? "All" : y}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            <AnimatePresence>
-              {hasFilters && (
-                <motion.button
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  onClick={() => { setYearFilter("all"); setSearch(""); }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                  <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
+          }
+        />
 
         {/* Table */}
         <motion.div
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
-          style={{ background: "white", border: "1px solid #f5eaea", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#fdfafa" }}>
-                {[
-                  { label: "Teacher",           w: "26%" },
-                  { label: "School Year",       w: "14%" },
-                  { label: "School Level",      w: "18%" },
-                  { label: "Grade & Section",   w: "18%" },
-                  { label: "Strand",            w: "14%" },
-                  { label: "",                  w: "10%" },
-                ].map(({ label, w }) => (
-                  <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "13px 18px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", width: w }}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <motion.tbody
-              variants={listVariants.container}
-              initial={isFirstRender ? "hidden" : false}
-              animate="visible"
+          <Card padding="none">
+            <Table
+              columns={TABLE_COLUMNS}
+              loading={loading}
+              isEmpty={filtered.length === 0}
+              skeletonRows={5}
+              empty={{
+                icon: "ti-user-off",
+                title: hasFilters ? "No assignments match your filters" : "No advisory assignments found",
+                subtitle: hasFilters
+                  ? "Try adjusting your search or filters"
+                  : "Assign a teacher to a section to get started",
+                action: hasFilters ? undefined : (
+                  <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+                    New Assignment
+                  </Button>
+                ),
+              }}
             >
-              {loading
-                ? Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Sk w={36} h={36} r={10} />
-                          <Sk w={140} h={13} />
-                        </div>
-                      </td>
-                      {[80, 100, 100, 60].map((w, j) => (
-                        <td key={j} style={{ padding: "13px 18px", borderBottom: "1px solid #f9f0f0" }}><Sk w={w} h={13} /></td>
-                      ))}
-                    </tr>
-                  ))
-                : filtered.length === 0
-                  ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "64px 16px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className="ti ti-user-off" style={{ fontSize: 22, color: "#8a6a6a" }} />
-                          </div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
-                            {hasFilters ? "No assignments match your filters" : "No advisory assignments found"}
-                          </div>
-                          <div style={{ fontSize: 12, color: "#8a6a6a" }}>
-                            {hasFilters ? "Try adjusting your search or filters" : "Assign a teacher to a section to get started"}
-                          </div>
-                          {!hasFilters && (
-                            <motion.button
-                              whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-                              whileTap={{ scale: 0.96 }}
-                              onClick={() => setModal({ mode: "create" })}
-                              style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-                              <i className="ti ti-plus" style={{ fontSize: 14 }} />New Assignment
-                            </motion.button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                  : filtered.map((a) => (
-                      <AdvisoryRow
-                        key={a.advisory_id}
-                        advisory={a}
-                        teacherName={teacherMap.get(a.teacher_user_id) || `User #${a.teacher_user_id}`}
-                        onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
-                        onDelete={(adv) => setToDelete(adv)}
-                      />
-                    ))
-              }
-            </motion.tbody>
-          </table>
+              {filtered.map((a) => (
+                <AdvisoryRow
+                  key={a.advisory_id}
+                  advisory={a}
+                  teacherName={teacherMap.get(a.teacher_user_id) || `User #${a.teacher_user_id}`}
+                  onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
+                  onDelete={(adv) => setToDelete(adv)}
+                />
+              ))}
+            </Table>
+          </Card>
         </motion.div>
       </div>
 
