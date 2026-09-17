@@ -98,7 +98,7 @@ class Student(models.Model):
 
     def _generate_student_number(self):
         from django.utils import timezone
-        year = timezone.now().year
+        year = timezone.localdate().year
         prefix = f"{year}-"
         # Find the highest sequential number for this year's prefix
         last = (
@@ -121,7 +121,7 @@ class Student(models.Model):
             candidate = self._generate_student_number()
             # Walk forward until we find a free number (guards against races)
             from django.utils import timezone
-            year = timezone.now().year
+            year = timezone.localdate().year
             prefix = f"{year}-"
             seq = int(candidate[len(prefix):])
             while Student.objects.filter(student_number=candidate).exists():

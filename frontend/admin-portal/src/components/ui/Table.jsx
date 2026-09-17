@@ -131,6 +131,10 @@ export function TableRow({ onClick, className = "", children, ...props }) {
 
   function handleKeyDown(e) {
     if (!clickable) return;
+    // Only keys pressed on the row itself. A button or input inside the row
+    // handles its own Enter/Space; intercepting those here ran the row's
+    // action instead and cancelled the control's.
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onClick(e);

@@ -109,6 +109,25 @@ describe("RequirementDocumentsPanel", () => {
     }));
   });
 
+  it("never lists the previous student's files after a quick switch", async () => {
+    // Student 42's request is slow and resolves after student 7's. Its rows
+    // carry student 42's submission ids, which Replace/Remove act on.
+    let finishFirst;
+    fetchRequirementSummary
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValueOnce([doc({ requirement_name: "Form 138 (student 7)" })]);
+
+    const { rerender } = renderPanel();
+    rerender(<RequirementDocumentsPanel studentId={7} student={STUDENT} />);
+    await waitFor(() => expect(screen.queryByText("Form 138 (student 7)")).not.toBeNull());
+
+    finishFirst([doc({ requirement_name: "PSA (student 42)", is_submitted: true, submission_id: 900 })]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.queryByText("PSA (student 42)")).toBeNull();
+    expect(screen.queryByText("Form 138 (student 7)")).not.toBeNull();
+  });
+
   it("hides every action in readOnly mode", async () => {
     fetchRequirementSummary.mockResolvedValue([doc()]);
     renderPanel({ readOnly: true });

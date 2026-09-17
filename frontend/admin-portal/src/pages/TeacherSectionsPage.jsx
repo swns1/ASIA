@@ -21,6 +21,7 @@ import {
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
 import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
+import { localISODate, todayISO } from "../utils/format";
 
 const SCHOOL_LEVEL_LABELS = {
   nursery: "Nursery",
@@ -81,21 +82,10 @@ const ATTENDANCE_STATUSES = [
   { value: "E", label: "Excused", color: "#1455a0", bg: "#e3f0fd" },
 ];
 
-function todayISO() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function shiftISODate(iso, delta) {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + delta);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localISODate(d);
 }
 
 // School year strings look like "2026-2027" → academic year runs Jun 1–May 31.

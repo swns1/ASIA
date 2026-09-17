@@ -38,11 +38,27 @@ export function clearAuthSession() {
   sessionStorage.removeItem(CURRENT_USER_KEY);
 }
 
+/**
+ * The claims inside a JWT, or throws if it isn't one.
+ *
+ * A JWT segment is base64url: `-` and `_` where base64 has `+` and `/`, and no
+ * padding. atob() rejects both of those characters. Today's tokens happen
+ * never to contain them, but a new claim (a name, say) would make atob throw
+ * and every valid session read as signed out.
+ */
+export function decodeJwtPayload(token) {
+  const segment = String(token).split(".")[1];
+  if (!segment) throw new Error("not a JWT");
+  const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 export function isTokenValid() {
   const token = sessionStorage.getItem("access_token");
   if (!token) return false;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    const payload = decodeJwtPayload(token);
     return payload.exp * 1000 > Date.now();
   } catch {
     return false;

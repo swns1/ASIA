@@ -33,7 +33,7 @@ def _last_day_of_month(year: int, month: int) -> date:
 
 def _generate_invoice_number(invoice_id: int) -> str:
     """Format: INV-YYYY-000001"""
-    yr = timezone.now().year
+    yr = timezone.localdate().year
     return f"INV-{yr}-{invoice_id:06d}"
 
 
@@ -387,7 +387,10 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     sch_deduction = _scholarship_discount_on_tuition(fee_data["tuition_total"], scholarships)
 
     # 2) Determine early bird eligibility
-    today = timezone.now().date()
+    # The school's calendar day. now().date() is UTC's, which before 8 AM is
+    # the day before -- a family invoiced on the first morning of the
+    # early-bird window was refused the discount.
+    today = timezone.localdate()
     eb = _is_early_bird(today)
 
     # 3) Run discount waterfall
@@ -634,7 +637,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
                 for idx, due in enumerate(existing_due_dates, start=1)
             ]
         else:
-            sy_start = settings.sy_start_date if settings else date(timezone.now().year, 6, 1)
+            sy_start = settings.sy_start_date if settings else date(timezone.localdate().year, 6, 1)
             schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
 
         inv.installments.all().delete()

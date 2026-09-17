@@ -9,6 +9,7 @@ import { StatusBadge } from "./ui/Badge";
 import { Field, Input, Textarea } from "./FormField";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
 import { PAYMENT_METHODS } from "../constants/paymentMethods";
+import { todayISO } from "../utils/format";
 
 import {
   getInvoice as _getInvoice,
@@ -40,7 +41,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
   const [form, setForm] = useState({
     amount_paid:      "",
     payment_method:   "cash",
-    payment_date:     new Date().toISOString().slice(0, 10),
+    payment_date:     todayISO(),
     reference_number: "",
     notes:            "",
   });
@@ -52,7 +53,9 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
     setLoadingInvoice(true);
     getInvoice(preloadedInvoiceId)
       .then(setInvoice)
-      .catch(() => {})
+      // Without this the modal fell back to the invoice search as if nothing
+      // had been chosen, and the cashier had no idea the one they picked failed.
+      .catch((e) => setError(e.message || "Couldn't load this invoice. Close and try again."))
       .finally(() => setLoadingInvoice(false));
   }, [preloadedInvoiceId]);
 

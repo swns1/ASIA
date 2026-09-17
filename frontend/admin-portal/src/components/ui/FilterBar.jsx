@@ -111,8 +111,10 @@ export default function FilterBar({
       {/* Row 1: scope + search + any page-specific controls + Search/Clear.
           The search field carries basis-64 rather than a bare flex-1: with a
           `scope` pill alongside it, flex-1/min-w-0 lets the pill's intrinsic
-          width win the negotiation and squeeze the field to just its icon. */}
-      <div className="flex items-center gap-2.5">
+          width win the negotiation and squeeze the field to just its icon.
+          It wraps so a tablet in portrait (no sidebar below lg) moves the
+          buttons to a second line instead of pushing them past the edge. */}
+      <div className="flex flex-wrap items-center gap-2.5">
         {showSearch && (
           <div className="filterbar-search flex h-[42px] flex-1 basis-64 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
             <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />

@@ -778,7 +778,7 @@ class StudentPaymentViewSet(
     @transaction.atomic
     def perform_create(self, serializer):
         if not serializer.validated_data.get("payment_date"):
-            serializer.validated_data["payment_date"] = timezone.now().date()
+            serializer.validated_data["payment_date"] = timezone.localdate()
 
         # ── Guard: prevent overpayment ──
         # Locked here, before the balance read below, not just later inside

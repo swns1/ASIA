@@ -126,7 +126,7 @@ class DashboardSummaryView(APIView):
         return shape_level_distribution(rows)
 
     def _attendance(self, school_year, student_ids, weeks):
-        since = timezone.now().date() - timedelta(weeks=weeks)
+        since = timezone.localdate() - timedelta(weeks=weeks)
         qs = AttendanceRecord.objects.filter(date__gte=since)
         qs = self._scoped(qs, school_year, student_ids, prefix="enrollment__")
         rows = (

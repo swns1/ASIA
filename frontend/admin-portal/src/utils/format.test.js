@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { peso, fmtDate, todayISO } from "./format";
+import { vi } from "vitest";
+import { peso, fmtDate, localISODate, todayISO } from "./format";
 import { gradeBand, attendanceBand, GRADE_OUTSTANDING, GRADE_PASSING } from "./grading";
 
 describe("peso", () => {
@@ -75,5 +76,28 @@ describe("grade and attendance bands", () => {
     [null, "muted"],
   ])("bands an attendance rate of %s as %s", (rate, band) => {
     expect(attendanceBand(rate)).toBe(band);
+  });
+});
+
+describe("local calendar dates", () => {
+  it("runs the suite on Philippine time, where the UTC date lags until 8 AM", () => {
+    expect(new Date(2026, 8, 1).toISOString()).toBe("2026-08-31T16:00:00.000Z");
+  });
+
+  it("names the day on this device's calendar, not UTC's", () => {
+    // SF2 builds its day columns from local midnights; each one used to be
+    // labelled with the day before, so marks landed a column late.
+    expect(localISODate(new Date(2026, 8, 1))).toBe("2026-09-01");
+    expect(localISODate(new Date(2026, 8, 30))).toBe("2026-09-30");
+  });
+
+  it("gives today's date before 8 AM", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 8, 17, 7, 30));
+      expect(todayISO()).toBe("2026-09-17");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -5,11 +5,15 @@ DiscountType via _get_discount_pct() to build its internal plan_pct_map
 (even for payment plans that don't use a DB-backed percentage), so it's
 mocked here rather than hitting a real database.
 """
-from datetime import date
+from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
 from unittest.mock import patch
 
-from billing.services import compute_discount_waterfall, shape_collections_series
+from billing.services import (
+    _generate_invoice_number,
+    compute_discount_waterfall,
+    shape_collections_series,
+)
 
 
 @patch("billing.services._get_discount_pct", return_value=Decimal("0"))
@@ -112,3 +116,12 @@ def test_collections_series_handles_a_null_sum():
 
 def test_collections_series_empty_input_is_empty():
     assert shape_collections_series([]) == []
+
+
+@patch(
+    "django.utils.timezone.now",
+    # 1 AM on 1 January in Manila; still 31 December in UTC.
+    return_value=datetime(2026, 12, 31, 17, 0, tzinfo=dt_timezone.utc),
+)
+def test_invoice_number_uses_the_school_year_on_new_years_morning(_now):
+    assert _generate_invoice_number(12) == "INV-2027-000012"

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { clearAuthSession } from "../utils/auth";
+import { clearAuthSession, decodeJwtPayload } from "../utils/auth";
 import { refreshToken } from "../api/identityApi";
 import Button from "./ui/Button";
 
@@ -27,7 +27,7 @@ export default function SessionTimeoutWarning() {
         return;
       }
       try {
-        const exp = JSON.parse(atob(token.split(".")[1])).exp * 1000;
+        const exp = decodeJwtPayload(token).exp * 1000;
         const msLeft = exp - Date.now();
         if (msLeft <= WARN_BEFORE_MS) {
           setShow(true);

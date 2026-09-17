@@ -853,7 +853,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
         counts = {r["school_year"]: r["count"] for r in rows}
 
-        today = date.today()
+        today = timezone.localdate()
         year = today.year if today.month >= 7 else today.year - 1
         current = f"{year}-{year + 1}"
         counts.setdefault(current, 0)
@@ -927,7 +927,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         EnrollmentTransfer.objects.create(
             enrollment=enrollment,
             transfer_type="internal_move",
-            effective_date=timezone.now().date(),
+            effective_date=timezone.localdate(),
             reason=reason,
             from_grade_level=before.get("grade_level"),
             from_section=before.get("section"),

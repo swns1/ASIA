@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -7,7 +8,7 @@ import ErrorState from "./ErrorState";
 import Table, { TableRow, TableCell } from "./Table";
 import Modal from "./Modal";
 import { StatusBadge } from "./Badge";
-import { Field, Input } from "../FormField";
+import { Field, Input, Textarea } from "../FormField";
 import { STUDENT_STATUS_MAP } from "../../constants/statusMaps";
 
 const COLUMNS = [
@@ -124,6 +125,27 @@ describe("Table states", () => {
     fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
     expect(onClick).toHaveBeenCalled();
   });
+
+  // TeacherAdvisoriesPage puts Edit/Remove buttons inside a clickable row.
+  // Enter on "Remove" used to reach the row's handler, which opened Edit and
+  // cancelled the button's own activation.
+  it("leaves Enter on a button inside the row to that button", () => {
+    const onRow = vi.fn();
+    render(
+      <Table columns={COLUMNS}>
+        <TableRow onClick={onRow}>
+          <TableCell>Ana</TableCell>
+          <TableCell>
+            <button type="button">Remove</button>
+          </TableCell>
+        </TableRow>
+      </Table>
+    );
+    const remove = screen.getByRole("button", { name: "Remove" });
+    const notCancelled = fireEvent.keyDown(remove, { key: "Enter" });
+    expect(onRow).not.toHaveBeenCalled();
+    expect(notCancelled).toBe(true);
+  });
 });
 
 describe("Field accessibility", () => {
@@ -176,5 +198,43 @@ describe("Modal", () => {
     );
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // A host that keeps the field's text in the same component that renders the
+  // Modal hands it a new inline onClose on every keystroke. The focus trap used
+  // to re-run on that and pull focus back to the autofocus button, so the
+  // "Reject application" note could not be typed past its first letter.
+  it("keeps focus in the field being typed into when the host re-renders", () => {
+    function RejectNote() {
+      const [note, setNote] = useState("");
+      return (
+        <Modal
+          title="Reject?"
+          onClose={() => {}}
+          footer={<Button data-autofocus>Cancel</Button>}
+        >
+          <Field label="Reason">
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </Modal>
+      );
+    }
+    render(<RejectNote />);
+    const box = screen.getByLabelText("Reason");
+    box.focus();
+    fireEvent.change(box, { target: { value: "M" } });
+    fireEvent.change(box, { target: { value: "Missing form" } });
+    expect(document.activeElement).toBe(box);
+    expect(box.value).toBe("Missing form");
+  });
+
+  it("uses the latest onClose for Escape", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<Modal title="Edit" onClose={first}><p>body</p></Modal>);
+    rerender(<Modal title="Edit" onClose={second}><p>body</p></Modal>);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
   });
 });

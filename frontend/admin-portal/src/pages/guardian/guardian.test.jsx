@@ -219,6 +219,48 @@ describe("GuardianChildPage — a failed fetch is never reported as 'nothing owe
     expect(screen.queryByText("This section couldn't be loaded")).toBeNull();
   });
 
+  it("does not summarise a failed ledger as 'Nothing due'", async () => {
+    // The summary strip above the tabs answers "do I owe anything?" first,
+    // so it has to fail the same honest way the Billing tab does.
+    getStudentLedger.mockRejectedValue(new Error("403"));
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+
+    expect(await screen.findByText("Couldn't load")).toBeTruthy();
+    expect(screen.queryByText("Nothing due")).toBeNull();
+  });
+
+  it("shows no summary strip when the report card itself failed", async () => {
+    getReportCard.mockRejectedValue(new Error("grading service is down"));
+
+    renderChildPage();
+    await screen.findByText(/grading service is down/);
+
+    expect(screen.queryByText("Nothing due")).toBeNull();
+    expect(screen.queryByText("Not posted yet")).toBeNull();
+    expect(screen.queryByText("Latest grades")).toBeNull();
+  });
+
+  it("summarises what is due when the ledger has an open installment", async () => {
+    getStudentLedger.mockResolvedValue({
+      ...LEDGER,
+      school_years: [{
+        school_year: "2025-2026",
+        invoices: [{
+          invoice_no: "INV-1",
+          installments: [{ installment_id: 1, sequence: 1, status: "pending", balance: "2500.00", amount: "2500.00", due_date: "2999-01-15" }],
+        }],
+      }],
+    });
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+
+    expect(await screen.findByText("Next payment")).toBeTruthy();
+    expect(screen.getByText("₱2,500.00")).toBeTruthy();
+  });
+
   it("renders the billing totals when the ledger loads", async () => {
     renderChildPage();
     await screen.findByText("Maria Santos Reyes");

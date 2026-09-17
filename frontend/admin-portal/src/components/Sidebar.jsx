@@ -12,6 +12,7 @@ import useMediaQuery from "../hooks/useMediaQuery";
 import { ConfirmDialog } from "./ui/Modal";
 import { Select } from "./FormField";
 import { springTransition } from "../utils/motion";
+import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
 
 // ── Global school-year filter: sets the default year every year-scoped
@@ -317,7 +318,7 @@ export default function Sidebar({
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
                 aria-hidden="true"
               >
-                {(currentUser?.name || "?").slice(0, 2).toUpperCase()}
+                {initialsFrom(currentUser?.name || "")}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-neutral-900">

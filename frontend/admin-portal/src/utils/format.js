@@ -28,5 +28,16 @@ export const fmtDate = (d, fallback = "—") =>
       })
     : fallback;
 
+/**
+ * A date as `YYYY-MM-DD` on this device's calendar.
+ *
+ * Not `toISOString().slice(0, 10)`: that is the UTC date, which in the
+ * Philippines (UTC+8) is still yesterday until 8 AM -- so a payment recorded at
+ * 7:30 defaulted to the previous day, and SF2 filed every attendance mark under
+ * the day after it was taken.
+ */
+export const localISODate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 /** Today as `YYYY-MM-DD`, for comparing against date-only API fields. */
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+export const todayISO = () => localISODate(new Date());

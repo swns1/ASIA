@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 const FOCUSABLE = [
   "a[href]",
@@ -22,6 +22,15 @@ const FOCUSABLE = [
  * @param {{ enabled?: boolean, onEscape?: () => void }} options
  */
 export default function useFocusTrap(ref, { enabled = true, onEscape } = {}) {
+  // Read through a ref so a new callback doesn't re-run the effect below. Hosts
+  // routinely pass an inline onClose, which is a new function on every render,
+  // and each re-run moved focus back to the first control -- a dialog whose
+  // host re-rendered per keystroke lost focus after the first letter typed.
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  });
+
   useEffect(() => {
     if (!enabled) return undefined;
     const node = ref.current;
@@ -38,7 +47,7 @@ export default function useFocusTrap(ref, { enabled = true, onEscape } = {}) {
 
     function handleKeyDown(e) {
       if (e.key === "Escape") {
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
       if (e.key !== "Tab") return;
@@ -67,5 +76,5 @@ export default function useFocusTrap(ref, { enabled = true, onEscape } = {}) {
       // continuous rather than dumping the user at the top of the document.
       if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus?.();
     };
-  }, [ref, enabled, onEscape]);
+  }, [ref, enabled]);
 }

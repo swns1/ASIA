@@ -31,7 +31,10 @@ class Command(BaseCommand):
     help = "Marks InvoiceInstallments past their due_date as overdue."
 
     def handle(self, *args, **options):
-        today = timezone.now().date()
+        # localdate(), not now().date(): with USE_TZ the latter is the UTC
+        # date, and this runs at 1 AM Manila -- still yesterday in UTC -- so
+        # every installment used to turn overdue a day late.
+        today = timezone.localdate()
         # Voiding an invoice is a plain status flip on the parent -- it never
         # touches child installments, which stay "pending". Without the parent
         # check those rows kept ageing into "overdue", so a cancelled invoice

@@ -10,6 +10,8 @@ import Skeleton from "../components/ui/Skeleton";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import GuardianHero from "../components/GuardianHero";
 
 // Pick the enrollment to feature per child: prefer an active (enrolled/pending)
 // one, else the most recent by school year / id.
@@ -19,6 +21,11 @@ function pickPrimary(enrollments) {
   return [...pool].sort((a, b) =>
     (b.school_year || "").localeCompare(a.school_year || "") || b.enrollment_id - a.enrollment_id
   )[0];
+}
+
+function greeting(now = new Date()) {
+  const h = now.getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
 export default function GuardianHomePage() {
@@ -67,18 +74,33 @@ export default function GuardianHomePage() {
     fetchChildren(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const firstName = user?.name?.trim().split(/\s+/)[0];
+  const today = new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" });
+
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
-        className="mb-6"
-      >
-        <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-          Hello{user?.name ? `, ${user.name.split(" ")[0]}` : ""} 👋
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Here are your children's academic records. Select a child to view grades, attendance, and billing.
-        </p>
+      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+        <GuardianHero className="mb-8">
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">{today}</div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+                {greeting()}{firstName ? `, ${firstName}` : ""}
+              </h1>
+              <p className="mt-1.5 max-w-md text-sm leading-relaxed text-white/70">
+                Your children's grades, attendance, billing and documents, all in one place.
+              </p>
+            </div>
+            {!loading && !error && children.length > 0 && (
+              <div className="hidden shrink-0 border-l border-white/15 pl-5 sm:block">
+                <div className="text-3xl font-semibold leading-none text-white">{children.length}</div>
+                <div className="mt-1.5 text-xs font-medium uppercase tracking-[0.08em] text-white/60">
+                  {children.length === 1 ? "Child" : "Children"} linked
+                </div>
+              </div>
+            )}
+          </div>
+        </GuardianHero>
       </motion.div>
 
       {error && (
@@ -89,35 +111,43 @@ export default function GuardianHomePage() {
         </div>
       )}
 
+      {!error && (
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500">Your children</h2>
+      )}
+
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="rounded-2xl border border-neutral-200 bg-white p-5">
-              <div className="mb-4 flex items-center gap-3">
+            <div key={i} className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+              <div className="flex items-start gap-3.5 p-5">
                 <Skeleton width={48} height={48} radius={12} />
                 <div className="flex-1 space-y-2">
-                  <Skeleton width="70%" height={15} />
-                  <Skeleton width="40%" height={12} />
+                  <Skeleton width="65%" height={15} />
+                  <Skeleton width="35%" height={12} />
+                  <Skeleton width="45%" height={11} />
                 </div>
               </div>
-              <Skeleton width="100%" height={40} radius={10} />
+              <div className="border-t border-neutral-200 px-5 py-3">
+                <Skeleton width="50%" height={12} />
+              </div>
             </div>
           ))}
         </div>
       ) : error ? null : children.length === 0 ? (
-        <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-16 text-center">
-          <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--color-brand-100),var(--color-brand-200))]">
-            <i className="ti ti-users text-2xl text-neutral-500" aria-hidden="true" />
+        <div className="rounded-xl border border-neutral-200 bg-white px-4 py-14 text-center shadow-sm">
+          <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100">
+            <i className="ti ti-users text-2xl text-brand-600" aria-hidden="true" />
           </div>
-          <div className="text-md font-semibold text-neutral-700">No linked students yet</div>
+          <div className="text-md font-semibold text-neutral-900">No linked students yet</div>
           <div className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-neutral-500">
             Your account hasn't been linked to a student record yet. Please contact the school's registrar or administrator to complete the link.
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {children.map((child, idx) => {
             const e = child.primary;
+            const avatar = getAvatarPalette(child.name);
             return (
               <motion.div
                 key={child.student_id}
@@ -126,34 +156,42 @@ export default function GuardianHomePage() {
               >
                 <Card
                   interactive
+                  padding="none"
                   onClick={() => navigate(`/guardian/child/${e.enrollment_id}`)}
-                  className="w-full text-left transition-shadow hover:shadow-[0_10px_30px_rgba(224,49,49,0.12)]"
+                  className="group h-full overflow-hidden"
                 >
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-lg font-bold text-brand-600">
-                      {child.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                  <div className="flex items-start gap-3.5 p-5">
+                    {/* Each child keeps their own colour, so a parent with several
+                        can tell the cards apart before reading a name. */}
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-md font-bold"
+                      style={{ background: avatar.bg, color: avatar.color }}
+                      aria-hidden="true"
+                    >
+                      {initialsFrom(child.name)}
                     </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-md font-bold text-neutral-900">{child.name}</div>
-                      {child.lrn && <div className="mt-0.5 font-mono text-xs text-neutral-500">LRN {child.lrn}</div>}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5">
-                    <div>
-                      <div className="text-sm font-semibold text-neutral-900">{e.grade_level} · {e.section}</div>
-                      <div className="mt-0.5 text-xs text-neutral-500">{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-md font-bold leading-snug text-neutral-900">{child.name}</div>
+                      <div className="mt-0.5 truncate text-sm font-medium text-neutral-700">
+                        {[e.grade_level, e.section].filter(Boolean).join(" · ")}
+                      </div>
+                      {child.lrn && <div className="mt-1 text-xs tabular-nums text-neutral-500">LRN {child.lrn}</div>}
                     </div>
                     <StatusBadge
                       status={e.enrollment_status}
                       map={ENROLLMENT_STATUS_MAP}
-                      dot
-                      className={e.enrollment_status === "pending" ? "animate-pulse" : undefined}
+                      className={`shrink-0 ${e.enrollment_status === "pending" ? "animate-pulse" : ""}`}
                     />
                   </div>
 
-                  <div className="mt-3.5 flex items-center justify-end gap-1.5 text-sm font-semibold text-brand-600">
-                    View records <i className="ti ti-arrow-right text-base" aria-hidden="true" />
+                  <div className="flex items-center justify-between gap-3 border-t border-neutral-200 px-5 py-3">
+                    <span className="min-w-0 truncate text-xs text-neutral-500">
+                      {LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-600">
+                      View records
+                      <i className="ti ti-arrow-right text-base transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                    </span>
                   </div>
                 </Card>
               </motion.div>

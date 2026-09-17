@@ -16,7 +16,10 @@ const PADDING = {
 export default function Card({
   padding = "md",
   interactive = false,
-  active = false,
+  // Left undefined unless the card is a toggle (StatCard filters pass a
+  // boolean). A card that just navigates is a plain button, and aria-pressed
+  // on it made screen readers announce "toggle button, not pressed".
+  active,
   className = "",
   children,
   ...props
@@ -38,7 +41,11 @@ export default function Card({
   const Tag = interactive ? "button" : "div";
 
   return (
-    <Tag className={classes} aria-pressed={interactive ? active : undefined} {...props}>
+    <Tag
+      className={classes}
+      aria-pressed={interactive && active !== undefined ? active : undefined}
+      {...props}
+    >
       {children}
     </Tag>
   );

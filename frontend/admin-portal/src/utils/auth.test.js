@@ -3,6 +3,7 @@ import {
   setCurrentUser,
   getCurrentUser,
   isTokenValid,
+  decodeJwtPayload,
   isAdminRole,
   canViewAuditTrail,
 } from "./auth";
@@ -34,6 +35,19 @@ describe("isTokenValid", () => {
   it("returns false for a malformed token instead of throwing", () => {
     sessionStorage.setItem("access_token", "not-a-real-jwt");
     expect(isTokenValid()).toBe(false);
+  });
+
+  it("reads a base64url payload, which atob alone rejects", () => {
+    // "?>" and "~" encode to "_" and "-" in base64url; the name adds UTF-8.
+    const claims = { exp: Math.floor(Date.now() / 1000) + 60, note: "?>~", name: "Peña" };
+    const bytes = new TextEncoder().encode(JSON.stringify(claims));
+    const b64url = btoa(String.fromCharCode(...bytes))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(b64url).toMatch(/[-_]/);
+
+    sessionStorage.setItem("access_token", `header.${b64url}.signature`);
+    expect(isTokenValid()).toBe(true);
+    expect(decodeJwtPayload(`header.${b64url}.signature`).name).toBe("Peña");
   });
 });
 

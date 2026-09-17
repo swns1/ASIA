@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import ConfirmModal from "../ConfirmModal";
@@ -161,8 +161,13 @@ export default function RequirementDocumentsPanel({
   // which is a new identity every render and would defeat the memo.
   const ctxLevel = context?.schoolLevel;
   const ctxStatus = context?.entryStatus;
+  // Only the newest request may fill the list. Switching students while one
+  // is loading otherwise let the earlier response land last, listing the
+  // previous student's files -- and Replace/Remove act on a row's own
+  // submission_id, so they would have changed that other student's documents.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
-
+    const seq = ++loadSeq.current;
     if (!studentId) { setItems([]); setLoading(false); return; }
     setLoading(true);
     setError("");
@@ -171,12 +176,14 @@ export default function RequirementDocumentsPanel({
         schoolLevel: ctxLevel,
         entryStatus: ctxStatus,
       });
+      if (seq !== loadSeq.current) return;
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setError(e.message || "Failed to load documents.");
       setItems([]);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [studentId, ctxLevel, ctxStatus]);
 

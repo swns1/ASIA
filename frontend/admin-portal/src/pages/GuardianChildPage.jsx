@@ -16,10 +16,13 @@ import { peso, fmtDate, todayISO } from "../utils/format";
 import Button from "../components/ui/Button";
 import Card, { StatCard, Panel } from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
-import Badge from "../components/ui/Badge";
+import Badge, { StatusBadge } from "../components/ui/Badge";
+import GuardianHero from "../components/GuardianHero";
 import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { initialsFrom } from "../utils/avatarPalette";
 
 const GRADE_TEXT_CLASS = {
   success: "text-success-500", info: "text-info-500", error: "text-error-500", muted: "text-neutral-400",
@@ -112,94 +115,142 @@ function missingRequirements(requirements) {
   return requirements.filter((r) => !r.is_submitted).length;
 }
 
-/** Compact attendance-rate tile with an animated draw-in ring — the one
- *  StatusStrip tile whose shape doesn't fit the generic StatCard template. */
-function AttendanceRingTile({ rate, loading }) {
-  const variant = attendanceVariant(rate);
+const GLANCE_CHIP = {
+  neutral: "bg-brand-100 text-brand-600",
+  info: "bg-info-50 text-info-500",
+  success: "bg-success-50 text-success-500",
+  warning: "bg-warning-50 text-warning-500",
+  error: "bg-error-50 text-error-500",
+  muted: "bg-muted-50 text-muted-500",
+};
+const GLANCE_VALUE = {
+  neutral: "text-neutral-900", info: "text-neutral-900", success: "text-success-500",
+  warning: "text-warning-500", error: "text-error-500", muted: "text-neutral-500",
+};
+
+/** One cell of the at-a-glance strip: icon (or `visual`), label, value, hint. */
+function GlanceItem({ icon, visual, tone = "neutral", label, value, hint, loading }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 bg-white px-4 py-3.5 sm:py-4">
+      {/* Two cells a row on a phone leaves no room for the icon; the tone
+          colour on the value still carries the signal there. */}
+      <div className="hidden shrink-0 sm:block">
+        {visual ?? (
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${GLANCE_CHIP[tone]}`}>
+            <i className={`ti ${icon} text-lg`} aria-hidden="true" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium uppercase tracking-[0.06em] text-neutral-500">{label}</div>
+        {loading ? (
+          <Skeleton width={72} height={16} variant="pulse" className="mt-1" />
+        ) : (
+          <>
+            <div className={`mt-0.5 truncate text-md font-bold ${GLANCE_VALUE[tone]}`}>{value}</div>
+            {hint && <div className="truncate text-xs text-neutral-500">{hint}</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The attendance cell's icon: a ring that fills to the rate. */
+function AttendanceRing({ rate }) {
   const RING_STROKE = {
     success: "stroke-success-500", warning: "stroke-warning-500",
     error: "stroke-error-500", muted: "stroke-neutral-300",
-  }[variant];
-  const TEXT_TONE = {
-    success: "text-success-500", warning: "text-warning-500",
-    error: "text-error-500", muted: "text-neutral-500",
-  }[variant];
+  }[attendanceVariant(rate)];
   const r = 16;
   const circumference = 2 * Math.PI * r;
   const offset = rate != null ? circumference * (1 - rate / 100) : circumference;
 
   return (
-    <Card padding="sm" className="flex items-center gap-3">
-      <div className="relative h-10 w-10 shrink-0">
-        <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
-          <circle cx="20" cy="20" r={r} strokeWidth="4" className="fill-none stroke-neutral-200" />
-          {rate != null && (
-            <motion.circle
-              cx="20" cy="20" r={r} strokeWidth="4" strokeLinecap="round"
-              className={`fill-none ${RING_STROKE}`}
-              style={{ strokeDasharray: circumference }}
-              initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset: offset }}
-              transition={{ duration: 1, ease: "easeOut" }}
-            />
-          )}
-        </svg>
-        <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${TEXT_TONE}`}>
-          {!loading && rate != null ? `${rate}%` : ""}
-        </span>
-      </div>
-      <div className="min-w-0">
-        <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-neutral-500">Attendance</div>
-        {loading ? (
-          <Skeleton width={56} height={16} variant="pulse" />
-        ) : (
-          <div className={`text-sm font-bold ${TEXT_TONE}`}>{rate != null ? `${rate}% rate` : "No data"}</div>
-        )}
-      </div>
-    </Card>
+    <svg viewBox="0 0 40 40" className="block h-10 w-10 -rotate-90" aria-hidden="true">
+      <circle cx="20" cy="20" r={r} strokeWidth="4" className="fill-none stroke-neutral-200" />
+      {rate != null && (
+        <motion.circle
+          cx="20" cy="20" r={r} strokeWidth="4" strokeLinecap="round"
+          className={`fill-none ${RING_STROKE}`}
+          style={{ strokeDasharray: circumference }}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1, ease: "easeOut" }}
+        />
+      )}
+    </svg>
   );
 }
 
-/** The strip under the child's name: four "should I act on this" answers. */
-function StatusStrip({ report, attendance, ledger, requirements, reportLoading, attLoading, ledgerLoading, reqLoading }) {
+/** A cell whose fetch failed. Says so rather than showing the empty-data
+ *  answer, which for billing would be "Nothing due" to a parent who owes. */
+const UNAVAILABLE = { value: "Couldn't load", hint: "See the tab below", tone: "muted" };
+
+/** The strip under the child's banner: four "should I act on this" answers,
+ *  in one card so they read as a single summary rather than four widgets. */
+function StatusStrip({ report, att, ledger: ledgerSection, reqs }) {
+  const attendance = att.data;
+  const ledger = ledgerSection.data;
+  const requirements = reqs.data;
   const period = latestPostedPeriod(report);
   const rate = attendanceRate(attendance?.totals || {});
+  const attTone = { success: "success", warning: "warning", error: "error" }[attendanceVariant(rate)] || "muted";
   const due = nextDue(ledger);
   const missing = missingRequirements(requirements);
   const balance = Number(ledger?.total_balance ?? 0);
 
+  let payment;
+  if (ledgerSection.failed) {
+    payment = { label: "Payments", ...UNAVAILABLE };
+  } else if (due.next) {
+    payment = {
+      label: due.overdueCount ? "Overdue" : "Next payment",
+      value: peso(due.next.balance),
+      hint: `${due.overdueCount ? "Was due" : "Due"} ${fmtDate(due.next.due_date, null)}`,
+      tone: due.overdueCount ? "error" : "warning",
+    };
+  } else if (balance > 0) {
+    payment = { label: "Balance", value: peso(balance), hint: "No due date set", tone: "warning" };
+  } else {
+    payment = { label: "Payments", value: "Nothing due", tone: "success" };
+  }
+
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <StatCard
-        label="Latest grades"
-        value={period || "None posted yet"}
+    <Card padding="none" className="mb-6 grid grid-cols-2 gap-px overflow-hidden bg-neutral-200 lg:grid-cols-4">
+      <GlanceItem
         icon="ti-chart-bar"
-        iconTone={period ? "info" : "muted"}
-        layout="horizontal"
-        loading={reportLoading}
+        tone={period ? "info" : "muted"}
+        label="Latest grades"
+        value={period || "Not posted yet"}
+        hint={report?.overall_gpa != null ? `General average ${report.overall_gpa}` : undefined}
       />
-      <AttendanceRingTile rate={rate} loading={attLoading} />
-      <StatCard
-        label={due.overdueCount ? "Overdue" : "Next payment"}
-        value={due.next ? `${peso(due.next.balance)} · ${fmtDate(due.next.due_date, null)}` : balance > 0 ? peso(balance) : "Nothing due"}
-        icon="ti-receipt"
-        iconTone={due.overdueCount ? "error" : due.next ? "warning" : "success"}
-        layout="horizontal"
-        loading={ledgerLoading}
+      <GlanceItem
+        visual={<AttendanceRing rate={att.loading ? null : rate} />}
+        label="Attendance"
+        loading={att.loading}
+        {...(att.failed
+          ? UNAVAILABLE
+          : {
+              tone: rate != null ? attTone : "muted",
+              value: rate != null ? `${rate}%` : "No records yet",
+              hint: rate != null ? `${attendance.totals.total} school days recorded` : undefined,
+            })}
       />
-      <StatCard
-        label="Documents"
-        value={
-          missing == null ? "—"
-          : missing === 0 ? "All submitted"
-          : <span className="animate-pulse">{missing} missing</span>
-        }
+      <GlanceItem icon="ti-receipt" loading={ledgerSection.loading} {...payment} />
+      <GlanceItem
         icon="ti-file-text"
-        iconTone={missing == null ? "muted" : missing === 0 ? "success" : "warning"}
-        layout="horizontal"
-        loading={reqLoading}
+        label="Documents"
+        loading={reqs.loading}
+        {...(reqs.failed
+          ? UNAVAILABLE
+          : {
+              tone: missing == null ? "muted" : missing === 0 ? "success" : "warning",
+              value: missing == null ? "—" : missing === 0 ? "All submitted" : `${missing} missing`,
+              hint: missing ? "Bring to the registrar" : undefined,
+            })}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -531,7 +582,7 @@ export default function GuardianChildPage() {
   const missingDocs = missingRequirements(reqs.data);
 
   const TABS = [
-    { id: "grades",       label: "Report Card", icon: "ti-chart-bar" },
+    { id: "grades",       label: "Grades",      icon: "ti-chart-bar" },
     { id: "attendance",   label: "Attendance",  icon: "ti-calendar-check" },
     { id: "billing",      label: "Billing",     icon: "ti-receipt" },
     // The count rides on the tab itself so a parent sees there's something
@@ -550,25 +601,40 @@ export default function GuardianChildPage() {
         </div>
       )}
 
-      {/* Child header */}
-      <Card className="mb-[18px]">
+      <GuardianHero className="mb-4">
         {loading ? (
-          <div className="flex items-center gap-3.5">
-            <Skeleton width={56} height={56} radius={14} />
-            <div className="flex-1 space-y-2">
-              <Skeleton width="50%" height={18} />
-              <Skeleton width="30%" height={13} />
+          <div className="flex items-center gap-4" aria-hidden="true">
+            <div className="h-14 w-14 shrink-0 animate-pulse rounded-2xl bg-white/10" />
+            <div className="flex-1 space-y-2.5">
+              <div className="h-5 w-1/2 animate-pulse rounded bg-white/10" />
+              <div className="h-3.5 w-1/3 animate-pulse rounded bg-white/10" />
             </div>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3.5">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xl font-bold text-brand-600">
-              {fullName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+        ) : student ? (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
+            <div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-xl font-semibold text-white"
+              aria-hidden="true"
+            >
+              {initialsFrom(student.first_name, student.last_name)}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-bold text-neutral-900">{fullName}</div>
-              <div className="mt-0.5 text-sm text-neutral-500">
-                {enrollment && <>{enrollment.grade_level} · {enrollment.section} · {LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} · SY {enrollment.school_year}</>}
+            {/* The 12rem floor pushes the button onto its own row on a phone,
+                rather than squeezing the name into a one-word-wide column. */}
+            <div className="min-w-[12rem] flex-1">
+              <h1 className="text-xl font-semibold leading-tight text-white">{fullName}</h1>
+              {enrollment && (
+                <div className="mt-1 text-sm text-white/75">
+                  {[enrollment.grade_level, enrollment.section, LEVEL_LABELS[enrollment.school_level] || enrollment.school_level]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              )}
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-white/65">
+                {enrollment?.enrollment_status && (
+                  <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} size="sm" />
+                )}
+                {enrollment?.school_year && <span>SY {enrollment.school_year}</span>}
+                {student.lrn && <span className="tabular-nums">LRN {student.lrn}</span>}
               </div>
             </div>
             {/* The printable report card already existed at this route and is
@@ -576,31 +642,34 @@ export default function GuardianChildPage() {
                 but nothing in this portal linked to it, so a parent had no way
                 to reach it. Its own toolbar has a Back button (navigate(-1)),
                 so this doesn't strand anyone on a chrome-less page. */}
-            {report && (
-              <Button variant="secondary" size="sm" icon="ti-file-text" to={`/report-card/${enrollmentId}`}>
-                Printable report card
-              </Button>
-            )}
+            <Button variant="secondary" size="sm" icon="ti-printer" to={`/report-card/${enrollmentId}`} className="w-full sm:w-auto">
+              Printable report card
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-xl font-semibold leading-tight text-white">Child records</h1>
+            <p className="mt-1 text-sm text-white/70">This child's details couldn't be loaded.</p>
           </div>
         )}
-      </Card>
+      </GuardianHero>
 
       {/* At-a-glance answers, so the page opens with "what needs attention"
-          rather than a static grades table. */}
-      {!loading && (
-        <StatusStrip
-          report={report}
-          attendance={att.data}
-          ledger={ledger.data}
-          requirements={reqs.data}
-          reportLoading={loading}
-          attLoading={att.loading}
-          ledgerLoading={ledger.loading}
-          reqLoading={reqs.loading}
-        />
+          rather than a static grades table. Only once the report card is in:
+          without it there is no child to summarise, and every cell would
+          show its empty answer ("Not posted yet", "Nothing due") as fact. */}
+      {!loading && report && (
+        <StatusStrip report={report} att={att} ledger={ledger} reqs={reqs} />
       )}
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-[18px]" />
+      {/* On a phone the icons go and the padding tightens, so all four tabs
+          fit on one line instead of "Documents" and its count scrolling off. */}
+      <Tabs
+        tabs={TABS}
+        value={tab}
+        onChange={setTab}
+        className="mb-[18px] max-sm:[&_[role=tab]]:px-3 max-sm:[&_[role=tab]>i]:hidden"
+      />
 
       <TabPanel id={tab} direction={direction}>
         {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} error={error} />)}

@@ -8,6 +8,7 @@
 // (see the plan's decision 6 — no document upload in v1).
 import { motion, AnimatePresence } from "framer-motion";
 import { Field, Input, Select, Textarea } from "../../components/FormField";
+import { todayISO } from "../../utils/format";
 import {
   STEPS, C, cardStyle, btnGhost, btnDanger,
   emptyGuardian, emptySibling, emptySchool,
@@ -214,7 +215,7 @@ export function StudentStep({ data, onChange, showStatus = true, lrnRequired = t
             value={data.birth_date || ""}
             onChange={h}
             min="1970-01-01"
-            max={new Date().toISOString().slice(0, 10)}
+            max={todayISO()}
             required
           />
         </Field>

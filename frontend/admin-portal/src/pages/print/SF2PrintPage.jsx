@@ -10,13 +10,14 @@ import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar
 import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
 import { PrintLetterhead } from "../../components/print/PrintLetterhead";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
+import { localISODate } from "../../utils/format";
 
 function getDaysInMonth(ym) {
   const [y, m] = ym.split("-").map(Number);
   const days = [], d = new Date(y, m - 1, 1);
   while (d.getMonth() === m - 1) {
     const dow = d.getDay();
-    days.push({ date: d.toISOString().slice(0, 10), day: d.getDate(), isWeekend: dow === 0 || dow === 6 });
+    days.push({ date: localISODate(d), day: d.getDate(), isWeekend: dow === 0 || dow === 6 });
     d.setDate(d.getDate() + 1);
   }
   return days;
@@ -107,7 +108,7 @@ export default function SF2PrintPage() {
         const [y, m] = month.split("-").map(Number);
         const recs = await fetchAllAttendance({
           date__gte: `${month}-01`,
-          date__lte: new Date(y, m, 0).toISOString().slice(0, 10),
+          date__lte: localISODate(new Date(y, m, 0)),
           enrollment__school_year: school_year,
           enrollment__grade_level: grade_level,
           enrollment__section:     section,

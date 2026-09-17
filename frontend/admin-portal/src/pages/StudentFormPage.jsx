@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import { mobileNumber, birthDate, email as emailCheck } from "../utils/validation";
+import { localISODate } from "../utils/format";
 import { getStudent, updateStudent } from "../api/studentApi";
 import {
   createGuardian,
@@ -75,7 +76,7 @@ function genDevData() {
   bDate.setFullYear(bDate.getFullYear() - ageYears);
   bDate.setMonth(Math.floor(Math.random() * 12));
   bDate.setDate(1 + Math.floor(Math.random() * 28));
-  const birth_date = bDate.toISOString().slice(0, 10);
+  const birth_date = localISODate(bDate);
 
   const city = pick(DEV_CITIES);
   const brgy = pick(DEV_BARANGAYS);

@@ -17,7 +17,7 @@ import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 
 import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
-import { fmtDate } from "../utils/format";
+import { fmtDate, todayISO } from "../utils/format";
 import { PAYMENT_METHODS, PAYMENT_METHOD_MAP as PM } from "../constants/paymentMethods";
 const getPayments = (p = {}) => _getPayments(p);
 
@@ -298,8 +298,8 @@ export default function PaymentsPage() {
                 <span style={filterLabel}>Quick</span>
                 <div style={{ display:"flex", gap:6 }}>
                   {[
-                    { label:"Today",      fn:() => { const d=new Date().toISOString().slice(0,10); setDateFrom(d); setDateTo(d); } },
-                    { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(new Date().toISOString().slice(0,10)); } },
+                    { label:"Today",      fn:() => { const d=todayISO(); setDateFrom(d); setDateTo(d); } },
+                    { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(todayISO()); } },
                     { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
                   ].map((q) => (
                     <motion.button key={q.label} type="button" onClick={q.fn}

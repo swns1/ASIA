@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import { clearAuthSession, getCurrentUser } from "../utils/auth";
 import Button from "./ui/Button";
 import { ConfirmDialog } from "./ui/Modal";
+import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
 
 // A slim, staff-sidebar-free shell for the guardian (parent) portal. Guardians
@@ -32,54 +33,62 @@ export default function GuardianLayout({ children }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">
-      <header className="sticky top-0 z-50 flex h-15 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 shadow-xs sm:px-6">
-        <Link
-          to="/guardian"
-          className="focus-ring flex items-center gap-2.5 rounded-md"
-          aria-label="Guardian portal home"
-        >
-          <img src={logo} alt="" className="h-[38px] w-[26px]" aria-hidden="true" />
-          <div className="min-w-0">
-            <div className="truncate text-base font-bold text-neutral-900">South Lakes IS</div>
-            <div className="truncate text-xs text-neutral-500">Guardian Portal</div>
-          </div>
-        </Link>
-
-        <div className="flex items-center gap-3">
-          {!onHome && (
-            <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian">
-              <span className="hidden sm:inline">My Children</span>
-            </Button>
-          )}
-
-          <div className="flex items-center gap-2.5">
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
-              aria-hidden="true"
-            >
-              {(user?.name || "G").slice(0, 2).toUpperCase()}
+      {/* The bar's contents share main's width, so on a wide screen the crest
+          and the account block line up with the page instead of the screen edges. */}
+      <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/90 shadow-xs backdrop-blur">
+        <div className="mx-auto flex h-15 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+          <Link
+            to="/guardian"
+            className="focus-ring flex items-center gap-2.5 rounded-md"
+            aria-label="Guardian portal home"
+          >
+            <img src={logo} alt="" className="h-[38px] w-[26px]" aria-hidden="true" />
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-base font-bold text-neutral-900">South Lakes IS</div>
+              <div className="truncate text-xs text-neutral-500">Guardian Portal</div>
             </div>
-            <div className="hidden min-w-0 leading-tight sm:block">
-              <div className="truncate text-sm font-semibold text-neutral-900">
-                {user?.name || "Guardian"}
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            {!onHome && (
+              <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian">
+                <span className="hidden sm:inline">My Children</span>
+              </Button>
+            )}
+
+            <div className="flex items-center gap-2.5 sm:border-l sm:border-neutral-200 sm:pl-3">
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-200 text-xs font-bold text-brand-700"
+                aria-hidden="true"
+              >
+                {initialsFrom(user?.name || "Guardian")}
               </div>
-              <div className="truncate text-xs text-neutral-500">Guardian</div>
+              <div className="hidden min-w-0 leading-tight sm:block">
+                <div className="max-w-[160px] truncate text-sm font-semibold text-neutral-900">
+                  {user?.name || "Guardian"}
+                </div>
+                <div className="truncate text-xs text-neutral-500">Guardian</div>
+              </div>
             </div>
-          </div>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            iconOnly
-            icon="ti-logout"
-            onClick={() => setShowLogout(true)}
-            title="Log out"
-            aria-label="Log out"
-          />
+            <Button
+              variant="secondary"
+              size="sm"
+              iconOnly
+              icon="ti-logout"
+              onClick={() => setShowLogout(true)}
+              title="Log out"
+              aria-label="Log out"
+            />
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16 pt-7 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-12 pt-6 sm:px-6">{children}</main>
+
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-center text-xs text-neutral-500 sm:px-6">
+        South Lakes Integrated School · Questions about a record? Contact the registrar's office.
+      </footer>
 
       <AnimatePresence>
         {showLogout && (

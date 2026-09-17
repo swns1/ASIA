@@ -16,6 +16,7 @@ import Badge from "../components/ui/Badge";
 import { Field, Select, Textarea } from "../components/FormField";
 import ConfirmModal from "../components/ConfirmModal";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { todayISO } from "../utils/format";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -516,14 +517,13 @@ function ManualAwardsTab({ scholarshipTypes }) {
 
   // Presets for the date drawer. Each sets both bounds at once — the common
   // case is a whole month or year, not a hand-picked pair of dates.
-  const iso = (d) => d.toISOString().slice(0, 10);
   const datePresets = [
     {
       label: "This Month",
       fn: () => {
         const n = new Date();
         setDateFrom(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`);
-        setDateTo(iso(new Date()));
+        setDateTo(todayISO());
       },
     },
     {
@@ -542,7 +542,7 @@ function ManualAwardsTab({ scholarshipTypes }) {
       fn: () => {
         const n = new Date();
         setDateFrom(`${n.getFullYear()}-01-01`);
-        setDateTo(iso(new Date()));
+        setDateTo(todayISO());
       },
     },
   ];
