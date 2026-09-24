@@ -53,8 +53,17 @@ export default function CORPrintPage() {
 
   const handleDownload = async () => {
     setDownloading(true);
-    await downloadAsPDF("cor-doc", `COR-${enrollmentId}.pdf`);
-    setDownloading(false);
+    // try/finally, not a bare await: html2pdf rejects on a failed capture or
+    // save, and without this the rejection propagated out of the handler and
+    // setDownloading(false) never ran -- leaving the button disabled and
+    // reading "Generating..." forever, with nothing shown to say why.
+    try {
+      await downloadAsPDF("cor-doc", `COR-${enrollmentId}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed", err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) return <PrintLoading label="Loading…" />;

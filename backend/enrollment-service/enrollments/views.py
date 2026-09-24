@@ -11,6 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
+from grading.deped import general_average, summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
     IsAdminRegistrarOrReadOnly,
@@ -1301,11 +1302,15 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             student_name = f"{student.last_name}, {student.first_name}"
             avg = None
 
-            # Compute subject average for display
-            grades = Grade.objects.filter(enrollment=enrollment).select_related("subject")
-            if grades.exists():
-                vals = [float(g.numeric_grade) for g in grades if g.numeric_grade is not None]
-                avg = round(sum(vals) / len(vals), 2) if vals else None
+            # Year outcome per learning area, from grading.deped -- the same
+            # reduction the report card prints, so the two can no longer
+            # disagree about whether this learner passed a subject.
+            grades = list(
+                Grade.objects.filter(enrollment=enrollment).select_related("subject")
+            )
+            outcomes = summarize_subjects(grades)
+            subject_averages = [o["average"] for o in outcomes.values()]
+            avg = float(general_average(subject_averages)) if subject_averages else None
 
             # Skip if already enrolled in destination year
             if student.student_id in already_enrolled_ids:
@@ -1317,11 +1322,22 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 })
                 continue
 
-            # Skip if failed/incomplete subjects
-            failed = grades.filter(remarks__in=["failed", "incomplete"])
-            if failed.exists():
+            # Skip if any learning area failed ON THE YEAR.
+            #
+            # This used to test per-PERIOD remarks -- any quarter marked
+            # "failed" or "incomplete" blocked promotion outright. A learner
+            # who failed the first quarter and finished the year at 84 was
+            # held back by a mark the report card had already superseded, and
+            # DO 8 sets the Final Grade for a learning area as the mean of its
+            # quarters, not the worst of them.
+            failed = [
+                o for o in outcomes.values()
+                if o["remarks"] in ("failed", "incomplete", "dropped")
+            ]
+            if failed:
                 failed_names = ", ".join(
-                    f"{g.subject.subject_name} ({g.numeric_grade})" for g in failed
+                    f"{o['subject'].subject_name} ({o['average'] if o['average'] is not None else o['remarks']})"
+                    for o in failed
                 )
                 to_skip.append({
                     "student_id":   student.student_id,
@@ -1555,18 +1571,24 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                     else:
                         next_allowed_grade = None  # All done
 
-            # ── Check for failed/incomplete subjects ───────────────────────────
-            failed_grades = list(
-                Grade.objects
-                .filter(enrollment=last_completed, remarks__in=["failed", "incomplete"])
-                .select_related("subject")
+            # ── Check for learning areas failed ON THE YEAR ────────────────────
+            # Same reduction as the bulk promotion path and the report card
+            # (grading.deped.summarize_subjects), so a student is never told
+            # they are blocked by a subject their own report card passes.
+            outcomes = summarize_subjects(
+                Grade.objects.filter(enrollment=last_completed).select_related("subject")
             )
-            if failed_grades:
+            failed_outcomes = [
+                o for o in outcomes.values()
+                if o["remarks"] in ("failed", "incomplete", "dropped")
+            ]
+            if failed_outcomes:
                 can_repeat = True
-                for g in failed_grades:
+                for o in failed_outcomes:
+                    shown = o["average"] if o["average"] is not None else "no grade"
                     blocking_reasons.append(
-                        f"Subject '{g.subject.subject_name}' in {last_completed.grade_level}: "
-                        f"{g.remarks}"
+                        f"Subject '{o['subject'].subject_name}' in {last_completed.grade_level}: "
+                        f"{o['remarks']} ({shown})"
                     )
         elif last_any:
             # Has enrollments but none completed — still in progress

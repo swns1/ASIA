@@ -51,8 +51,17 @@ export default function ReportCardPage() {
 
   const handleDownload = async () => {
     setDownloading(true);
-    await downloadAsPDF("report-card-print", `Report-Card-${enrollmentId}.pdf`);
-    setDownloading(false);
+    // try/finally, not a bare await: html2pdf rejects on a failed capture or
+    // save, and without this the rejection propagated out of the handler and
+    // setDownloading(false) never ran -- leaving the button disabled and
+    // reading "Generating..." forever, with nothing shown to say why.
+    try {
+      await downloadAsPDF("report-card-print", `Report-Card-${enrollmentId}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed", err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) return <PrintLoading label="Loading report card…" />;
@@ -70,7 +79,11 @@ export default function ReportCardPage() {
     );
   }
 
-  const { enrollment, student, grading_periods, subjects, overall_gpa, available_periods } = data;
+  const { enrollment, student, grading_periods, subjects, available_periods } = data;
+  // DO 8 calls this the General Average and reports it as a whole number.
+  // `overall_gpa` is the old field name kept for one release; read
+  // `general_average` and fall back only so a stale API still renders.
+  const generalAverage = data.general_average ?? data.overall_gpa;
   const fullName = [student.last_name, student.first_name, student.middle_name]
     .filter(Boolean).join(", ");
 
@@ -204,17 +217,17 @@ export default function ReportCardPage() {
                 <td colSpan={grading_periods.length + 1} style={{ padding: "15px 16px", fontWeight: 700, color: C.dark, textAlign: "right" }}>
                   General Average
                 </td>
-                <td style={{ textAlign: "center", padding: "15px 10px", fontWeight: 800, fontSize: 18, color: gradeColor(overall_gpa) }}>
-                  {overall_gpa != null ? overall_gpa.toFixed(2) : "—"}
+                <td style={{ textAlign: "center", padding: "15px 10px", fontWeight: 800, fontSize: 18, color: gradeColor(generalAverage) }}>
+                  {generalAverage != null ? generalAverage : "—"}
                 </td>
                 <td style={{ textAlign: "center", padding: "15px 16px" }}>
-                  {overall_gpa != null ? (
+                  {generalAverage != null ? (
                     <span style={{
                       fontSize: 12, fontWeight: 700, borderRadius: 50, padding: "4px 14px",
-                      color: overall_gpa >= 75 ? C.green : C.red,
-                      background: overall_gpa >= 75 ? C.greenBg : C.redBg,
+                      color: generalAverage >= 75 ? C.green : C.red,
+                      background: generalAverage >= 75 ? C.greenBg : C.redBg,
                     }}>
-                      {overall_gpa >= 75 ? "Passed" : "Failed"}
+                      {generalAverage >= 75 ? "Passed" : "Failed"}
                     </span>
                   ) : "—"}
                 </td>
@@ -233,7 +246,10 @@ export default function ReportCardPage() {
             { label: "Failed",   value: countRemarks("failed"), color: C.red,   bg: C.redBg },
             ...(incompleteCount ? [{ label: "Incomplete", value: incompleteCount, color: C.amber, bg: C.amberBg }] : []),
             ...(droppedCount    ? [{ label: "Dropped",    value: droppedCount,    color: C.gray,  bg: C.grayBg  }] : []),
-            { label: "GWA",      value: overall_gpa != null ? overall_gpa.toFixed(2) : "—", color: overall_gpa != null ? gradeColor(overall_gpa) : C.muted, bg: C.redBg, bold: true },
+            // "GWA" is wrong twice over: DepEd does not weight learning areas
+            // against one another, and the figure is a whole number, not a
+            // 2-decimal one. See grading/deped.py::general_average.
+            { label: "General Average", value: generalAverage != null ? generalAverage : "—", color: generalAverage != null ? gradeColor(generalAverage) : C.muted, bg: C.redBg, bold: true },
           ].map(({ label, value, color, bg, bold }) => (
             <div key={label} style={{ flex: 1, background: bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 3 }}>{label}</div>

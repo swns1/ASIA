@@ -2,6 +2,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from enrollments.models import Enrollment
+from grading.deped import HIGHEST_TRANSMUTED_GRADE, LOWEST_TRANSMUTED_GRADE
 from subjects.models import Subject
 from .models import Grade, NarrativeCategory, NarrativeReport
 
@@ -39,10 +40,32 @@ class GradeSerializer(serializers.ModelSerializer):
         return {"subject_id": s.subject_id, "subject_code": s.subject_code, "subject_name": s.subject_name}
 
     def validate_numeric_grade(self, value):
+        """
+        This column holds a DO 8 s.2015 TRANSMUTED grade -- the number that
+        goes on the report card and on SF9/SF10 -- so the floor is 60, not 0.
+
+        The range used to be 0-100, which let an untransmuted score through on
+        any path that did not go via the grading calculator. The section
+        quick-entry grid on My Sections is exactly such a path: it posts
+        whatever the teacher types. So a learner could still be recorded as 40
+        -- the precise defect grading/deped.py was written to end, and which
+        its docstring already describes as fixed. Enforcing the floor here
+        rather than in one of the two clients is what actually makes that
+        true, since both write to this serializer.
+
+        Note this does NOT transmute for the caller: transmuting an
+        already-transmuted grade moves it again (84 -> 90), so the conversion
+        has to stay with whoever holds the raw component scores.
+        """
         if value is None:
             raise serializers.ValidationError("Required.")
-        if value < Decimal("0") or value > Decimal("100"):
-            raise serializers.ValidationError("Numeric grade must be between 0 and 100.")
+        lo, hi = LOWEST_TRANSMUTED_GRADE, HIGHEST_TRANSMUTED_GRADE
+        if value < Decimal(lo) or value > Decimal(hi):
+            raise serializers.ValidationError(
+                f"Numeric grade must be a transmuted grade between {lo} and {hi} "
+                f"(DepEd Order 8 s.2015). Got {value}. If this is a raw score, "
+                f"compute it in the grading calculator first."
+            )
         return value
 
     def validate(self, attrs):

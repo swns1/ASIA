@@ -57,20 +57,6 @@ export function groupYears(options, currentYear) {
 }
 
 /**
- * Label a year with its count: "2025-2026 · 68".
- *
- * The noun is deliberately omitted: the sidebar's picker governs Grades,
- * Attendance and Analytics as well as Enrollments, so "enrollments" would be
- * wrong in most of those contexts. A year with no count available renders
- * bare rather than as "· 0", which would claim the year is empty when the
- * truth is that nothing was counted.
- */
-export function yearLabel(year, counts = {}) {
-  const n = counts[year];
-  return n == null ? year : `${year} · ${n}`;
-}
-
-/**
  * The year list for a form that ENROLLS INTO a year, rather than filtering
  * years that already have data — an enrollment form, or a promotion's target.
  *

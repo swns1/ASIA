@@ -37,6 +37,23 @@ def _generate_invoice_number(invoice_id: int) -> str:
     return f"INV-{yr}-{invoice_id:06d}"
 
 
+# The academic year runs July 1 - June 30. This has to agree with
+# enrollments.views.school_years() and the frontend's
+# utils/schoolYear.computeDefaultSchoolYear(), which both cut at July: while
+# this module cut at June instead, a student enrolled in June was filed under
+# one school year by the registrar and a different one by billing, and the two
+# services disagreed about which invoices belonged to the open year.
+SY_START_MONTH = 7
+
+
+def default_sy_start(today: date = None) -> date:
+    """The opening date of the school year `today` falls in -- the fallback
+    used only when the singleton settings row has no calendar configured."""
+    today = today or timezone.localdate()
+    year = today.year if today.month >= SY_START_MONTH else today.year - 1
+    return date(year, SY_START_MONTH, 1)
+
+
 def _get_school_settings():
     """Return the singleton SchoolSetting row, or None if not yet configured."""
     from school_settings.models import SchoolSetting
@@ -154,52 +171,76 @@ def _get_discount_pct(code: str) -> Decimal:
 
 # ── Installment schedule ─────────────────────────────────────────────────────
 
+def _month_sequence(sy_start: date, count: int, step: int = 1):
+    """`count` (year, month) slots stepping `step` months from the school
+    year's opening month. Derived from sy_start rather than hardcoded so a
+    school that opens in August is not handed a June installment."""
+    slots = []
+    y, m = sy_start.year, sy_start.month
+    for _ in range(count):
+        slots.append((y, m))
+        m += step
+        while m > 12:
+            m -= 12
+            y += 1
+    return slots
+
+
+def _spread(grand_total: Decimal, slots) -> list:
+    """Split `grand_total` evenly across `slots`, parking the rounding
+    remainder on the final installment so the parts always sum to the whole."""
+    n = len(slots)
+    per_inst = (grand_total / Decimal(n)).quantize(Decimal("0.01"))
+    rounding_adjust = grand_total - (per_inst * n)
+    return [
+        {
+            "sequence": i,
+            "due_date": _last_day_of_month(y, m),
+            "amount": per_inst + rounding_adjust if i == n else per_inst,
+        }
+        for i, (y, m) in enumerate(slots, start=1)
+    ]
+
+
+# How many installments each plan runs, and how many months apart they fall.
+# The 10-month academic run is the shared spine: monthly bills every month of
+# it, quarterly every 3rd (allowing a period to close before it is billed),
+# semi-annual every 5th, annual once.
+PLAN_SHAPE = {
+    "monthly":     (10, 1),
+    "quarterly":   (4, 3),
+    "semi_annual": (2, 5),
+    "annual":      (1, 1),
+}
+
+
 def generate_installment_schedule(grand_total: Decimal, payment_plan: str, sy_start: date):
     """
-    Returns list of {sequence, due_date, amount} dicts.
-    All due dates fall on END OF MONTH. SY starts in June by convention.
+    Returns list of {sequence, due_date, amount} dicts, all due on the LAST
+    DAY of their month.
+
+    Every slot is counted forward from `sy_start`'s own month. This used to
+    hardcode a June-to-March calendar and read only `sy_start.year`, which
+    broke in two ways for any school that does not open in June: the first
+    installments were dated before the school year began -- already overdue
+    the moment the invoice was generated, and duly flagged as such by
+    `manage.py flag_overdue_installments` -- and the schedule silently
+    disagreed with `_is_early_bird`, which has always read the real
+    `sy_start_date`.
+
+    The annual plan is due in the opening month, not late in the year. It
+    carries the largest discount of the four, and while it sat on a fixed
+    October due date that discount was being paid for a settlement that
+    landed *later* than the first five monthly installments.
     """
     grand_total = Decimal(grand_total)
-    sy_year     = sy_start.year
 
-    if payment_plan == "monthly":
-        # 10 installments — June through March (last day of each month)
-        months = [(6, sy_year), (7, sy_year), (8, sy_year), (9, sy_year), (10, sy_year),
-                  (11, sy_year), (12, sy_year), (1, sy_year + 1), (2, sy_year + 1), (3, sy_year + 1)]
-        per_inst = (grand_total / Decimal("10")).quantize(Decimal("0.01"))
-        rounding_adjust = grand_total - (per_inst * 10)
-        installments = []
-        for i, (m, y) in enumerate(months, start=1):
-            amt = per_inst + rounding_adjust if i == len(months) else per_inst
-            installments.append({"sequence": i, "due_date": _last_day_of_month(y, m), "amount": amt})
-        return installments
+    shape = PLAN_SHAPE.get(payment_plan)
+    if shape is None:
+        raise ValueError(f"Unknown payment plan: {payment_plan}")
 
-    if payment_plan == "quarterly":
-        # 4 installments — last day of August, November, February, May
-        slots = [(8, sy_year), (11, sy_year), (2, sy_year + 1), (5, sy_year + 1)]
-        per_inst = (grand_total / Decimal("4")).quantize(Decimal("0.01"))
-        rounding_adjust = grand_total - (per_inst * 4)
-        installments = []
-        for i, (m, y) in enumerate(slots, start=1):
-            amt = per_inst + rounding_adjust if i == len(slots) else per_inst
-            installments.append({"sequence": i, "due_date": _last_day_of_month(y, m), "amount": amt})
-        return installments
-
-    if payment_plan == "semi_annual":
-        # 2 installments — last day of October, March
-        slots = [(10, sy_year), (3, sy_year + 1)]
-        per_inst = (grand_total / Decimal("2")).quantize(Decimal("0.01"))
-        rounding_adjust = grand_total - (per_inst * 2)
-        installments = []
-        for i, (m, y) in enumerate(slots, start=1):
-            amt = per_inst + rounding_adjust if i == len(slots) else per_inst
-            installments.append({"sequence": i, "due_date": _last_day_of_month(y, m), "amount": amt})
-        return installments
-
-    if payment_plan == "annual":
-        return [{"sequence": 1, "due_date": _last_day_of_month(sy_year, 10), "amount": grand_total}]
-
-    raise ValueError(f"Unknown payment plan: {payment_plan}")
+    count, step = shape
+    return _spread(grand_total, _month_sequence(sy_start, count, step))
 
 
 def generate_installment_schedule_prorated(grand_total: Decimal, payment_plan: str, sy_start: date, start_from_date: date):
@@ -219,19 +260,10 @@ def generate_installment_schedule_prorated(grand_total: Decimal, payment_plan: s
     full = generate_installment_schedule(grand_total, payment_plan, sy_start)
     remaining = [inst for inst in full if inst["due_date"] >= start_from_date] or [full[-1]]
 
-    n = len(remaining)
-    grand_total = Decimal(grand_total)
-    per_inst = (grand_total / Decimal(n)).quantize(Decimal("0.01"))
-    rounding_adjust = grand_total - (per_inst * n)
-
-    return [
-        {
-            "sequence": i,
-            "due_date": inst["due_date"],
-            "amount": per_inst + rounding_adjust if i == n else per_inst,
-        }
-        for i, inst in enumerate(remaining, start=1)
-    ]
+    return _spread(
+        Decimal(grand_total),
+        [(inst["due_date"].year, inst["due_date"].month) for inst in remaining],
+    )
 
 
 # ── Invoice generation ───────────────────────────────────────────────────────
@@ -260,13 +292,34 @@ def _read_fee_schedule(school_level: str, grade_level: str):
     }
 
 
+def early_bird_cutoff(settings=None):
+    """The last date an invoice can be issued and still earn the Early Bird
+    discount, or None when the school hasn't configured its calendar yet."""
+    settings = settings or _get_school_settings()
+    if not settings or not settings.sy_start_date:
+        return None
+    days = settings.early_bird_days if settings.early_bird_days is not None else 7
+    return settings.sy_start_date + timedelta(days=days - 1)
+
+
 def _is_early_bird(invoice_date: date) -> bool:
-    settings = _get_school_settings()
-    if not settings:
+    """
+    Early Bird = invoiced on or before the cutoff. There is deliberately NO
+    lower bound.
+
+    This used to require `sy_start_date <= invoice_date <= cutoff`, which made
+    the discount unreachable for the families it exists to reward: invoices
+    are generated when an enrollment is approved, and enrollment for a July
+    school year happens from February onward. Every early enroller fell below
+    the window and was refused, while the only people who qualified were those
+    invoiced during the first week of classes -- the latest payers in the
+    intake, not the earliest. Dropping the lower bound is what makes the name
+    true.
+    """
+    cutoff = early_bird_cutoff()
+    if cutoff is None:
         return False
-    days = settings.early_bird_days or 7
-    cutoff = settings.sy_start_date + timedelta(days=days - 1)
-    return settings.sy_start_date <= invoice_date <= cutoff
+    return invoice_date <= cutoff
 
 
 def _fetch_enrollment(enrollment_id: int):
@@ -299,24 +352,64 @@ def _fetch_enrollment_scholarships(enrollment_id: int):
             "discount_mode":  r.scholarship_type.discount_mode,
             "discount_value": r.scholarship_type.discount_value,
             "scholarship_name": r.scholarship_type.scholarship_name,
+            "scholarship_code": r.scholarship_type.scholarship_code,
         }
         for r in rows
     ]
 
 
-def _scholarship_discount_on_tuition(tuition: Decimal, scholarships: list) -> Decimal:
-    """Apply each scholarship as a deduction on the tuition base.
-       (Vouchers are a special-case scholarship_code — kept simple for now.)"""
+# Government subsidies are vouchers, not school-granted scholarships, and the
+# waterfall has always had a separate stage for them. ESC (Educational Service
+# Contracting) and the SHS voucher programs are the two that reach a Philippine
+# private school; a code is treated as a voucher when it starts with one of
+# these, so VOUCHER_SHS and ESC_JHS both land in the right stage.
+VOUCHER_CODE_PREFIXES = ("VOUCHER", "ESC", "QVR")
+
+
+def _is_voucher(scholarship: dict) -> bool:
+    code = (scholarship.get("scholarship_code") or "").upper()
+    return code.startswith(VOUCHER_CODE_PREFIXES)
+
+
+def _deduction_on(base: Decimal, scholarships: list) -> Decimal:
+    """Total deduction `scholarships` produce against `base`, capped at it.
+
+    Percentages are taken on the base handed in rather than always on raw
+    tuition, which is what lets the caller run the voucher stage first and
+    have a 50% scholarship mean "half of what is still owed after the
+    voucher" -- the order the module docstring has always described.
+    """
     deduction = Decimal("0")
     for s in scholarships:
-        mode  = s["discount_mode"]
         value = Decimal(s["discount_value"])
-        if mode == "percentage":
-            deduction += _apply_pct(tuition, value)
+        if s["discount_mode"] == "percentage":
+            deduction += _apply_pct(base, value)
         else:  # fixed_amount
             deduction += value
-    # Cap at tuition amount
-    return min(deduction, tuition)
+    return min(deduction, base)
+
+
+def _split_voucher_and_scholarship(tuition: Decimal, scholarships: list):
+    """Returns (voucher_amount, scholarship_amount) for the waterfall.
+
+    Both stages existed in compute_discount_waterfall from the start, but
+    every caller passed voucher_amount=0 and funnelled government subsidies
+    through the scholarship stage instead -- so the voucher line on a family's
+    invoice breakdown was always zero, and an ESC grant was reported to them
+    as a school scholarship it had not awarded.
+    """
+    vouchers     = [s for s in scholarships if _is_voucher(s)]
+    scholarships = [s for s in scholarships if not _is_voucher(s)]
+
+    voucher_amount = _deduction_on(tuition, vouchers)
+    after_voucher  = max(tuition - voucher_amount, Decimal("0"))
+    return voucher_amount, _deduction_on(after_voucher, scholarships)
+
+
+def _scholarship_discount_on_tuition(tuition: Decimal, scholarships: list) -> Decimal:
+    """Back-compat shim: the combined deduction across both stages."""
+    voucher, scholarship = _split_voucher_and_scholarship(tuition, scholarships)
+    return voucher + scholarship
 
 
 @transaction.atomic
@@ -384,12 +477,19 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
         )
 
     scholarships = _fetch_enrollment_scholarships(enrollment_id)
-    sch_deduction = _scholarship_discount_on_tuition(fee_data["tuition_total"], scholarships)
+    voucher_deduction, sch_deduction = _split_voucher_and_scholarship(
+        fee_data["tuition_total"], scholarships
+    )
 
     # 2) Determine early bird eligibility
     # The school's calendar day. now().date() is UTC's, which before 8 AM is
     # the day before -- a family invoiced on the first morning of the
     # early-bird window was refused the discount.
+    #
+    # Read once and passed down: the discount row below states the cutoff, and
+    # step 7 builds the installment calendar off the same row, so re-reading
+    # the singleton three times only invites the three to disagree.
+    settings_row = _get_school_settings()
     today = timezone.localdate()
     eb = _is_early_bird(today)
 
@@ -398,7 +498,7 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
         raw_tuition=fee_data["tuition_total"],
         raw_misc=fee_data["misc_total"],
         raw_other=fee_data["other_total"],
-        voucher_amount=Decimal("0"),
+        voucher_amount=voucher_deduction,
         scholarship_discount_amount=sch_deduction,
         payment_plan=payment_plan,
         early_bird=eb,
@@ -426,10 +526,24 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
         )
 
     # 6) Create discount rows
-    if sch_deduction > 0:
+    # Voucher and scholarship get their own rows. They are different things to
+    # a family -- one is a government subsidy they applied for, the other is
+    # the school's own award -- and the invoice has to say which is which.
+    if voucher_deduction > 0:
+        named = ", ".join(
+            s["scholarship_name"] for s in scholarships if _is_voucher(s)
+        )
         StudentInvoiceDiscount.objects.create(
             invoice=invoice,
-            description=f"Scholarship discount ({len(scholarships)} item{'s' if len(scholarships) != 1 else ''})",
+            description=f"Voucher — {named}" if named else "Voucher",
+            amount=voucher_deduction,
+        )
+
+    if sch_deduction > 0:
+        awarded = [s for s in scholarships if not _is_voucher(s)]
+        StudentInvoiceDiscount.objects.create(
+            invoice=invoice,
+            description=f"Scholarship discount ({len(awarded)} item{'s' if len(awarded) != 1 else ''})",
             amount=sch_deduction,
         )
 
@@ -451,16 +565,21 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     eb_deduction = Decimal(waterfall["early_bird_deduction"])
     if eb_deduction > 0:
         eb_dt = _get_discount_type("EARLY_BIRD")
+        # The window is read from settings, never hardcoded: a school that
+        # sets early_bird_days to 30 was being told "first 7 days" on the
+        # invoice it actually earned over a month.
+        cutoff = early_bird_cutoff(settings_row)
         StudentInvoiceDiscount.objects.create(
             invoice=invoice,
             discount_type=eb_dt,
-            description="Early Bird (first 7 days of S.Y.)",
+            description=(
+                f"Early Bird (invoiced on or before {cutoff})" if cutoff else "Early Bird"
+            ),
             amount=eb_deduction,
         )
 
     # 7) Generate installments
-    settings = _get_school_settings()
-    sy_start = settings.sy_start_date if settings else date(today.year if today.month >= 6 else today.year - 1, 6, 1)
+    sy_start = settings_row.sy_start_date if settings_row else default_sy_start(today)
     if effective_date:
         schedule = generate_installment_schedule_prorated(
             Decimal(waterfall["grand_total"]), payment_plan, sy_start, effective_date
@@ -561,7 +680,9 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
 
         # Recompute discounts (re-fetch scholarships, re-apply plan + early bird)
         scholarships = _fetch_enrollment_scholarships(inv.enrollment_id)
-        sch_deduction = _scholarship_discount_on_tuition(fee_data["tuition_total"], scholarships)
+        voucher_deduction, sch_deduction = _split_voucher_and_scholarship(
+            fee_data["tuition_total"], scholarships
+        )
 
         eb = _is_early_bird(inv.invoice_date) if inv.invoice_date else False
 
@@ -569,7 +690,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
             raw_tuition=fee_data["tuition_total"],
             raw_misc=fee_data["misc_total"],
             raw_other=fee_data["other_total"],
-            voucher_amount=Decimal("0"),
+            voucher_amount=voucher_deduction,
             scholarship_discount_amount=sch_deduction,
             payment_plan=inv.payment_plan,
             early_bird=eb,
@@ -577,10 +698,16 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
 
         # Replace discount rows
         inv.discounts.all().delete()
+        if voucher_deduction > 0:
+            StudentInvoiceDiscount.objects.create(
+                invoice=inv,
+                description="Voucher (recalculated)",
+                amount=voucher_deduction,
+            )
         if sch_deduction > 0:
             StudentInvoiceDiscount.objects.create(
                 invoice=inv,
-                description=f"Scholarship discount (recalculated)",
+                description="Scholarship discount (recalculated)",
                 amount=sch_deduction,
             )
         plan_deduction = Decimal(waterfall["plan_deduction"])
@@ -637,7 +764,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
                 for idx, due in enumerate(existing_due_dates, start=1)
             ]
         else:
-            sy_start = settings.sy_start_date if settings else date(timezone.localdate().year, 6, 1)
+            sy_start = settings.sy_start_date if settings else default_sy_start()
             schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
 
         inv.installments.all().delete()

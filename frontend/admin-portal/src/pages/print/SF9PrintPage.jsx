@@ -20,6 +20,33 @@ import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
 import { SectionBar } from "../../components/print/SectionBar";
 
+// DO 8 s.2015 marks the Report on Learner's Observed Values AO / SO / RO / NO,
+// and the legend printed under this table spells those four out. The rating was
+// rendered raw, so a row entered through the app read "needs_improvement" under
+// a legend promising "RO": NarrativeReport accepts both vocabularies, but the
+// only UI that writes one (GradesPage, and TeacherSectionsPage's copy of the
+// same list) offers outstanding / satisfactory / needs_improvement, leaving the
+// DepEd set unreachable from the frontend entirely.
+//
+// Mapping on the way out means historical rows print correctly on the mandated
+// form without a data migration. Four marks onto three words is lossy in the
+// other direction, which is why this is a display mapping and not a rewrite:
+// "Sometimes Observed" is the honest reading of "satisfactory".
+const OBSERVED_MARKS = {
+  AO: "AO",
+  SO: "SO",
+  RO: "RO",
+  NO: "NO",
+  outstanding: "AO",
+  satisfactory: "SO",
+  needs_improvement: "RO",
+};
+
+function observedMark(rating) {
+  if (!rating) return "—";
+  return OBSERVED_MARKS[rating] ?? String(rating).toUpperCase().slice(0, 2);
+}
+
 export default function SF9PrintPage() {
   const { enrollmentId } = useParams();
   const [searchParams]   = useSearchParams();
@@ -56,14 +83,16 @@ export default function SF9PrintPage() {
           getStudent(studentId),
           getSubjects({
             school_level: enr.school_level,
+            grade_level: enr.grade_level,
+            page_size: 100,
             ...(enr.strand   ? { strand:   enr.strand   } : {}),
             ...(enr.semester ? { semester: enr.semester } : {}),
           }),
-          getGrades({ enrollment: enrollmentId }),
+          getGrades({ enrollment: enrollmentId, page_size: 200 }),
           soft(getAttendance({ enrollment: enrollmentId, page_size: 500 }), "attendance", []),
           getSchoolSettings().catch(() => null),
-          soft(getNarrativeCategories({ is_active: true }), "observed values", []),
-          soft(getNarrativeReports({ enrollment: enrollmentId }), "observed values", []),
+          soft(getNarrativeCategories({ is_active: true, page_size: 100 }), "observed values", []),
+          soft(getNarrativeReports({ enrollment: enrollmentId, page_size: 200 }), "observed values", []),
         ]);
 
         setStudent(stu);
@@ -117,8 +146,17 @@ export default function SF9PrintPage() {
 
   const handleDownload = async () => {
     setDownloading(true);
-    await downloadAsPDF("sf9-doc", `SF9-${enrollmentId}.pdf`);
-    setDownloading(false);
+    // try/finally, not a bare await: html2pdf rejects on a failed capture or
+    // save, and without this the rejection propagated out of the handler and
+    // setDownloading(false) never ran -- leaving the button disabled and
+    // reading "Generating..." forever, with nothing shown to say why.
+    try {
+      await downloadAsPDF("sf9-doc", `SF9-${enrollmentId}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed", err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) return <PrintLoading label="Loading SF9…" />;
@@ -321,7 +359,7 @@ export default function SF9PrintPage() {
                 <td style={TD({ fontWeight: 600 })}>{v.name}</td>
                 {cfg.periods.map((p, i) => (
                   <td key={i} style={TD({ textAlign: "center", fontWeight: 700 })}>
-                    {v.marks[p] ?? "—"}
+                    {observedMark(v.marks[p])}
                   </td>
                 ))}
               </tr>

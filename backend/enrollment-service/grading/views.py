@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from accounts.permissions import (
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
+    assert_teacher_may_write_enrollment,
     guardian_student_ids,
     teacher_student_ids,
 )
@@ -85,6 +86,32 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
         elif role == "guardian":
             qs = qs.filter(enrollment__student_id__in=guardian_student_ids(self.request.user))
         return qs
+
+    def perform_create(self, serializer):
+        # has_object_permission never runs on create, so without this any
+        # teacher could post a score entry for any learner in the school.
+        #
+        # GradeViewSet and AttendanceViewSet both close this the same way, and
+        # assert_teacher_may_write_enrollment's own docstring names "grades /
+        # attendance" as the paths it was written for -- score entries were
+        # missed. They are not a lesser record: compute_grade() turns them into
+        # the transmuted grade that goes on the report card and on SF9/SF10.
+        assert_teacher_may_write_enrollment(
+            self.request.user, serializer.validated_data.get("enrollment")
+        )
+        serializer.save()
+
+    def perform_update(self, serializer):
+        # Detail routes DO get has_object_permission, but only against the row
+        # as it already exists. A PATCH that moves an entry onto a different
+        # enrollment is checked against the old one, so the destination needs
+        # its own check.
+        assert_teacher_may_write_enrollment(
+            self.request.user,
+            serializer.validated_data.get("enrollment")
+            or getattr(serializer.instance, "enrollment", None),
+        )
+        serializer.save()
 
     @action(detail=False, methods=["get"], url_path="compute")
     def compute_grade(self, request):

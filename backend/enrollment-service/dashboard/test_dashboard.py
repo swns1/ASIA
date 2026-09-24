@@ -9,6 +9,8 @@ are `managed = False`, so pytest-django builds no tables for them).
 Role behaviour is tested through the permission class with APIRequestFactory +
 SimpleNamespace, matching accounts/test_permissions.py.
 """
+import pytest
+
 from datetime import date
 from types import SimpleNamespace
 
@@ -140,13 +142,55 @@ class TestShapeAttendanceSeries:
         assert entry["excused"] == 2
         assert entry["total"] == 10
 
-    def test_rate_counts_late_against_attendance(self):
+    def test_rate_counts_a_late_learner_as_having_attended(self):
+        # Changed deliberately, and it is a behaviour change rather than a bug
+        # fix, so the reasoning belongs here.
+        #
+        # This used to assert 0.6 -- present / (present + absent + late), with
+        # late in the denominator only, counting a learner who turned up late
+        # as fully absent. Unlike its neighbours above and below, that
+        # assertion carried no rationale, and the function's docstring argued
+        # the excused-absence decision at length while never mentioning this
+        # one.
+        #
+        # What settles it is not which reading of "late" is kinder but that the
+        # system reported ONE figure called "attendance rate" from three places
+        # under TWO definitions: ai/services.py (which drives the at-risk flag
+        # and is anchored on DepEd Order 8's 20% absence rule) and
+        # enrollments/views.py::section_attendance_stats both count late as
+        # attended. A chronically tardy learner read near 100% in the risk
+        # engine and near 0% on the dashboard, for the same days. Tardiness is
+        # worth surfacing -- as its own measure, not folded into a number that
+        # means something else everywhere it is used.
         rows = [
             {"week": date(2025, 1, 6), "status": "P", "n": 6},
             {"week": date(2025, 1, 6), "status": "A", "n": 2},
             {"week": date(2025, 1, 6), "status": "L", "n": 2},
         ]
-        assert shape_attendance_series(rows)[0]["rate"] == 0.6
+        entry = shape_attendance_series(rows)[0]
+        assert entry["rate"] == 0.8      # (6 present + 2 late) / 10 countable
+        assert entry["late"] == 2        # still reported separately
+
+    def test_rate_matches_the_at_risk_model_for_the_same_marks(self):
+        """The three attendance rates in this system must agree.
+
+        ai/services.py computes (total - absent - excused) / total over P/A/L/E.
+        Excluding excused from both sides here, the two must land on the same
+        number for the same marks -- that equality is the invariant, and it is
+        what the old formula broke.
+        """
+        rows = [
+            {"week": date(2025, 1, 6), "status": "P", "n": 15},
+            {"week": date(2025, 1, 6), "status": "L", "n": 3},
+            {"week": date(2025, 1, 6), "status": "A", "n": 2},
+        ]
+        dashboard_rate = shape_attendance_series(rows)[0]["rate"]
+
+        # The risk model's formula, with no excused marks in play.
+        total, absent, excused = 20, 2, 0
+        risk_rate = (total - absent - excused) / total
+
+        assert dashboard_rate == pytest.approx(risk_rate)
 
     def test_week_with_only_excused_has_null_rate_not_zero(self):
         # A holiday week must break the line, not plunge it to 0% and invent a

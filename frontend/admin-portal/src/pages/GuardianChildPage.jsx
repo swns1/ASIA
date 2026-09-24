@@ -223,7 +223,7 @@ function StatusStrip({ report, att, ledger: ledgerSection, reqs }) {
         tone={period ? "info" : "muted"}
         label="Latest grades"
         value={period || "Not posted yet"}
-        hint={report?.overall_gpa != null ? `General average ${report.overall_gpa}` : undefined}
+        hint={(report?.general_average ?? report?.overall_gpa) != null ? `General average ${report.general_average ?? report.overall_gpa}` : undefined}
       />
       <GlanceItem
         visual={<AttendanceRing rate={att.loading ? null : rate} />}
@@ -343,8 +343,12 @@ function ReportCardTab({ data, error }) {
     <Panel
       title="Report Card"
       padding="none"
-      action={data.overall_gpa != null && (
-        <Badge variant={gradeVariant(data.overall_gpa)}>GPA {data.overall_gpa}</Badge>
+      action={(data.general_average ?? data.overall_gpa) != null && (
+        // "General Average" is DepEd's term; GPA implies a weighting DO 8
+        // does not apply across learning areas.
+        <Badge variant={gradeVariant(data.general_average ?? data.overall_gpa)}>
+          General average {data.general_average ?? data.overall_gpa}
+        </Badge>
       )}
     >
       <div className="overflow-x-auto">

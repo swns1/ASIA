@@ -6,7 +6,7 @@
  * not appear — which reads exactly like "not eligible".
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const api = {
@@ -70,8 +70,16 @@ async function runScan() {
   fireEvent.click(screen.getByRole("tab", { name: /Grade-Based Eligibility/ }));
   // The tab adopts the global year in an effect; scanning before that lands
   // is a no-op, so wait for the year chip to show as chosen.
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: /2026-2027/ }).getAttribute("aria-pressed")).toBe("true"),
+  //
+  // Queried through `pressed` rather than read off getAttribute inside a
+  // waitFor: the latter re-throws on the FIRST miss if getByRole itself
+  // cannot find the chip yet, and its 1s default lost the race whenever the
+  // suite ran all 26 files in parallel on a loaded machine. This form retries
+  // the whole query, and says what it is waiting for.
+  await screen.findByRole(
+    "button",
+    { name: /2026-2027/, pressed: true },
+    { timeout: 5000 },
   );
   fireEvent.click(screen.getByRole("button", { name: /Scan Now/ }));
 }
@@ -94,6 +102,6 @@ describe("ScholarshipsPage — eligibility scan", () => {
     api.getEnrollments.mockRejectedValue(new Error("enrollment service is down"));
     await runScan();
 
-    await waitFor(() => expect(screen.queryByText(/enrollment service is down/)).not.toBeNull());
+    await screen.findByText(/enrollment service is down/, {}, { timeout: 5000 });
   });
 });

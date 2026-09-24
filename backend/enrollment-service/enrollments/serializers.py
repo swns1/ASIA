@@ -1,8 +1,30 @@
 from rest_framework import serializers
+
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from .models import Enrollment, EnrollmentTransfer, SectionAdvisory, Student
 
 
+class SchoolYearField(serializers.CharField):
+    """A school year, validated and normalized to canonical "YYYY-YYYY" form.
+
+    school_year is the partition key every screen filters by and that billing
+    joins on in raw SQL, but the column is a plain varchar(20) with no CHECK
+    behind it. Validating on the way in is what keeps "2025-26" and a
+    trailing space from splitting one school year into several that no query
+    ever brings back together.
+    """
+
+    def to_internal_value(self, data):
+        text = super().to_internal_value(data)
+        try:
+            return normalize_school_year(text)
+        except InvalidSchoolYear as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+
 class SectionAdvisorySerializer(serializers.ModelSerializer):
+    school_year = SchoolYearField()
+
     class Meta:
         model = SectionAdvisory
         fields = (
@@ -78,6 +100,8 @@ class StudentSummarySerializer(serializers.ModelSerializer):
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
+    school_year = SchoolYearField()
+
     student_detail = StudentSummarySerializer(source="student", read_only=True)
     student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
     student_id = serializers.IntegerField(source="student.student_id", read_only=True)

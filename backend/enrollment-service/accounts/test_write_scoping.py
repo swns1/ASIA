@@ -2,10 +2,15 @@
 Create-path scoping for records that hang off an Enrollment.
 
 DRF only calls has_object_permission on detail routes, so IsAdvisoryTeacherOrStaff
-never saw a plain POST. That left POST /api/grades/, POST /api/attendance/ and
-POST /api/narrative-reports/ open: any teacher could write a record for any
-student in the school, even though the equivalent bulk and read paths were
-correctly scoped.
+never saw a plain POST. That left POST /api/grades/, POST /api/attendance/,
+POST /api/narrative-reports/ and POST /api/score-entries/ open: any teacher
+could write a record for any student in the school, even though the equivalent
+bulk and read paths were correctly scoped.
+
+Score entries were the one this list missed on the first pass, and they are the
+least obvious and not the least serious: compute_grade() turns them into the
+transmuted grade printed on the report card and on SF9/SF10. The viewset-level
+test below is what stops the next endpoint from being missed the same way.
 
 Like the rest of this service's permission tests, these patch the ORM rather
 than hitting a database -- Enrollment and SectionAdvisory are managed=False, so
@@ -59,3 +64,43 @@ def test_an_unresolvable_enrollment_is_refused_rather_than_allowed():
             enrollment_model.objects.filter.return_value.values_list.return_value.first.return_value = None
             with pytest.raises(PermissionDenied):
                 assert_teacher_may_write_enrollment(_teacher(), 4242)
+
+
+# ── every enrollment-scoped create path is guarded ──────────────────────────
+
+def test_no_enrollment_scoped_viewset_is_missing_its_create_guard():
+    """The regression that actually happened, asserted structurally.
+
+    Three viewsets were fixed by hand and a fourth (ScoreEntryViewSet) was
+    missed, because nothing checked that the list was complete. Any viewset
+    whose rows hang off an Enrollment and that accepts writes must define
+    perform_create -- reading `owner_student_id_field` as the marker for "this
+    is enrollment-scoped", which is the same attribute the permission class
+    uses to find the owner.
+    """
+    from rest_framework import mixins
+
+    from attendance.views import AttendanceViewSet
+    from grades.views import GradeViewSet, NarrativeReportViewSet
+    from grading.views import ScoreEntryViewSet
+
+    writable = [
+        AttendanceViewSet, GradeViewSet, NarrativeReportViewSet, ScoreEntryViewSet,
+    ]
+    for viewset in writable:
+        assert issubclass(viewset, mixins.CreateModelMixin), viewset.__name__
+        assert "perform_create" in viewset.__dict__, (
+            f"{viewset.__name__} accepts POST for enrollment-scoped rows but "
+            f"defines no perform_create, so assert_teacher_may_write_enrollment "
+            f"never runs on the create path."
+        )
+
+
+def test_score_entry_create_guard_calls_the_shared_rule():
+    """ScoreEntryViewSet must use the same helper, not its own re-derivation."""
+    import inspect
+
+    from grading.views import ScoreEntryViewSet
+
+    source = inspect.getsource(ScoreEntryViewSet.perform_create)
+    assert "assert_teacher_may_write_enrollment" in source

@@ -244,8 +244,18 @@ class ApplyVerifyView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [ApplicantVerifyThrottle]
 
+    @transaction.atomic
     def post(self, request, invite_id):
-        invite = get_object_or_404(ApplicationInvite, pk=invite_id)
+        # Locked for the read-check-write below. check_access_code() increments
+        # code_attempts and locks the invite at MAX_CODE_ATTEMPTS, but without
+        # the row lock two simultaneous guesses both read the same count and
+        # both write it back as count+1 -- so a parallel guesser got more
+        # attempts than the cap allows, which is the one thing the cap exists
+        # to prevent. The per-invite throttle limits the rate; it does not
+        # serialise what arrives inside one window.
+        invite = get_object_or_404(
+            ApplicationInvite.objects.select_for_update(), pk=invite_id
+        )
 
         if invite.is_revoked or invite.is_expired:
             return Response(

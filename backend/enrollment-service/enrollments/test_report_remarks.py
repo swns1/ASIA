@@ -1,5 +1,12 @@
 """
-Tests for the Remarks column on a report card (_subject_remarks).
+Tests for the Remarks column on a report card (grading.deped.subject_remarks).
+
+This rule started life as report_views._subject_remarks and moved into
+grading.deped so promotion could share it: promotion used to block on ANY
+period marked failed/incomplete while the report card reduced the subject over
+its whole year, so one system printed Passed and the other refused to promote
+the same learner. The import alias below keeps these tests pointed at the
+rule rather than at where it happens to live.
 
 The bug these exist for: report_card() derived that column purely from the
 subject's numeric average (`avg >= 75 -> "passed"`), while the remark a
@@ -17,8 +24,7 @@ exactly that reason, and is tested directly.
 """
 import pytest
 
-from grading.deped import PASSING_GRADE
-from .report_views import _subject_remarks
+from grading.deped import PASSING_GRADE, subject_remarks as _subject_remarks
 
 
 # ── the regression ───────────────────────────────────────────────────────

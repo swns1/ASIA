@@ -1465,31 +1465,19 @@ export default function AcademicCalendarPage() {
       const fetched = Array.isArray(data) ? data : (data.results ?? []);
       setEvents(fetched);
 
-      // Auto-import PH holidays silently if none exist for this school year
-      const hasHolidays = fetched.some((e) => e.event_type === "holiday");
-      if (!hasHolidays) {
-        try {
-          const toAdd = getHolidaysForSY(sy).filter(
-            (h) => !fetched.some((e) => e.start_date === h.date)
-          );
-          for (const h of toAdd) {
-            await createEvent({
-              school_year: h.school_year,
-              title:       h.title,
-              event_type:  "holiday",
-              start_date:  h.date,
-              end_date:    h.date,
-              description: null,
-            });
-          }
-          if (toAdd.length > 0) {
-            const updated = await getEvents(sy);
-            setEvents(Array.isArray(updated) ? updated : (updated.results ?? []));
-          }
-        } catch {
-          // Silent — holidays failed to import but calendar still shows
-        }
-      }
+      // Reading the calendar does not write to it.
+      //
+      // This used to silently import the PH holiday list whenever a school
+      // year had none -- up to eighteen sequential POSTs fired from a page
+      // load, inside a bare catch, on a route open to every staff role. It
+      // had no idempotency key, so two people opening the page at once both
+      // saw "no holidays" and both inserted, and a permission failure was
+      // invisible because the catch swallowed it.
+      //
+      // Nothing is lost by removing it: the "PH Holidays" button in the
+      // header opens ImportHolidaysModal, which does the same import
+      // explicitly, shows what it is about to add, and lets the registrar
+      // decide. That is the same feature, asked for rather than assumed.
     } catch { setError("Failed to load calendar events."); }
     finally { setLoading(false); }
   }, []);

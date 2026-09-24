@@ -72,15 +72,30 @@ export default function SF10PrintPage() {
             const year = `SY ${enr.school_year}`;
             const [subs, allGrades, attData] = await Promise.all([
               soft(
+                // page_size and grade_level are BOTH load-bearing here.
+                //
+                // Without page_size the server's default of 20 truncates the
+                // result, and this form then computes a per-subject average and
+                // a General Average from the partial set and prints them on a
+                // DepEd form as fact -- a Grade 4 learner with 9 subjects over
+                // 4 quarters is 36 grade rows, so 16 of them never arrived.
+                //
+                // Without grade_level the subject list covers the whole school
+                // level, so a Grade 3 permanent record listed Grade 1-6
+                // subjects, most of them empty -- and, combined with the
+                // truncation, the 20 that did arrive were an arbitrary slice
+                // that need not include the ones the learner actually took.
                 getSubjects({
                   school_level: enr.school_level,
+                  grade_level: enr.grade_level,
+                  page_size: 100,
                   ...(enr.strand   ? { strand:   enr.strand   } : {}),
                   ...(enr.semester ? { semester: enr.semester } : {}),
                 }).then(d => Array.isArray(d) ? d : d.results ?? []),
                 `subjects (${year})`, [],
               ),
               soft(
-                getGrades({ enrollment: enr.enrollment_id })
+                getGrades({ enrollment: enr.enrollment_id, page_size: 200 })
                   .then(d => Array.isArray(d) ? d : d.results ?? []),
                 `grades (${year})`, [],
               ),
@@ -127,8 +142,17 @@ export default function SF10PrintPage() {
 
   const handleDownload = async () => {
     setDownloading(true);
-    await downloadAsPDF("sf10-doc", `SF10-${student?.lrn || studentId}.pdf`);
-    setDownloading(false);
+    // try/finally, not a bare await: html2pdf rejects on a failed capture or
+    // save, and without this the rejection propagated out of the handler and
+    // setDownloading(false) never ran -- leaving the button disabled and
+    // reading "Generating..." forever, with nothing shown to say why.
+    try {
+      await downloadAsPDF("sf10-doc", `SF10-${student?.lrn || studentId}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed", err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) return <PrintLoading label="Loading SF10…" />;

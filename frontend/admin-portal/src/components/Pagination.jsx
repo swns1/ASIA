@@ -19,6 +19,11 @@ export default function Pagination({
   page,
   totalPages,
   count,
+  // Optional caveat shown beside the total, for a list the server paginates
+  // but the client narrows further (GradesPage filters on an average it can
+  // only compute after fetching). Without it such a page reports the server's
+  // unfiltered total beside a handful of visible rows.
+  note,
   hasPrevious,
   hasNext,
   onPageChange,
@@ -33,6 +38,7 @@ export default function Pagination({
         Page <strong className="text-neutral-700">{page}</strong> of{" "}
         <strong className="text-neutral-700">{totalPages || 1}</strong>
         &nbsp;·&nbsp; {count.toLocaleString()} total records
+        {note ? <>&nbsp;·&nbsp; <em className="not-italic text-neutral-500">{note}</em></> : null}
       </span>
 
       <nav aria-label="Pagination" className="flex items-center gap-1">

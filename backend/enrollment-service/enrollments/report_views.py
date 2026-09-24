@@ -3,11 +3,12 @@ from decimal import Decimal, ROUND_HALF_UP
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
+from django.utils import timezone
 
 from accounts.permissions import GRADE_READ_ROLES, HasRole, guardian_student_ids, teacher_student_ids
 from .models import Enrollment
 from grades.models import Grade
-from grading.deped import PASSING_GRADE
+from grading.deped import general_average, summarize_subjects
 from subjects.models import Subject
 
 
@@ -30,41 +31,6 @@ def _round2(value):
     if value is None:
         return None
     return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-
-
-def _subject_remarks(recorded, average):
-    """
-    The Remarks a subject shows on its report card row.
-
-    A remark a teacher actually recorded outranks one derived from the
-    average. Grade.remarks carries "incomplete" and "dropped" as well as
-    pass/fail, and a teacher sets those two by hand (see GradesPage's
-    REMARKS_META) precisely because a numeric score cannot express them — a
-    subject dropped mid-quarter can still average 88. Deriving this column
-    from the average alone, as this used to, reported every such subject as
-    "passed" and left the report card no way to show INC or Dropped at all,
-    even though each period's recorded remark was already being serialized
-    right beside its grade.
-
-    "dropped" outranks "incomplete": dropping is terminal, whereas an
-    incomplete is a subject still awaiting its final mark.
-
-    A recorded "passed"/"failed" is deliberately *not* preferred over the
-    average. Those are per-period marks, and the figure printed next to this
-    column is the average across every period — a subject passed in one
-    quarter can still fail on the year, and the row has to agree with the
-    number beside it.
-
-    `recorded` is the set of remarks across that subject's periods; `average`
-    is its mean numeric grade, or None when no period carries one.
-    """
-    if "dropped" in recorded:
-        return "dropped"
-    if "incomplete" in recorded:
-        return "incomplete"
-    if average is None:
-        return None
-    return "passed" if average >= PASSING_GRADE else "failed"
 
 
 @api_view(["GET"])
@@ -126,23 +92,27 @@ def report_card(request, enrollment_id):
     # Determine grading periods to show in column order
     ordered_periods = [p for p in GRADING_PERIOD_ORDER if p in periods_seen]
 
-    # Compute per-subject average across the periods that have grades
-    for entry in subject_map.values():
-        values = [v["numeric_grade"] for v in entry["grades"].values() if v["numeric_grade"] is not None]
-        entry["average"] = _round2(sum(values) / len(values)) if values else None
-
-        # See _subject_remarks: a teacher's recorded INC/Dropped wins over the
-        # pass/fail this would otherwise derive from the average alone.
-        entry["overall_remarks"] = _subject_remarks(
-            {v["remarks"] for v in entry["grades"].values() if v["remarks"]},
-            entry["average"],
-        )
+    # Per-subject average and year outcome, computed over EVERY period the
+    # learner has a grade in -- base_qs, not the filtered grades_qs.
+    #
+    # The `?grading_period=` filter narrows which columns are PRINTED. It used
+    # to narrow this too, so opening the card on the 1st quarter reported a
+    # subject's year average and its Passed/Failed from that one quarter, under
+    # a heading that claims to be the year. A learner who failed Q1 and
+    # recovered read as Failed for the year on their own report card.
+    outcomes = summarize_subjects(base_qs)
+    for sid, entry in subject_map.items():
+        outcome = outcomes.get(sid)
+        entry["average"] = _round2(outcome["average"]) if outcome else None
+        entry["overall_remarks"] = outcome["remarks"] if outcome else None
 
     subjects_list = sorted(subject_map.values(), key=lambda s: s["subject_name"])
 
-    # Overall GPA
-    averages = [s["average"] for s in subjects_list if s["average"] is not None]
-    overall_gpa = _round2(sum(averages) / len(averages)) if averages else None
+    # DO 8 General Average: the mean of the learner's final grades across
+    # learning areas, as a whole number. Named for what DepEd calls it --
+    # this was "overall_gpa", a term DO 8 does not use and which invites the
+    # weighted reading that grading.deped.general_average explicitly rejects.
+    general_avg = general_average([s["average"] for s in subjects_list])
 
     return Response({
         "enrollment": {
@@ -173,8 +143,11 @@ def report_card(request, enrollment_id):
             {"key": p, "label": GRADING_PERIOD_LABELS[p]} for p in available_periods
         ],
         "subjects":     subjects_list,
-        "overall_gpa":  overall_gpa,
-        "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "general_average": general_avg,
+        # Kept so an older frontend build still renders a figure; the number
+        # is the same one, and `general_average` is the name to read.
+        "overall_gpa":  general_avg,
+        "generated_at": timezone.now().isoformat(),
     })
 
 

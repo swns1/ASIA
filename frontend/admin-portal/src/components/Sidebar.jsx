@@ -7,7 +7,7 @@ import {
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { groupYears, yearLabel } from "../utils/schoolYear";
+import { groupYears } from "../utils/schoolYear";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { ConfirmDialog } from "./ui/Modal";
 import { Select } from "./FormField";
@@ -25,7 +25,7 @@ import logo from "../assets/logo.png";
 // which year is "Recent"; only the widget differs, and deliberately so: this
 // one is a single line of chrome that sets a default, not a filter.
 function GlobalSchoolYearSelect() {
-  const { schoolYear, setSchoolYear, options, currentYear, yearCounts } = useSchoolYear();
+  const { schoolYear, setSchoolYear, options, currentYear } = useSchoolYear();
 
   const groups = useMemo(() => groupYears(options, currentYear), [options, currentYear]);
 
@@ -49,7 +49,18 @@ function GlobalSchoolYearSelect() {
         {groups.map(([label, years]) => (
           <optgroup key={label} label={label}>
             {years.map((y) => (
-              <option key={y} value={y}>{yearLabel(y, yearCounts)}</option>
+              // Bare year, no count. This control scopes the eight modules
+              // listed in `title` above, but the only count available to it
+              // counts enrollments -- so on Grades or Attendance it described
+              // something other than what the picker was filtering. The noun
+              // could not be supplied either, which is exactly why the label
+              // helper that used to live in utils/schoolYear omitted it, and
+              // a number nobody can label is a number nobody can read.
+              //
+              // Which years hold data is already carried by which years the
+              // endpoint returns. Per-year counts still appear on
+              // ui/SchoolYearPicker, where the page supplies the noun.
+              <option key={y} value={y}>{y}</option>
             ))}
           </optgroup>
         ))}

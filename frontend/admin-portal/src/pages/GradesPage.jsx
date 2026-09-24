@@ -123,6 +123,9 @@ function OverviewTab({ onNavigate }) {
   // their filters while the server was down.
   const [loadError, setLoadError] = useState(null);
   const [pageMeta, setPageMeta] = useState({ count: 0, next: null, previous: null });
+  // Set when the Passed/Failed filter narrows a page after the server has
+  // already counted it — see fetchPage.
+  const [filterNote, setFilterNote] = useState("");
   const [page,     setPage]     = useState(1);
   const [loading,  setLoading]  = useState(false);
   const [sortKey,  setSortKey]  = useState("avg");
@@ -190,20 +193,35 @@ function OverviewTab({ onNavigate }) {
         const grades = gradeResults[i];
         const nums   = grades.map((g) => parseFloat(g.numeric_grade)).filter((n) => !isNaN(n));
         const avg    = nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-        const passed = grades.filter((g) => parseFloat(g.numeric_grade) >= 75).length;
-        const failed = grades.filter((g) => parseFloat(g.numeric_grade) < 75 && !isNaN(parseFloat(g.numeric_grade))).length;
+        const passed = grades.filter((g) => parseFloat(g.numeric_grade) >= GRADE_PASSING).length;
+        const failed = grades.filter((g) => parseFloat(g.numeric_grade) < GRADE_PASSING && !isNaN(parseFloat(g.numeric_grade))).length;
         const sd     = en.student_detail ?? {};
         const name   = sd.full_name ?? [sd.first_name, sd.middle_name, sd.last_name, sd.suffix].filter(Boolean).join(" ");
         return { enrollment_id: en.enrollment_id, name, lrn: sd.lrn, student_number: sd.student_number, grade_level: en.grade_level, section: en.section, school_year: en.school_year, school_level: en.school_level, avg, passed, failed, total: grades.length, _student: sd, _enrollment: en };
       });
 
+      // The Passed/Failed filter runs HERE, on the page the server already
+      // returned, because it tests a per-learner average that only exists once
+      // every enrollment's grades have been fetched -- there is no server-side
+      // field to filter on.
+      //
+      // That is a real constraint, but the page used to hide it: `meta.count`
+      // stayed the server's unfiltered total, so selecting "Failed" on a
+      // 400-enrollment year showed two rows under a footer reading "Page 1 of
+      // 20 · 400 total records", and every following page was mostly empty
+      // with no way to tell how many failing learners there actually were.
+      // The count is now labelled for what it is.
+      const fetchedOnPage = built.length;
       if (rm) {
         built = built.filter((r) => {
-          if (rm === "passed") return r.avg !== null && r.avg >= 75;
-          if (rm === "failed") return r.avg !== null && r.avg < 75;
+          if (rm === "passed") return r.avg !== null && r.avg >= GRADE_PASSING;
+          if (rm === "failed") return r.avg !== null && r.avg < GRADE_PASSING;
           return true;
         });
       }
+      setFilterNote(
+        rm ? `${built.length} of ${fetchedOnPage} on this page match "${rm}"` : "",
+      );
 
       setRows(built);
       setPageMeta(meta);
@@ -427,6 +445,7 @@ function OverviewTab({ onNavigate }) {
           page={page}
           totalPages={totalPages}
           count={pageMeta.count}
+          note={filterNote}
           hasPrevious={!!pageMeta.previous}
           hasNext={!!pageMeta.next}
           onPageChange={fetchPage}

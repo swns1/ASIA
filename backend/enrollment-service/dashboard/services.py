@@ -125,9 +125,21 @@ def shape_attendance_series(rows):
 
     Two things the obvious implementation gets wrong:
 
-    * **`rate` excludes excused absences.** It is present ÷ (present + absent
-      + late). An excused absence is approved leave, not an attendance
-      failure, and counting it as one penalises a class for taking it.
+    * **`rate` excludes excused absences.** It is (present + late) ÷
+      (present + absent + late). An excused absence is approved leave, not an
+      attendance failure, and counting it as one penalises a class for taking
+      it.
+
+    * **A late learner attended.** `late` sits in the numerator as well as the
+      denominator. It used to be in the denominator only -- `present ÷
+      (present + absent + late)` -- which counted a learner who turned up late
+      as fully absent. The docstring defended the excused-absence decision and
+      never mentioned this one, so it read as an oversight rather than a
+      policy, and it put this endpoint in direct conflict with the two that
+      matter most: `ai/services.py` (the at-risk score) and
+      `enrollments/views.py::section_attendance_stats` both treat late as
+      attended. A chronically tardy learner therefore read near 100% in the
+      risk engine and near 0% here, for the same days.
 
     * **Weeks with no records at all are emitted, not skipped, and carry
       `rate: None` rather than 0.** Skipping them compresses the time axis and
@@ -159,7 +171,9 @@ def shape_attendance_series(rows):
             "week": cursor.isoformat() if hasattr(cursor, "isoformat") else str(cursor),
             **bucket,
             "total": countable + bucket["excused"],
-            "rate": round(bucket["present"] / countable, 4) if countable else None,
+            "rate": round(
+                (bucket["present"] + bucket["late"]) / countable, 4
+            ) if countable else None,
         })
         cursor = cursor + timedelta(weeks=1)
     return series

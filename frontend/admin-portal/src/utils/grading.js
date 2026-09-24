@@ -8,9 +8,20 @@
 // lookup silently fell back to the Elementary/quarterly config. LEVEL_CONFIG
 // here is keyed correctly.
 
+// Nursery and Kindergarten run on the same four quarters as Elementary.
+//
+// They used to declare a period literally named "annual", which does not exist:
+// Grade.GRADING_PERIOD_CHOICES has only the four quarters and two semesters, so
+// nothing could ever be stored under it. Both places a teacher actually enters
+// an early-years grade -- GradesPage and TeacherSectionsPage -- write quarters.
+// The only consumers of this table are the SF9 and SF10 print pages, which do
+// `cfg.periods.map(p => sg[p] ?? null)`; `sg["annual"]` was always undefined,
+// so every subject, every grade cell, the Final column and the General Average
+// printed as an em dash on a Kindergarten report card even with all four
+// quarters encoded. attIndex() collapsed the attendance row for the same reason.
 export const LEVEL_CONFIG = {
-  nursery:           { type: "annual",    periods: ["annual"],                                                 cols: ["Annual Grade"] },
-  kindergarten:      { type: "annual",    periods: ["annual"],                                                 cols: ["Annual Grade"] },
+  nursery:           { type: "quarterly", periods: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],  cols: ["Q1","Q2","Q3","Q4"] },
+  kindergarten:      { type: "quarterly", periods: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],  cols: ["Q1","Q2","Q3","Q4"] },
   elementary:        { type: "quarterly", periods: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],  cols: ["Q1","Q2","Q3","Q4"] },
   junior_highschool: { type: "quarterly", periods: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],  cols: ["Q1","Q2","Q3","Q4"] },
   senior_highschool: { type: "semester",  periods: ["1st_semester","2nd_semester"],                            cols: ["Sem 1","Sem 2"] },
@@ -24,7 +35,6 @@ export const PERIOD_LABEL = {
   "1st_quarter": "1st Quarter", "2nd_quarter": "2nd Quarter",
   "3rd_quarter": "3rd Quarter", "4th_quarter": "4th Quarter",
   "1st_semester": "1st Semester", "2nd_semester": "2nd Semester",
-  annual: "Annual",
 };
 
 export const GRADE_ORDER = [
@@ -34,17 +44,24 @@ export const GRADE_ORDER = [
   "Grade 11", "Grade 12",
 ];
 
-// Philippine school calendar quarter/semester index (0-based)
+// Which quarter (or semester) a date falls in, 0-based, for the attendance row
+// on SF9/SF10.
+//
+// The school year runs June to March -- school_settings' own default, what
+// billing builds its installment calendar from, and what the rest of the app
+// assumes. This used to start the first quarter in August and sweep June and
+// July into the LAST bucket via the final `return 3`, so the opening two months
+// of the year were filed as fourth-quarter attendance on the permanent record.
 export function attIndex(dateStr, type) {
   const m = new Date(dateStr).getMonth() + 1;
   if (type === "quarterly") {
-    if ([8, 9, 10].includes(m))  return 0;
-    if ([11, 12, 1].includes(m)) return 1;
-    if ([2, 3].includes(m))      return 2;
-    return 3;
+    if ([6, 7, 8].includes(m))   return 0;   // Jun-Aug
+    if ([9, 10, 11].includes(m)) return 1;   // Sep-Nov
+    if ([12, 1].includes(m))     return 2;   // Dec-Jan
+    return 3;                                 // Feb-Mar
   }
   if (type === "semester") {
-    return [8, 9, 10, 11, 12, 1].includes(m) ? 0 : 1;
+    return [6, 7, 8, 9, 10].includes(m) ? 0 : 1;
   }
   return 0;
 }

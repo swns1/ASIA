@@ -35,16 +35,41 @@ class InvalidTransition(serializers.ValidationError):
     caller's request that was invalid, not a server fault."""
 
 
+# The application lifecycle, in one place.
+#
+# SUBMITTED -> APPROVED/REJECTED are here because they are what actually
+# happens: a registrar opening an application and deciding on it in one sitting
+# never passes through IN_REVIEW. The table used to omit those two edges while
+# approve_application/reject_application assigned `status` by hand and never
+# called transition() at all -- so the declared state machine forbade the
+# commonest path in the system and nothing noticed, because nothing enforced
+# it. Both functions now route through here, which is what makes this table
+# the lifecycle rather than a description of one.
+VALID_EDGES = {
+    StudentApplication.DRAFT:     {StudentApplication.SUBMITTED},
+    StudentApplication.SUBMITTED: {
+        StudentApplication.IN_REVIEW,
+        StudentApplication.APPROVED,
+        StudentApplication.REJECTED,
+    },
+    StudentApplication.IN_REVIEW: {StudentApplication.APPROVED, StudentApplication.REJECTED},
+    StudentApplication.REJECTED:  {StudentApplication.IN_REVIEW},
+    # APPROVED is terminal: it has created real student rows.
+    StudentApplication.APPROVED:  set(),
+}
+
+
+def can_transition(from_status, to_status):
+    """Whether `from_status -> to_status` is a legal edge."""
+    return to_status in VALID_EDGES.get(from_status, set())
+
+
 def transition(application, to_status, *, actor=None):
     """Moves `application` to `to_status`, validating the edge is legal.
     Callers must already hold a row lock (select_for_update) if the
     transition needs to be race-safe — this function only checks legality,
     it doesn't lock."""
-    valid_edges = {
-        StudentApplication.SUBMITTED: {StudentApplication.IN_REVIEW},
-        StudentApplication.IN_REVIEW: {StudentApplication.APPROVED, StudentApplication.REJECTED},
-        StudentApplication.REJECTED: {StudentApplication.IN_REVIEW},
-    }
+    valid_edges = VALID_EDGES
     allowed = valid_edges.get(application.status, set())
     if to_status not in allowed:
         raise InvalidTransition(
@@ -80,7 +105,15 @@ def _deep_merge_payload(base, overrides):
     if "student" in overrides:
         merged["student"] = {**base.get("student", {}), **overrides["student"]}
     if "household" in overrides:
-        merged["household"] = overrides["household"]
+        # Merged field-by-field like `student`, not replaced. Both are single
+        # dicts describing one thing, and replacing this one meant a registrar
+        # correcting a single household field -- a misspelled barangay, say --
+        # silently blanked every other field the applicant had filled in.
+        # The lists below stay replace-semantics on purpose: there is no
+        # identity to merge rows on, so a partial list can only mean "this is
+        # now the list".
+        base_household = base.get("household") or {}
+        merged["household"] = {**base_household, **(overrides["household"] or {})}
     for key in ("guardians", "siblings", "previous_schools"):
         if key in overrides:
             merged[key] = overrides[key]
@@ -111,8 +144,8 @@ def approve_application(application_id, *, actor, overrides=None):
         if application.status == StudentApplication.APPROVED:
             return application, False
 
-        if application.status not in (StudentApplication.SUBMITTED, StudentApplication.IN_REVIEW):
-            raise serializers.ValidationError(
+        if not can_transition(application.status, StudentApplication.APPROVED):
+            raise InvalidTransition(
                 {"status": f"Cannot approve an application that is '{application.status}'."}
             )
 
@@ -165,6 +198,7 @@ def approve_application(application_id, *, actor, overrides=None):
         application.decided_at = timezone.now()
         application.save(update_fields=["status", "created_student_id", "decided_by_user_id", "decided_at", "updated_at"])
 
+
         return application, True
 
 
@@ -174,8 +208,8 @@ def reject_application(application_id, *, actor, note):
 
     with transaction.atomic():
         application = StudentApplication.objects.select_for_update().get(pk=application_id)
-        if application.status not in (StudentApplication.SUBMITTED, StudentApplication.IN_REVIEW):
-            raise serializers.ValidationError(
+        if not can_transition(application.status, StudentApplication.REJECTED):
+            raise InvalidTransition(
                 {"status": f"Cannot reject an application that is '{application.status}'."}
             )
 

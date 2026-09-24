@@ -33,6 +33,7 @@ from django.db.models import Count, Q
 
 from attendance.models import AttendanceRecord
 from grades.models import Grade, NarrativeReport
+from grading.deped import PASSING_GRADE as DEPED_PASSING_GRADE
 from subjects.models import Subject
 
 NARRATIVE_SCORE = {
@@ -49,10 +50,12 @@ NARRATIVE_SCORE = {
     "NO": 1.0,
 }
 
-# DepEd passing mark. The most load-bearing constant in this module — it's
-# the line the school itself acts on (enrollments/report_views.py uses the
-# same 75 for pass/fail remarks).
-PASSING_GRADE = 75.0
+# DepEd passing mark. The most load-bearing constant in this module -- it's
+# the line the school itself acts on. Imported rather than redeclared: this
+# module carried its own `75.0` alongside a comment asserting the rest of the
+# codebase used "the same 75", which is exactly the arrangement that lets the
+# two drift without anything failing.
+PASSING_GRADE = float(DEPED_PASSING_GRADE)
 
 # Which period precedes which, for the quarter-over-quarter trend signal.
 # Absent from the map = no prior period exists (1st quarter, or "overall").
@@ -71,19 +74,73 @@ QUARTER_INDEX = {
 }
 
 
+# Fallback academic window, used only when the school has not configured its
+# calendar. June-March matches school_settings' own default and the installment
+# calendar billing generates from it.
+_DEFAULT_SY_OPEN = (6, 1)
+_DEFAULT_SY_CLOSE = (3, 31)
+
+
+def _configured_sy_dates(school_year):
+    """The school's own start/end dates for `school_year`, or None.
+
+    `school_settings` is billing-service's table. Reading it here is a
+    cross-service read of the shared database, which is the same thing billing
+    does to `enrollments` -- these are separate processes over one schema, not
+    separate datastores. Any failure returns None and the caller falls back to
+    the convention below, because a missing settings row must not take the
+    risk model down.
+    """
+    from django.db import connection
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT sy_start_date, sy_end_date FROM school_settings "
+                "WHERE current_school_year = %s LIMIT 1",
+                [str(school_year)],
+            )
+            row = cur.fetchone()
+    except Exception:  # noqa: BLE001 — never break scoring over a settings read
+        return None
+    if not row or not row[0] or not row[1]:
+        return None
+    return row[0], row[1]
+
+
 def _school_year_bounds(school_year):
     """
     Outer date bounds for a "2025-2026"-style school year string.
-    Deliberately generous (whole calendar years) rather than guessing a
-    June/March academic window — this is only ever the outermost clamp for a
-    period window, and a too-wide clamp degrades to the previous full-year
-    behavior instead of silently dropping attendance rows.
+
+    These used to be whole calendar years -- Jan 1 of the opening year to
+    Dec 31 of the closing one. The reasoning was that a too-wide clamp
+    degrades gracefully rather than dropping attendance rows, which is true of
+    the `overall` case but not of the quarters: the first quarter's window
+    opens at its lower clamp and the last quarter's closes at the upper one,
+    so Q1 of S.Y. 2025-2026 began in January 2025 (five months before the
+    school year) and Q4 ran to December 2026 (nine months after it). Those are
+    the windows the UI reports as the period a figure covers.
+
+    Two calendar years is also long enough to span a learner's *previous*
+    enrollment, so the clamp was only safe because attendance is filtered by
+    enrollment id before the date window is applied.
+
+    The school's configured dates win; the June-March convention is the
+    fallback. Both are narrower than a calendar year and neither guesses.
     """
     try:
         start_year, end_year = (int(part) for part in str(school_year).split("-", 1))
     except (ValueError, TypeError):
         return None, None
-    return date(start_year, 1, 1), date(end_year, 12, 31)
+
+    configured = _configured_sy_dates(school_year)
+    if configured:
+        return configured
+
+    return (
+        date(start_year, *_DEFAULT_SY_OPEN),
+        date(end_year, *_DEFAULT_SY_CLOSE),
+    )
 
 
 def resolve_period_window(school_year, grading_period):
@@ -305,11 +362,16 @@ def build_student_features(school_year, grading_period, subject_id=None,
             # itself) — matches the convention used everywhere else
             # (see frontend/admin-portal/src/utils/attendance.js).
             #
-            # NOTE: enrollments/views.py's section_attendance_stats computes
-            # a different number — (present + late) / total, ignoring
-            # excused. Two definitions of one concept; this one is
-            # authoritative for risk scoring. Reconciling them is its own
-            # change.
+            # This matches enrollments/views.py's section_attendance_stats.
+            # That one is written as (present + late) / total, which over the
+            # four statuses P/A/L/E is the same arithmetic -- `total` there is
+            # Count("attendance_id"), so present + late == total - absent -
+            # excused. A note here used to claim the two were rival
+            # definitions needing reconciliation; they never were, and the
+            # note sent readers hunting a bug that does not exist. What does
+            # differ is presentation: that endpoint reports 0-100 and answers
+            # for any non-zero total, while this one reports 0-1 and withholds
+            # a rate below MIN_ATTENDANCE_DAYS.
             missed = att["absent"] + att["excused"]
             sd["attendance_rate"] = (att["total"] - missed) / att["total"]
             sd["absent_days"] = missed

@@ -1291,12 +1291,20 @@ export default function EnrollmentsPage() {
                   label="Filter by status"
                   value={statusFilter}
                   onChange={setStatusFilter}
+                  // Each chip shows ITS OWN count, from statusCounts.
+                  //
+                  // All four used to read `pageMeta.count`, which is the size
+                  // of the currently filtered list -- so with "Enrolled"
+                  // selected and 68 results, every chip read 68, including
+                  // Cancelled when there were none. The per-status numbers
+                  // were already being fetched for the stat cards directly
+                  // above; the chips just were not reading them.
                   options={[
-                    { value: "",          label: "All",       tone: "brand" },
-                    { value: "enrolled",  label: "Enrolled",  tone: "success", dot: "#4caf50", count: !loading ? pageMeta.count : null },
-                    { value: "pending",   label: "Pending",   tone: "warning", dot: "#ff9800", count: !loading ? pageMeta.count : null },
-                    { value: "completed", label: "Completed", tone: "info",    dot: "#2196f3", count: !loading ? pageMeta.count : null },
-                    { value: "cancelled", label: "Cancelled", tone: "error",   dot: "#f44336", count: !loading ? pageMeta.count : null },
+                    { value: "",          label: "All",       tone: "brand",   count: !countsLoading ? statusCounts.total     : null },
+                    { value: "enrolled",  label: "Enrolled",  tone: "success", dot: "#4caf50", count: !countsLoading ? statusCounts.enrolled  : null },
+                    { value: "pending",   label: "Pending",   tone: "warning", dot: "#ff9800", count: !countsLoading ? statusCounts.pending   : null },
+                    { value: "completed", label: "Completed", tone: "info",    dot: "#2196f3", count: !countsLoading ? statusCounts.completed : null },
+                    { value: "cancelled", label: "Cancelled", tone: "error",   dot: "#f44336", count: !countsLoading ? statusCounts.cancelled : null },
                   ]}
                 />
               </FilterRow>

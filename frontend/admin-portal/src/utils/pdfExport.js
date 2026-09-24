@@ -1,7 +1,13 @@
 export const downloadAsPDF = async (elementId, filename, options = {}) => {
   const { default: html2pdf } = await import("html2pdf.js");
   const element = document.getElementById(elementId);
-  if (!element) return;
+  if (!element) {
+    // Was a silent `return`, which made a mistyped or renamed element id look
+    // exactly like a successful export that produced no file.
+    throw new Error(
+      `Nothing to export: no element with id "${elementId}" is on the page.`,
+    );
+  }
 
   const landscape = options.landscape ?? false;
 
