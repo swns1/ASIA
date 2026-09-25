@@ -21,10 +21,17 @@ export async function updateGuardian(id, payload) {
   return res.data;
 }
 
-// Partial update — used to link/unlink a guardian contact record to a
-// `role=guardian` login account (guardians.user_id).
 export async function patchGuardian(id, payload) {
   const res = await studentClient.patch(`/guardians/${id}/`, payload);
+  return res.data;
+}
+
+// Links this guardian contact to a `role=guardian` login account, or unlinks
+// it with null. Its own endpoint because guardians.user_id is read-only on
+// the plain guardian routes -- a PATCH of it returned 200 and saved nothing --
+// and this one checks the account is an active parent/guardian account.
+export async function linkGuardianAccount(id, userId) {
+  const res = await studentClient.post(`/guardians/${id}/link-account/`, { user_id: userId });
   return res.data;
 }
 

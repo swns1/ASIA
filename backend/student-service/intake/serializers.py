@@ -22,7 +22,8 @@ these bounds by construction alone.
 from rest_framework import serializers
 
 from students.models import Guardian, Household, Sibling, PreviousSchool, Student
-from students.validators import validate_lrn_format
+from students.serializers import require_a_guardian
+from students.validators import blank_to_none, validate_lrn_format
 
 
 # ── Re-derivable allowlists (used again in intake/services.py at approve time) ──
@@ -93,6 +94,12 @@ class ApplicantStudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = tuple(sorted(ALLOWED_STUDENT_FIELDS))
 
+    def validate_email(self, value):
+        # Stored as null, not "": students.email is unique, and a blank string
+        # carried through to approval collided with the first student saved
+        # without one. See students.validators.BlankEmailAsNullMixin.
+        return blank_to_none(value)
+
 
 class ApplicantHouseholdSerializer(serializers.ModelSerializer):
     class Meta:
@@ -144,10 +151,8 @@ class ApplicantSubmissionSerializer(serializers.Serializer):
     previous_schools = ApplicantPreviousSchoolSerializer(many=True, required=False, default=list)
 
     def validate_guardians(self, value):
-        primary_count = sum(1 for g in value if g.get("is_primary_contact"))
-        if primary_count > 1:
-            raise serializers.ValidationError("Only one primary guardian is allowed.")
-        return value
+        # Same rule as the counter form: at least one guardian, one primary.
+        return require_a_guardian(value)
 
 
 # ── Staff-facing serializers (issuing invites, reviewing applications) ──
@@ -164,7 +169,9 @@ class ApplicationInviteIssueSerializer(serializers.Serializer):
     in to issue a new invite."""
     applicant_first_name = serializers.CharField(max_length=50)
     applicant_last_name = serializers.CharField(max_length=50)
-    contact_email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
+    # 150 is the column width; without it a longer address passed validation
+    # and failed at the database as a 500.
+    contact_email = serializers.EmailField(max_length=150, required=False, allow_null=True, allow_blank=True)
     contact_mobile = serializers.CharField(max_length=20, required=False, allow_null=True, allow_blank=True)
 
 

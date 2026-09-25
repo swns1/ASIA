@@ -9,6 +9,7 @@ re-whitelisted here even though it was already whitelisted at submit time.
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 
 from students.models import PreviousSchool, Sibling
 from students.serializers import (
@@ -57,6 +58,15 @@ VALID_EDGES = {
     # APPROVED is terminal: it has created real student rows.
     StudentApplication.APPROVED:  set(),
 }
+
+
+def _locked_application(application_id):
+    """The application, row-locked -- or a 404. A missing or malformed id used
+    to escape as DoesNotExist/ValueError and answer 500."""
+    try:
+        return StudentApplication.objects.select_for_update().get(pk=application_id)
+    except (StudentApplication.DoesNotExist, ValueError, TypeError):
+        raise NotFound("That application doesn't exist.")
 
 
 def can_transition(from_status, to_status):
@@ -139,7 +149,7 @@ def approve_application(application_id, *, actor, overrides=None):
     service's test database can't be built at all).
     """
     with transaction.atomic():
-        application = StudentApplication.objects.select_for_update().get(pk=application_id)
+        application = _locked_application(application_id)
 
         if application.status == StudentApplication.APPROVED:
             return application, False
@@ -207,7 +217,7 @@ def reject_application(application_id, *, actor, note):
         raise serializers.ValidationError({"decision_note": "A reason is required to reject an application."})
 
     with transaction.atomic():
-        application = StudentApplication.objects.select_for_update().get(pk=application_id)
+        application = _locked_application(application_id)
         if not can_transition(application.status, StudentApplication.REJECTED):
             raise InvalidTransition(
                 {"status": f"Cannot reject an application that is '{application.status}'."}

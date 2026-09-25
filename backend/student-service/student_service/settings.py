@@ -105,8 +105,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     # This service was the only one of the four without CsrfViewMiddleware.
     # The DRF endpoints authenticate with a Bearer token rather than the
-    # session cookie, so nothing here was exploitable — but /admin/ is mounted
-    # and session-authenticated, and an unexplained asymmetry between four
+    # session cookie, so nothing here was exploitable (and /admin/ is no longer
+    # mounted -- see urls.py) — but an unexplained asymmetry between four
     # otherwise-identical stacks is exactly the kind of thing that gets
     # copied forward into whichever service is added next.
     'django.middleware.csrf.CsrfViewMiddleware',

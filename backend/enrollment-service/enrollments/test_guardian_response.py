@@ -36,7 +36,7 @@ def student(student_id, status="active", last="Cruz", first="Ana"):
 def enrollment(e_id, st, *, year, status, grade="Grade 5"):
     return SimpleNamespace(
         enrollment_id=e_id, pk=e_id, student=st, student_id=st.student_id,
-        school_year=year, grade_level=grade, section="Rizal",
+        school_year=year, grade_level=grade, section="Rizal", semester=None,
         enrollment_status=status, guardian_response=None,
     )
 
@@ -155,6 +155,7 @@ def test_active_students_without_a_row_this_year_are_listed():
     assert ids == [1, 3]  # Cruz, Santos -- by surname
     ana = response.data["results"][0]
     assert ana["last_enrollment"]["grade_level"] == "Grade 4"
+    assert "semester" in ana["last_enrollment"]
     assert response.data["results"][1]["last_enrollment"] is None
 
 

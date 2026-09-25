@@ -516,11 +516,14 @@ export default function StudentsPage() {
             title="Delete student?"
             message={
               <>
-                You&apos;re about to permanently remove{" "}
+                Delete{" "}
                 <strong className="text-neutral-900">
                   {toDelete.first_name} {toDelete.last_name}
-                </strong>{" "}
-                and all their associated records. This cannot be undone.
+                </strong>
+                ? This is only for a record created by mistake, such as a
+                duplicate registration, and cannot be undone. A student who has
+                ever been enrolled can&apos;t be deleted — change their status to
+                Transferred, Dropped or Inactive instead.
               </>
             }
             confirmLabel="Delete student"

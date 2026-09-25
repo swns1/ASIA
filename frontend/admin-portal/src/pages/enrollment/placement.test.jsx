@@ -34,6 +34,7 @@ const api = {
   transferInEnrollment: vi.fn(),
   getStudents: vi.fn(),
   getStudent: vi.fn(),
+  markStudentsGraduated: vi.fn(),
 };
 const pass = (name) => (...a) => api[name](...a);
 
@@ -56,6 +57,7 @@ vi.mock("../../api/enrollmentApi", () => ({
 vi.mock("../../api/studentApi", () => ({
   getStudents: pass("getStudents"),
   getStudent: pass("getStudent"),
+  markStudentsGraduated: pass("markStudentsGraduated"),
 }));
 vi.mock("../../api/billingApi", () => ({ generateInvoice: vi.fn() }));
 vi.mock("../../api/previousSchoolApi", () => ({ createPreviousSchool: vi.fn() }));
@@ -224,6 +226,29 @@ describe("Not yet placed", () => {
 
     expect((await screen.findByTestId("location")).textContent)
       .toBe("/enrollments/new?student=117&school_year=2025-2026");
+  });
+
+  it("offers Grade 12 finishers 'Mark graduated' instead of Enroll, and refreshes after", async () => {
+    const finisher = {
+      student_id: 201, full_name: "Lia Santos", student_number: "S-201", lrn: "2",
+      last_enrollment: {
+        enrollment_id: 9, school_year: "2024-2025", grade_level: "Grade 12",
+        semester: "2nd", enrollment_status: "completed",
+      },
+    };
+    api.getUnplacedStudents
+      .mockResolvedValueOnce({ school_year: "2025-2026", count: 1, results: [finisher] })
+      .mockResolvedValue({ school_year: "2025-2026", count: 0, results: [] });
+    api.markStudentsGraduated.mockResolvedValue({ graduated: [201], skipped: [] });
+
+    renderEnrollments();
+    fireEvent.click(await screen.findByRole("button", { name: /Show/ }));
+
+    expect(screen.queryByRole("button", { name: /^Enroll$/ })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: /Mark graduated/ }));
+
+    await waitFor(() => expect(api.markStudentsGraduated).toHaveBeenCalledWith([201]));
+    await waitFor(() => expect(api.getUnplacedStudents).toHaveBeenCalledTimes(2));
   });
 });
 

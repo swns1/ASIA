@@ -6,16 +6,17 @@
  * reset and success countdown exist for the shared device; on a parent's
  * phone they only throw the family back to the code gate mid-form.
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 const verifyApplicantCode = vi.fn();
+const saveDraft = vi.fn();
 const idleReset = vi.fn();
 
 vi.mock("../../api/applyApi", () => ({
   verifyApplicantCode: (...a) => verifyApplicantCode(...a),
-  saveApplicationDraft: vi.fn(() => Promise.resolve({ token: "t", revision: 1, payload: {} })),
+  saveApplicationDraft: (...a) => saveDraft(...a),
   submitApplication: vi.fn(),
 }));
 vi.mock("../../hooks/useIdleReset", () => ({
@@ -55,6 +56,8 @@ describe("ApplicantFormPage kiosk mode", () => {
       payload: {},
       revision: 0,
     });
+    saveDraft.mockReset();
+    saveDraft.mockResolvedValue({ conflict: false, token: "t", revision: 1, payload: {} });
   });
 
   it("on a parent's own phone, opens the form with no hand-over and no idle reset", async () => {
@@ -87,5 +90,45 @@ describe("ApplicantFormPage kiosk mode", () => {
     expect(await screen.findAllByText("Household")).not.toHaveLength(0);
     expect(screen.queryByText("Hand this device to the applicant?")).toBeNull();
     expect(lastIdleOptions().enabled).toBe(true);
+  });
+});
+
+describe("ApplicantFormPage session", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    verifyApplicantCode.mockReset();
+    verifyApplicantCode.mockResolvedValue({ token: "session-token", applicant_full_name: "Juan", payload: {}, revision: 0 });
+    saveDraft.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function typeAndAutosave(value) {
+    fireEvent.change(await screen.findByPlaceholderText("Juan"), { target: { value } });
+    await act(async () => { vi.advanceTimersByTime(3100); });
+  }
+
+  it("each autosave renews the session, and the next save uses the new token", async () => {
+    saveDraft.mockResolvedValue({ conflict: false, token: "renewed-1", revision: 1, payload: {} });
+    renderPage();
+    await enterCode();
+
+    await typeAndAutosave("Ana");
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+    expect(saveDraft.mock.calls[0][1]).toBe("session-token");
+
+    await typeAndAutosave("Anna");
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(2));
+    expect(saveDraft.mock.calls[1][1]).toBe("renewed-1");
+  });
+
+  it("an autosave refused for an expired session shows the enter-your-code screen at once", async () => {
+    saveDraft.mockRejectedValue({ response: { status: 403, data: { code: "applicant_token_invalid" } } });
+    renderPage();
+    await enterCode();
+
+    await typeAndAutosave("Ana");
+
+    expect(await screen.findByText("This session is no longer available")).toBeTruthy();
   });
 });

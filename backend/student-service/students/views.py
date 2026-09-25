@@ -11,8 +11,10 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404
+from django.utils import timezone
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
+from accounts.users import guardian_account_problem
 from shared.uploads import resolve_stored_path, verify_download_token
 from .services import create_student_bundle
 from .models import (
@@ -36,6 +38,42 @@ from .serializers import (
     StudentBulkCreateSerializer,
     StudentBulkCreateResponseSerializer,
 )
+
+
+# An enrollment that places a learner for its school year. Cancelled and
+# completed rows are history, not a placement.
+LIVE_ENROLLMENT_STATUSES = ("enrolled", "pending")
+
+
+def _int_param(params, name):
+    """Query parameter `name` as an int, or None when it is absent.
+
+    These ids go straight into ORM filters, which raise ValueError on a
+    non-number -- so `?student_id=abc` answered 500 "something went wrong on
+    our end" for what is the caller's mistake. A 400 naming the parameter says
+    what actually happened.
+    """
+    raw = params.get(name)
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise serializers.ValidationError({name: "Must be a whole number."})
+
+
+def _int_list_param(params, name):
+    """Comma-separated ids (`?user_id__in=1,2,3`) as a list of ints."""
+    values = []
+    for part in (params.get(name) or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            values.append(int(part))
+        except ValueError:
+            raise serializers.ValidationError({name: "Must be whole numbers separated by commas."})
+    return values
 
 
 def _scope_to_teacher_roster(queryset, user, *, field="student_id__in", deny_accounting=True):
@@ -120,8 +158,9 @@ class StudentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=params["status"])
         if params.get("sex"):
             queryset = queryset.filter(sex=params["sex"])
-        if params.get("household_id"):
-            queryset = queryset.filter(household_id=params["household_id"])
+        household_id = _int_param(params, "household_id")
+        if household_id is not None:
+            queryset = queryset.filter(household_id=household_id)
         if params.get("student_number"):
             queryset = queryset.filter(student_number=params["student_number"])
         if params.get("lrn"):
@@ -150,6 +189,25 @@ class StudentViewSet(viewsets.ModelViewSet):
             )
             queryset = queryset.exclude(student_id__in=list(covered))
 
+        # ?school_level= / ?grade_level= [&school_year=] -- students placed at
+        # that level or grade: a live enrollment matching it, in that school
+        # year when one is given. The Requirements page has always sent both,
+        # but nothing here read them, so its Level and Grade filters changed
+        # nothing and every student was listed whatever was picked.
+        school_level = (params.get("school_level") or "").strip()
+        grade_level = (params.get("grade_level") or "").strip()
+        if school_level or grade_level:
+            from accounts.enrollment_mirror import EnrollmentMirror
+            placed = EnrollmentMirror.objects.filter(enrollment_status__in=LIVE_ENROLLMENT_STATUSES)
+            if school_level:
+                placed = placed.filter(school_level=school_level)
+            if grade_level:
+                placed = placed.filter(grade_level=grade_level)
+            placed_year = (params.get("school_year") or "").strip()
+            if placed_year:
+                placed = placed.filter(school_year=placed_year)
+            queryset = queryset.filter(student_id__in=placed.values("student_id"))
+
         # accounting keeps roster-wide access (see get_serializer_class --
         # it gets a reduced field set instead, not a filtered queryset: any
         # student could need an invoice, so scoping by teacher-style roster
@@ -164,6 +222,91 @@ class StudentViewSet(viewsets.ModelViewSet):
         if getattr(self.request.user, "role", None) == "accounting":
             return StudentBillingSummarySerializer
         return super().get_serializer_class()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Deleting is for a record created by mistake -- a duplicate
+        registration -- before the learner was ever enrolled.
+
+        It used to delete anyone. The database cascades a student to their
+        enrollments and from there to grades, score entries and narrative
+        reports, so a learner with grades but no attendance yet was erased
+        outright, permanent record included; one with attendance or an invoice
+        hit a foreign key at commit and got a 500 instead. School records have
+        to be kept: a learner who leaves is marked Transferred, Dropped or
+        Inactive, which keeps their history attached to their name.
+        """
+        student = self.get_object()
+        from accounts.enrollment_mirror import EnrollmentMirror
+        if EnrollmentMirror.objects.filter(student_id=student.pk).exists():
+            return Response(
+                {
+                    "detail": (
+                        f"{student.first_name} {student.last_name} has enrollment history, so "
+                        "this record can't be deleted -- school records have to be kept. "
+                        "Change their status to Transferred, Dropped or Inactive instead."
+                    ),
+                    "code": "student_has_history",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=["post"], url_path="mark-graduated")
+    def mark_graduated(self, request):
+        """
+        POST /api/students/mark-graduated/  {"student_ids": [..]}
+
+        Marks learners who finished Grade 12 as graduated. Nothing else ever
+        set that status, so every Grade 12 completer stayed `active` for good
+        and turned up on the "not yet placed" worklist every year after.
+
+        Only a learner who is still active, has a completed Grade 12
+        2nd-semester enrollment and holds no enrolled or pending row is
+        changed; everyone else comes back under `skipped` with the reason.
+        """
+        raw_ids = request.data.get("student_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return Response({"detail": "student_ids must be a non-empty list."}, status=400)
+        try:
+            ids = {int(i) for i in raw_ids}
+        except (TypeError, ValueError):
+            return Response({"detail": "student_ids must be whole numbers."}, status=400)
+
+        from accounts.enrollment_mirror import EnrollmentMirror
+        rows = EnrollmentMirror.objects.filter(student_id__in=ids)
+        finished = set(
+            rows.filter(grade_level="Grade 12", semester="2nd", enrollment_status="completed")
+            .values_list("student_id", flat=True)
+        )
+        still_placed = set(
+            rows.filter(enrollment_status__in=LIVE_ENROLLMENT_STATUSES)
+            .values_list("student_id", flat=True)
+        )
+        statuses = dict(Student.objects.filter(pk__in=ids).values_list("student_id", "status"))
+
+        graduated, skipped = [], []
+        for sid in sorted(ids):
+            if sid not in statuses:
+                reason = "No such student."
+            elif statuses[sid] != "active":
+                reason = f"Already marked {statuses[sid]}."
+            elif sid not in finished:
+                reason = "Has not completed Grade 12 (2nd semester)."
+            elif sid in still_placed:
+                reason = "Still has an enrolled or pending enrollment."
+            else:
+                graduated.append(sid)
+                continue
+            skipped.append({"student_id": sid, "reason": reason})
+
+        if graduated:
+            # updated_at by hand: .update() skips auto_now, and an edit form
+            # opened before this must see that the record changed under it.
+            Student.objects.filter(pk__in=graduated, status="active").update(
+                status="graduated", updated_at=timezone.now(),
+            )
+        return Response({"graduated": graduated, "skipped": skipped})
 
     @action(detail=False, methods=["post"], url_path="bulk-create")
     def bulk_create(self, request):
@@ -291,6 +434,9 @@ class StudentViewSet(viewsets.ModelViewSet):
                     .values_list("student_id", flat=True)
                 )
                 Student.objects.filter(household_id=absorbed_id).update(household_id=household_id)
+                # Empty now, and its details were merged above. Leaving it
+                # behind is how households with nobody in them built up.
+                Household.objects.filter(pk=absorbed_id).delete()
             else:
                 moved = []
                 for person in (student, sibling):
@@ -315,16 +461,34 @@ class StudentViewSet(viewsets.ModelViewSet):
         """
         POST /api/students/{id}/unlink-sibling/
 
-        Removes this student from their household, which is what "they aren't
-        siblings after all" means when the link is derived. The household row
-        is left in place for whoever remains in it.
+        Moves this student out of the household they share, which is what
+        "they aren't siblings after all" means when the link is derived. The
+        household row stays with whoever remains in it.
+
+        The student leaves with their own copy of the household's details.
+        Clearing their household_id, as this used to, dropped the parents'
+        marital status, living arrangement and 4Ps membership from their record
+        entirely -- facts about their family that didn't stop being true
+        because a sibling link was wrong.
         """
         student = self.get_object()
         if not student.household_id:
             return Response({"detail": "This student isn't linked to a household."}, status=400)
+        if not Student.objects.filter(household_id=student.household_id).exclude(pk=student.pk).exists():
+            return Response(
+                {"detail": f"{student.first_name} has no siblings recorded in this household, so there is nothing to unlink."},
+                status=400,
+            )
 
-        Student.objects.filter(pk=student.pk).update(household_id=None)
-        return Response({"detail": "Student removed from the household."})
+        with transaction.atomic():
+            source = Household.objects.filter(pk=student.household_id).first()
+            details = {f: getattr(source, f) for f in _HOUSEHOLD_MERGE_FIELDS} if source else {}
+            own = Household.objects.create(**details)
+            Student.objects.filter(pk=student.pk).update(household_id=own.household_id)
+        return Response({
+            "detail": "Removed from the siblings' household. Their family details were kept on their own record.",
+            "household_id": own.household_id,
+        })
 
 
 class HouseholdViewSet(viewsets.ModelViewSet):
@@ -334,8 +498,8 @@ class HouseholdViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        student_id = self.request.query_params.get("student")
-        if student_id:
+        student_id = _int_param(self.request.query_params, "student")
+        if student_id is not None:
             queryset = queryset.filter(student__student_id=student_id)
         # accounting keeps access here (unlike the other viewsets below):
         # is_4ps_beneficiary / parent_marital_status / living_arrangement
@@ -347,7 +511,8 @@ class HouseholdViewSet(viewsets.ModelViewSet):
 
 
 class GuardianViewSet(viewsets.ModelViewSet):
-    queryset = Guardian.objects.all()
+    # select_related: every row serializes student_name.
+    queryset = Guardian.objects.select_related("student").order_by("guardian_id")
     serializer_class = GuardianSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -358,18 +523,79 @@ class GuardianViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         params = self.request.query_params
 
-        if params.get("student_id"):
-            queryset = queryset.filter(student_id=params["student_id"])
+        student_id = _int_param(params, "student_id")
+        if student_id is not None:
+            queryset = queryset.filter(student_id=student_id)
         if params.get("relationship"):
             queryset = queryset.filter(relationship=params["relationship"])
         if params.get("is_primary_contact") in ["true", "false"]:
             queryset = queryset.filter(is_primary_contact=params["is_primary_contact"] == "true")
-        if params.get("user_id"):
-            queryset = queryset.filter(user_id=params["user_id"])
+        user_id = _int_param(params, "user_id")
+        if user_id is not None:
+            queryset = queryset.filter(user_id=user_id)
         if params.get("user_id__in"):
-            ids = [v.strip() for v in params["user_id__in"].split(",") if v.strip()]
-            queryset = queryset.filter(user_id__in=ids)
+            queryset = queryset.filter(user_id__in=_int_list_param(params, "user_id__in"))
         return _scope_to_teacher_roster(queryset, self.request.user)
+
+    # ── One primary contact per student ──────────────────────────────────────
+    # Marking a guardian primary demotes whoever held it, in one transaction.
+    # Refusing instead broke the edit form, which saves guardians one request
+    # at a time in list order: moving the star upward was refused while the
+    # guardian below still held it, halfway through a save. The demotion runs
+    # first because uq_guardian_primary_per_student allows only one.
+
+    def _demote_other_primaries(self, serializer):
+        if not serializer.validated_data.get("is_primary_contact"):
+            return
+        instance = serializer.instance
+        student = serializer.validated_data.get("student") or getattr(instance, "student", None)
+        others = Guardian.objects.filter(student=student, is_primary_contact=True)
+        if instance is not None:
+            others = others.exclude(pk=instance.pk)
+        others.update(is_primary_contact=False)
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            self._demote_other_primaries(serializer)
+            serializer.save()
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            self._demote_other_primaries(serializer)
+            serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="link-account")
+    def link_account(self, request, pk=None):
+        """
+        POST /api/guardians/{id}/link-account/  {"user_id": N}   (null unlinks)
+
+        Gives this guardian's parent-portal login access to the student.
+        `user_id` is read-only on the plain guardian endpoints, which is right
+        -- it is the one key the parent portal scopes by -- but the Link
+        account screen kept PATCHing it there, got a 200 back with the field
+        silently ignored, and told staff it had linked. This is where a person
+        links by hand, and it checks the target: it must exist, be a
+        parent/guardian account, and not be deactivated.
+        """
+        guardian = self.get_object()
+        raw = request.data.get("user_id")
+        if raw in (None, ""):
+            user_id = None
+        else:
+            try:
+                user_id = int(raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "user_id must be a whole number.", "user_id": ["Must be a whole number."]},
+                    status=400,
+                )
+            problem = guardian_account_problem(user_id)
+            if problem:
+                return Response({"detail": problem, "user_id": [problem]}, status=400)
+
+        Guardian.objects.filter(pk=guardian.pk).update(user_id=user_id)
+        guardian.user_id = user_id
+        return Response(self.get_serializer(guardian).data)
 
 
 class SiblingViewSet(viewsets.ModelViewSet):
@@ -379,8 +605,8 @@ class SiblingViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        student_id = self.request.query_params.get("student_id")
-        if student_id:
+        student_id = _int_param(self.request.query_params, "student_id")
+        if student_id is not None:
             queryset = queryset.filter(student_id=student_id)
         return _scope_to_teacher_roster(queryset, self.request.user)
 
@@ -392,13 +618,17 @@ class PreviousSchoolViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        student_id = self.request.query_params.get("student_id")
-        if student_id:
+        student_id = _int_param(self.request.query_params, "student_id")
+        if student_id is not None:
             queryset = queryset.filter(student_id=student_id)
         return _scope_to_teacher_roster(queryset, self.request.user)
 
 
-class RequirementTypeViewSet(viewsets.ModelViewSet):
+class RequirementTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    # Read-only. requirement_types belongs to enrollment-service, which is
+    # where the app manages it; this copy used to accept writes too, and
+    # deleting a type students had already submitted answered 500 (the
+    # RESTRICT foreign key) instead of anything useful.
     queryset = RequirementType.objects.all()
     serializer_class = RequirementTypeSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
@@ -432,10 +662,12 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         params = self.request.query_params
 
-        if params.get("student_id"):
-            queryset = queryset.filter(student_id=params["student_id"])
-        if params.get("requirement_type_id"):
-            queryset = queryset.filter(requirement_type_id=params["requirement_type_id"])
+        student_id = _int_param(params, "student_id")
+        if student_id is not None:
+            queryset = queryset.filter(student_id=student_id)
+        requirement_type_id = _int_param(params, "requirement_type_id")
+        if requirement_type_id is not None:
+            queryset = queryset.filter(requirement_type_id=requirement_type_id)
         if params.get("is_submitted") in ["true", "false"]:
             queryset = queryset.filter(is_submitted=params["is_submitted"] == "true")
         return _scope_to_teacher_roster(queryset, self.request.user)

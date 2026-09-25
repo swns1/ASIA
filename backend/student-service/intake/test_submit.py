@@ -47,6 +47,11 @@ def _valid_student_payload(**overrides):
     return payload
 
 
+# Every submission needs at least one guardian now (require_a_guardian), so
+# a payload meant to be valid carries one.
+PARENT = {"relationship": "mother", "full_name": "Maria Dela Cruz", "is_primary_contact": True}
+
+
 # ── Field whitelisting — the security-critical assertion ──────────────────
 #
 # BulkStudentSerializer/BulkGuardianSerializer are exclude-based and would
@@ -59,6 +64,7 @@ def _valid_student_payload(**overrides):
 class TestWhitelisting:
     def test_dangerous_student_fields_are_dropped(self):
         payload = {
+            "guardians": [dict(PARENT)],
             "student": _valid_student_payload(
                 student_number="2099-9999",  # would claim a permanent, unique id
                 status="graduated",           # would falsify the record's state
@@ -97,17 +103,17 @@ class TestWhitelisting:
     def test_lrn_is_optional(self):
         """Nursery/kindergarten applicants have no DepEd-assigned LRN yet —
         see the plan's decision 7."""
-        payload = {"student": _valid_student_payload(lrn="")}
+        payload = {"guardians": [dict(PARENT)], "student": _valid_student_payload(lrn="")}
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
     def test_lrn_is_optional_when_null(self):
-        payload = {"student": _valid_student_payload(lrn=None)}
+        payload = {"guardians": [dict(PARENT)], "student": _valid_student_payload(lrn=None)}
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
     def test_twelve_digit_lrn_is_accepted(self):
-        payload = {"student": _valid_student_payload(lrn="136789012345")}
+        payload = {"guardians": [dict(PARENT)], "student": _valid_student_payload(lrn="136789012345")}
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
@@ -116,7 +122,7 @@ class TestWhitelisting:
         enforced only in the browser, so a direct POST to this public
         endpoint could store a malformed national learner identifier."""
         for bad in ("13678", "1367890123456", "1367-8901-2345", "13678901234X"):
-            payload = {"student": _valid_student_payload(lrn=bad)}
+            payload = {"guardians": [dict(PARENT)], "student": _valid_student_payload(lrn=bad)}
             serializer = ApplicantSubmissionSerializer(data=payload)
             assert not serializer.is_valid(), bad
             assert "lrn" in serializer.errors["student"], bad
@@ -128,7 +134,7 @@ class TestWhitelisting:
         in intake/serializers.py). This test would fail loudly if that
         override were ever reverted, since nothing here touches a real
         `students` table for it to check against."""
-        payload = {"student": _valid_student_payload(email="taken@example.com")}
+        payload = {"guardians": [dict(PARENT)], "student": _valid_student_payload(email="taken@example.com")}
         serializer = ApplicantSubmissionSerializer(data=payload)
         assert serializer.is_valid(), serializer.errors
 
@@ -193,7 +199,7 @@ def _draft(invite, application_id=1, payload=None):
     application = StudentApplication(
         student_application_id=application_id,
         status=StudentApplication.DRAFT,
-        payload_json=payload or {"student": _valid_student_payload()},
+        payload_json=payload or {"guardians": [dict(PARENT)], "student": _valid_student_payload()},
     )
     application.invite = invite
     return application
@@ -238,7 +244,7 @@ class TestApplySubmitView:
         """A double-tap or a retried request on flaky mobile data must not
         create a second application — see the plan's concurrency table."""
         invite = _invite()
-        application = _draft(invite, payload={"student": _valid_student_payload()})
+        application = _draft(invite, payload={"guardians": [dict(PARENT)], "student": _valid_student_payload()})
         application.status = StudentApplication.SUBMITTED  # already submitted
         request = self._post_with_token(invite, application)
 
@@ -335,6 +341,7 @@ class TestApplyingFor:
         registrar gets on approval was silently always empty."""
         invite = _invite()
         application = _draft(invite, payload={
+            "guardians": [dict(PARENT)],
             "student": _valid_student_payload(),
             "applying_for": {"grade_level": "Grade 7", "school_level": "junior_highschool"},
         })
@@ -355,6 +362,7 @@ class TestApplyingFor:
         straight to submit cannot smuggle in a section or a status."""
         invite = _invite()
         application = _draft(invite, payload={
+            "guardians": [dict(PARENT)],
             "student": _valid_student_payload(),
             "applying_for": {
                 "grade_level": "Grade 11",
@@ -386,3 +394,38 @@ class TestApplyingFor:
         assert "school_level" not in student
         assert student == {"first_name": "Juan", "last_name": "Dela Cruz"}
         assert (household, guardians, siblings, schools) == (None, [], [], [])
+
+
+class TestGuardianRule:
+    """At least one guardian, one primary contact -- the same rule the counter
+    form enforces (students.serializers.require_a_guardian)."""
+
+    def test_a_submission_with_no_guardian_is_refused(self):
+        serializer = ApplicantSubmissionSerializer(data={"student": _valid_student_payload()})
+        assert not serializer.is_valid()
+        assert "guardians" in serializer.errors
+
+    def test_the_first_guardian_becomes_primary_when_none_is_marked(self):
+        serializer = ApplicantSubmissionSerializer(data={
+            "student": _valid_student_payload(),
+            "guardians": [
+                {"relationship": "mother", "full_name": "Maria", "is_primary_contact": False},
+                {"relationship": "father", "full_name": "Jose"},
+            ],
+        })
+        assert serializer.is_valid(), serializer.errors
+        flags = [g.get("is_primary_contact", False) for g in serializer.validated_data["guardians"]]
+        assert flags == [True, False]
+
+
+class TestBlankEmail:
+    """A blank email is stored as null. As \"\" it collided on students.email's
+    unique index with the first student approved without one, and every later
+    approval failed with a 500."""
+
+    def test_blank_email_becomes_null(self):
+        serializer = ApplicantSubmissionSerializer(
+            data={"guardians": [dict(PARENT)], "student": _valid_student_payload(email="  ")}
+        )
+        assert serializer.is_valid(), serializer.errors
+        assert serializer.validated_data["student"]["email"] is None

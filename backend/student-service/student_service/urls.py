@@ -14,7 +14,6 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
 from django.urls import path, include
 from shared.health import health_check
 
@@ -24,8 +23,12 @@ from shared.health import health_check
 # DEBUG was hardcoded True). Documents are served instead through the
 # StudentRequirementSubmissionViewSet.file action, gated by a short-lived
 # signed token (see backend/shared/uploads.py).
+#
+# No Django admin either. It was mounted at /admin/ but could never be used:
+# the accounts.User stub it logs in against has no manager for natural-key
+# lookups or password checks, so every login attempt answered 500. Staff
+# manage everything through the SPA.
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('health/', health_check, name='health-check'),
     # Before students.urls: both mount under api/ via include(), and Django
     # falls through to the next include() when nothing in the first one

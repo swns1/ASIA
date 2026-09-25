@@ -162,8 +162,11 @@ export default function App() {
             Deliberately outside the shell: these are single-task flows that
             have never shown the sidebar, so the user isn't invited to navigate
             away mid-entry and lose their work. */}
-        <Route path="/students/new"           element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
-        <Route path="/students/:id/edit"      element={<P roles={STAFF_ALL}><StudentFormPage /></P>} />
+        {/* ACADEMIC_STAFF: the server refuses a student save from any other
+            role, so teachers and accounting used to fill in a whole form for
+            nothing. */}
+        <Route path="/students/new"           element={<P roles={ACADEMIC_STAFF}><StudentFormPage /></P>} />
+        <Route path="/students/:id/edit"      element={<P roles={ACADEMIC_STAFF}><StudentFormPage /></P>} />
         <Route path="/enrollments/new"        element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
         <Route path="/enrollments/:id/edit"   element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
 

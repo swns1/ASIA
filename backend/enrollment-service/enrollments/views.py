@@ -942,6 +942,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                     "enrollment_id":     last.enrollment_id,
                     "school_year":       last.school_year,
                     "grade_level":       last.grade_level,
+                    # Tells a finished Grade 12 (2nd semester) apart from
+                    # one mid-year: the page offers "mark graduated" for it.
+                    "semester":          last.semester,
                     "enrollment_status": last.enrollment_status,
                 } if last else None,
             })

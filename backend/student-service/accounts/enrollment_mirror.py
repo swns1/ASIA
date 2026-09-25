@@ -18,6 +18,9 @@ class EnrollmentMirror(models.Model):
     grade_level = models.CharField(max_length=20)
     section = models.CharField(max_length=50)
     strand = models.CharField(max_length=50, null=True, blank=True)
+    # Senior high only (1st/2nd); used to tell a finished Grade 12 apart from
+    # one halfway through the year -- see StudentViewSet.mark_graduated.
+    semester = models.CharField(max_length=20, null=True, blank=True)
     enrollment_status = models.CharField(max_length=20)
 
     class Meta:

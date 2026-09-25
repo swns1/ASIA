@@ -375,6 +375,11 @@ export default function StudentFormPage() {
       return { step: 1, message: "4Ps ID is required when 4Ps beneficiary is enabled." };
 
     // Step 3 — Guardians
+    // At least one: the parent portal account is created from a guardian's
+    // email, and SF1 prints the parent or guardian's name. The server
+    // refuses a registration without one too.
+    if (guardians.length === 0)
+      return { step: 2, message: "Add at least one parent or guardian." };
     for (let i = 0; i < guardians.length; i++) {
       if (!guardians[i].full_name?.trim())
         return { step: 2, message: `Guardian ${i + 1} has no name — fill it in or remove it.` };
@@ -409,30 +414,47 @@ export default function StudentFormPage() {
       // student payload — KEEP updated_at so the optimistic-lock check passes
       const studentPayload = nullify(student, nullableStudentFields);
 
+      // Nobody starred: the first guardian becomes the primary contact, the
+      // same default the server applies to a new registration.
+      const guardiansToSave = guardians.some((g) => g.is_primary_contact)
+        ? guardians
+        : guardians.map((g, i) => (i === 0 ? { ...g, is_primary_contact: true } : g));
+
       if (id) {
         // ════════════════════════════════════════════════════════
         // EDIT MODE
         // ════════════════════════════════════════════════════════
 
         // 1) Update student (updated_at is included in studentPayload from getStudent)
-        await updateStudent(id, studentPayload);
+        let saved = await updateStudent(id, studentPayload);
 
         // 2) Household — create or update depending on whether one already exists
         if (householdHasContent(household)) {
           const hhPayload = nullify({ ...household }, nullableHouseholdFields);
-          if (householdId) {
-            await updateHousehold(householdId, hhPayload);
+          let hhId = householdId;
+          if (hhId) {
+            await updateHousehold(hhId, hhPayload);
           } else {
             const created = await createHousehold(hhPayload);
-            const createdId = created.household_id || created.id || null;
-            setHouseholdId(createdId);
-            // Link the new household to the student
-            if (createdId) await updateStudent(id, { ...studentPayload, household: createdId });
+            hhId = created.household_id || created.id || null;
+            setHouseholdId(hhId);
+          }
+          // Link it with the updated_at the save above just returned. Re-sending
+          // the one loaded with the form was refused as "updated by another
+          // user" -- the first save had just changed it -- which left the new
+          // household attached to nobody and every retry failing the same way.
+          if (hhId && saved.household !== hhId) {
+            saved = await updateStudent(id, { ...studentPayload, updated_at: saved.updated_at, household: hhId });
           }
         }
+        // Keep the form's copy current, so pressing Save again after a later
+        // step fails isn't refused by the same check.
+        setStudent((prev) => ({ ...prev, updated_at: saved.updated_at, household: saved.household }));
 
-        // 3) Guardians — update existing, create new, delete removed
-        for (const g of guardians) {
+        // 3) Guardians — update existing, create new, delete removed. Starring
+        // a guardian demotes the previous primary server-side, so the order
+        // these are saved in no longer matters.
+        for (const g of guardiansToSave) {
           const payload = nullify({ ...g, student: id }, nullableGuardianFields);
           if (g.guardian_id) {
             await updateGuardian(g.guardian_id, payload);
@@ -511,7 +533,7 @@ export default function StudentFormPage() {
           household: householdHasContent(household)
             ? nullify(household, nullableHouseholdFields)
             : null,
-          guardians: guardians.filter((g) => g.full_name?.trim()).map((g) => nullify(g, nullableGuardianFields)),
+          guardians: guardiansToSave.filter((g) => g.full_name?.trim()).map((g) => nullify(g, nullableGuardianFields)),
           siblings: siblings
             .filter((s) => s.full_name?.trim())
             .map((s) => ({ full_name: s.full_name, age: s.age ? parseInt(s.age) : null })),

@@ -28,7 +28,8 @@ import {
   completeSection,
   getUnplacedStudents,
 } from "../api/enrollmentApi";
-import { getStudents as apiGetStudents } from "../api/studentApi";
+import { getStudents as apiGetStudents, markStudentsGraduated } from "../api/studentApi";
+import toast from "react-hot-toast";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
@@ -1151,6 +1152,14 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
+/** Completed the 2nd semester of Grade 12: finished, not waiting for a class. */
+function isGrade12Finisher(st) {
+  const last = st.last_enrollment;
+  return Boolean(
+    last && last.grade_level === "Grade 12" && last.semester === "2nd" && last.enrollment_status === "completed",
+  );
+}
+
 export default function EnrollmentsPage() {
   usePageTitle("Enrollments");
   const navigate = useNavigate();
@@ -1169,6 +1178,8 @@ export default function EnrollmentsPage() {
   // Active students with no enrolled/pending row in the selected year.
   const [unplaced,        setUnplaced]        = useState(null);
   const [unplacedOpen,    setUnplacedOpen]    = useState(false);
+  const [unplacedReload,  setUnplacedReload]  = useState(0);
+  const [markingGraduated, setMarkingGraduated] = useState(false);
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
 
@@ -1211,7 +1222,29 @@ export default function EnrollmentsPage() {
       .then((d) => { if (!cancelled) setUnplaced(d); })
       .catch(() => { if (!cancelled) setUnplaced(null); });
     return () => { cancelled = true; };
-  }, [token, canManage, schoolYear]);
+  }, [token, canManage, schoolYear, unplacedReload]);
+
+  // Learners who finished Grade 12 are not waiting for a class -- they have
+  // graduated. Nothing used to record that, so they stayed "active" and sat
+  // on this list every year; they get "Mark graduated" instead of "Enroll".
+  const finishedGrade12 = (unplaced?.results ?? []).filter(isGrade12Finisher);
+
+  async function handleMarkGraduated(studentIds) {
+    setMarkingGraduated(true);
+    try {
+      const res = await markStudentsGraduated(studentIds);
+      const done = res.graduated.length;
+      if (done) toast.success(`${done} student${done === 1 ? "" : "s"} marked graduated.`);
+      if (res.skipped.length) {
+        toast.error(`${res.skipped.length} not changed: ${res.skipped[0].reason}`, { duration: 8000 });
+      }
+      setUnplacedReload((k) => k + 1);
+    } catch (e) {
+      toast.error(e.message || "Could not mark them graduated.");
+    } finally {
+      setMarkingGraduated(false);
+    }
+  }
 
   // Reset grade when level changes — but not on the initial mount, so a URL-seeded
   // grade_level (alongside school_level) isn't immediately wiped out.
@@ -1356,15 +1389,28 @@ export default function EnrollmentsPage() {
                       <strong>{unplaced.count}</strong> active student{unplaced.count !== 1 ? "s have" : " has"} no enrollment in SY {unplaced.school_year}.
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={unplacedOpen ? "ti-chevron-up" : "ti-chevron-down"}
-                    aria-expanded={unplacedOpen}
-                    onClick={() => setUnplacedOpen((v) => !v)}
-                  >
-                    {unplacedOpen ? "Hide" : "Show"}
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {finishedGrade12.length > 1 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon="ti-certificate"
+                        loading={markingGraduated}
+                        onClick={() => handleMarkGraduated(finishedGrade12.map((st) => st.student_id))}
+                      >
+                        Mark {finishedGrade12.length} Grade 12 finishers graduated
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={unplacedOpen ? "ti-chevron-up" : "ti-chevron-down"}
+                      aria-expanded={unplacedOpen}
+                      onClick={() => setUnplacedOpen((v) => !v)}
+                    >
+                      {unplacedOpen ? "Hide" : "Show"}
+                    </Button>
+                  </div>
                 </div>
                 {unplacedOpen && (
                   <ul className="max-h-72 divide-y divide-neutral-100 overflow-y-auto border-t border-neutral-100">
@@ -1378,14 +1424,26 @@ export default function EnrollmentsPage() {
                               : "No enrollment on record"}
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon="ti-clipboard-plus"
-                          onClick={() => navigate(`/enrollments/new?student=${st.student_id}&school_year=${encodeURIComponent(unplaced.school_year)}`)}
-                        >
-                          Enroll
-                        </Button>
+                        {isGrade12Finisher(st) ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon="ti-certificate"
+                            loading={markingGraduated}
+                            onClick={() => handleMarkGraduated([st.student_id])}
+                          >
+                            Mark graduated
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon="ti-clipboard-plus"
+                            onClick={() => navigate(`/enrollments/new?student=${st.student_id}&school_year=${encodeURIComponent(unplaced.school_year)}`)}
+                          >
+                            Enroll
+                          </Button>
+                        )}
                       </li>
                     ))}
                   </ul>

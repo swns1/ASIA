@@ -12,6 +12,7 @@ import { StatusBadge as StudentStatusBadge } from "../components/ui/Badge";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getStudent, getStudents } from "../api/studentApi";
+import { useSchoolYear } from "../context/SchoolYearContext";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 
 
@@ -67,6 +68,10 @@ export default function RequirementsPage() {
   // Filter state
   const [levelFilter, setLevelFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
+  // Level and grade are where a learner is placed, which is per school year:
+  // the filters list students enrolled (or pending) there in the year picked
+  // in the header.
+  const { schoolYear } = useSchoolYear();
   const gradeOptions = GRADE_LEVELS_BY_LEVEL[levelFilter] ?? ["All Grades"];
 
   // Reset grade when level changes
@@ -134,6 +139,7 @@ export default function RequirementsPage() {
       page_size: RECENT_PAGE_SIZE,
       school_level: levelFilter,
       grade_level: gradeFilter,
+      ...((levelFilter || gradeFilter) && schoolYear ? { school_year: schoolYear } : {}),
     })
       .then((data) => {
         setRecentStudents(data?.results ?? []);
@@ -142,9 +148,9 @@ export default function RequirementsPage() {
       })
       .catch(() => {})
       .finally(() => setRecentStudentsLoading(false));
-  }, [levelFilter, gradeFilter]);
+  }, [levelFilter, gradeFilter, schoolYear]);
 
-  useEffect(() => { fetchRecentStudents(1); }, [levelFilter, gradeFilter]);
+  useEffect(() => { fetchRecentStudents(1); }, [fetchRecentStudents]);
 
   // Close dropdown on outside click
   useEffect(() => {

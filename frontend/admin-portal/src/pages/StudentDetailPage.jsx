@@ -11,13 +11,13 @@ import {
   linkSibling,
   unlinkSibling,
 } from "../api/studentApi";
-import { getGuardiansByStudent, patchGuardian, getGuardiansByUserIds } from "../api/guardianApi";
+import { getGuardiansByStudent, linkGuardianAccount, getGuardiansByUserIds } from "../api/guardianApi";
 import { getSiblingsByStudent } from "../api/siblingApi";
 import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudentLedger } from "../api/billingApi";
 import { getUsers, createUser } from "../api/identityApi";
-import { getCurrentUser, hasAnyRole, isAdminRole, BILLING_ROLES } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, isAdminRole, ACADEMIC_STAFF, BILLING_ROLES } from "../utils/auth";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
@@ -61,7 +61,11 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
   useEffect(() => {
     getUsers({ role: "guardian" })
       .then(async (data) => {
-        const guardianUsers = (Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian");
+        // A deactivated account can't sign in, and the server refuses to link
+        // one -- so it is only listed while it is the one already linked here.
+        const guardianUsers = (Array.isArray(data) ? data : data?.results ?? [])
+          .filter((u) => u.role === "guardian")
+          .filter((u) => u.is_active !== false || u.user_id === guardian.user_id);
         setUsers(guardianUsers);
         if (guardianUsers.length === 0 && canCreateAccount) setMode("create");
         try {
@@ -77,13 +81,13 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
       })
       .catch((e) => setError(e.message || "Failed to load guardian accounts."))
       .finally(() => setLoading(false));
-  }, [guardian.guardian_id, canCreateAccount]);
+  }, [guardian.guardian_id, guardian.user_id, canCreateAccount]);
 
   async function handleSave(unlink = false) {
     setSaving(true); setError("");
     try {
       const value = unlink ? null : (selected ? parseInt(selected, 10) : null);
-      const updated = await patchGuardian(guardian.guardian_id, { user_id: value });
+      const updated = await linkGuardianAccount(guardian.guardian_id, value);
       toast.success(unlink ? "Account unlinked." : "Guardian account linked.");
       onLinked(updated);
       onClose();
@@ -117,7 +121,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
     }
 
     try {
-      const updated = await patchGuardian(guardian.guardian_id, { user_id: created.user_id });
+      const updated = await linkGuardianAccount(guardian.guardian_id, created.user_id);
       toast.success(`Account created for ${created.name} and linked.`);
       onLinked(updated);
       onClose();
@@ -504,6 +508,9 @@ export default function StudentDetailPage() {
   const [showLinkSibling, setShowLinkSibling]   = useState(false);
 
   const canLink = hasAnyRole(getCurrentUser(), CAN_LINK_ROLES);
+  // Only these roles can save a student; teachers and accounting were shown
+  // the Edit button and a form whose every save the server refused.
+  const canEdit = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   // getStudentLedger hits a billing-service endpoint that's BILLING_ROLES-only
   // even though this route allows every staff role — skip the doomed fetch
   // for teacher/registrar and show an accurate message instead of "Failed to
@@ -554,8 +561,8 @@ export default function StudentDetailPage() {
 
   async function handleUnlinkSibling() {
     try {
-      await unlinkSibling(id);
-      toast.success("Removed from the household.");
+      const res = await unlinkSibling(id);
+      toast.success(res?.detail || "Removed from the household.");
       await reloadSiblings();
     } catch (e) {
       toast.error(e.message || "Could not unlink.");
@@ -605,7 +612,7 @@ export default function StudentDetailPage() {
               { label: loading ? "Loading…" : fullName },
             ]}
             actions={
-              !loading && student && (
+              !loading && student && canEdit && (
                 <Button
                   variant="secondary"
                   icon="ti-pencil"

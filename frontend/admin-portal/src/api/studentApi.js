@@ -6,7 +6,7 @@ const studentClient = createApiClient({
   timeout: 10000,
 });
 
-export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "", unenrolled = "" } = {}) {
+export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "", school_year = "", unenrolled = "" } = {}) {
   const res = await studentClient.get("/students/", {
     params: {
       page,
@@ -17,6 +17,8 @@ export async function getStudents({ page = 1, page_size, search = "", status = "
       ...(ordering     && { ordering }),
       ...(school_level && { school_level }),
       ...(grade_level  && { grade_level }),
+      // Narrows school_level/grade_level to placements in that year.
+      ...(school_year  && { school_year }),
       // A school year: students with no live enrollment for it.
       ...(unenrolled   && { unenrolled }),
     },
@@ -47,6 +49,15 @@ export async function updateStudent(id, payload) {
 
 export async function updateStudentStatus(id, status) {
   const res = await studentClient.patch(`/students/${id}/`, { status });
+  return res.data;
+}
+
+// Marks Grade 12 completers as graduated. The server only changes a learner
+// who is active, finished Grade 12 (2nd semester) and holds no enrolled or
+// pending row; the rest come back in `skipped` with the reason.
+// -> { graduated: [ids], skipped: [{ student_id, reason }] }
+export async function markStudentsGraduated(studentIds) {
+  const res = await studentClient.post("/students/mark-graduated/", { student_ids: studentIds });
   return res.data;
 }
 

@@ -171,13 +171,18 @@ class TestLinkSibling:
 
 
 class TestUnlinkSibling:
-    def test_unlinking_clears_the_household(self):
+    def test_unlinking_moves_the_student_to_a_household_of_their_own(self):
+        # Not household_id=None: that dropped the family's details from the
+        # student's record. See test_qa_fixes.TestUnlinkSibling for the copy.
         student = _student(pk=1, household_id=3)
         view = _view(student)
-        with patch("students.views.Student") as student_model:
+        with _no_db_transaction(), patch("students.views.Student") as student_model, \
+                patch("students.views.Household") as household_model:
+            student_model.objects.filter.return_value.exclude.return_value.exists.return_value = True
+            household_model.objects.create.return_value = SimpleNamespace(household_id=8)
             response = view.unlink_sibling(view.request, pk=1)
         assert response.status_code == 200
-        student_model.objects.filter.return_value.update.assert_called_once_with(household_id=None)
+        student_model.objects.filter.return_value.update.assert_called_once_with(household_id=8)
 
     def test_unlinking_a_student_with_no_household_is_a_400(self):
         view = _view(_student(household_id=None))
@@ -262,6 +267,18 @@ class TestAbsorbingASecondHousehold:
         assert "married" in conflicts[0] and "separated" in conflicts[0]
         # Nothing was overwritten on the survivor.
         household_model.objects.filter.return_value.update.assert_not_called()
+
+    def test_the_emptied_household_is_removed(self):
+        """Everyone moved out of it and its details were merged, so the row
+        is deleted rather than left behind with nobody in it."""
+        student_model = MagicMock()
+        student_model.objects.filter.return_value.values_list.return_value = [2]
+        household_model = self._households(self._blank(), self._blank())
+
+        self._link(student_model, household_model)
+
+        household_model.objects.filter.assert_any_call(pk=7)
+        household_model.objects.filter.return_value.delete.assert_called_once_with()
 
     def test_no_conflicts_key_when_the_two_agree(self):
         student_model = MagicMock()

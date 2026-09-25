@@ -35,10 +35,13 @@ puts every caller behind the throttle first.
 """
 from django.db import transaction
 from django.db.models import F
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+# DRF's, not django.shortcuts': it turns a malformed id (a non-UUID invite,
+# "abc" for an application) into a 404, where Django's raised ValueError or
+# ValidationError and answered 500.
+from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -274,7 +277,8 @@ class ApplyVerifyView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        code = (request.data.get("access_code") or "").strip()
+        body = request.data if isinstance(request.data, dict) else {}
+        code = str(body.get("access_code") or "").strip()
         ok = invite.check_access_code(code)
         invite.save(update_fields=["code_attempts", "locked_at"])
         if not ok:
@@ -329,10 +333,23 @@ class ApplyDraftView(APIView):
             ALLOWED_SIBLING_FIELDS, ALLOWED_STUDENT_FIELDS, whitelist,
         )
 
-        client_revision = request.data.get("revision")
-        raw_payload = request.data.get("payload") or {}
+        body = request.data if isinstance(request.data, dict) else {}
+        client_revision = body.get("revision")
+        raw_payload = body.get("payload") or {}
         if client_revision is None:
             return Response({"detail": "revision is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            client_revision = int(client_revision)
+        except (TypeError, ValueError):
+            return Response({"detail": "revision must be a whole number."}, status=status.HTTP_400_BAD_REQUEST)
+        # A malformed body used to reach .get() on a list, or iterate a null,
+        # and answer 500 on this public endpoint.
+        if not isinstance(raw_payload, dict):
+            return Response({"detail": "payload must be an object."}, status=status.HTTP_400_BAD_REQUEST)
+
+        def rows(key, allowed):
+            value = raw_payload.get(key)
+            return [whitelist(row, allowed) for row in value] if isinstance(value, list) else []
 
         # Best-effort whitelist on every autosave — not full serializer
         # validation, since the applicant may be mid-step with an
@@ -344,11 +361,9 @@ class ApplyDraftView(APIView):
             "student": whitelist(raw_payload.get("student"), ALLOWED_STUDENT_FIELDS),
             "household": (whitelist(raw_payload.get("household"), ALLOWED_HOUSEHOLD_FIELDS)
                           if raw_payload.get("household") else None),
-            "guardians": [whitelist(g, ALLOWED_GUARDIAN_FIELDS) for g in raw_payload.get("guardians", [])],
-            "siblings": [whitelist(s, ALLOWED_SIBLING_FIELDS) for s in raw_payload.get("siblings", [])],
-            "previous_schools": [
-                whitelist(p, ALLOWED_PREVIOUS_SCHOOL_FIELDS) for p in raw_payload.get("previous_schools", [])
-            ],
+            "guardians": rows("guardians", ALLOWED_GUARDIAN_FIELDS),
+            "siblings": rows("siblings", ALLOWED_SIBLING_FIELDS),
+            "previous_schools": rows("previous_schools", ALLOWED_PREVIOUS_SCHOOL_FIELDS),
             "applying_for": whitelist(raw_payload.get("applying_for"), ALLOWED_APPLYING_FOR_FIELDS),
         }
 
@@ -368,7 +383,15 @@ class ApplyDraftView(APIView):
             )
 
         fresh = StudentApplication.objects.get(pk=application.pk)
-        return Response({"payload": fresh.payload_json, "revision": fresh.revision})
+        # A fresh token with every save, so an applicant who keeps working
+        # never reaches the TTL (invites.issue_session_token always said this
+        # happened; nothing did it, so the session ended two hours after the
+        # code was entered however busy the applicant was).
+        return Response({
+            "payload": fresh.payload_json,
+            "revision": fresh.revision,
+            "token": invites.issue_session_token(application.invite, fresh),
+        })
 
 
 class ApplySubmitView(APIView):

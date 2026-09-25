@@ -355,9 +355,19 @@ export default function ApplicantFormPage() {
           toast("This draft was updated elsewhere — reloaded the latest version.");
         } else {
           setRevision(res.revision);
+          // Each save renews the session; without this the token from the
+          // code gate expired two hours in, however recently they saved.
+          if (res.token) setToken(res.token);
           setSaveState("saved");
         }
-      } catch {
+      } catch (err) {
+        // A refused session is not a network blip: say so now, with the way
+        // back (re-enter the code), rather than showing "couldn't save" until
+        // they reach Submit.
+        if (err.response?.data?.code === "applicant_token_invalid") {
+          setPhase("expired");
+          return;
+        }
         setSaveState("error");
       }
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -459,6 +469,8 @@ export default function ApplicantFormPage() {
     if (shapeError) return shapeError;
     if (!student.current_address?.trim()) return "Current address is required.";
     if (!student.permanent_address?.trim()) return "Permanent address is required.";
+    // Same rule as the counter form and the server: someone to contact.
+    if (!guardians.some((g) => g.full_name?.trim())) return "Please add at least one parent or guardian.";
     return null;
   };
   const validationError = validate();
@@ -502,8 +514,9 @@ export default function ApplicantFormPage() {
         return;
       }
       setRevision(saved.revision);
+      if (saved.token) setToken(saved.token);
 
-      const res = await submitApplication(inviteId, token);
+      const res = await submitApplication(inviteId, saved.token || token);
       setReference(res.reference);
       setPhase("success");
     } catch (err) {

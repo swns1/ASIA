@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from shared.uploads import download_url, file_kind_for, safe_save
-from .validators import LrnFormatMixin
+from .validators import BlankEmailAsNullMixin, LrnFormatMixin
 from .models import (
     Student,
     Household,
@@ -37,7 +37,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class StudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
+class StudentSerializer(LrnFormatMixin, BlankEmailAsNullMixin, serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
@@ -118,8 +118,9 @@ class GuardianSerializer(serializers.ModelSerializer):
         # users.user_id at an arbitrary student and hand that account the
         # child's grades, attendance, invoices and uploaded documents.
         # Linking an account is a privileged operation and belongs to
-        # accounts/guardian_provisioning.py, which validates the target -- not
-        # to a plain PATCH of this column.
+        # enrollment-service's accounts/guardian_provisioning.py or
+        # GuardianViewSet.link_account here, which both validate the target --
+        # not to a plain PATCH of this column.
         read_only_fields = ("user_id",)
 
     def get_student_name(self, obj):
@@ -129,29 +130,28 @@ class GuardianSerializer(serializers.ModelSerializer):
         parts = [s.first_name, s.middle_name, s.last_name, s.suffix]
         return " ".join(p for p in parts if p)
 
-    def validate(self, attrs):
-        if attrs.get("is_primary_contact"):
-            # A PATCH need not carry `student`, and attrs.get("student") was
-            # then None -- so this filtered on student=None, matched nothing,
-            # and let a second primary contact through on any partial update.
-            # Fall back to the row being edited.
-            student = attrs.get("student") or getattr(self.instance, "student", None)
-            existing = Guardian.objects.filter(
-                student=student,
-                is_primary_contact=True
-            )
-            if self.instance:
-                existing = existing.exclude(pk=self.instance.pk)
-            if existing.exists():
-                raise serializers.ValidationError("Only one primary guardian is allowed per student.")
-        return attrs
+    # No "only one primary contact" check here any more. Marking a guardian
+    # primary now demotes the student's previous primary contact, in the same
+    # transaction (GuardianViewSet.perform_create/perform_update), because the
+    # edit form saves guardians one request at a time in list order: moving the
+    # star to a guardian listed above the current one was refused here while
+    # the old one was still primary, halfway through a save that had already
+    # written the student and household. The database's
+    # uq_guardian_primary_per_student index still guarantees at most one.
 
 
 class BulkGuardianSerializer(serializers.ModelSerializer):
-    """Used only inside bulk-create — student is injected server-side after creation."""
+    """Used only inside bulk-create — student is injected server-side after creation.
+
+    `user_id` is excluded for the same reason GuardianSerializer makes it
+    read-only: it is the key the parent portal scopes by, so accepting it here
+    let a registration hand a brand-new child's grades, invoices and documents
+    to any existing login account. Accounts are linked through
+    GuardianViewSet.link_account or enrollment-service's provisioning, which
+    both check the target."""
     class Meta:
         model = Guardian
-        exclude = ["student"]
+        exclude = ["student", "user_id"]
 
     def validate(self, attrs):
         # Primary-contact uniqueness check is deferred to the view
@@ -263,7 +263,7 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class BulkStudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
+class BulkStudentSerializer(LrnFormatMixin, BlankEmailAsNullMixin, serializers.ModelSerializer):
     """Used only inside bulk-create — student_id, household FK, and updated_at are managed server-side."""
     class Meta:
         model = Student
@@ -305,6 +305,28 @@ class StudentBulkCreateSerializer(serializers.Serializer):
     # approval path (intake/services.py::approve_application) already did.
     siblings         = BulkSiblingSerializer(many=True, required=False, default=list)
     previous_schools = BulkPreviousSchoolSerializer(many=True, required=False, default=list)
+
+    def validate_guardians(self, value):
+        return require_a_guardian(value)
+
+
+def require_a_guardian(guardians):
+    """At least one parent or guardian, and exactly one primary contact.
+
+    Nothing used to require either: 183 of the 238 students in the local data
+    have no guardian on file. Every parent-facing feature hangs off this list --
+    the parent portal account is provisioned from a guardian with an email, and
+    SF1 prints the parent or guardian's name. When nobody is marked primary,
+    the first guardian listed becomes the primary contact rather than the
+    registration failing over a flag.
+    """
+    if not guardians:
+        raise serializers.ValidationError("Add at least one parent or guardian.")
+    if sum(1 for g in guardians if g.get("is_primary_contact")) > 1:
+        raise serializers.ValidationError("Only one primary guardian is allowed.")
+    if not any(g.get("is_primary_contact") for g in guardians):
+        guardians = [dict(guardians[0], is_primary_contact=True), *guardians[1:]]
+    return guardians
 
 
 class StudentBulkCreateResponseSerializer(serializers.Serializer):

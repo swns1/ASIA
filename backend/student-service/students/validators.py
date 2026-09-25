@@ -54,3 +54,27 @@ class LrnFormatMixin:
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
         return value
+
+
+def blank_to_none(value):
+    """"" and whitespace become None; anything else is returned as-is."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    return value
+
+
+class BlankEmailAsNullMixin:
+    """Stores a left-blank student email as NULL, never as "".
+
+    `students.email` is UNIQUE and nullable. NULLs never collide, but "" is a
+    value like any other -- so the first student saved with a blank email took
+    it, and every later one failed on the unique index. DRF can't catch that
+    as a 400: a blank string skips the field's validators, UniqueValidator
+    included, so it reached the database and came back as a 500. Most
+    applicants are children with no email, which made the second kiosk
+    approval without one fail outright. The counter form happened to send
+    null; the kiosk and any direct API caller sent "".
+    """
+
+    def validate_email(self, value):
+        return blank_to_none(value)
