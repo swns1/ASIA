@@ -1,7 +1,9 @@
 /**
  * DashboardPage — who gets which notification.
  *
- * The bell should only list what the viewer can act on. Approving an
+ * The bell should only list what the viewer can act on. (super_admin and
+ * admin no longer see the bell: their home lists the same queues under "Needs
+ * your attention" — see adminHome.test.jsx.) Approving an
  * enrollment is limited to super_admin/admin/registrar by the backend, and
  * invoices to the billing roles, so a teacher or accountant must not get a red
  * dot for a pending enrollment they can't approve.
@@ -58,12 +60,6 @@ async function openBellAs(role) {
 }
 
 describe("DashboardPage — notifications by role", () => {
-  it("tells admins about unpaid invoices and pending enrollments", async () => {
-    await openBellAs("admin");
-    expect(screen.getByRole("link", { name: /12 unpaid invoices/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /3 enrollments pending approval/ })).toBeTruthy();
-  });
-
   it("tells registrars about pending enrollments but not invoices", async () => {
     await openBellAs("registrar");
     expect(screen.getByRole("link", { name: /3 enrollments pending approval/ })).toBeTruthy();

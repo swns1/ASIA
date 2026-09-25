@@ -15,6 +15,7 @@ import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { describeApiError } from "../utils/apiError";
 import { pageVariants } from "../utils/motion";
 import { AttendanceBand, PipelineBand, RiskBand } from "./dashboard/DashboardBands";
+import AdminHome from "./dashboard/AdminHome";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import { getStudents as _getStudents } from "../api/studentApi";
@@ -25,7 +26,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
   const motionVal = useMotionValue(0);
@@ -175,8 +176,17 @@ const RECENT_ENROLLMENT_COLUMNS = [
   { key: "status",  label: "Status" },
 ];
 
+/**
+ * super_admin and admin land on their own task-first home (AdminHome, the
+ * approved "Principal / Admin" board). Every other staff role keeps the shared
+ * dashboard below until its own home is designed.
+ */
 export default function DashboardPage() {
   usePageTitle("Dashboard");
+  return hasAnyRole(getCurrentUser(), STAFF_ADMIN) ? <AdminHome /> : <StaffDashboard />;
+}
+
+function StaffDashboard() {
   const navigate = useNavigate();
   const now = useClock();
 

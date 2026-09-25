@@ -233,6 +233,20 @@ def payment_counts_by_school_year():
     return counts
 
 
+def filter_overdue(queryset, flag):
+    """
+    `?overdue=true`: only invoices with an installment past its due date.
+
+    Overdue lives on installments, not invoices (the nightly
+    flag_overdue_installments job sets it), so an invoice can read "partially
+    paid" while one of its payments is late. The admin home counts these and
+    links here, so the list and its summary tiles must apply the same filter.
+    """
+    if str(flag).lower() not in ("1", "true"):
+        return queryset
+    return queryset.filter(installments__status="overdue").distinct()
+
+
 class StudentInvoiceViewSet(viewsets.ModelViewSet):
     """
     /api/invoices/                            GET, POST
@@ -281,7 +295,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
                 Q(invoice_no__icontains=term) |
                 Q(enrollment_id__in=enrollment_ids_matching_student(term))
             )
-        return queryset
+        return filter_overdue(queryset, self.request.query_params.get("overdue"))
 
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):
@@ -379,6 +393,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         if payment_plan:
             qs = qs.filter(payment_plan=payment_plan)
         qs = scope_invoices_to_school_year(qs, request.query_params.get("school_year"))
+        qs = filter_overdue(qs, request.query_params.get("overdue"))
 
         from django.db.models import Count
         counts = qs.values("status").annotate(n=Count("invoice_id"))

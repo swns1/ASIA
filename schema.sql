@@ -107,6 +107,7 @@ CREATE TABLE public.academic_calendar_events (
     start_date date NOT NULL,
     end_date date NOT NULL,
     description text,
+    grading_period character varying(20),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -3537,6 +3538,13 @@ CREATE INDEX token_blacklist_outstandingtoken_jti_hex_d9bdf6f7_like ON public.to
 --
 
 CREATE INDEX token_blacklist_outstandingtoken_user_id_83bc629a ON public.token_blacklist_outstandingtoken USING btree (user_id);
+
+
+--
+-- Name: uniq_calendar_grading_period_per_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_calendar_grading_period_per_year ON public.academic_calendar_events USING btree (school_year, grading_period) WHERE (grading_period IS NOT NULL);
 
 
 --

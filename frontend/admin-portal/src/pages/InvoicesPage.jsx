@@ -18,6 +18,7 @@ import ChipGroup from "../components/ui/ChipGroup";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import ErrorState from "../components/ui/ErrorState";
+import Alert from "../components/ui/Alert";
 import Pagination from "../components/Pagination";
 import Badge, { StatusBadge } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
@@ -628,6 +629,10 @@ export default function InvoicesPage() {
 
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "all");
   const [planFilter,   setPlanFilter]   = useState("all");
+  // "Only invoices with a payment past due" — reached from the admin home's
+  // overdue count, which links here with ?overdue=1. Overdue is flagged on
+  // installments, so it isn't one of the status chips.
+  const [overdueOnly,  setOverdueOnly]  = useState(() => ["1", "true"].includes(searchParams.get("overdue")));
   const [search,       setSearch]       = useState("");
   const [inputVal,     setInputVal]     = useState("");
   const [ordering,     setOrdering]     = useState("-invoice_id");
@@ -649,6 +654,7 @@ export default function InvoicesPage() {
     term = search,
     ord = ordering,
     year = yearFilter,
+    overdue = overdueOnly,
   ) => {
     setLoading(true);
     try {
@@ -657,6 +663,7 @@ export default function InvoicesPage() {
       if (plan   !== "all") params.payment_plan = plan;
       if (term.trim())      params.search = term.trim();
       if (year)             params.school_year = year;
+      if (overdue)          params.overdue = "true";
 
       // The stat tiles read from /summary/, so it must carry the same year and
       // plan scoping as the list — otherwise the tiles would total a different
@@ -664,6 +671,7 @@ export default function InvoicesPage() {
       const summaryParams = {};
       if (plan !== "all") summaryParams.payment_plan = plan;
       if (year)           summaryParams.school_year = year;
+      if (overdue)        summaryParams.overdue = "true";
 
       const [data, summaryData] = await Promise.all([
         getInvoices(params),
@@ -683,7 +691,7 @@ export default function InvoicesPage() {
       setPageMeta({ count: 0, next: null, previous: null });
     }
     finally { setLoading(false); }
-  }, [statusFilter, planFilter, search, ordering, yearFilter]);
+  }, [statusFilter, planFilter, search, ordering, yearFilter, overdueOnly]);
 
   // The year is never empty on first render (useYearFilter starts from the
   // current year), so the first load no longer waits for it; if School
@@ -711,17 +719,23 @@ export default function InvoicesPage() {
   const handleClearAll = () => {
     setInputVal(""); setSearch("");
     setStatusFilter("all"); setPlanFilter("all");
+    setOverdueOnly(false);
     setOrdering("-invoice_id");
     // Clearing returns to the current school year, not to all-years: falling
     // back to every year would resurrect the mixed-year view this filter exists
     // to prevent.
     setYearFilter(null);
-    fetchInvoices(1, "all", "all", "", "-invoice_id", currentYear);
+    fetchInvoices(1, "all", "all", "", "-invoice_id", currentYear, false);
+  };
+
+  const showAllInvoices = () => {
+    setOverdueOnly(false);
+    fetchInvoices(1, statusFilter, planFilter, search, ordering, yearFilter, false);
   };
 
   const hasActiveFilters =
     search || statusFilter !== "all" || planFilter !== "all" ||
-    ordering !== "-invoice_id" || !yearIsDefault;
+    ordering !== "-invoice_id" || !yearIsDefault || overdueOnly;
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 
@@ -861,6 +875,17 @@ export default function InvoicesPage() {
             />
           </FilterRow>
         </FilterBar>
+
+        <AnimatePresence>
+          {overdueOnly && (
+            <Alert variant="warning" icon="ti-clock-exclamation" title="Only invoices with a payment past due">
+              Each of these has at least one installment past its due date.{" "}
+              <button type="button" onClick={showAllInvoices} className="focus-ring rounded-sm font-semibold underline">
+                Show all invoices
+              </button>
+            </Alert>
+          )}
+        </AnimatePresence>
 
         {/* Master / detail — stacks below lg, where a 360px + detail split has
             no room to breathe. */}

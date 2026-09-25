@@ -88,8 +88,9 @@ export default function StudentsPage() {
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [students, setStudents]   = useState([]);
-  const [search, setSearch]       = useState("");
-  const [inputVal, setInputVal]   = useState("");
+  // ?search= is how the admin home's "Find a student" box lands here.
+  const [search, setSearch]       = useState(() => searchParams.get("search") ?? "");
+  const [inputVal, setInputVal]   = useState(() => searchParams.get("search") ?? "");
   const [page, setPage]           = useState(1);
   const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading]     = useState(true);
@@ -169,7 +170,7 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
-    fetchStudents(1, "", statusFilter, "", DEFAULT_ORDERING);
+    fetchStudents(1, search, statusFilter, "", DEFAULT_ORDERING);
     fetchCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
