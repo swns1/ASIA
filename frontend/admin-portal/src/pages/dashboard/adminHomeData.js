@@ -37,8 +37,12 @@ export function sectionName(s) {
   return [s.grade_level, s.strand, s.section].filter(Boolean).join(" · ");
 }
 
-export const compactPeso = (n) =>
-  `₱${Number(n || 0).toLocaleString("en-PH", { notation: "compact", maximumFractionDigits: 2 })}`;
+// Adds the page's year to a list-page link that doesn't carry one (the
+// Billing panel's links are shared with the staff dashboard and have none).
+export function withYear(link, year) {
+  if (!year || /[?&]school_year=/.test(link)) return link;
+  return `${link}${link.includes("?") ? "&" : "?"}school_year=${encodeURIComponent(year)}`;
+}
 
 // Every link carries the school year its count came from, because the list
 // pages open on the year in their link.

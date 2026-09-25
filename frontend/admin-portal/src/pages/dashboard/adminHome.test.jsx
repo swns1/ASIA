@@ -39,12 +39,12 @@ vi.mock("../../api/applicationApi", () => ({
 }));
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
-    schoolYear: "2026-2027", options: ["2026-2027"], yearCounts: {}, currentYear: "2026-2027",
+    schoolYear: "2026-2027", options: ["2027-2028", "2026-2027"], yearCounts: {}, currentYear: "2026-2027",
   }),
 }));
 
 const { default: DashboardPage } = await import("../DashboardPage");
-const { dueLine, attentionRows } = await import("./adminHomeData");
+const { dueLine, attentionRows, withYear } = await import("./adminHomeData");
 
 const SECTIONS = [
   {
@@ -79,6 +79,11 @@ function teachersToday(overrides = {}) {
     sections: SECTIONS,
     ...overrides,
   };
+}
+
+async function pickYearFrom(year) {
+  fireEvent.click(await screen.findByRole("button", { name: /^School year: 2026-2027/ }));
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(year) }));
 }
 
 function LocationProbe() {
@@ -163,46 +168,66 @@ describe("AdminHome — needs your attention", () => {
 });
 
 describe("AdminHome — teachers today", () => {
-  it("names the sections that haven't taken attendance, flagging a missing adviser", async () => {
+  const openDetails = async () =>
+    fireEvent.click(await screen.findByRole("button", { name: "Teachers today: open details" }));
+
+  it("previews attendance, grades and missing advisers without listing sections", async () => {
     renderAs("admin");
-    await screen.findByText("Not taken yet");
-    expect(screen.getByText("Grade 3 · Rizal")).toBeTruthy();
-    expect(screen.getByText("Ana Lim")).toBeTruthy();
-    expect(screen.getByText("Grade 9 · Diamond")).toBeTruthy();
-    expect(screen.getByText("No adviser")).toBeTruthy();
-    expect(screen.queryByText("Grade 10 · Ruby")).toBeNull();
-    expect(screen.getByRole("progressbar", { name: /Attendance taken: 1 of 3 sections/ })).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /2nd Quarter grades complete: 2 of 3 sections/ })).toBeTruthy();
+    expect(await screen.findByRole("progressbar", { name: /Attendance taken: 1 of 3 sections/ })).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: /2nd Quarter grades in: 2 of 3 sections/ })).toBeTruthy();
+    expect(screen.getByText("1 section has no adviser")).toBeTruthy();
+    // The section list lives in the details window, not on the page.
+    expect(screen.queryByText("Grade 3 · Rizal")).toBeNull();
+    expect(screen.queryByText(/Add each quarter's dates/)).toBeNull();
   });
 
   it("shows the due date when the calendar has quarter dates", async () => {
     renderAs("admin");
     expect(await screen.findByText(/^Due .*October 23 · \d+ days left$/)).toBeTruthy();
-    expect(screen.queryByText(/Add each quarter's dates/)).toBeNull();
   });
 
-  it("asks for quarter dates when the calendar has none", async () => {
+  it("says there are no classes on a holiday", async () => {
+    getTeachersToday.mockResolvedValue(teachersToday({ no_classes: { label: "National Heroes Day" } }));
+    renderAs("admin");
+    expect(await screen.findByText("No classes today")).toBeTruthy();
+    expect(screen.queryByRole("progressbar", { name: /Attendance taken/ })).toBeNull();
+  });
+
+  it("opens every section in the details window", async () => {
+    renderAs("admin");
+    await openDetails();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Grade 3 · Rizal")).toBeTruthy();
+    expect(within(dialog).getByText("Grade 10 · Ruby")).toBeTruthy();
+    expect(within(dialog).getByText("60 of 240 grades in")).toBeTruthy();
+  });
+
+  it("filters the window to the sections that need something", async () => {
+    renderAs("admin");
+    await openDetails();
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^No adviser/ }));
+    expect(within(dialog).getByText("Grade 9 · Diamond")).toBeTruthy();
+    expect(within(dialog).queryByText("Grade 3 · Rizal")).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Grades not complete/ }));
+    expect(within(dialog).getByText("Grade 3 · Rizal")).toBeTruthy();
+    expect(within(dialog).queryByText("Grade 9 · Diamond")).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Attendance not taken/ }));
+    expect(within(dialog).getByText("Grade 9 · Diamond")).toBeTruthy();
+    expect(within(dialog).queryByText("Grade 10 · Ruby")).toBeNull();
+  });
+
+  it("asks for quarter dates in the window when the calendar has none", async () => {
     getTeachersToday.mockResolvedValue(teachersToday({
       grading_period: { ...teachersToday().grading_period, source: "grades", due_date: null, semester_due_date: null },
     }));
     renderAs("admin");
-    expect(await screen.findByText(/Add each quarter's dates to the Academic Calendar/)).toBeTruthy();
+    await openDetails();
+    expect(within(screen.getByRole("dialog")).getByText(/Add each quarter's dates to the Academic Calendar/)).toBeTruthy();
     expect(screen.queryByText(/days left/)).toBeNull();
-  });
-
-  it("says there are no classes instead of listing sections on a holiday", async () => {
-    getTeachersToday.mockResolvedValue(teachersToday({ no_classes: { label: "National Heroes Day" } }));
-    renderAs("admin");
-    expect(await screen.findByText("No classes today")).toBeTruthy();
-    expect(screen.queryByText("Not taken yet")).toBeNull();
-  });
-
-  it("opens every section in a dialog", async () => {
-    renderAs("admin");
-    fireEvent.click(await screen.findByRole("button", { name: /See every section/ }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Grade 10 · Ruby")).toBeTruthy();
-    expect(within(dialog).getByText("60 of 240 grades in")).toBeTruthy();
   });
 });
 
@@ -216,12 +241,52 @@ describe("AdminHome — start a task", () => {
 });
 
 describe("AdminHome — school at a glance", () => {
-  it("hides peso amounts on request", async () => {
+  it("shows three tiles, with money in the Billing panel instead of a tile", async () => {
     renderAs("admin");
-    expect(await screen.findByText("₱20.04M")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Hide amounts" }));
-    expect(screen.queryByText("₱20.04M")).toBeNull();
-    expect(screen.getByText("Amounts hidden")).toBeTruthy();
+    expect(await screen.findByText("Billing · S.Y. 2026-2027")).toBeTruthy();
+    expect(screen.getByText("Present today")).toBeTruthy();
+    expect(screen.getByText("Need follow-up")).toBeTruthy();
+    // "Collected" only as the panel's column, not also as a tile repeating it.
+    expect(screen.getAllByText("Collected")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "₱20,040,000.00" })).toBeTruthy();
+  });
+
+  it("gives the Billing panel no year filter of its own", async () => {
+    renderAs("admin");
+    await screen.findByText("Billing · S.Y. 2026-2027");
+    expect(screen.queryByRole("button", { name: "Filter by school year" })).toBeNull();
+  });
+
+  it("keeps the panel's year filter on the staff dashboard", async () => {
+    renderAs("accounting");
+    expect(await screen.findByRole("button", { name: "Filter by school year" })).toBeTruthy();
+  });
+
+  it("hides amounts with the panel's own eye button", async () => {
+    renderAs("admin");
+    const eye = await screen.findByRole("button", { name: "Hide financial amounts" });
+    fireEvent.click(eye);
+    expect(screen.getByRole("button", { name: "Show financial amounts" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens invoices on the page's year from the panel", async () => {
+    renderAs("admin");
+    await screen.findByText("Billing · S.Y. 2026-2027");
+    await pickYearFrom("2027-2028");
+    await screen.findByText("Billing · S.Y. 2027-2028");
+    fireEvent.click(screen.getByRole("button", { name: "₱9,430,000.00" }));
+    expect(screen.getByTestId("location").textContent).toBe("/invoices?status=unpaid&school_year=2027-2028");
+  });
+});
+
+describe("withYear", () => {
+  it("adds the year to a link that has none", () => {
+    expect(withYear("/invoices", "2026-2027")).toBe("/invoices?school_year=2026-2027");
+    expect(withYear("/invoices?status=paid", "2026-2027")).toBe("/invoices?status=paid&school_year=2026-2027");
+  });
+
+  it("leaves a link that already names a year alone", () => {
+    expect(withYear("/invoices?school_year=2024-2025", "2026-2027")).toBe("/invoices?school_year=2024-2025");
   });
 });
 
@@ -250,5 +315,56 @@ describe("attentionRows", () => {
   it("drops queues whose count is zero or missing", () => {
     const rows = attentionRows({ pending: 2, applications: 0, unpaid: undefined, overdue: 1 }, "2026-2027");
     expect(rows.map((r) => r.id)).toEqual(["pending", "overdue"]);
+  });
+});
+
+describe("AdminHome — school year", () => {
+  const pickYear = pickYearFrom;
+
+  it("opens on the current year, with no way back needed", async () => {
+    renderAs("admin");
+    expect(await screen.findByRole("button", { name: /^School year: 2026-2027/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Back to/ })).toBeNull();
+  });
+
+  it("offers no All years option", async () => {
+    renderAs("admin");
+    fireEvent.click(await screen.findByRole("button", { name: /^School year: 2026-2027/ }));
+    expect(screen.queryByRole("option", { name: /All years/ })).toBeNull();
+  });
+
+  it("moves the counts and their links to the picked year", async () => {
+    renderAs("admin");
+    await screen.findByText("4 things are waiting on you");
+    await pickYear("2027-2028");
+    await screen.findByRole("button", { name: /Back to 2026-2027/ });
+
+    expect(getEnrollments).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enrollment_status: "pending", school_year: "2027-2028" }));
+    expect(getDashboardSummary).toHaveBeenLastCalledWith({ school_year: "2027-2028" });
+    expect(getFinancialSummary).toHaveBeenLastCalledWith("2027-2028");
+
+    fireEvent.click(await screen.findByRole("button", { name: /Review: 12 enrollments waiting/ }));
+    expect(screen.getByTestId("location").textContent)
+      .toBe("/enrollments?enrollment_status=pending&school_year=2027-2028");
+  });
+
+  it("keeps Teachers today on the current year, and says so", async () => {
+    renderAs("admin");
+    await screen.findByText("4 things are waiting on you");
+    await pickYear("2027-2028");
+    await screen.findByRole("button", { name: /Back to 2026-2027/ });
+    expect(getTeachersToday).toHaveBeenLastCalledWith({ school_year: "2026-2027" });
+    // The card's subtitle and the Present today tile both name today's year.
+    expect(await screen.findAllByText("Today · S.Y. 2026-2027")).toHaveLength(2);
+  });
+
+  it("goes back to the current year", async () => {
+    renderAs("admin");
+    await screen.findByText("4 things are waiting on you");
+    await pickYear("2027-2028");
+    fireEvent.click(await screen.findByRole("button", { name: /Back to 2026-2027/ }));
+    expect(await screen.findByRole("button", { name: /^School year: 2026-2027/ })).toBeTruthy();
+    expect(getDashboardSummary).toHaveBeenLastCalledWith({ school_year: "2026-2027" });
   });
 });

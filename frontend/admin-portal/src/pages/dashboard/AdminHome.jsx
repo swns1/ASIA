@@ -7,28 +7,34 @@
 //   1. Start a task: find a student, enroll one, record a payment.
 //   2. Needs your attention: one row per queue with its own button, listing
 //      only queues that have something in them.
-//   3. Teachers today: which sections haven't taken attendance, and how far
-//      along the current grading period's grades are.
-//   4. School at a glance: four headline numbers, no filter drawers (those
-//      stay on the list pages).
+//   3. Teachers today: a short preview (attendance taken, grades in, sections
+//      with no adviser). Clicking it opens every section with filters.
+//   4. School at a glance: three headline numbers, then the Billing panel.
+//      No filter drawers; those stay on the list pages.
 //   5. Trends: the same three charts the staff dashboard uses.
 //
-// Every count here is scoped to the current school year, and so is every link,
-// because the list pages open on the year in their link.
+// The page opens on the current school year, and the picker in the header can
+// switch it (next year during enrollment season, say). Every count follows the
+// picked year, and so does every link, because the list pages open on the year
+// in their link. Teachers today is the exception: today's attendance only
+// exists in the current year, so it always shows that and says so.
 
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 
 import PageHeader from "../../components/ui/PageHeader";
+import SchoolYearPicker from "../../components/ui/SchoolYearPicker";
 import Button from "../../components/ui/Button";
 import Alert from "../../components/ui/Alert";
 import Modal from "../../components/ui/Modal";
 import Skeleton from "../../components/ui/Skeleton";
 import Card, { Panel, StatCard } from "../../components/ui/Card";
+import BillingPanel from "../../components/ui/BillingPanel";
+import ChipGroup from "../../components/ui/ChipGroup";
 import Table, { TableRow, TableCell } from "../../components/ui/Table";
 import Meter from "../../components/charts/Meter";
-import { token } from "../../components/charts/tokens";
+import { chartInk, token } from "../../components/charts/tokens";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import { Input } from "../../components/FormField";
 import { AttendanceBand, PipelineBand, RiskBand } from "./DashboardBands";
@@ -37,9 +43,10 @@ import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api
 import { getFinancialSummary, getInvoices } from "../../api/billingApi";
 import { getStudentApplications } from "../../api/applicationApi";
 import { useSchoolYear } from "../../context/SchoolYearContext";
+import useYearFilter from "../../hooks/useYearFilter";
 import { getCurrentUser } from "../../utils/auth";
 import { pageVariants } from "../../utils/motion";
-import { attentionRows, compactPeso, dueLine, greeting, plural, sectionName } from "./adminHomeData";
+import { attentionRows, dueLine, greeting, plural, sectionName, withYear } from "./adminHomeData";
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -47,24 +54,26 @@ export default function AdminHome() {
   const navigate = useNavigate();
   const user = getCurrentUser();
   const firstName = String(user?.name ?? "").trim().split(/\s+/)[0];
-  const { currentYear: schoolYear } = useSchoolYear();
+  const { currentYear } = useSchoolYear();
+  // No "All years": a home page that adds up several years is hard to read.
+  const [year, setYear, yearIsDefault] = useYearFilter({ allowAll: false });
   const [now] = useState(() => new Date());
 
   const [loading, setLoading] = useState(true);
   const [partialError, setPartialError] = useState(false);
   const [data, setData] = useState({});
   const [showAmounts, setShowAmounts] = useState(true);
-  const [showSections, setShowSections] = useState(false);
+  const [showTeachers, setShowTeachers] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
   const load = useCallback(async () => {
-    if (!schoolYear) return;
+    if (!year || !currentYear) return;
     setLoading(true);
-    const sy = schoolYear;
+    const sy = year;
     const count = (p) => p.then((r) => r?.count ?? 0);
     const parts = {
       summary:      getDashboardSummary({ school_year: sy }),
-      teachers:     getTeachersToday({ school_year: sy }),
+      teachers:     getTeachersToday({ school_year: currentYear }),
       financial:    getFinancialSummary(sy),
       pending:      count(getEnrollments({ enrollment_status: "pending", school_year: sy, page_size: 1 })),
       applications: count(getStudentApplications({ status: "submitted", page_size: 1 })),
@@ -84,7 +93,7 @@ export default function AdminHome() {
     setData(next);
     setPartialError(failed);
     setLoading(false);
-  }, [schoolYear]);
+  }, [year, currentYear]);
 
   useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -93,8 +102,10 @@ export default function AdminHome() {
   const subtitle = [
     now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     period?.source === "calendar" ? period.label : null,
-    schoolYear ? `S.Y. ${schoolYear}` : null,
+    year ? `S.Y. ${year}` : null,
   ].filter(Boolean).join(" · ");
+  // Set only while another year is picked, for the cards that stay on today.
+  const todayYear = yearIsDefault ? null : currentYear;
 
   return (
     <>
@@ -102,6 +113,24 @@ export default function AdminHome() {
         title={firstName ? `${greeting(now)}, ${firstName}` : greeting(now)}
         icon="ti-home"
         subtitle={subtitle}
+        actions={
+          <div className="flex items-center gap-2">
+            {!yearIsDefault && (
+              <Button variant="ghost" size="sm" icon="ti-arrow-back-up" onClick={() => setYear(null)}>
+                Back to {currentYear}
+              </Button>
+            )}
+            <SchoolYearPicker
+              value={year}
+              onChange={setYear}
+              includeAllYears={false}
+              // Red only while it narrows to a year other than the current one.
+              active={!yearIsDefault}
+              // The pill is at the page's right edge; open the panel leftward.
+              align="end"
+            />
+          </div>
+        }
       />
 
       <motion.div
@@ -129,43 +158,36 @@ export default function AdminHome() {
           />
         </motion.div>
 
-        <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <AttentionPanel data={data} loading={loading} schoolYear={schoolYear} onGo={navigate} />
-          <TeachersTodayPanel
+        <motion.div variants={pageVariants.item} className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          <AttentionPanel data={data} loading={loading} schoolYear={year} onGo={navigate} />
+          <TeachersTodayPreview
             teachers={teachers}
             loading={loading}
             now={now}
-            onSeeAll={() => setShowSections(true)}
-            onOpenCalendar={() => navigate("/academic-calendar")}
+            onOpen={() => setShowTeachers(true)}
           />
         </motion.div>
 
-        <motion.section variants={pageVariants.item} aria-labelledby="glance-heading">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={showAmounts ? "ti-eye-off" : "ti-eye"}
-              onClick={() => setShowAmounts((v) => !v)}
-              aria-pressed={!showAmounts}
-            >
-              {showAmounts ? "Hide amounts" : "Show amounts"}
-            </Button>
-          </div>
-          <Glance
-            data={data}
+        <motion.section variants={pageVariants.item} aria-labelledby="glance-heading" className="flex flex-col gap-3">
+          <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
+          <Glance data={data} loading={loading} schoolYear={year} todayYear={todayYear} onGo={navigate} />
+          {/* The panel follows the page's year picker, so it gets no year
+              filter of its own; two year controls could disagree. Its links
+              carry the year for the same reason every other link here does. */}
+          <BillingPanel
+            summary={data.financial}
             loading={loading}
-            schoolYear={schoolYear}
+            schoolYear={year}
             showAmounts={showAmounts}
-            onGo={navigate}
+            onToggleAmounts={() => setShowAmounts((v) => !v)}
+            onOpenInvoices={(link) => navigate(withYear(link, year))}
           />
         </motion.section>
 
         <motion.section variants={pageVariants.item} aria-labelledby="trends-heading">
           <h2 id="trends-heading" className="mb-2 text-sm font-bold text-neutral-900">Trends</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <PipelineBand pipeline={data.summary?.pipeline} loading={loading} schoolYear={schoolYear} compact />
+            <PipelineBand pipeline={data.summary?.pipeline} loading={loading} schoolYear={year} compact />
             <RiskBand
               risk={data.summary?.risk}
               loading={loading}
@@ -181,8 +203,13 @@ export default function AdminHome() {
         </motion.section>
       </motion.div>
 
-      {showSections && teachers && (
-        <SectionsModal teachers={teachers} now={now} onClose={() => setShowSections(false)} />
+      {showTeachers && teachers && (
+        <TeachersTodayModal
+          teachers={teachers}
+          now={now}
+          onOpenCalendar={() => navigate("/academic-calendar")}
+          onClose={() => setShowTeachers(false)}
+        />
       )}
       {showPayment && (
         <RecordPaymentModal
@@ -274,123 +301,123 @@ function AttentionPanel({ data, loading, schoolYear, onGo }) {
 }
 
 // ── Teachers today ───────────────────────────────────────────────────────────
+//
+// A short preview on the page; everything else lives in the details window.
+// The long "not taken yet" list and the calendar reminder used to sit here,
+// which made this the tallest thing on the page.
 
-const NOT_TAKEN_SHOWN = 4;
+const TEACHERS_SUBTITLE = "Attendance and grades, by section";
 
-function TeachersTodayPanel({ teachers, loading, now, onSeeAll, onOpenCalendar }) {
-  const action = teachers?.sections?.length ? (
-    <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={onSeeAll}>
-      See every section
-    </Button>
-  ) : undefined;
+function noAdviserCount(sections) {
+  return sections.filter((s) => !s.advisers?.length).length;
+}
 
-  if (loading) {
+// One compact progress row: label, bar, "N of M sections".
+function MiniMeter({ label, value, max, color }) {
+  const pct = max > 0 ? Math.round((Math.min(value, max) / max) * 100) : 0;
+  const text = `${value.toLocaleString()} of ${plural(max, "section")}`;
+  return (
+    <div className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 text-xs">
+      <span className="truncate font-semibold text-neutral-700">{label}</span>
+      <span
+        className="block h-2 overflow-hidden rounded-full"
+        style={{ background: chartInk().grid }}
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label}: ${text}`}
+      >
+        <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </span>
+      <span className="tabular-nums text-neutral-600">
+        <strong className="text-neutral-900">{value.toLocaleString()}</strong> of {plural(max, "section")}
+      </span>
+    </div>
+  );
+}
+
+function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
+  if (loading || !teachers || !teachers.sections.length) {
     return (
-      <Panel title="Teachers today" subtitle="Attendance and grades, by section" icon="ti-user-check">
-        <div className="flex flex-col gap-3">
-          <Skeleton height={36} variant="pulse" />
-          <Skeleton height={72} variant="pulse" />
-          <Skeleton height={36} variant="pulse" />
-        </div>
-      </Panel>
-    );
-  }
-
-  if (!teachers) {
-    return (
-      <Panel title="Teachers today" subtitle="Attendance and grades, by section" icon="ti-user-check">
-        <p className="text-sm text-neutral-600">Couldn't load teacher activity.</p>
+      <Panel title="Teachers today" subtitle={TEACHERS_SUBTITLE} icon="ti-user-check">
+        {loading ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton height={14} variant="pulse" />
+            <Skeleton height={14} variant="pulse" />
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-600">
+            {!teachers ? "Couldn't load teacher activity." : "No section has enrolled students this school year yet."}
+          </p>
+        )}
       </Panel>
     );
   }
 
   const { attendance, grades, grading_period: period, no_classes: noClasses, sections } = teachers;
-
-  if (!sections.length) {
-    return (
-      <Panel title="Teachers today" subtitle="Attendance and grades, by section" icon="ti-user-check">
-        <p className="text-sm text-neutral-600">No section has enrolled students this school year yet.</p>
-      </Panel>
-    );
-  }
-
-  const notTaken = sections.filter((s) => !s.attendance_taken);
   const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
-  const hasSeniorHigh = sections.some((s) => s.school_level === "senior_highschool" && s.grades);
+  const noAdviser = noAdviserCount(sections);
 
   return (
-    <Panel title="Teachers today" subtitle="Attendance and grades, by section" icon="ti-user-check" action={action}>
-      <div className="flex flex-col gap-5">
-        <div>
+    <Card padding="none" className="overflow-hidden">
+      {/* The whole card is one button: it holds no other controls, so there
+          is nothing to nest, and one big target suits the people using it. */}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label="Teachers today: open details"
+        className="focus-ring block w-full text-left transition-colors hover:bg-brand-50/40"
+      >
+        <div className="flex items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
+          <i className="ti ti-user-check text-brand-600" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-bold text-neutral-900">Teachers today</h3>
+            {/* Always today, whatever year the page is showing, so the year
+                is part of the subtitle rather than a banner. */}
+            <p className="truncate text-xs text-neutral-500">Today · S.Y. {teachers.school_year}</p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-600">
+            View details <i className="ti ti-arrow-right" aria-hidden="true" />
+          </span>
+        </div>
+        <div className="flex flex-col gap-2.5 px-5 py-3.5">
           {noClasses ? (
-            <p className="text-sm text-neutral-700">
+            <p className="text-xs text-neutral-700">
               <span className="font-semibold text-neutral-900">No classes today</span> · {noClasses.label}
             </p>
           ) : (
-            <>
-              <Meter
-                label="Attendance taken"
-                value={attendance.sections_taken}
-                max={attendance.sections_total}
-                valueText={attendance.sections_taken.toLocaleString()}
-                targetText={plural(attendance.sections_total, "section")}
-                color={token("--color-success-500")}
-              />
-              {notTaken.length > 0 && (
-                <div className="mt-3">
-                  <div className="mb-1.5 text-xs font-semibold text-neutral-600">Not taken yet</div>
-                  <ul className="flex flex-col gap-1">
-                    {notTaken.slice(0, NOT_TAKEN_SHOWN).map((s) => (
-                      <li key={sectionName(s) + s.school_level} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="font-semibold text-neutral-900">{sectionName(s)}</span>
-                        <AdviserName advisers={s.advisers} />
-                      </li>
-                    ))}
-                  </ul>
-                  {notTaken.length > NOT_TAKEN_SHOWN && (
-                    <div className="mt-1 text-xs text-neutral-500">
-                      and {plural(notTaken.length - NOT_TAKEN_SHOWN, "more section")}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
+            <MiniMeter
+              label="Attendance taken"
+              value={attendance.sections_taken}
+              max={attendance.sections_total}
+              color={token("--color-success-500")}
+            />
           )}
-        </div>
-
-        <div className="border-t border-neutral-200 pt-4">
           {grades.sections_total > 0 ? (
-            <Meter
-              label={`${period.label} grades complete`}
+            <MiniMeter
+              label={`${period.label} grades in`}
               value={grades.sections_complete}
               max={grades.sections_total}
-              valueText={grades.sections_complete.toLocaleString()}
-              targetText={plural(grades.sections_total, "section")}
               color={token("--color-info-500")}
             />
           ) : (
-            <p className="text-sm text-neutral-600">No subjects are set up for these grade levels yet.</p>
+            <p className="text-xs text-neutral-600">No subjects are set up for these grade levels yet.</p>
           )}
-          {due && (
-            <p className={`mt-2 text-xs font-semibold ${due.late ? "text-error-500" : "text-neutral-600"}`}>
-              {due.text}
-            </p>
-          )}
-          {hasSeniorHigh && grades.sections_total > 0 && (
-            <p className="mt-1 text-xs text-neutral-500">Senior High sections count their {period.semester_label} grades.</p>
-          )}
-          {period?.source !== "calendar" && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-sm bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
-              <i className="ti ti-calendar-plus text-sm" aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                Add each quarter's dates to the Academic Calendar (type: Grading Period) to see when grades are due.
-              </span>
-              <Button variant="ghost" size="sm" onClick={onOpenCalendar}>Open calendar</Button>
+          {(due || noAdviser > 0) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
+              {due && <span className={due.late ? "text-error-500" : "text-neutral-600"}>{due.text}</span>}
+              {noAdviser > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-warning-500">
+                  <i className="ti ti-alert-triangle" aria-hidden="true" />
+                  {plural(noAdviser, "section has", "sections have")} no adviser
+                </span>
+              )}
             </div>
           )}
         </div>
-      </div>
-    </Panel>
+      </button>
+    </Card>
   );
 }
 
@@ -409,66 +436,155 @@ const SECTION_COLUMNS = [
   { key: "grades",     label: "Grades" },
 ];
 
-function SectionsModal({ teachers, now, onClose }) {
-  const noClasses = teachers.no_classes;
+const SECTION_FILTERS = {
+  all:        () => true,
+  attendance: (s) => !s.attendance_taken,
+  grades:     (s) => Boolean(s.grades) && !s.grades.complete,
+  adviser:    (s) => !s.advisers?.length,
+};
+
+function SummaryBox({ children }) {
+  return <div className="rounded-md border border-neutral-200 px-4 py-3">{children}</div>;
+}
+
+function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
+  const [filter, setFilter] = useState("all");
+  const { attendance, grades, grading_period: period, no_classes: noClasses, sections } = teachers;
+  const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
+  const hasSeniorHigh = sections.some((s) => s.school_level === "senior_highschool" && s.grades);
+  const noAdviser = noAdviserCount(sections);
+  const shown = sections.filter(SECTION_FILTERS[filter]);
+
+  const count = (key) => sections.filter(SECTION_FILTERS[key]).length;
+  const chips = [
+    { value: "all", label: "All sections", tone: "brand", count: sections.length },
+    // On a day with no classes, "not taken" would list every section for no reason.
+    ...(noClasses ? [] : [{ value: "attendance", label: "Attendance not taken", tone: "warning", count: count("attendance") }]),
+    { value: "grades", label: "Grades not complete", tone: "info", count: count("grades") },
+    { value: "adviser", label: "No adviser", tone: "warning", count: noAdviser },
+  ];
+
   return (
     <Modal
       size="xl"
-      title="Every section"
-      description={`${teachers.grading_period.label} · ${now.toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" })}`}
-      icon="ti-users-group"
+      title="Teachers today"
+      description={[
+        now.toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" }),
+        period.label,
+        `S.Y. ${teachers.school_year}`,
+      ].join(" · ")}
+      icon="ti-user-check"
       onClose={onClose}
       showClose
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}
     >
-      <Table columns={SECTION_COLUMNS} stickyHeader={false}>
-        {teachers.sections.map((s) => (
-          <TableRow key={sectionName(s) + s.school_level}>
-            <TableCell className="font-semibold text-neutral-900">
-              {sectionName(s)}
-              <div className="text-xs font-normal text-neutral-500">{s.level_label}</div>
-            </TableCell>
-            <TableCell><AdviserName advisers={s.advisers} /></TableCell>
-            <TableCell className="tabular-nums">{s.students.toLocaleString()}</TableCell>
-            <TableCell>
-              {noClasses ? (
-                <span className="text-neutral-500">No classes</span>
-              ) : s.attendance_taken ? (
-                <span className="font-semibold text-success-500">Taken</span>
-              ) : (
-                <span className="font-semibold text-warning-500">Not yet</span>
-              )}
-            </TableCell>
-            <TableCell>
-              {!s.grades ? (
-                <span className="text-neutral-500">No subjects set up</span>
-              ) : s.grades.complete ? (
-                <span className="font-semibold text-success-500">{s.grades.label} complete</span>
-              ) : (
-                <span className="tabular-nums text-neutral-700">
-                  {s.grades.done.toLocaleString()} of {s.grades.expected.toLocaleString()} grades in
-                </span>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </Table>
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SummaryBox>
+            {noClasses ? (
+              <p className="text-sm text-neutral-700">
+                <span className="font-semibold text-neutral-900">No classes today</span> · {noClasses.label}
+              </p>
+            ) : (
+              <Meter
+                label="Attendance taken"
+                value={attendance.sections_taken}
+                max={attendance.sections_total}
+                valueText={attendance.sections_taken.toLocaleString()}
+                targetText={plural(attendance.sections_total, "section")}
+                color={token("--color-success-500")}
+              />
+            )}
+          </SummaryBox>
+          <SummaryBox>
+            {grades.sections_total > 0 ? (
+              <Meter
+                label={`${period.label} grades in`}
+                value={grades.sections_complete}
+                max={grades.sections_total}
+                valueText={grades.sections_complete.toLocaleString()}
+                targetText={plural(grades.sections_total, "section")}
+                color={token("--color-info-500")}
+              />
+            ) : (
+              <p className="text-sm text-neutral-600">No subjects are set up yet.</p>
+            )}
+            {due && <p className={`mt-2 text-xs font-semibold ${due.late ? "text-error-500" : "text-neutral-600"}`}>{due.text}</p>}
+            {hasSeniorHigh && <p className="mt-1 text-xs text-neutral-500">Senior High counts its {period.semester_label}.</p>}
+          </SummaryBox>
+          <SummaryBox>
+            <div className="text-xs font-semibold text-neutral-700">No adviser</div>
+            <div className={`mt-1 text-lg font-bold tabular-nums ${noAdviser ? "text-warning-500" : "text-neutral-900"}`}>
+              {noAdviser.toLocaleString()}{" "}
+              <span className="text-xs font-medium text-neutral-500">of {plural(sections.length, "section")}</span>
+            </div>
+            {noAdviser > 0 && (
+              <p className="mt-1 text-xs text-neutral-500">No teacher can take attendance or enter grades for these.</p>
+            )}
+          </SummaryBox>
+        </div>
+
+        {period?.source !== "calendar" && (
+          <div className="flex flex-wrap items-center gap-2 rounded-sm bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+            <i className="ti ti-calendar-plus text-sm" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              Add each quarter's dates to the Academic Calendar (type: Grading Period) to see when grades are due.
+            </span>
+            <Button variant="ghost" size="sm" onClick={onOpenCalendar}>Open calendar</Button>
+          </div>
+        )}
+
+        <ChipGroup label="Show sections" options={chips} value={filter} onChange={setFilter} />
+
+        <Table
+          columns={SECTION_COLUMNS}
+          stickyHeader={false}
+          isEmpty={shown.length === 0}
+          empty={{ icon: "ti-circle-check", title: "Nothing here", subtitle: "No section matches this filter.", withAvatar: false }}
+        >
+          {shown.map((s) => (
+            <TableRow key={sectionName(s) + s.school_level}>
+              <TableCell className="font-semibold text-neutral-900">
+                {sectionName(s)}
+                <div className="text-xs font-normal text-neutral-500">{s.level_label}</div>
+              </TableCell>
+              <TableCell><AdviserName advisers={s.advisers} /></TableCell>
+              <TableCell className="tabular-nums">{s.students.toLocaleString()}</TableCell>
+              <TableCell>
+                {noClasses ? (
+                  <span className="text-neutral-500">No classes</span>
+                ) : s.attendance_taken ? (
+                  <span className="font-semibold text-success-500">Taken</span>
+                ) : (
+                  <span className="font-semibold text-warning-500">Not yet</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {!s.grades ? (
+                  <span className="text-neutral-500">No subjects set up</span>
+                ) : s.grades.complete ? (
+                  <span className="font-semibold text-success-500">{s.grades.label} complete</span>
+                ) : (
+                  <span className="tabular-nums text-neutral-700">
+                    {s.grades.done.toLocaleString()} of {s.grades.expected.toLocaleString()} grades in
+                  </span>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </Table>
+      </div>
     </Modal>
   );
 }
 
 // ── School at a glance ───────────────────────────────────────────────────────
 
-function Glance({ data, loading, schoolYear, showAmounts, onGo }) {
+function Glance({ data, loading, schoolYear, todayYear, onGo }) {
   const pipeline = data.summary?.pipeline;
   const risk = data.summary?.risk;
-  const fin = data.financial;
   const att = data.teachers?.attendance;
   const noClasses = data.teachers?.no_classes;
-
-  const billed = parseFloat(fin?.net_billed ?? 0);
-  const collected = parseFloat(fin?.total_collected ?? 0);
-  const collectedPct = billed > 0 ? Math.round((collected / billed) * 100) : null;
 
   const riskDate = risk?.computed_at
     ? new Date(risk.computed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
@@ -476,7 +592,7 @@ function Glance({ data, loading, schoolYear, showAmounts, onGo }) {
   const sy = encodeURIComponent(schoolYear ?? "");
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <StatCard
         label="Enrolled"
         icon="ti-school"
@@ -487,17 +603,6 @@ function Glance({ data, loading, schoolYear, showAmounts, onGo }) {
         onClick={() => onGo(`/enrollments?enrollment_status=enrolled&school_year=${sy}`)}
       />
       <StatCard
-        label="Collected"
-        icon="ti-cash"
-        iconTone="info"
-        loading={loading}
-        value={!fin ? "—" : showAmounts ? compactPeso(collected) : "₱ ••••••"}
-        hint={!fin ? "Billing didn't load" : !showAmounts ? "Amounts hidden" : collectedPct === null
-          ? "Nothing billed yet"
-          : `${collectedPct}% of ${compactPeso(billed)} billed`}
-        onClick={() => onGo(`/invoices?school_year=${sy}`)}
-      />
-      <StatCard
         label="Present today"
         icon="ti-calendar-check"
         iconTone="brand"
@@ -506,6 +611,7 @@ function Glance({ data, loading, schoolYear, showAmounts, onGo }) {
         hint={
           noClasses ? `No classes · ${noClasses.label}`
             : !att ? "Attendance didn't load"
+            : todayYear ? `Today · S.Y. ${todayYear}`
             : att.sections_taken ? `From ${att.sections_taken} of ${plural(att.sections_total, "section")}`
             : "No attendance taken yet today"
         }

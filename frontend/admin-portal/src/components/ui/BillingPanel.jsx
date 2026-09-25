@@ -134,16 +134,21 @@ export default function BillingPanel({
             aria-pressed={!showAmounts}
             onClick={onToggleAmounts}
           />
-          <Button
-            variant={filterYear ? "secondary" : "ghost"}
-            size="sm"
-            iconOnly
-            icon="ti-adjustments-horizontal"
-            title="Filter by school year"
-            aria-label="Filter by school year"
-            aria-expanded={showFilters}
-            onClick={onToggleFilters}
-          />
+          {/* Only where the page wants the panel to pick its own year. The
+              admin home's year picker already scopes it, and a second year
+              control there could disagree with the first. */}
+          {onToggleFilters && (
+            <Button
+              variant={filterYear ? "secondary" : "ghost"}
+              size="sm"
+              iconOnly
+              icon="ti-adjustments-horizontal"
+              title="Filter by school year"
+              aria-label="Filter by school year"
+              aria-expanded={showFilters}
+              onClick={onToggleFilters}
+            />
+          )}
         </div>
       </div>
 

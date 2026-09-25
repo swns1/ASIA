@@ -43,6 +43,37 @@ function setup(props = {}) {
 
 const openPicker = () => fireEvent.click(screen.getByRole("button"));
 
+describe("SchoolYearPicker — popover edge", () => {
+  const panel = () => screen.getByRole("listbox").closest("div.absolute");
+
+  it("opens from the pill's left edge by default", () => {
+    setup();
+    openPicker();
+    expect(panel().className).toMatch(/\bleft-0\b/);
+  });
+
+  it("opens leftward from a pill at the right edge of the page", () => {
+    setup({ align: "end" });
+    openPicker();
+    expect(panel().className).toMatch(/\bright-0\b/);
+    expect(panel().className).not.toMatch(/\bleft-0\b/);
+  });
+
+  it("never scrolls the page to show the selected year", () => {
+    // scrollIntoView scrolled every ancestor, the app shell included.
+    const spy = vi.fn();
+    Element.prototype.scrollIntoView = spy;
+    try {
+      setup();
+      openPicker();
+      fireEvent.keyDown(screen.getByRole("button"), { key: "ArrowDown" });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+});
+
 describe("SchoolYearPicker — trigger", () => {
   it("shows the selected year and its real count, not the page's result count", () => {
     setup();
