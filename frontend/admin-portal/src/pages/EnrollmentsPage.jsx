@@ -13,7 +13,7 @@ import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
 import { StatusBadge } from "../components/ui/Badge";
-import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP } from "../constants/statusMaps";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
 
@@ -25,6 +25,8 @@ import {
   bulkCreateEnrollments as apiBulkEnroll,
   promotePreview,
   promoteConfirm,
+  completeSection,
+  getUnplacedStudents,
 } from "../api/enrollmentApi";
 import { getStudents as apiGetStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
@@ -641,7 +643,8 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
 // ════════════════════════════════════════════════════════════════════════════
 // PROMOTE SECTION MODAL
 // ════════════════════════════════════════════════════════════════════════════
-function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLevel, initSection }) {
+function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolYear, initGradeLevel, initSection }) {
+  const navigate = useNavigate();
   // Step: "input" → "preview" → "result"
   const STEP_ORDER = ["input", "preview", "result"];
   const [step, setStep] = useState("input");
@@ -659,6 +662,11 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
   const [confirming,  setConfirming]  = useState(false);
   const [resultData,  setResultData]  = useState(null);
   const [error,       setError]       = useState("");
+  // The server's "level_transition" refusal (Grade 6 -> 7, 10 -> 11, K -> 1).
+  // Those learners are placed per class through Mass Enroll, so this is shown
+  // as a next step rather than as an error.
+  const [levelTransition, setLevelTransition] = useState(null);
+  const [closing,     setClosing]     = useState(false);
 
   function goStep(next) {
     const prevIdx = STEP_ORDER.indexOf(prevStepRef.current);
@@ -690,37 +698,62 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
 
   const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear;
 
+  const promotePayload = () => ({
+    from_school_year: fromSchoolYear,
+    from_grade_level: fromGradeLevel,
+    from_section:     fromSection.trim(),
+    to_school_year:   toSchoolYear,
+    to_section:       toSection.trim() || fromSection.trim(),
+  });
+
   async function handlePreview() {
     setError("");
+    setLevelTransition(null);
     setPreviewing(true);
     try {
-      const data = await promotePreview({
-        from_school_year: fromSchoolYear,
-        from_grade_level: fromGradeLevel,
-        from_section:     fromSection.trim(),
-        to_school_year:   toSchoolYear,
-        to_section:       toSection.trim() || fromSection.trim(),
-      });
+      const data = await promotePreview(promotePayload());
       setPreviewData(data);
       goStep("preview");
     } catch (e) {
+      if (e.response?.data?.reason === "level_transition") setLevelTransition(e.response.data);
       setError(e.response?.data?.detail || e.message || "Preview failed.");
     } finally {
       setPreviewing(false);
     }
   }
 
+  // Promote reads only learners whose year is Completed. Closing the section
+  // here replaces one "Mark Completed" click per learner, then re-runs the
+  // preview so the lists reflect it.
+  async function handleCloseYear() {
+    setError("");
+    setClosing(true);
+    try {
+      await completeSection({
+        school_year: fromSchoolYear,
+        grade_level: fromGradeLevel,
+        section:     fromSection.trim(),
+        // Grade 11 is enrolled per semester; the year ends with the 2nd.
+        ...(fromGradeLevel === "Grade 11" ? { semester: "2nd" } : {}),
+      });
+      setPreviewData(await promotePreview(promotePayload()));
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Could not close the section's year.");
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  // A learner held back is re-enrolled in the same grade, one at a time, on
+  // the enrollment form -- which opens on "Repeat" for this link.
+  const repeaterLink = (studentId) =>
+    `/enrollments/new?student=${studentId}&retain=1${toSchoolYear ? `&school_year=${encodeURIComponent(toSchoolYear)}` : ""}`;
+
   async function handleConfirm() {
     setError("");
     setConfirming(true);
     try {
-      const data = await promoteConfirm({
-        from_school_year: fromSchoolYear,
-        from_grade_level: fromGradeLevel,
-        from_section:     fromSection.trim(),
-        to_school_year:   toSchoolYear,
-        to_section:       toSection.trim() || fromSection.trim(),
-      });
+      const data = await promoteConfirm(promotePayload());
       setResultData(data);
       goStep("result");
       onSuccess?.();
@@ -824,7 +857,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                 <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
                   <div style={{ background:"#f0f5ff", border:"1px solid #c7d9f8", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#1455a0", display:"flex", gap:10, alignItems:"flex-start" }}>
                     <i className="ti ti-info-circle" style={{ fontSize:15, flexShrink:0, marginTop:1 }} />
-                    Only students with <strong>completed</strong> status and <strong>no failed/incomplete subjects</strong> will be promoted. You'll see a preview before anything is saved.
+                    Only students with <strong>completed</strong> status and <strong>no failed/incomplete subjects</strong> will be promoted. If the section is still marked Enrolled, you can close its year from the preview. Nothing is saved until you confirm.
                   </div>
 
                   <div>
@@ -839,7 +872,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                       </div>
                       <div>
                         <label style={lbl}>Grade Level <span style={{ color:"#c92a2a" }}>*</span></label>
-                        <select value={fromGradeLevel} onChange={(e) => setFromGradeLevel(e.target.value)} style={sel}>
+                        <select value={fromGradeLevel} onChange={(e) => { setFromGradeLevel(e.target.value); setLevelTransition(null); }} style={sel}>
                           {allGrades.map((g) => <option key={g} value={g}>{g}</option>)}
                         </select>
                       </div>
@@ -877,8 +910,31 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                     </div>
                   </div>
 
+                  {levelTransition && (
+                    <div style={{ background:"#f0f5ff", border:"1px solid #c7d9f8", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#1455a0", display:"flex", flexDirection:"column", gap:10 }}>
+                      <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                        <i className="ti ti-info-circle" style={{ fontSize:15, flexShrink:0, marginTop:1 }} />
+                        <div>
+                          {levelTransition.detail}{" "}
+                          Place them with <strong>Mass Enroll</strong>: it lists every learner whose last completed grade is {levelTransition.from_grade_level}.
+                        </div>
+                      </div>
+                      {onOpenMassEnroll && (
+                        <div>
+                          <Button size="sm" icon="ti-users-plus" onClick={() => onOpenMassEnroll({
+                            schoolYear:  toSchoolYear || undefined,
+                            schoolLevel: levelTransition.to_school_level,
+                            gradeLevel:  levelTransition.to_grade_level,
+                          })}>
+                            Open Mass Enroll for {levelTransition.to_grade_level}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <AnimatePresence>
-                    {error && (
+                    {error && !levelTransition && (
                       <motion.div
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -914,7 +970,19 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                     ))}
                   </div>
 
-                  {previewData.to_promote.length === 0 && (
+                  {previewData.still_enrolled?.length > 0 && (
+                    <div style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#7a4a00", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                      <div>
+                        <i className="ti ti-alert-triangle" style={{ marginRight:7 }} />
+                        <strong>{previewData.still_enrolled.length}</strong> learner{previewData.still_enrolled.length !== 1 ? "s are" : " is"} still marked <strong>Enrolled</strong> for SY {fromSchoolYear}. Promote only reads learners whose year is <strong>Completed</strong>.
+                      </div>
+                      <Button size="sm" icon="ti-flag-check" loading={closing} onClick={handleCloseYear}>
+                        Mark {previewData.still_enrolled.length} completed
+                      </Button>
+                    </div>
+                  )}
+
+                  {previewData.to_promote.length === 0 && !previewData.still_enrolled?.length && (
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}
                       style={{ background:"#faeeda", border:"1px solid #f0c070", borderRadius:10, padding:"14px 18px", fontSize:13, color:"#7a4a00" }}>
@@ -973,6 +1041,12 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                               <span style={{ fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{s.student_name}</span>
                             </div>
                             <div style={{ fontSize:11.5, color:"#9a5050", marginLeft:38 }}>{s.reason}</div>
+                            {s.kind === "failed" && (
+                              <button type="button" onClick={() => navigate(repeaterLink(s.student_id))}
+                                style={{ marginLeft:38, marginTop:4, background:"none", border:"none", padding:0, fontSize:11.5, fontWeight:700, color:"#1455a0", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                                Enroll as repeater →
+                              </button>
+                            )}
                           </motion.div>
                         ))}
                       </div>
@@ -1032,6 +1106,12 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                       {resultData.skipped.map((s, i) => (
                         <div key={s.student_id ?? i} style={{ fontSize:11.5, marginTop:3 }}>
                           · {s.student_name ?? `Student #${s.student_id}`}: {s.reason}
+                          {s.kind === "failed" && (
+                            <button type="button" onClick={() => navigate(repeaterLink(s.student_id))}
+                              style={{ marginLeft:6, background:"none", border:"none", padding:0, fontSize:11.5, fontWeight:700, color:"#1455a0", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                              Enroll as repeater →
+                            </button>
+                          )}
                         </div>
                       ))}
                     </motion.div>
@@ -1082,7 +1162,13 @@ export default function EnrollmentsPage() {
   const [page,           setPage]           = useState(1);
   const [pageMeta,       setPageMeta]       = useState({ count: 0, next: null, previous: null });
   const [showMassEnroll,  setShowMassEnroll]  = useState(false);
+  // Set when Promote hands a level crossing (e.g. Grade 6 -> 7) over to Mass
+  // Enroll, so it opens on the destination class instead of the page filters.
+  const [massEnrollInit,  setMassEnrollInit]  = useState(null);
   const [showPromote,     setShowPromote]     = useState(false);
+  // Active students with no enrolled/pending row in the selected year.
+  const [unplaced,        setUnplaced]        = useState(null);
+  const [unplacedOpen,    setUnplacedOpen]    = useState(false);
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
 
@@ -1095,6 +1181,8 @@ export default function EnrollmentsPage() {
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
+  // The guardian's answer on pending rows: returning / not_returning / none.
+  const [parentAnswer, setParentAnswer] = useState("");
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
 
@@ -1108,6 +1196,22 @@ export default function EnrollmentsPage() {
   }, [globalSchoolYear]);
 
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
+
+  // Only pending rows carry a guardian's answer, so the filter applies only
+  // while Pending is selected.
+  const activeParentAnswer = statusFilter === "pending" ? parentAnswer : "";
+
+  // Not-yet-placed worklist for the selected year. Staff who manage
+  // enrollments only; the endpoint refuses everyone else. Rendered only when
+  // it matches the selected year, so a stale list never shows.
+  useEffect(() => {
+    if (!token || !canManage || !schoolYear) return;
+    let cancelled = false;
+    getUnplacedStudents(schoolYear)
+      .then((d) => { if (!cancelled) setUnplaced(d); })
+      .catch(() => { if (!cancelled) setUnplaced(null); });
+    return () => { cancelled = true; };
+  }, [token, canManage, schoolYear]);
 
   // Reset grade when level changes — but not on the initial mount, so a URL-seeded
   // grade_level (alongside school_level) isn't immediately wiped out.
@@ -1157,6 +1261,7 @@ export default function EnrollmentsPage() {
       if (schoolLevel)  params.set("school_level",       schoolLevel);
       if (gradeLevel)   params.set("grade_level",        gradeLevel);
       if (statusFilter) params.set("enrollment_status",  statusFilter);
+      if (activeParentAnswer) params.set("guardian_response", activeParentAnswer);
       if (search)       params.set("search",             search);
 
       const data = await apiGetEnrollments(Object.fromEntries(params));
@@ -1173,17 +1278,17 @@ export default function EnrollmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, schoolYear, schoolLevel, gradeLevel, statusFilter, search, navigate]);
+  }, [token, schoolYear, schoolLevel, gradeLevel, statusFilter, activeParentAnswer, search, navigate]);
 
   useEffect(() => { fetchEnrollments(1); }, [fetchEnrollments]);
 
   const handleSearch = () => { setSearch(searchInput); };
   const clearFilters = () => {
     setSchoolYear(""); setSchoolLevel(""); setGradeLevel("");
-    setStatusFilter(""); setSearch(""); setSearchInput("");
+    setStatusFilter(""); setParentAnswer(""); setSearch(""); setSearchInput("");
   };
 
-  const hasFilters = schoolYear || schoolLevel || gradeLevel || statusFilter || search;
+  const hasFilters = schoolYear || schoolLevel || gradeLevel || statusFilter || activeParentAnswer || search;
   const totalPages = Math.ceil(pageMeta.count / 20);
 
   const isFirstRender    = useIsFirstRender();
@@ -1240,6 +1345,53 @@ export default function EnrollmentsPage() {
                 </div>
               ))}
             </div>
+
+            {/* ── Not yet placed ── */}
+            {canManage && unplaced?.school_year === schoolYear && unplaced.count > 0 && (
+              <Card padding="none" className="overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-2.5 text-sm text-neutral-800">
+                    <i className="ti ti-user-question text-lg text-warning-500" aria-hidden="true" />
+                    <span>
+                      <strong>{unplaced.count}</strong> active student{unplaced.count !== 1 ? "s have" : " has"} no enrollment in SY {unplaced.school_year}.
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={unplacedOpen ? "ti-chevron-up" : "ti-chevron-down"}
+                    aria-expanded={unplacedOpen}
+                    onClick={() => setUnplacedOpen((v) => !v)}
+                  >
+                    {unplacedOpen ? "Hide" : "Show"}
+                  </Button>
+                </div>
+                {unplacedOpen && (
+                  <ul className="max-h-72 divide-y divide-neutral-100 overflow-y-auto border-t border-neutral-100">
+                    {unplaced.results.map((st) => (
+                      <li key={st.student_id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-neutral-900">{st.full_name}</div>
+                          <div className="truncate text-xs text-neutral-500">
+                            {st.last_enrollment
+                              ? `Last: ${st.last_enrollment.grade_level} · SY ${st.last_enrollment.school_year} · ${ENROLLMENT_STATUS_MAP[st.last_enrollment.enrollment_status]?.label ?? st.last_enrollment.enrollment_status}`
+                              : "No enrollment on record"}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon="ti-clipboard-plus"
+                          onClick={() => navigate(`/enrollments/new?student=${st.student_id}&school_year=${encodeURIComponent(unplaced.school_year)}`)}
+                        >
+                          Enroll
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )}
 
             {/* ── Search + filters ── */}
             <FilterBar
@@ -1308,6 +1460,22 @@ export default function EnrollmentsPage() {
                   ]}
                 />
               </FilterRow>
+
+              {/* Guardians answer "returning next year?" on pending rows, so
+                  this only appears with the Pending filter. */}
+              <CollapsibleFilterRow open={statusFilter === "pending"} label="Parent answer">
+                <ChipGroup
+                  label="Filter by parent answer"
+                  value={parentAnswer}
+                  onChange={setParentAnswer}
+                  options={[
+                    { value: "",              label: "All",           tone: "brand" },
+                    { value: "returning",     label: "Returning",     tone: "success", icon: "ti-user-check" },
+                    { value: "not_returning", label: "Not returning", tone: "error",   icon: "ti-user-x" },
+                    { value: "none",          label: "No answer",     tone: "warning", icon: "ti-help-circle" },
+                  ]}
+                />
+              </CollapsibleFilterRow>
             </FilterBar>
 
             {/* ── Table ── */}
@@ -1388,10 +1556,20 @@ export default function EnrollmentsPage() {
                         </TableCell>
 
                         <TableCell>
-                          <StatusBadge
-                            status={en.enrollment_status}
-                            map={ENROLLMENT_STATUS_MAP}
-                          />
+                          <div className="flex flex-col items-start gap-1">
+                            <StatusBadge
+                              status={en.enrollment_status}
+                              map={ENROLLMENT_STATUS_MAP}
+                            />
+                            {en.enrollment_status === "pending" && en.guardian_response && (
+                              <StatusBadge
+                                size="sm"
+                                status={en.guardian_response.response}
+                                map={GUARDIAN_RESPONSE_MAP}
+                                title={en.guardian_response.reason ? `Parent: ${en.guardian_response.reason}` : "Parent's answer"}
+                              />
+                            )}
+                          </div>
                         </TableCell>
 
                         {/* Stop propagation so the edit action doesn't also
@@ -1429,11 +1607,11 @@ export default function EnrollmentsPage() {
     <AnimatePresence>
       {showMassEnroll && (
         <MassEnrollModal
-          onClose={() => setShowMassEnroll(false)}
+          onClose={() => { setShowMassEnroll(false); setMassEnrollInit(null); }}
           onSuccess={() => fetchEnrollments(page)}
-          initSchoolYear={schoolYear   || undefined}
-          initSchoolLevel={schoolLevel || undefined}
-          initGradeLevel={gradeLevel   || undefined}
+          initSchoolYear={massEnrollInit?.schoolYear   ?? (schoolYear   || undefined)}
+          initSchoolLevel={massEnrollInit?.schoolLevel ?? (schoolLevel || undefined)}
+          initGradeLevel={massEnrollInit?.gradeLevel   ?? (gradeLevel   || undefined)}
         />
       )}
     </AnimatePresence>
@@ -1442,6 +1620,11 @@ export default function EnrollmentsPage() {
         <PromoteSectionModal
           onClose={() => setShowPromote(false)}
           onSuccess={() => fetchEnrollments(page)}
+          onOpenMassEnroll={(init) => {
+            setShowPromote(false);
+            setMassEnrollInit(init);
+            setShowMassEnroll(true);
+          }}
           initSchoolYear={schoolYear  || undefined}
           initSchoolLevel={schoolLevel || undefined}
           initGradeLevel={gradeLevel  || undefined}

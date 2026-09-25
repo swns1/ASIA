@@ -119,7 +119,7 @@ and the `student_invoice_balances` view that Django cannot see at all — a writ
 rejected at the DB level, so check the trigger before blaming the ORM. 33 models are
 `managed = False`; the real migrations are all in enrollment-service (`ai` risk tables,
 `attendance`, `academic_calendar`, and `enrollments`' `section_advisories` /
-`enrollment_transfers` / `email_delivery_failures`). Schema changes go through pgAdmin or a
+`enrollment_transfers` / `email_delivery_failures` / `guardian_responses`). Schema changes go through pgAdmin or a
 reviewed script in `scripts/`, then `schema.sql` is regenerated. Every change needs a stated
 rollback; money and grade tables (`invoices`, `installments`, `payments`, `grades`) get extra
 scrutiny. Index what you filter and join on; flag any new per-row query in a loop.

@@ -223,6 +223,51 @@ class EnrollmentTransfer(models.Model):
         return f"{self.get_transfer_type_display()} · enrollment #{self.enrollment_id} · {self.effective_date}"
 
 
+# ─── Guardian's answer to "returning next school year?" ─────────────────────
+class GuardianResponse(models.Model):
+    """
+    A guardian's answer on a continuing learner's next-year `pending` row --
+    the only thing the guardian portal writes.
+
+    Guardians do not enroll. Promote (or the registrar) creates the pending
+    row, and the registrar activates it through the document gate or cancels
+    it; this only tells them which way the family is leaning. It never changes
+    the enrollment's status, so "not returning" is a prompt to follow up, not
+    a withdrawal.
+
+    One row per enrollment, overwritten while the enrollment is still pending
+    so a guardian can change their mind. New data owned by enrollment-service,
+    so -- like EnrollmentTransfer -- Django-managed with a real migration.
+    """
+
+    RESPONSE_CHOICES = [
+        ("returning",     "Returning"),
+        ("not_returning", "Not returning"),
+    ]
+
+    guardian_response_id = models.BigAutoField(primary_key=True)
+
+    enrollment = models.OneToOneField(
+        Enrollment,
+        on_delete=models.CASCADE,
+        db_column="enrollment_id",
+        related_name="guardian_response",
+    )
+
+    response = models.CharField(max_length=20, choices=RESPONSE_CHOICES)
+    reason = models.TextField(blank=True)
+
+    responded_by = models.IntegerField()  # user_id from identity-service JWT
+    responded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "guardian_responses"
+
+    def __str__(self):  # pragma: no cover
+        return f"{self.get_response_display()} · enrollment #{self.enrollment_id}"
+
+
 # ─── Email delivery failure record ───────────────────────────────────────────
 class EmailDeliveryFailure(models.Model):
     """

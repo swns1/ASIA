@@ -234,6 +234,26 @@ export const promotePreview = (payload) =>
 export const promoteConfirm = (payload) =>
   enrollmentClient.post("/enrollments/promote/confirm/", payload).then((r) => r.data);
 
+// Closes a section's school year: every `enrolled` row in it becomes
+// `completed`, which is what Promote reads from. { school_year, grade_level,
+// section, semester? } — semester is required for Grade 11/12.
+export const completeSection = (payload) =>
+  enrollmentClient.post("/enrollments/complete-section/", payload).then((r) => r.data);
+
+// Active students with no enrolled/pending row in `schoolYear` — the
+// registrar's "not yet placed" worklist.
+export const getUnplacedStudents = (schoolYear) =>
+  enrollmentClient
+    .get("/enrollments/unplaced/", { params: schoolYear ? { school_year: schoolYear } : {} })
+    .then((r) => r.data);
+
+// A guardian's answer on their child's next-year pending row. Records the
+// answer only — the registrar still activates or cancels the enrollment.
+export const submitGuardianResponse = (enrollmentId, { response, reason = "" }) =>
+  enrollmentClient
+    .post(`/enrollments/${enrollmentId}/guardian-response/`, { response, reason })
+    .then((r) => r.data);
+
 // ── Report card ───────────────────────────────────────────────────────────────
 export const getReportCard = (enrollmentId, params = {}) =>
   enrollmentClient.get(`/enrollments/${enrollmentId}/report-card/`, { params }).then((r) => r.data);

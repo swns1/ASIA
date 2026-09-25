@@ -21,10 +21,12 @@ const getAttendanceSummary = vi.fn();
 const getStudentLedger = vi.fn();
 const fetchRequirementSummary = vi.fn();
 const getEnrollments = vi.fn();
+const submitGuardianResponse = vi.fn();
 
 vi.mock("../../api/enrollmentApi", () => ({
   getReportCard: (...a) => getReportCard(...a),
   getEnrollments: (...a) => getEnrollments(...a),
+  submitGuardianResponse: (...a) => submitGuardianResponse(...a),
 }));
 vi.mock("../../api/attendanceApi", () => ({
   getAttendanceSummary: (...a) => getAttendanceSummary(...a),
@@ -344,5 +346,107 @@ describe("GuardianHomePage", () => {
     const card = screen.getByRole("button", { name: /Bianca Soriano/ });
     expect(card.textContent).toContain("2025-2026");
     expect(card.textContent).not.toContain("2024-2025");
+  });
+});
+
+// The one thing a guardian can send: "will your child return next year?".
+// Promote creates the next-year row as Pending; the parent answers on it, and
+// the registrar still confirms the enrollment.
+describe("GuardianHomePage — next school year", () => {
+  const child = { full_name: "Bianca Soriano", lrn: "136700000110" };
+  const thisYear = {
+    enrollment_id: 210, student_id: 110, school_year: "2025-2026",
+    enrollment_status: "completed", grade_level: "Grade 4", section: "A",
+    school_level: "elementary", student_detail: child,
+  };
+  const nextYear = {
+    enrollment_id: 220, student_id: 110, school_year: "2026-2027",
+    enrollment_status: "pending", grade_level: "Grade 5", section: "A",
+    school_level: "elementary", student_detail: child, guardian_response: null,
+  };
+
+  it("keeps the card on the year with records, not the empty next-year row", async () => {
+    getEnrollments.mockResolvedValue({ results: [thisYear, nextYear] });
+
+    renderHomePage();
+
+    await screen.findByText("Bianca Soriano");
+    const card = screen.getByRole("button", { name: /Bianca Soriano/ });
+    expect(card.textContent).toContain("2025-2026");
+    expect(card.textContent).toContain("Grade 4");
+  });
+
+  it("asks whether the child is returning", async () => {
+    getEnrollments.mockResolvedValue({ results: [thisYear, nextYear] });
+
+    renderHomePage();
+
+    expect(await screen.findByText("Will Bianca return to school in SY 2026-2027?")).toBeTruthy();
+  });
+
+  it("does not ask about a new learner's pending placement", async () => {
+    // No earlier year here: that row is waiting on documents, not on the family.
+    getEnrollments.mockResolvedValue({ results: [nextYear] });
+
+    renderHomePage();
+
+    await screen.findByText("Bianca Soriano");
+    expect(screen.queryByText(/Will Bianca return/)).toBeNull();
+  });
+
+  it("sends the answer and shows it back", async () => {
+    getEnrollments.mockResolvedValue({ results: [thisYear, nextYear] });
+    submitGuardianResponse.mockResolvedValue({
+      enrollment_id: 220,
+      guardian_response: { response: "returning", reason: "", responded_at: "2026-03-01T08:00:00Z" },
+    });
+
+    renderHomePage();
+    fireEvent.click(await screen.findByRole("button", { name: /Yes, returning/ }));
+
+    await waitFor(() => expect(submitGuardianResponse).toHaveBeenCalledWith(220, { response: "returning", reason: "" }));
+    expect(await screen.findByText("Returning")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Change answer/ })).toBeTruthy();
+    expect(screen.queryByText(/Will Bianca return/)).toBeNull();
+  });
+
+  it("sends a reason with 'not returning'", async () => {
+    getEnrollments.mockResolvedValue({ results: [thisYear, nextYear] });
+    submitGuardianResponse.mockResolvedValue({
+      enrollment_id: 220,
+      guardian_response: { response: "not_returning", reason: "Moving to Cebu", responded_at: "2026-03-01T08:00:00Z" },
+    });
+
+    renderHomePage();
+    fireEvent.click(await screen.findByRole("button", { name: /Not returning/ }));
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: " Moving to Cebu " } });
+    fireEvent.click(screen.getByRole("button", { name: /Send: not returning/ }));
+
+    await waitFor(() => expect(submitGuardianResponse).toHaveBeenCalledWith(
+      220, { response: "not_returning", reason: "Moving to Cebu" },
+    ));
+    expect(await screen.findByText("Reason: Moving to Cebu")).toBeTruthy();
+  });
+
+  it("shows an answer given earlier instead of asking again", async () => {
+    getEnrollments.mockResolvedValue({
+      results: [thisYear, { ...nextYear, guardian_response: { response: "returning", reason: "" } }],
+    });
+
+    renderHomePage();
+
+    expect(await screen.findByText("Returning")).toBeTruthy();
+    expect(screen.queryByText(/Will Bianca return/)).toBeNull();
+  });
+
+  it("keeps the question open when saving fails", async () => {
+    getEnrollments.mockResolvedValue({ results: [thisYear, nextYear] });
+    submitGuardianResponse.mockRejectedValue(new Error("Network down"));
+
+    renderHomePage();
+    fireEvent.click(await screen.findByRole("button", { name: /Yes, returning/ }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/Will Bianca return/)).toBeTruthy();
   });
 });

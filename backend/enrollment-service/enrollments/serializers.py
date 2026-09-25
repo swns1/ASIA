@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
@@ -119,6 +120,11 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     # at validation time that row does not exist yet.
     is_transfer_in = serializers.BooleanField(write_only=True, required=False, default=False)
 
+    # The guardian's answer on a next-year pending row (GuardianResponse).
+    # Read-only here: guardians write it through the guardian-response action,
+    # never through this serializer.
+    guardian_response = serializers.SerializerMethodField()
+
     class Meta:
         model = Enrollment
         fields = (
@@ -137,8 +143,22 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             "progression_override",
             "progression_override_reason",
             "is_transfer_in",
+            "guardian_response",
         )
         read_only_fields = ("enrollment_id",)
+
+    def get_guardian_response(self, obj):
+        try:
+            answer = obj.guardian_response
+        except (ObjectDoesNotExist, AttributeError):
+            return None
+        if answer is None:
+            return None
+        return {
+            "response":     answer.response,
+            "reason":       answer.reason,
+            "responded_at": answer.responded_at,
+        }
 
     def get_student_name(self, obj):
         s = obj.student
@@ -310,15 +330,19 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                             })
 
                 # ── Failed/incomplete subjects block promotion ─────────────────
+                # On the YEAR, per learning area -- enrollments.promotion, the
+                # rule Promote and the report card use. This used to match any
+                # per-quarter "failed" remark, so a learner Promote had carried
+                # up (failed Q1, finished at 84) was refused here, one learner
+                # at a time, by the same system.
                 if not progression_override and grade_level != last_grade:
-                    failed = Grade.objects.filter(
-                        enrollment=last_completed,
-                        remarks__in=["failed", "incomplete"],
-                    ).select_related("subject")
-                    if failed.exists():
-                        names = ", ".join(
-                            g.subject.subject_name for g in failed
-                        )
+                    from .promotion import failed_learning_areas
+
+                    failed = failed_learning_areas(
+                        Grade.objects.filter(enrollment=last_completed).select_related("subject")
+                    )
+                    if failed:
+                        names = ", ".join(failed)
                         raise serializers.ValidationError({
                             "grade_level": (
                                 f"Cannot promote from {last_grade} — student has "

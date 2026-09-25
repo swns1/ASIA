@@ -4,6 +4,7 @@ from datetime import date
 from rest_framework import viewsets, status
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
@@ -11,7 +12,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
-from grading.deped import general_average, summarize_subjects
+from shared import school_year as school_year_rules
+from grading.deped import summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
     IsAdminRegistrarOrReadOnly,
@@ -20,7 +22,14 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
-from .models import Enrollment, EnrollmentOverride, EnrollmentTransfer, SectionAdvisory
+from .models import (
+    Enrollment,
+    EnrollmentOverride,
+    EnrollmentTransfer,
+    GuardianResponse,
+    SectionAdvisory,
+    Student,
+)
 from .serializers import (
     EnrollmentSerializer,
     EnrollmentTransferSerializer,
@@ -30,6 +39,7 @@ from .serializers import (
     StudentSummarySerializer,
 )
 from .filters import EnrollmentFilter
+from . import promotion
 
 logger = logging.getLogger(__name__)
 
@@ -811,7 +821,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
       ?search=Cruz       (matches student name, LRN, student_number, section)
     """
 
-    queryset = Enrollment.objects.select_related("student").all()
+    queryset = Enrollment.objects.select_related("student", "guardian_response").all()
     serializer_class = EnrollmentSerializer
     permission_classes = [IsStaffOrOwnerGuardianReadOnly]
     owner_student_id_field = "student_id"  # obj is the Enrollment itself
@@ -864,6 +874,79 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             for y in sorted(counts, reverse=True)
         ]
         return Response({"current": current, "results": results})
+
+    @action(detail=False, methods=["get"], url_path="unplaced")
+    def unplaced(self, request):
+        """
+        GET /api/enrollments/unplaced/?school_year=2026-2027
+
+        Active students with no enrolled or pending row in that school year
+        (default: the current one) -- the registrar's worklist of learners
+        nobody has placed.
+
+        The rule this checks: every `active` student holds exactly one active
+        enrollment per school year. The unique index uq_enrollments_student_sy
+        already stops them holding two; nothing stopped them holding none. An
+        approved application or a counter registration creates the Student
+        and hands off to the enrollment form, and a form abandoned there left
+        a learner with no class, no SF1 line and no invoice, and no screen
+        that would ever show them.
+
+        Each result carries the learner's latest enrollment of any year, so
+        the screen can suggest the next grade -- or show that there is none
+        and this is a new learner.
+        """
+        if getattr(request.user, "role", None) not in ACADEMIC_STAFF_ROLES:
+            return Response({"detail": "You do not have access to this record."}, status=403)
+
+        raw_year = request.query_params.get("school_year")
+        try:
+            year = (
+                school_year_rules.normalize(raw_year)
+                if raw_year
+                else school_year_rules.current(timezone.localdate())
+            )
+        except school_year_rules.InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        placed = Enrollment.objects.filter(
+            school_year=year,
+            enrollment_status__in=("enrolled", "pending"),
+        ).values("student_id")
+        students = list(
+            Student.objects.filter(status="active")
+            .exclude(student_id__in=placed)
+            .order_by("last_name", "first_name", "student_id")
+        )
+
+        # One query for everyone's history; the first row per student in this
+        # ordering is their latest.
+        latest = {}
+        for e in (
+            Enrollment.objects.filter(student_id__in=[st.student_id for st in students])
+            .order_by("student_id", "-school_year", "-enrollment_id")
+        ):
+            latest.setdefault(e.student_id, e)
+
+        results = []
+        for st in students:
+            last = latest.get(st.student_id)
+            results.append({
+                "student_id":     st.student_id,
+                "student_number": st.student_number,
+                "lrn":            st.lrn,
+                "full_name":      " ".join(
+                    p for p in (st.first_name, st.middle_name, st.last_name, st.suffix) if p
+                ),
+                "last_enrollment": {
+                    "enrollment_id":     last.enrollment_id,
+                    "school_year":       last.school_year,
+                    "grade_level":       last.grade_level,
+                    "enrollment_status": last.enrollment_status,
+                } if last else None,
+            })
+
+        return Response({"school_year": year, "count": len(results), "results": results})
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -1081,6 +1164,103 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(
+        detail=True, methods=["post"], url_path="guardian-response",
+        # The viewset's IsStaffOrOwnerGuardianReadOnly refuses every guardian
+        # write, which is right for everything else on this viewset. This is
+        # the one exception, so it carries its own checks below instead.
+        permission_classes=[IsAuthenticated],
+    )
+    def guardian_response(self, request, pk=None):
+        """
+        POST /api/enrollments/{id}/guardian-response/
+
+        A guardian's answer to "will your child return next school year?",
+        on the pending row Promote (or the registrar) created for it.
+
+        Guardians do not enroll: this records the answer and nothing else. It
+        never changes the enrollment's status -- the registrar still activates
+        the row through the document gate, or cancels it. The answer can be
+        changed while the row is pending.
+
+        Refused unless the row is the caller's own child's, still pending, and
+        a next-year row for a learner already here (an earlier enrollment
+        exists). A pending row with no history is a new learner's placement
+        waiting on documents, not a question for the family.
+
+        Body:
+          {
+            "response": "returning" | "not_returning",
+            "reason":   "Moving to Cebu"     // optional, kept for not_returning
+          }
+        """
+        if getattr(request.user, "role", None) != "guardian":
+            return Response(
+                {"detail": "Only a guardian can answer for their child."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # get_queryset() is already scoped to this guardian's children, so
+        # another family's row is simply not found here.
+        enrollment = self.get_queryset().filter(pk=pk).first()
+        if enrollment is None:
+            return Response(
+                {"detail": "You do not have access to this record."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        answer = (request.data.get("response") or "").strip()
+        if answer not in ("returning", "not_returning"):
+            return Response(
+                {"detail": "response must be 'returning' or 'not_returning'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = (request.data.get("reason") or "").strip() if answer == "not_returning" else ""
+        if len(reason) > 500:
+            return Response(
+                {"detail": "Please keep the reason under 500 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if enrollment.enrollment_status != "pending":
+            return Response(
+                {"detail": "This enrollment is no longer waiting on your answer."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        continuing = (
+            Enrollment.objects.filter(
+                student_id=enrollment.student_id,
+                school_year__lt=enrollment.school_year,
+                enrollment_status__in=("enrolled", "completed"),
+            )
+            .exclude(pk=enrollment.pk)
+            .exists()
+        )
+        if not continuing:
+            return Response(
+                {"detail": "Only a returning learner's next-year enrollment takes an answer here."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        saved, _ = GuardianResponse.objects.update_or_create(
+            enrollment=enrollment,
+            defaults={
+                "response": answer,
+                "reason": reason,
+                "responded_by": getattr(request.user, "user_id", None) or getattr(request.user, "id", None) or 0,
+            },
+        )
+
+        return Response({
+            "enrollment_id": enrollment.enrollment_id,
+            "guardian_response": {
+                "response":     saved.response,
+                "reason":       saved.reason,
+                "responded_at": saved.responded_at,
+            },
+        })
+
     @action(detail=False, methods=["post"], url_path="bulk")
     def bulk_create(self, request):
         """
@@ -1198,6 +1378,63 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         return self._promote_logic(request, dry_run=False)
 
+    @action(detail=False, methods=["post"], url_path="complete-section")
+    def complete_section(self, request):
+        """
+        POST /api/enrollments/complete-section/
+
+        Closes a section's school year: every `enrolled` row in it becomes
+        `completed`, in one transaction. This is the step Promote reads from,
+        and it used to take one "Mark Completed" click per learner.
+
+        Only `enrolled` rows move. Pending, cancelled and transferred-out
+        learners did not finish the year here and are left as they are.
+        Whether a completed learner passed is still decided from their grades,
+        by Promote -- completing a row does not promote anyone.
+
+        Body:
+          {
+            "school_year": "2025-2026",
+            "grade_level": "Grade 4",
+            "section":     "Rizal",
+            "semester":    "2nd"     // required for Grade 11 / Grade 12
+          }
+        """
+        school_year = (request.data.get("school_year") or "").strip()
+        grade_level = (request.data.get("grade_level") or "").strip()
+        section     = (request.data.get("section") or "").strip()
+        semester    = (request.data.get("semester") or "").strip() or None
+
+        missing = [f for f, v in [
+            ("school_year", school_year),
+            ("grade_level", grade_level),
+            ("section",     section),
+        ] if not v]
+        if missing:
+            return Response(
+                {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if grade_level in ("Grade 11", "Grade 12") and semester not in ("1st", "2nd"):
+            return Response(
+                {"detail": "semester ('1st' or '2nd') is required for senior high sections."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = Enrollment.objects.filter(
+            school_year=school_year,
+            grade_level=grade_level,
+            section__iexact=section,
+            enrollment_status="enrolled",
+        )
+        if semester:
+            qs = qs.filter(semester=semester)
+
+        with transaction.atomic():
+            completed = qs.update(enrollment_status="completed")
+
+        return Response({"completed": completed})
+
     def _promote_logic(self, request, dry_run):
         from grades.models import Grade
 
@@ -1272,19 +1509,60 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Source: all completed enrollments in the from-section
-        source_qs = Enrollment.objects.filter(
+        # Grade 11 is enrolled per semester, so a learner holds two rows in
+        # the from-section. Promotion is judged at the end of the year: the
+        # 2nd-semester row is the source, the 1st must also be completed, and
+        # both semesters' grades count.
+        semestered = from_grade_level == promotion.SEMESTERED_SOURCE
+        section_qs = Enrollment.objects.filter(
             school_year=from_school_year,
             grade_level=from_grade_level,
             section__iexact=from_section,
-            enrollment_status="completed",
-        ).select_related("student")
+        )
+        if semestered:
+            section_qs = section_qs.filter(semester="2nd")
 
-        if not source_qs.exists():
-            return Response(
-                {"detail": "No completed enrollments found for the specified section and school year."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        # Learners the section still lists as studying. Promote reads only
+        # `completed` rows, and until now the only way to get there was one
+        # "Mark Completed" click per learner -- the modal offers to close them
+        # all at once (complete_section below) instead of reporting "no
+        # completed enrollments" and leaving the registrar to find out why.
+        still_enrolled = [
+            {
+                "enrollment_id": e.enrollment_id,
+                "student_id":    e.student_id,
+                "student_name":  f"{e.student.last_name}, {e.student.first_name}",
+            }
+            for e in section_qs.filter(enrollment_status="enrolled").select_related("student")
+        ]
+
+        source_rows = promotion.one_per_student(
+            section_qs.filter(enrollment_status="completed")
+            .select_related("student")
+            .order_by("student__last_name", "student__first_name", "enrollment_id")
+        )
+
+        if not source_rows:
+            if still_enrolled and dry_run:
+                # Nothing to promote yet, but the preview is exactly where the
+                # registrar can close the year -- so answer rather than 404.
+                return Response({
+                    "to_grade_level":  to_grade_level,
+                    "to_school_level": to_school_level,
+                    "to_section":      to_section,
+                    "to_school_year":  to_school_year,
+                    "to_promote":      [],
+                    "to_skip":         [],
+                    "still_enrolled":  still_enrolled,
+                })
+            detail = "No completed enrollments found for the specified section and school year."
+            if semestered:
+                detail = (
+                    f"Grade 11 is promoted from its 2nd semester, and no learner in "
+                    f"{from_section} has a completed 2nd-semester enrollment in "
+                    f"{from_school_year}. Enroll and complete the 2nd semester first."
+                )
+            return Response({"detail": detail}, status=status.HTTP_404_NOT_FOUND)
 
         # Students already in the destination year (any active status)
         already_enrolled_ids = set(
@@ -1294,55 +1572,47 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             ).values_list("student_id", flat=True)
         )
 
+        student_ids = [row.student_id for row in source_rows]
+        graded_enrollment_ids = {row.student_id: [row.enrollment_id] for row in source_rows}
+        first_semester_done = set()
+        if semestered:
+            for e_id, s_id in Enrollment.objects.filter(
+                student_id__in=student_ids,
+                school_year=from_school_year,
+                grade_level=from_grade_level,
+                semester="1st",
+                enrollment_status="completed",
+            ).values_list("enrollment_id", "student_id"):
+                first_semester_done.add(s_id)
+                graded_enrollment_ids[s_id].append(e_id)
+
+        grades_by_student = {s_id: [] for s_id in student_ids}
+        enrollment_owner = {
+            e_id: s_id for s_id, e_ids in graded_enrollment_ids.items() for e_id in e_ids
+        }
+        for g in Grade.objects.filter(enrollment_id__in=enrollment_owner).select_related("subject"):
+            grades_by_student[enrollment_owner[g.enrollment_id]].append(g)
+
         to_promote = []
         to_skip    = []
 
-        for enrollment in source_qs:
+        for enrollment in source_rows:
             student = enrollment.student
             student_name = f"{student.last_name}, {student.first_name}"
-            avg = None
 
-            # Year outcome per learning area, from grading.deped -- the same
-            # reduction the report card prints, so the two can no longer
-            # disagree about whether this learner passed a subject.
-            grades = list(
-                Grade.objects.filter(enrollment=enrollment).select_related("subject")
+            avg, skip = promotion.assess(
+                grades_by_student[student.student_id],
+                from_grade_level=from_grade_level,
+                to_school_year=to_school_year,
+                already_enrolled=student.student_id in already_enrolled_ids,
+                first_semester_done=student.student_id in first_semester_done,
             )
-            outcomes = summarize_subjects(grades)
-            subject_averages = [o["average"] for o in outcomes.values()]
-            avg = float(general_average(subject_averages)) if subject_averages else None
-
-            # Skip if already enrolled in destination year
-            if student.student_id in already_enrolled_ids:
+            if skip:
                 to_skip.append({
                     "student_id":   student.student_id,
                     "student_name": student_name,
-                    "reason":       f"Already has an active enrollment in {to_school_year}.",
-                    "average":      avg,
-                })
-                continue
-
-            # Skip if any learning area failed ON THE YEAR.
-            #
-            # This used to test per-PERIOD remarks -- any quarter marked
-            # "failed" or "incomplete" blocked promotion outright. A learner
-            # who failed the first quarter and finished the year at 84 was
-            # held back by a mark the report card had already superseded, and
-            # DO 8 sets the Final Grade for a learning area as the mean of its
-            # quarters, not the worst of them.
-            failed = [
-                o for o in outcomes.values()
-                if o["remarks"] in ("failed", "incomplete", "dropped")
-            ]
-            if failed:
-                failed_names = ", ".join(
-                    f"{o['subject'].subject_name} ({o['average'] if o['average'] is not None else o['remarks']})"
-                    for o in failed
-                )
-                to_skip.append({
-                    "student_id":   student.student_id,
-                    "student_name": student_name,
-                    "reason":       f"Failed/incomplete: {failed_names}",
+                    "reason":       skip["reason"],
+                    "kind":         skip["kind"],
                     "average":      avg,
                 })
                 continue
@@ -1351,8 +1621,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 "student_id":   student.student_id,
                 "student_name": student_name,
                 "average":      avg,
-                # carry object reference for actual creation (not serialized)
+                # carry object references for actual creation (not serialized)
                 "_student_obj": student,
+                "_source":      enrollment,
             })
 
         if dry_run:
@@ -1367,6 +1638,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                     for s in to_promote
                 ],
                 "to_skip": to_skip,
+                "still_enrolled": still_enrolled,
             })
 
         # ── Commit ─────────────────────────────────────────────────────────────
@@ -1375,6 +1647,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
         for entry in to_promote:
             student_obj = entry["_student_obj"]
+            # Grade 11 -> 12 stays in senior high: the new row needs a
+            # semester (the enrollments CHECK constraint rejects SHS without
+            # one) and keeps the strand chosen in Grade 11.
+            shs = to_school_level == "senior_highschool"
             try:
                 with transaction.atomic():
                     enr = Enrollment.objects.create(
@@ -1383,6 +1659,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                         school_level=to_school_level,
                         grade_level=to_grade_level,
                         section=to_section,
+                        strand=entry["_source"].strand if shs else None,
+                        semester="1st" if shs else None,
                         enrollment_status="pending",
                     )
                 created.append({
@@ -1656,7 +1934,17 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         # ── Is eligible? ───────────────────────────────────────────────────────
         # Eligible if: no grade blocks AND no missing docs (or new student).
         # An unassessed document check is not a passing one.
-        has_grade_blocks = len(blocking_reasons) > 0
+        #
+        # Failed subjects block moving UP, not repeating: the serializer lets
+        # a learner re-enroll in the grade they failed without an override
+        # (retention), so when the caller asks about that placement the
+        # failures are reported but do not demand one. Before this, the form
+        # demanded an admin override for the one placement that needs none.
+        repeating = (
+            last_completed is not None
+            and grade_level == last_completed.grade_level
+        )
+        has_grade_blocks = len(blocking_reasons) > 0 and not repeating
         is_eligible = (
             not has_grade_blocks
             and documents_assessed

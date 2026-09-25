@@ -2,25 +2,155 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { getEnrollments } from "../api/enrollmentApi";
+import { getEnrollments, submitGuardianResponse } from "../api/enrollmentApi";
 import { getCurrentUser } from "../utils/auth";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
 import { StatusBadge } from "../components/ui/Badge";
-import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP } from "../constants/statusMaps";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import GuardianHero from "../components/GuardianHero";
 
-// Pick the enrollment to feature per child: prefer an active (enrolled/pending)
-// one, else the most recent by school year / id.
-function pickPrimary(enrollments) {
-  const active = enrollments.filter((e) => ["enrolled", "pending"].includes(e.enrollment_status));
-  const pool = active.length ? active : enrollments;
-  return [...pool].sort((a, b) =>
-    (b.school_year || "").localeCompare(a.school_year || "") || b.enrollment_id - a.enrollment_id
-  )[0];
+const newestFirst = (a, b) =>
+  (b.school_year || "").localeCompare(a.school_year || "") || b.enrollment_id - a.enrollment_id;
+
+// A returning learner's next-year row: pending, with an earlier year this
+// child actually attended. A pending row with no history is a new learner's
+// placement waiting on documents, not a question for the family -- the server
+// refuses an answer on it for the same reason.
+function nextYearRow(enrollments) {
+  const attended = enrollments.filter((e) => ["enrolled", "completed"].includes(e.enrollment_status));
+  return enrollments
+    .filter((e) => e.enrollment_status === "pending"
+      && attended.some((a) => (a.school_year || "") < (e.school_year || "")))
+    .sort(newestFirst)[0] ?? null;
+}
+
+// Pick the enrollment the card opens: this year's (enrolled), else a pending
+// one, else the most recent. The next-year row is left out -- once Promote
+// creates it, it is the newest pending row, and featuring it sent the parent
+// to a record with no grades yet in place of the year still in progress.
+function pickPrimary(enrollments, next = null) {
+  const rest = next ? enrollments.filter((e) => e !== next) : enrollments;
+  const pool = [["enrolled"], ["pending"]]
+    .map((statuses) => rest.filter((e) => statuses.includes(e.enrollment_status)))
+    .find((rows) => rows.length) ?? rest;
+  return [...(pool.length ? pool : enrollments)].sort(newestFirst)[0];
+}
+
+// "Will your child return next school year?" -- the one thing the portal lets
+// a parent send. It records their answer and nothing else: the enrollment
+// stays Pending until the registrar confirms it.
+function NextYearPrompt({ enrollment, childName, onAnswered }) {
+  const saved = enrollment.guardian_response;
+  const [editing, setEditing] = useState(!saved);
+  const [askReason, setAskReason] = useState(false);
+  const [reason, setReason] = useState(saved?.reason ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const firstName = childName.split(/\s+/)[0] || "your child";
+  const place = [enrollment.grade_level, enrollment.section].filter(Boolean).join(" · ");
+
+  async function answer(response) {
+    setSaving(true);
+    setError("");
+    try {
+      const data = await submitGuardianResponse(enrollment.enrollment_id, {
+        response,
+        reason: response === "not_returning" ? reason.trim() : "",
+      });
+      onAnswered(enrollment.enrollment_id, data.guardian_response);
+      setEditing(false);
+      setAskReason(false);
+    } catch (e) {
+      setError(e.message || "Your answer could not be saved. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section
+      aria-label={`School year ${enrollment.school_year} for ${childName}`}
+      className="mt-2 rounded-xl border border-neutral-200 bg-white px-5 py-4 shadow-sm"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          SY {enrollment.school_year}{place ? ` · ${place}` : ""}
+        </div>
+        <StatusBadge status="pending" map={ENROLLMENT_STATUS_MAP} size="sm" />
+      </div>
+
+      {saved && !editing ? (
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm text-neutral-800">
+            <StatusBadge status={saved.response} map={GUARDIAN_RESPONSE_MAP} size="sm" />
+            <span className="min-w-0">
+              {saved.response === "returning"
+                ? "The registrar will confirm the enrollment."
+                : saved.reason ? `Reason: ${saved.reason}` : "Thank you for letting the school know."}
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => { setEditing(true); setError(""); }}>
+            Change answer
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-2.5">
+          <p className="text-sm font-medium text-neutral-900">
+            Will {firstName} return to school in SY {enrollment.school_year}?
+          </p>
+          {askReason ? (
+            <div className="mt-3">
+              <label htmlFor={`reason-${enrollment.enrollment_id}`} className="mb-1 block text-xs font-semibold text-neutral-600">
+                Reason (optional)
+              </label>
+              <textarea
+                id={`reason-${enrollment.enrollment_id}`}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="e.g. Moving to another city"
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus-ring"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" loading={saving} onClick={() => answer("not_returning")}>
+                  Send: not returning
+                </Button>
+                <Button size="sm" variant="ghost" disabled={saving} onClick={() => setAskReason(false)}>
+                  Back
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" icon="ti-user-check" loading={saving} onClick={() => answer("returning")}>
+                Yes, returning
+              </Button>
+              <Button size="sm" variant="secondary" icon="ti-user-x" disabled={saving} onClick={() => setAskReason(true)}>
+                Not returning
+              </Button>
+              {saved && (
+                <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-neutral-500">
+            This only tells the school your plans. The registrar still confirms the enrollment.
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="mt-2 text-xs font-medium text-error-500">{error}</div>
+      )}
+    </section>
+  );
 }
 
 function greeting(now = new Date()) {
@@ -53,12 +183,14 @@ export default function GuardianHomePage() {
       });
 
       const kids = Array.from(byStudent.values()).map((enrollments) => {
-        const primary = pickPrimary(enrollments);
+        const next = nextYearRow(enrollments);
+        const primary = pickPrimary(enrollments, next);
         return {
           student_id:   primary.student_id ?? primary.student,
           name:         primary.student_detail?.full_name || primary.student_name || "Student",
           lrn:          primary.student_detail?.lrn,
           primary,
+          next,
         };
       });
       kids.sort((a, b) => a.name.localeCompare(b.name));
@@ -73,6 +205,14 @@ export default function GuardianHomePage() {
   useEffect(() => {
     fetchChildren(); // eslint-disable-line react-hooks/set-state-in-effect
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAnswered = (enrollmentId, guardianResponse) => {
+    setChildren((kids) => kids.map((k) => (
+      k.next?.enrollment_id === enrollmentId
+        ? { ...k, next: { ...k.next, guardian_response: guardianResponse } }
+        : k
+    )));
+  };
 
   const firstName = user?.name?.trim().split(/\s+/)[0];
   const today = new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" });
@@ -194,6 +334,16 @@ export default function GuardianHomePage() {
                     </span>
                   </div>
                 </Card>
+                {/* Outside the card: the card is itself a button, and these
+                    are buttons too. */}
+                {child.next && (
+                  <NextYearPrompt
+                    key={child.next.enrollment_id}
+                    enrollment={child.next}
+                    childName={child.name}
+                    onAnswered={handleAnswered}
+                  />
+                )}
               </motion.div>
             );
           })}

@@ -31,6 +31,15 @@ export const ENROLLMENT_STATUS_MAP = {
   transferred_out: { label: "Transferred Out", variant: "warning", icon: "ti-arrow-right-circle" },
 };
 
+/** A guardian's answer on a next-year pending enrollment —
+ *  enrollment.guardian_response.response. Shown to staff beside the status,
+ *  and to the guardian on their child's card. It records intent only: the
+ *  enrollment itself stays Pending until the registrar activates it. */
+export const GUARDIAN_RESPONSE_MAP = {
+  returning:     { label: "Returning",     variant: "success", icon: "ti-user-check" },
+  not_returning: { label: "Not returning", variant: "error",   icon: "ti-user-x" },
+};
+
 /** Invoices and installments — invoice.status / installment.status
  *  "overdue" was previously purple, which read as an unrelated category rather
  *  than something more urgent than "unpaid". It's now error-toned with a

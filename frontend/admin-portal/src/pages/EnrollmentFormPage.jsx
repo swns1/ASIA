@@ -327,7 +327,7 @@ function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, 
           </ul>
           {can_repeat && (
             <div style={{ fontSize: 11, color: "#92400e", marginTop: 8, fontStyle: "italic" }}>
-              Student may repeat the same grade level (retention).
+              Student may repeat the same grade level (retention) — choose "Repeat" under Placement. No override is needed for that.
             </div>
           )}
         </div>
@@ -547,6 +547,14 @@ export default function EnrollmentFormPage() {
     setEligibilityNonce((n) => n + 1);
   }
   const [studentLastGrade, setStudentLastGrade] = useState(null);
+  // Move a returning learner up a grade, or enroll them in the same grade
+  // again (retention). The server allows a repeat with no override, but the
+  // grade used to be locked to "next", so a learner held back could not be
+  // entered here at all. ?retain=1 comes from Promote Section's "Enroll as
+  // repeater" link.
+  const [placementChoice, setPlacementChoice] = useState(
+    () => (searchParams.get("retain") === "1" ? "repeat" : "promote"),
+  );
 
   // Eligibility state (new enrollment)
   const [eligibility,        setEligibility]        = useState(null);
@@ -620,6 +628,21 @@ export default function EnrollmentFormPage() {
   }, [id, isEdit]);
 
   const nextAllowedGrade = studentLastGrade ? getNextGradeLevel(studentLastGrade) : null;
+  // The grade this placement is locked to: the next one, or the same one again.
+  const allowedGrade = !studentLastGrade
+    ? null
+    : placementChoice === "repeat" ? studentLastGrade : nextAllowedGrade;
+
+  const placeInGrade = (grade) => {
+    const level = getSchoolLevelForGrade(grade);
+    setForm((f) => ({ ...f, school_level: level, grade_level: grade, strand: "", semester: level === "senior_highschool" ? (f.semester || "1st") : "" }));
+  };
+
+  const choosePlacement = (choice) => {
+    setPlacementChoice(choice);
+    const grade = choice === "repeat" ? studentLastGrade : getNextGradeLevel(studentLastGrade);
+    if (grade) placeInGrade(grade);
+  };
 
   const handleStudentChange = (st, lastGrade) => {
     if (!st) {
@@ -646,11 +669,8 @@ export default function EnrollmentFormPage() {
     setTransferInSchoolAddress("");
 
     if (lastGrade) {
-      const next = getNextGradeLevel(lastGrade);
-      if (next) {
-        const level = getSchoolLevelForGrade(next);
-        setForm((f) => ({ ...f, school_level: level, grade_level: next, strand: "", semester: level === "senior_highschool" ? (f.semester || "1st") : "" }));
-      }
+      const target = placementChoice === "repeat" ? lastGrade : getNextGradeLevel(lastGrade);
+      if (target) placeInGrade(target);
     }
 
     // The eligibility fetch itself lives in the effect below, keyed on the
@@ -725,6 +745,11 @@ export default function EnrollmentFormPage() {
         );
         return;
       }
+
+      // Promote's "Enroll as repeater" and the not-yet-placed worklist both
+      // know which year the learner is being placed into.
+      const appliedYear = searchParams.get("school_year");
+      if (appliedYear) setForm((f) => ({ ...f, school_year: appliedYear }));
 
       const appliedGrade = searchParams.get("grade_level");
       const appliedLevel = searchParams.get("school_level") || schoolLevelForGrade(appliedGrade || "");
@@ -811,8 +836,11 @@ export default function EnrollmentFormPage() {
     // "enrollment can be created as Pending" — actually true.
     if (!isEdit && form.enrollment_status === "enrolled" && (eligibility?.missing_docs?.length ?? 0) > 0)
       return "Required documents are still missing. Save this enrollment as Pending, or upload the documents first.";
-    if (!isEdit && nextAllowedGrade && form.grade_level !== nextAllowedGrade && !overrideMode)
-      return `This student must enroll in ${nextAllowedGrade} (next after ${studentLastGrade}).`;
+    const lockedGrade = placementChoice === "repeat" ? studentLastGrade : nextAllowedGrade;
+    if (!isEdit && lockedGrade && form.grade_level !== lockedGrade && !overrideMode)
+      return placementChoice === "repeat"
+        ? `A repeating student enrolls in ${lockedGrade} again.`
+        : `This student must enroll in ${lockedGrade} (next after ${studentLastGrade}).`;
     if (!isEdit && overrideMode && !overrideReason.trim())
       return "An override reason is required when bypassing grade progression rules.";
     if (isEdit && gradePlacementChanged && !gradePlacementReason.trim())
@@ -824,7 +852,7 @@ export default function EnrollmentFormPage() {
     if (!isEdit && isTransferIn && !transferInSchoolAddress.trim())
       return "Previous school address is required for a transfer-in.";
     return "";
-  }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason, isTransferIn, transferInDate, transferInSchoolName, transferInSchoolAddress]);
+  }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, placementChoice, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason, isTransferIn, transferInDate, transferInSchoolName, transferInSchoolAddress]);
 
     const handleSubmit = async () => {
       setError("");
@@ -1001,7 +1029,7 @@ export default function EnrollmentFormPage() {
                 </>
               ) : (
                 <Field label="Enrolling Student" required hint="Find an existing student record. Need to register a new one first? Use the Students page.">
-                  <StudentPicker value={student} onChange={handleStudentChange} currentGrade={studentLastGrade} nextGrade={nextAllowedGrade} />
+                  <StudentPicker value={student} onChange={handleStudentChange} currentGrade={studentLastGrade} nextGrade={allowedGrade} />
                 </Field>
               )}
             </SectionCard>
@@ -1165,11 +1193,32 @@ export default function EnrollmentFormPage() {
                 </div>
               )}
 
+              {!isEdit && studentLastGrade && (
+                <Field label="Placement" required hint="Repeating a grade needs no override; moving up with failed subjects does.">
+                  <div role="radiogroup" aria-label="Placement" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {[
+                      { value: "promote", icon: "ti-arrow-up-right", label: nextAllowedGrade ? `Promote to ${nextAllowedGrade}` : "No next grade", disabled: !nextAllowedGrade },
+                      { value: "repeat",  icon: "ti-repeat",         label: `Repeat ${studentLastGrade} (retained)` },
+                    ].map((opt) => {
+                      const active = placementChoice === opt.value;
+                      return (
+                        <button key={opt.value} type="button" role="radio" aria-checked={active}
+                          disabled={opt.disabled}
+                          onClick={() => choosePlacement(opt.value)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: opt.disabled ? "not-allowed" : "pointer", opacity: opt.disabled ? 0.45 : 1, fontFamily: "'DM Sans', sans-serif" }}>
+                          <i className={`ti ${opt.icon}`} style={{ fontSize: 14 }} />{opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              )}
+
               <Field label="School Level" required>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {SCHOOL_LEVELS.map((lvl) => {
                     const active = form.school_level === lvl.value;
-                    const locked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(nextAllowedGrade));
+                    const locked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(allowedGrade));
                     return (
                       <motion.button key={lvl.value} type="button"
                         whileHover={!locked ? { scale: 1.04 } : {}}
@@ -1184,8 +1233,8 @@ export default function EnrollmentFormPage() {
                 </div>
               </Field>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
-                <Field label="Grade Level" required hint={!isEdit && nextAllowedGrade ? `Locked to ${nextAllowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
-                  {(isEdit && !gradePlacementUnlocked) || (!isEdit && nextAllowedGrade) ? (
+                <Field label="Grade Level" required hint={!isEdit && allowedGrade ? `Locked to ${allowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
+                  {(isEdit && !gradePlacementUnlocked) || (!isEdit && allowedGrade) ? (
                     <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
                       <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
                       {form.grade_level}
