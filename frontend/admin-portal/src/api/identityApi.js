@@ -16,19 +16,17 @@ export async function login({ identifier, password, rememberMe }) {
   return res.data;
 }
 
-export async function refreshToken() {
-  const res = await identityClient.post("/refresh/");
-  return res.data;
-}
-
 export async function logout() {
   const res = await identityClient.post("/logout/");
   return res.data;
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-export const getUsers = () =>
-  identityClient.get("/users/").then((r) => r.data);
+// { role: "teacher" } or { role: "teacher,guardian" } narrows the list. The
+// pickers should always pass one: the full list carries every account's photo.
+// A registrar only ever gets teachers and guardians back.
+export const getUsers = (params = {}) =>
+  identityClient.get("/users/", { params }).then((r) => r.data);
 
 export const getUser = (id) =>
   identityClient.get(`/users/${id}/`).then((r) => r.data);

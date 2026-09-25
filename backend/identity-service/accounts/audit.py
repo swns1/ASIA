@@ -59,6 +59,12 @@ def resolve_user_from_request(request):
     if not user:
         return None
 
+    # Deactivating clears current_session_id, so the sid check below already
+    # refuses the account's old tokens; this holds even if that clear is ever
+    # skipped.
+    if not getattr(user, "is_active", True):
+        return None
+
     # Single-active-session enforcement: a token whose sid claim doesn't
     # match the user's current session is stale (superseded by a later
     # login elsewhere) — treat it as unauthenticated rather than resolving
@@ -69,6 +75,12 @@ def resolve_user_from_request(request):
         return None
 
     return user
+
+
+def _clip(value, field):
+    limit = AuditLog._meta.get_field(field).max_length
+    text = str(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def record_audit_event(
@@ -87,12 +99,16 @@ def record_audit_event(
         user = user or resolve_user_from_request(request)
         AuditLog.objects.create(
             user_id=getattr(user, "user_id", None),
-            user_name=user_name or getattr(user, "name", None) or "Unknown user",
-            user_role=user_role or getattr(user, "role", None) or "unknown",
-            action=action,
-            module=module,
+            # Clipped to the column widths. A failed sign-in records whatever
+            # was typed as the identifier, and a 200-character one used to
+            # overflow user_name -- the insert failed, the except below
+            # swallowed it, and the attempt never reached the audit trail.
+            user_name=_clip(user_name or getattr(user, "name", None) or "Unknown user", "user_name"),
+            user_role=_clip(user_role or getattr(user, "role", None) or "unknown", "user_role"),
+            action=_clip(action, "action"),
+            module=_clip(module, "module"),
             occurred_at=timezone.now(),
-            status=status,
+            status=_clip(status, "status"),
             details=details or "",
             ip_address=get_client_ip(request),
             metadata=metadata or {},

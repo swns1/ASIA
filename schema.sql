@@ -1990,6 +1990,7 @@ CREATE TABLE public.users (
     password character varying(255) NOT NULL,
     profile_picture text,
     current_session_id uuid,
+    is_active boolean DEFAULT true NOT NULL,
     CONSTRAINT users_role_check CHECK (((role)::text = ANY (ARRAY['super_admin'::text, 'admin'::text, 'registrar'::text, 'teacher'::text, 'accounting'::text, 'guardian'::text])))
 );
 

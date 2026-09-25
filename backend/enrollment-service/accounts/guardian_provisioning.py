@@ -177,8 +177,18 @@ def provision_guardian_accounts(student_id):
         label = f"{guardian.full_name} (guardian #{guardian.guardian_id})"
 
         if guardian.user_id:
-            results[ALREADY_LINKED].append(label)
-            continue
+            if User.objects.filter(user_id=guardian.user_id).exists():
+                results[ALREADY_LINKED].append(label)
+                continue
+            # The linked account was deleted. Nothing stops that (users has no
+            # foreign keys pointing at it), and the dead id used to count as
+            # "already linked" forever -- the parent could never be given a
+            # new account short of a registrar unlinking them by hand. Unlink
+            # and provision again below.
+            GuardianMirror.objects.filter(
+                pk=guardian.pk, user_id=guardian.user_id,
+            ).update(user_id=None)
+            guardian.user_id = None
 
         email = _clean_email(guardian.email_address)
         if not email:

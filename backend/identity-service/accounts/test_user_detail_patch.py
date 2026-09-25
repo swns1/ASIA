@@ -28,6 +28,9 @@ from rest_framework.test import APIClient
 def _admin_user(**overrides):
     defaults = dict(user_id=1, name="Admin User", email="admin@example.com", role="admin")
     defaults.update(overrides)
+    # What DRF's throttles read off request.user, which HasRole now sets.
+    defaults.setdefault("is_authenticated", True)
+    defaults.setdefault("pk", defaults["user_id"])
     return SimpleNamespace(**defaults)
 
 
@@ -44,6 +47,9 @@ def _target_user(**overrides):
         save=MagicMock(),
     )
     defaults.update(overrides)
+    # What DRF's throttles read off request.user, which HasRole now sets.
+    defaults.setdefault("is_authenticated", True)
+    defaults.setdefault("pk", defaults["user_id"])
     return SimpleNamespace(**defaults)
 
 

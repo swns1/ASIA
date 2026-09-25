@@ -27,6 +27,11 @@ class User(models.Model):
     password = models.CharField(max_length=255)
     profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist
     current_session_id = models.UUIDField(null=True, blank=True)
+    # False = deactivated: cannot sign in, but the account stays, so the
+    # person's name stays on everything that points at them (advisories,
+    # grades, overrides, guardian links) -- which a delete would orphan.
+    # Added by migration 0003_add_user_is_active.
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = "users"
@@ -34,10 +39,6 @@ class User(models.Model):
 
     @property
     def is_authenticated(self):
-        return True
-
-    @property
-    def is_active(self):
         return True
 
     def __str__(self):

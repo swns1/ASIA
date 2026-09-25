@@ -9,7 +9,7 @@ from .models import AuditLog, User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("user_id", "name", "email", "role", "profile_picture")
+        fields = ("user_id", "name", "email", "role", "profile_picture", "is_active")
         read_only_fields = ("user_id",)
 
 
@@ -95,6 +95,11 @@ class LoginSerializer(serializers.Serializer):
         # requires context={"request": request} from the view.
         request = self.context.get("request")
         user = authenticate(request, username=identifier, password=password)
+        if not user and getattr(request, "slis_account_deactivated", False):
+            # Set by IdentityUserBackend only after the password matched.
+            raise serializers.ValidationError(
+                "This account has been deactivated. Ask an admin to reactivate it."
+            )
         if not user:
             # Deliberately one message whether the identifier doesn't
             # exist, the password is wrong, or axes has locked this

@@ -1389,7 +1389,7 @@ export default function TeacherSectionsPage() {
   // so the page still loads instead of hanging on a blank picker.
   useEffect(() => {
     if (isTeacher) return;
-    getUsers()
+    getUsers({ role: "teacher" })
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.results ?? [];
         setTeachers(list.filter((u) => u.role === "teacher"));
@@ -1454,7 +1454,7 @@ export default function TeacherSectionsPage() {
                 >
                   <option value="">Select a teacher…</option>
                   {teachers.map((t) => (
-                    <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+                    <option key={t.user_id} value={t.user_id}>{t.name} ({t.email}){t.is_active === false ? " — deactivated" : ""}</option>
                   ))}
                 </Select>
               </>
@@ -1498,7 +1498,7 @@ export default function TeacherSectionsPage() {
               >
                 <option value="">Select a teacher…</option>
                 {teachers.map((t) => (
-                  <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+                  <option key={t.user_id} value={t.user_id}>{t.name} ({t.email}){t.is_active === false ? " — deactivated" : ""}</option>
                 ))}
               </Select>
             </>

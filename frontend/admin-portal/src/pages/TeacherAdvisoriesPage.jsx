@@ -65,9 +65,16 @@ const TABLE_COLUMNS = [
 function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
   const { schoolYear: globalSchoolYear } = useSchoolYear();
+  // A deactivated teacher can't sign in to use a section, so they are never
+  // offered as its adviser. Editing a section whose adviser was deactivated
+  // (or whose account is gone) starts with the picker empty, asking for a
+  // new one.
+  const activeTeachers = teachers.filter((t) => t.is_active !== false);
+  const currentAdviserActive = activeTeachers.some((t) => t.user_id === advisory?.teacher_user_id);
+  const needsNewAdviser = isEdit && !teachersUnavailable && !currentAdviserActive;
 
   const [form, setForm] = useState({
-    teacher_user_id: advisory?.teacher_user_id ?? "",
+    teacher_user_id: needsNewAdviser ? "" : (advisory?.teacher_user_id ?? ""),
     school_year:     advisory?.school_year     ?? globalSchoolYear,
     school_level:    advisory?.school_level    ?? "elementary",
     grade_level:     advisory?.grade_level     ?? "",
@@ -146,7 +153,7 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
       <Field label="Teacher" required>
         <Select value={form.teacher_user_id} onChange={(e) => setF("teacher_user_id", e.target.value)}>
           <option value="">Select a teacher…</option>
-          {teachers.map((t) => (
+          {activeTeachers.map((t) => (
             <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
           ))}
         </Select>
@@ -155,7 +162,12 @@ function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSav
             text — it's the same amber notice the pre-migration page showed. */}
         {teachersUnavailable && (
           <Alert variant="warning" className="mt-2">
-            Teacher list unavailable — listing users requires admin access.
+            Teacher list unavailable — the teacher accounts couldn't be loaded. Try again in a moment.
+          </Alert>
+        )}
+        {needsNewAdviser && (
+          <Alert variant="warning" className="mt-2">
+            This section&apos;s adviser can no longer sign in — their account was deactivated or removed. Choose a new adviser.
           </Alert>
         )}
       </Field>
@@ -223,7 +235,7 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
 }
 
 // ── Table Row ─────────────────────────────────────────────────────────────────
-function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
+function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, onEdit, onDelete }) {
   const lvlMeta = getLevelMeta(advisory.school_level);
 
   return (
@@ -233,8 +245,15 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${lvlMeta?.chip ?? "bg-brand-100 text-brand-600"}`}>
             <i className="ti ti-user-check text-[15px]" aria-hidden="true" />
           </div>
-          <div className="text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
-            {teacherName}
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+              {teacherName}
+            </div>
+            {adviserGone && (
+              <Badge variant={needsAdviser ? "warning" : "muted"} icon="ti-user-off" size="sm">
+                {needsAdviser ? "Needs a new adviser" : "Adviser deactivated"}
+              </Badge>
+            )}
           </div>
         </div>
       </TableCell>
@@ -306,18 +325,36 @@ export default function TeacherAdvisoriesPage() {
     teachers.forEach((t) => map.set(t.user_id, t.name));
     return map;
   }, [teachers]);
+  const activeTeacherIds = useMemo(
+    () => new Set(teachers.filter((t) => t.is_active !== false).map((t) => t.user_id)),
+    [teachers],
+  );
+  const { currentYear } = useSchoolYear();
+
+  // An adviser who can't sign in: deactivated, or an account deleted before
+  // deactivation existed. Unknowable while the teacher list failed to load.
+  const adviserGone = useCallback(
+    (a) => !teachersUnavailable && !activeTeacherIds.has(a.teacher_user_id),
+    [teachersUnavailable, activeTeacherIds],
+  );
+  // Only this year and later need action: a past year's adviser leaving
+  // afterwards is history, not a gap.
+  const needsAdviser = useCallback(
+    (a) => adviserGone(a) && (!currentYear || a.school_year >= currentYear),
+    [adviserGone, currentYear],
+  );
+  const needingAdviser = useMemo(() => advisories.filter(needsAdviser), [advisories, needsAdviser]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // getUsers() is admin-only on identity-service (full user list, by
-      // design) even though this route allows registrar too — caught on its
-      // own so a 403 here doesn't reject the whole Promise.all and blank
-      // the advisories list for registrar. teachersUnavailable then tells
-      // the assign-teacher picker why it has no options.
+      // Teachers only: the full list carries every account's photo. Caught
+      // on its own so a failure here doesn't reject the whole Promise.all
+      // and blank the advisories list. teachersUnavailable then tells the
+      // assign-teacher picker why it has no options.
       const [advisoryData, userData] = await Promise.all([
         getSectionAdvisories({ page_size: 500 }),
-        getUsers().catch(() => null),
+        getUsers({ role: "teacher" }).catch(() => null),
       ]);
       setAdvisories(Array.isArray(advisoryData) ? advisoryData : advisoryData?.results ?? []);
       if (userData == null) {
@@ -424,6 +461,12 @@ export default function TeacherAdvisoriesPage() {
           }
         />
 
+        {needingAdviser.length > 0 && (
+          <Alert variant="warning">
+            {needingAdviser.length} section{needingAdviser.length === 1 ? "" : "s"} need{needingAdviser.length === 1 ? "s" : ""} a new adviser — the assigned teacher&apos;s account was deactivated or removed, so nobody can take attendance or enter grades there. Open the section to reassign it.
+          </Alert>
+        )}
+
         {/* Table */}
         <motion.div
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
@@ -453,7 +496,9 @@ export default function TeacherAdvisoriesPage() {
                 <AdvisoryRow
                   key={a.advisory_id}
                   advisory={a}
-                  teacherName={teacherMap.get(a.teacher_user_id) || `User #${a.teacher_user_id}`}
+                  teacherName={teacherMap.get(a.teacher_user_id) || `Removed account #${a.teacher_user_id}`}
+                  adviserGone={adviserGone(a)}
+                  needsAdviser={needsAdviser(a)}
                   onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
                   onDelete={(adv) => setToDelete(adv)}
                 />

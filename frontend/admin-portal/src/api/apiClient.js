@@ -6,6 +6,7 @@
 // one place that logic lives now — see studentApi.js / billingApi.js / etc.
 // for usage.
 import axios from "axios";
+import { setCurrentUser } from "../utils/auth";
 
 const IDENTITY_REFRESH_URL =
   (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth").replace(/\/+$/, "") +
@@ -63,6 +64,17 @@ let refreshPromise = null;
 // waiters reject together and would otherwise each assign location.href.
 let redirecting = false;
 
+/**
+ * Trade the httpOnly refresh cookie for a new access token.
+ *
+ * Also what restores a session in a new tab or a reopened browser (see
+ * PrivateRoute): the response carries the user, so the page knows who is
+ * signed in without a login.
+ */
+export function refreshSession() {
+  return refreshAccessToken();
+}
+
 function refreshAccessToken() {
   if (!refreshPromise) {
     redirecting = false; // a new refresh cycle earns a new redirect
@@ -73,6 +85,7 @@ function refreshAccessToken() {
       .then((res) => {
         const token = res.data.access;
         sessionStorage.setItem("access_token", token);
+        if (res.data.user) setCurrentUser(res.data.user);
         return token;
       })
       .finally(() => {
@@ -118,6 +131,14 @@ export function createApiClient({
           original.headers.Authorization = `Bearer ${newToken}`;
           return client(original);
         } catch (refreshError) {
+          // Only a refused session means signed out. A rate limit (429) or a
+          // dropped connection says nothing about the session, and treating
+          // them as one threw people onto the login page mid-task.
+          const status = refreshError.response?.status;
+          if (status !== 401 && status !== 403) {
+            if (status === 429) error.message = "Too many requests right now. Wait a moment and try again.";
+            return Promise.reject(error);
+          }
           sessionStorage.removeItem("access_token");
           if (!redirecting) {
             redirecting = true;
@@ -125,6 +146,12 @@ export function createApiClient({
           }
           return Promise.reject(refreshError);
         }
+      }
+      if (error.response?.status === 413) {
+        error.message = error.response?.data?.detail || "This request is too large.";
+      }
+      if (error.response?.status === 429) {
+        error.message = "Too many requests right now. Wait a moment and try again.";
       }
       if (error.response?.status === 403) {
         // Rewrite .message to the backend's real reason (or a friendly

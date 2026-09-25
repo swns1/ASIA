@@ -23,7 +23,7 @@ factory = APIRequestFactory()
 
 
 def _user(role):
-    return SimpleNamespace(role=role, user_id=1)
+    return SimpleNamespace(role=role, user_id=1, pk=1, is_authenticated=True)
 
 
 class TestHasRole:

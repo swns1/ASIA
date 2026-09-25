@@ -3,9 +3,11 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 import {
-  hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
+  hasAnyRole, clearAuthSession, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
+import useCurrentUser from "../hooks/useCurrentUser";
+import AccountSettingsModal from "./AccountSettingsModal";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { groupYears } from "../utils/schoolYear";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -126,6 +128,7 @@ export default function Sidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const [showLogout, setShowLogout] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   // Sections marked `defaultCollapsed` (currently just "Admin") start closed;
   // this is the only per-section collapse state — independent of the
   // whole-rail `collapsed` prop below.
@@ -146,7 +149,8 @@ export default function Sidebar({
   // to the persistent desktop rail.
   const showLabels = !collapsed || !isDesktop;
 
-  const currentUser = getCurrentUser();
+  // Live, so editing your own name on the Users page shows here at once.
+  const currentUser = useCurrentUser();
 
   const navGroups = NAV.map((group) => ({
     ...group,
@@ -346,6 +350,15 @@ export default function Sidebar({
               </div>
               <button
                 type="button"
+                title="Change password"
+                aria-label="Change password"
+                onClick={() => setShowAccount(true)}
+                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+              >
+                <i className="ti ti-key text-[15px]" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
                 title="Log out"
                 aria-label="Log out"
                 onClick={() => setShowLogout(true)}
@@ -354,6 +367,17 @@ export default function Sidebar({
                 <i className="ti ti-logout text-[15px]" aria-hidden="true" />
               </button>
             </div>
+          )}
+          {!showLabels && (
+            <button
+              type="button"
+              title="Change password"
+              aria-label="Change password"
+              onClick={() => setShowAccount(true)}
+              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+            >
+              <i className="ti ti-key text-[15px]" aria-hidden="true" />
+            </button>
           )}
           {!showLabels && (
             <button
@@ -381,6 +405,11 @@ export default function Sidebar({
             onConfirm={handleLogout}
             onCancel={() => setShowLogout(false)}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showAccount && (
+          <AccountSettingsModal user={currentUser} onClose={() => setShowAccount(false)} />
         )}
       </AnimatePresence>
     </>

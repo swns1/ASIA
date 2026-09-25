@@ -59,7 +59,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
   const [createError,  setCreateError] = useState("");
 
   useEffect(() => {
-    getUsers()
+    getUsers({ role: "guardian" })
       .then(async (data) => {
         const guardianUsers = (Array.isArray(data) ? data : data?.results ?? []).filter((u) => u.role === "guardian");
         setUsers(guardianUsers);
@@ -260,7 +260,7 @@ function LinkAccountModal({ guardian, onClose, onLinked }) {
               const linkedTo = linkedMap[u.user_id];
               return (
                 <option key={u.user_id} value={u.user_id}>
-                  {u.name} ({u.email}){linkedTo?.length ? ` — linked to: ${linkedTo.join(", ")}` : ""}
+                  {u.name} ({u.email}){u.is_active === false ? " — deactivated" : ""}{linkedTo?.length ? ` — linked to: ${linkedTo.join(", ")}` : ""}
                 </option>
               );
             })}

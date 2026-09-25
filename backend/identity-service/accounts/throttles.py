@@ -1,4 +1,32 @@
+import hashlib
+
 from rest_framework.throttling import SimpleRateThrottle
+
+
+class SessionRateThrottle(SimpleRateThrottle):
+    """
+    Refresh and logout: at most N calls per signed-in browser per window (the
+    "session" rate), keyed by the refresh cookie rather than the address.
+
+    Both are called without a usable access token -- that is what they are
+    for -- so DRF's default throttles counted them as anonymous traffic from
+    the caller's address: 30 a minute shared by everyone behind a school's one
+    public IP on a hosted deployment. A rate-limited refresh then read to the
+    frontend as a dead session and sent the user to the login page. Keyed by
+    the cookie, each browser has its own budget. A request with no cookie
+    falls back to the address; it can do nothing but fail anyway.
+
+    The cookie is hashed so the raw token never lands in the cache.
+    """
+
+    scope = "session"
+
+    def get_cache_key(self, request, view):
+        cookie = request.COOKIES.get("refresh")
+        ident = (
+            hashlib.sha256(cookie.encode()).hexdigest() if cookie else self.get_ident(request)
+        )
+        return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
 class LoginRateThrottle(SimpleRateThrottle):

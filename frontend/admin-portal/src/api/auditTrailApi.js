@@ -10,6 +10,9 @@ function toFriendlyError(err) {
   if (err.response?.status === 403) {
     return new Error("You are not authorized to view audit records.", { cause: err });
   }
+  if (err.response?.status === 429) {
+    return new Error("Too many requests right now. Wait a moment, then try again.", { cause: err });
+  }
   return new Error("Failed to load log records.", { cause: err });
 }
 

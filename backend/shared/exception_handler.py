@@ -8,6 +8,7 @@ Django's DEBUG=True HTML error page instead of JSON.
 """
 import logging
 
+from django.core.exceptions import RequestDataTooBig
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
@@ -20,6 +21,16 @@ def safe_exception_handler(exc, context):
     response = drf_exception_handler(exc, context)
     if response is not None:
         return response
+
+    # A body over DATA_UPLOAD_MAX_MEMORY_SIZE is the client's doing, not a
+    # server fault. DRF doesn't recognise Django's exception for it, so it
+    # used to fall through to the 500 below -- "Something went wrong on our
+    # end" for a photo that was simply too big.
+    if isinstance(exc, RequestDataTooBig):
+        return Response(
+            {"detail": "This request is too large. If you attached a file, choose a smaller one."},
+            status=413,
+        )
 
     view = context.get("view")
     logger.exception("Unhandled exception in %s", type(view).__name__ if view else "view")

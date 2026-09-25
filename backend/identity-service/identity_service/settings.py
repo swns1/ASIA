@@ -118,6 +118,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'identity_service.wsgi.application'
 
+# Profile pictures travel as base64 data URIs inside JSON, which is a third
+# larger than the image. Django's default request cap (2.5 MB) therefore
+# refused any photo over ~1.87 MB, while the page and the view both promise
+# 2 MB -- and the refusal surfaced as a 500. 3 MB fits a full 2 MB image
+# plus the rest of the form. The view still enforces the 2 MB image limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 3 * 1024 * 1024
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -133,6 +140,9 @@ REST_FRAMEWORK = {
         "anon": "30/minute",
         "user": "200/minute",
         "login": "10/minute",
+        # Refresh and logout, per signed-in browser -- see
+        # accounts.throttles.SessionRateThrottle.
+        "session": "30/minute",
     },
     "EXCEPTION_HANDLER": "shared.exception_handler.safe_exception_handler",
     # NUM_PROXIES governs both DRF throttling's client identification

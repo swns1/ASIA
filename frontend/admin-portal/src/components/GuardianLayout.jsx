@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
-import { clearAuthSession, getCurrentUser } from "../utils/auth";
+import { clearAuthSession } from "../utils/auth";
+import useCurrentUser from "../hooks/useCurrentUser";
+import AccountSettingsModal from "./AccountSettingsModal";
 import Button from "./ui/Button";
 import { ConfirmDialog } from "./ui/Modal";
 import { initialsFrom } from "../utils/avatarPalette";
@@ -17,12 +19,14 @@ import logo from "../assets/logo.png";
 export default function GuardianLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = getCurrentUser();
+  const user = useCurrentUser();
   // Gated behind a confirm the same way the staff Sidebar gates its own logout
   // button. This one is an icon-only button sitting next to the account block
   // in a top bar, so it is the easiest of the two to hit by accident, and
   // clearAuthSession() ends the session server-side — there is no undo.
   const [showLogout, setShowLogout] = useState(false);
+  // Parents are given a password by an admin; this is how they replace it.
+  const [showAccount, setShowAccount] = useState(false);
 
   function handleLogout() {
     clearAuthSession();
@@ -75,6 +79,15 @@ export default function GuardianLayout({ children }) {
               variant="secondary"
               size="sm"
               iconOnly
+              icon="ti-key"
+              onClick={() => setShowAccount(true)}
+              title="Change password"
+              aria-label="Change password"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              iconOnly
               icon="ti-logout"
               onClick={() => setShowLogout(true)}
               title="Log out"
@@ -102,6 +115,11 @@ export default function GuardianLayout({ children }) {
             onConfirm={handleLogout}
             onCancel={() => setShowLogout(false)}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showAccount && (
+          <AccountSettingsModal user={user} onClose={() => setShowAccount(false)} />
         )}
       </AnimatePresence>
     </div>

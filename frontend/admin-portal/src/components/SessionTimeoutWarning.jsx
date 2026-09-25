@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { clearAuthSession, decodeJwtPayload } from "../utils/auth";
-import { refreshToken } from "../api/identityApi";
+import { refreshSession } from "../api/apiClient";
 import Button from "./ui/Button";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry
@@ -16,6 +16,7 @@ export default function SessionTimeoutWarning() {
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [extending, setExtending] = useState(false);
+  const [extendFailed, setExtendFailed] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -52,15 +53,22 @@ export default function SessionTimeoutWarning() {
 
   async function handleExtend() {
     setExtending(true);
+    setExtendFailed(false);
     try {
-      const data = await refreshToken();
-      if (data?.access) {
-        sessionStorage.setItem("access_token", data.access);
-        setShow(false);
+      // The shared refresh: one request even if an API call is refreshing
+      // at the same moment, and it stores the token itself.
+      await refreshSession();
+      setShow(false);
+    } catch (e) {
+      // Only a refused session means signed out. A dropped connection or a
+      // rate limit leaves the session alive -- let them try again.
+      const status = e?.response?.status;
+      if (status === 401 || status === 403) {
+        clearAuthSession();
+        navigate("/login");
+      } else {
+        setExtendFailed(true);
       }
-    } catch {
-      clearAuthSession();
-      navigate("/login");
     } finally {
       setExtending(false);
     }
@@ -92,6 +100,11 @@ export default function SessionTimeoutWarning() {
               <div className="text-xs text-neutral-700">
                 You&apos;ll be signed out in less than 5 minutes. Any unsaved work will be lost.
               </div>
+              {extendFailed && (
+                <div className="mt-1 text-xs font-medium text-error-500">
+                  Couldn&apos;t reach the server. Try again.
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-2">

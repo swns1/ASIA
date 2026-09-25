@@ -40,6 +40,9 @@ def _user(**overrides):
         delete=MagicMock(),
     )
     defaults.update(overrides)
+    # What DRF's throttles read off request.user, which HasRole now sets.
+    defaults.setdefault("is_authenticated", True)
+    defaults.setdefault("pk", defaults["user_id"])
     return SimpleNamespace(**defaults)
 
 

@@ -42,6 +42,12 @@ class HasRole(BasePermission):
         request.resolved_user = user  # avoid a second DB lookup in the view
         if not user:
             raise NotAuthenticated("Authentication required.")
+        # Also hand the caller to DRF. Permissions run before throttles, and
+        # with no authenticator ever setting request.user, every signed-in
+        # call here was throttled as *anonymous* traffic: one 30-a-minute
+        # bucket per address, shared by every staff member behind the same
+        # public IP. Set here, UserRateThrottle counts per account instead.
+        request.user = user
         required = getattr(view, "required_roles", None)
         if required:
             if getattr(user, "role", None) not in required:

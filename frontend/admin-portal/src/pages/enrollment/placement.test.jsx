@@ -121,7 +121,9 @@ beforeEach(() => {
   api.getScholarshipTypes.mockResolvedValue({ results: [] });
 });
 
-describe("Promote Section", () => {
+// Each test here renders the whole Enrollments page and walks a modal; in the
+// full parallel run that brushed Vitest's 5-second default and flaked.
+describe("Promote Section", { timeout: 20_000 }, () => {
   it("offers to close a section that is still marked Enrolled", async () => {
     api.promotePreview
       .mockResolvedValueOnce({ ...PREVIEW, to_promote: [], still_enrolled: [

@@ -1,4 +1,5 @@
 import base64
+import binascii
 import re
 import uuid
 
@@ -6,6 +7,7 @@ from axes.helpers import get_client_ip_address
 from axes.utils import reset as axes_reset
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date, parse_time
@@ -24,15 +26,87 @@ from .audit import (
     is_audit_admin,
     is_super_admin,
     record_audit_event,
+    resolve_user_from_request,
 )
 from .authentication import NoOpAuthentication
 from .models import AuditLog, User, VALID_ROLES
 from .permissions import HasRole
 from .serializers import LoginSerializer, AuditLogSerializer, UserSerializer
 from .services.auth_service import stamp_session_id
-from .throttles import LoginRateThrottle
+from .throttles import LoginRateThrottle, SessionRateThrottle
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+# The column widths (users.name varchar(100), users.email varchar(150)).
+# Checked up front: past them the INSERT/UPDATE failed with a DataError, and
+# the user saw "Something went wrong on the server" instead of which field.
+NAME_MAX_LENGTH = User._meta.get_field("name").max_length
+EMAIL_MAX_LENGTH = User._meta.get_field("email").max_length
+
+# What a registrar may see of the user list: the accounts behind the two
+# pickers they use it for (class advisers, guardian portal accounts). The
+# admin accounts, and everyone's photos, are none of their business.
+REGISTRAR_VISIBLE_ROLES = {"teacher", "guardian"}
+
+
+def _name_error(name):
+    if not name:
+        return "Name cannot be empty."
+    if len(name) > NAME_MAX_LENGTH:
+        return f"Name must be {NAME_MAX_LENGTH} characters or fewer."
+    return None
+
+
+def _email_error(email):
+    """Accounts are signed into by email, so a typo here locks the person out."""
+    if not email:
+        return "Email cannot be empty."
+    if len(email) > EMAIL_MAX_LENGTH:
+        return f"Email must be {EMAIL_MAX_LENGTH} characters or fewer."
+    try:
+        validate_email(email)
+    except DjangoValidationError:
+        return "Enter a valid email address."
+    return None
+
+
+def _field_error(field, message):
+    # `detail` for the form-level alert, the field key for the inline one
+    # (see the frontend's apiError.fieldErrorsFrom).
+    return Response({"detail": message, field: [message]}, status=400)
+
+
+def _user_payload(user):
+    return {
+        "id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "profile_picture": user.profile_picture,
+    }
+
+
+def _session_user_from_refresh_cookie(request):
+    """
+    The user whose *current* session the refresh cookie belongs to, or None.
+
+    A cookie from a superseded session (the user has since signed in
+    somewhere else) resolves to None, same as an invalid one.
+    """
+    raw = request.COOKIES.get("refresh")
+    if not raw:
+        return None
+    try:
+        refresh = RefreshToken(raw)
+    except TokenError:
+        return None
+    sid = refresh.get("sid")
+    user = User.objects.filter(user_id=refresh.get("user_id")).first()
+    if not sid or not user or str(user.current_session_id) != str(sid):
+        return None
+    if not getattr(user, "is_active", True):
+        return None
+    return user
 
 # The refresh cookie only needs to be sent back on this service's own
 # /api/auth/* endpoints (RefreshView, LogoutView read it) -- previously
@@ -69,20 +143,22 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             LoginRateThrottle.record_failure(request, self)
-            detail = serializer.errors.get("non_field_errors", serializer.errors)
-            if isinstance(detail, list) and detail:
-                detail = detail[0]
+            # Always one string. A missing field used to come back as the
+            # whole errors dict under `detail`, which the login page renders
+            # as text -- React cannot render an object.
+            errors = serializer.errors.get("non_field_errors")
+            detail = str(errors[0]) if errors else "Identifier and password are required."
 
-            identifier = request.data.get("identifier") or "Unknown user"
+            identifier = str(request.data.get("identifier") or "Unknown user")
             record_audit_event(
                 request,
-                user_name=str(identifier),
+                user_name=identifier,
                 user_role="unknown",
                 action="Failed login attempt",
                 module="Identity",
                 status="failed",
-                details=str(detail),
-                metadata={"identifier": str(identifier)},
+                details=detail,
+                metadata={"identifier": identifier[:EMAIL_MAX_LENGTH]},
             )
             return Response({"detail": detail}, status=400)
 
@@ -122,13 +198,7 @@ class LoginView(APIView):
             {
                 "access": access_token,
                 "message": "Login successful.",
-                "user": {
-                    "id": user.user_id,
-                    "name": user.name,
-                    "email": user.email,
-                    "role": user.role,
-                    "profile_picture": user.profile_picture,
-                },
+                "user": _user_payload(user),
             },
             status=200,
         )
@@ -157,6 +227,7 @@ class LoginView(APIView):
 class RefreshView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [SessionRateThrottle]
 
     def post(self, request):
         if not _origin_allowed(request):
@@ -171,44 +242,58 @@ class RefreshView(APIView):
         except TokenError:
             return Response({"detail": "Invalid refresh token."}, status=401)
 
-        sid = refresh.get("sid")
-        user = User.objects.filter(user_id=refresh.get("user_id")).first()
-        if not sid or not user or str(user.current_session_id) != str(sid):
+        user = _session_user_from_refresh_cookie(request)
+        if user is None:
             return Response({"detail": "Session no longer active."}, status=401)
 
-        access_token = str(refresh.access_token)
-        return Response({"access": access_token}, status=200)
+        # The user comes back too: a new tab (or a browser reopened under
+        # "Remember me") restores its session from this call alone, and the
+        # portal needs the name and role to draw the page and gate routes.
+        return Response(
+            {"access": str(refresh.access_token), "user": _user_payload(user)},
+            status=200,
+        )
 
 
 class LogoutView(APIView):
-    authentication_classes = [NoOpAuthentication]
-    permission_classes = [HasRole]
-    ALLOW_ANY_AUTHENTICATED_ROLE = True  # any authenticated user may log themselves out
+    """
+    Ends the caller's session and deletes the refresh cookie -- always.
+
+    It used to require a live access token. A user who left the portal open
+    past the 2-hour token and then clicked Log out got a 401: the session
+    stayed active, and the refresh cookie (kept up to 7 days under "Remember
+    me") could still mint new tokens on that computer.
+
+    Now the refresh cookie identifies the session when the access token
+    can't. Only the session that credential belongs to is ended: one from a
+    superseded session (the user has since signed in somewhere else) must
+    not sign out the newer login. The cookie is deleted regardless.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [SessionRateThrottle]
 
     def post(self, request):
-        user = request.resolved_user
-        refresh_token = request.COOKIES.get("refresh")
-        if refresh_token:
-            try:
-                token = RefreshToken(refresh_token)
-                if hasattr(token, "blacklist"):
-                    token.blacklist()
-            except TokenError:
-                pass
+        if not _origin_allowed(request):
+            return Response({"detail": "Origin not allowed."}, status=403)
 
-        # request.resolved_user was only resolved because resolve_user_from_request()
-        # already confirmed this token's sid matches the current session, so
-        # it's always safe to clear it here.
-        User.objects.filter(user_id=user.user_id).update(current_session_id=None)
+        user = resolve_user_from_request(request) or _session_user_from_refresh_cookie(request)
+        if user is not None:
+            # Filtered on the session too, so a login that lands between the
+            # lookup above and this write is not the one cleared.
+            User.objects.filter(
+                user_id=user.user_id, current_session_id=user.current_session_id,
+            ).update(current_session_id=None)
 
-        record_audit_event(
-            request,
-            user=user,
-            action="Logged out",
-            module="Identity",
-            status="success",
-            details="Admin portal logout completed.",
-        )
+            record_audit_event(
+                request,
+                user=user,
+                action="Logged out",
+                module="Identity",
+                status="success",
+                details="Admin portal logout completed.",
+            )
+
         response = Response({"message": "Logged out."}, status=200)
         # Same attributes as set_cookie(): a SameSite=None cookie is only
         # replaced by a deletion that is also SameSite=None (and Secure).
@@ -219,6 +304,14 @@ class LogoutView(APIView):
 
 
 # ── Users ──────────────────────────────────────────────────────────────────────
+
+class UserPagination(PageNumberPagination):
+    # The Users page used to download every account -- guardians included,
+    # photos included -- and filter in the browser.
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
 
 class UserListView(APIView):
     """GET /api/auth/users/  — list all users (admin, super_admin, or registrar
@@ -231,8 +324,68 @@ class UserListView(APIView):
     required_roles = ADMIN_ROLES | {"registrar"}
 
     def get(self, request):
-        users = User.objects.all().order_by("user_id")
-        return Response(UserSerializer(users, many=True).data)
+        """
+        Filters:
+          ?role=teacher or ?role=teacher,guardian   (the pickers pass one)
+          ?status=active | inactive
+          ?search=ana                               (name or email)
+
+        With ?page=N the result is one page of 25 (?page_size up to 100),
+        plus `counts` over every account the caller may see -- what the Users
+        page draws its stat cards and filter chips from. Without it, the
+        plain list the pickers use.
+
+        A registrar only ever sees teachers and guardians, without photos.
+        """
+        base = User.objects.all().order_by("user_id")
+        is_admin = request.resolved_user.role in ADMIN_ROLES
+        if not is_admin:
+            base = base.filter(role__in=REGISTRAR_VISIBLE_ROLES)
+
+        users = base
+        roles = {r.strip() for r in (request.query_params.get("role") or "").split(",") if r.strip()}
+        if not is_admin and roles:
+            roles &= REGISTRAR_VISIBLE_ROLES
+            if not roles:
+                users = users.none()
+        if roles:
+            users = users.filter(role__in=roles)
+
+        status_value = request.query_params.get("status")
+        if status_value in ("active", "inactive"):
+            users = users.filter(is_active=status_value == "active")
+
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            users = users.filter(Q(name__icontains=search) | Q(email__icontains=search))
+
+        def serialize(rows):
+            data = UserSerializer(rows, many=True).data
+            if not is_admin:
+                for row in data:
+                    row.pop("profile_picture", None)
+            return data
+
+        if "page" not in request.query_params:
+            return Response(serialize(users))
+
+        paginator = UserPagination()
+        page = paginator.paginate_queryset(users, request, view=self)
+        by_role = {
+            row["role"]: row["n"]
+            for row in base.order_by().values("role").annotate(n=Count("pk"))
+        }
+        return Response({
+            "count": paginator.page.paginator.count,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "results": serialize(page),
+            "counts": {
+                "total": sum(by_role.values()),
+                "by_role": by_role,
+                "inactive": base.filter(is_active=False).count(),
+            },
+        })
 
     def post(self, request):
         requester = request.resolved_user
@@ -247,6 +400,13 @@ class UserListView(APIView):
 
         if not name or not email or not role or not password:
             return Response({"detail": "name, email, role and password are required."}, status=400)
+
+        error = _name_error(name)
+        if error:
+            return _field_error("name", error)
+        error = _email_error(email)
+        if error:
+            return _field_error("email", error)
 
         if role not in VALID_ROLES:
             return Response({"detail": f"Invalid role '{role}'."}, status=400)
@@ -364,12 +524,14 @@ class UserDetailView(APIView):
         # service checks it, so this also signs the user out of billing/
         # enrollment/student-service, not just identity-service).
         invalidate_session = False
+        password_changed = False
 
         # ── Name ──────────────────────────────────────────────────────────────
         if "name" in data:
             new_name = (data["name"] or "").strip()
-            if not new_name:
-                return Response({"detail": "Name cannot be empty."}, status=400)
+            error = _name_error(new_name)
+            if error:
+                return _field_error("name", error)
             if new_name != target.name:
                 changes.append(f"name changed from '{target.name}' to '{new_name}'")
                 target.name = new_name
@@ -377,11 +539,12 @@ class UserDetailView(APIView):
         # ── Email ─────────────────────────────────────────────────────────────
         if "email" in data:
             new_email = (data["email"] or "").strip()
-            if not new_email:
-                return Response({"detail": "Email cannot be empty."}, status=400)
             if new_email.lower() != target.email.lower():
+                error = _email_error(new_email)
+                if error:
+                    return _field_error("email", error)
                 if User.objects.filter(email__iexact=new_email).exclude(user_id=target.user_id).exists():
-                    return Response({"detail": "This email is already in use."}, status=400)
+                    return _field_error("email", "This email is already in use.")
                 changes.append(f"email changed from '{target.email}' to '{new_email}'")
                 target.email = new_email
 
@@ -412,6 +575,27 @@ class UserDetailView(APIView):
                 target.role = new_role
                 invalidate_session = True
 
+        # ── Active / deactivated (admin only) ─────────────────────────────────
+        # Deactivating is how an account is retired: the person can't sign
+        # in, any open session ends, and everything that points at their id
+        # still names them. The super admin rule above already applies.
+        if "is_active" in data:
+            if not is_admin:
+                return Response({"detail": "Only admins can deactivate accounts."}, status=403)
+            new_active = data.get("is_active")
+            if not isinstance(new_active, bool):
+                return Response({"detail": "is_active must be true or false."}, status=400)
+            if is_own_profile and not new_active:
+                return Response(
+                    {"detail": "You cannot deactivate your own account. Ask another admin."},
+                    status=403,
+                )
+            if new_active != target.is_active:
+                changes.append("account reactivated" if new_active else "account deactivated")
+                target.is_active = new_active
+                if not new_active:
+                    invalidate_session = True
+
         # ── Password ──────────────────────────────────────────────────────────
         if "new_password" in data:
             new_password = data.get("new_password") or ""
@@ -428,6 +612,7 @@ class UserDetailView(APIView):
             target.password = make_password(new_password)
             changes.append("password updated")
             invalidate_session = True
+            password_changed = True
 
         # ── Profile picture ───────────────────────────────────────────────────
         if "profile_picture" in data:
@@ -440,8 +625,11 @@ class UserDetailView(APIView):
                     return Response({"detail": "profile_picture must be a valid base64 image data URI."}, status=400)
                 b64_data = pic.split(",", 1)[1]
                 try:
-                    decoded_size = len(base64.b64decode(b64_data + "=="))
-                except Exception:
+                    # validate=True: the lenient default silently discarded
+                    # anything outside the base64 alphabet, so a string of
+                    # junk measured as a tiny image and was stored whole.
+                    decoded_size = len(base64.b64decode(b64_data, validate=True))
+                except (binascii.Error, ValueError):
                     return Response({"detail": "Invalid base64 image data."}, status=400)
                 if decoded_size > MAX_IMAGE_BYTES:
                     return Response({"detail": "Profile picture must be under 2 MB."}, status=400)
@@ -455,6 +643,14 @@ class UserDetailView(APIView):
             target.current_session_id = None
 
         target.save()
+
+        if password_changed:
+            # A person locked out after five wrong guesses is told "contact an
+            # admin", and the admin's answer is to set a new password -- which
+            # did nothing while axes still held the lockout for up to an hour.
+            # Clear it for both identifiers they might sign in with.
+            axes_reset(username=target.email)
+            axes_reset(username=target.name)
 
         detail_msg = "; ".join(changes).capitalize() + "."
         record_audit_event(

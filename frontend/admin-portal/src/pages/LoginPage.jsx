@@ -24,13 +24,23 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  // Off by default. "Remember me" now really keeps a browser signed in for a
+  // week (see PrivateRoute), and this portal is used on shared machines -- the
+  // registrar's desk, school PCs -- where the next person should not inherit
+  // the last one's session. Someone on their own phone or laptop ticks it.
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Shown under a wrong-credentials error only. The server deliberately gives
+  // the same message for a wrong password and a locked-out account (so the two
+  // can't be told apart by an attacker), which left a locked-out person
+  // retyping a correct password for an hour.
+  const [showLockoutHint, setShowLockoutHint] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setShowLockoutHint(false);
     setLoading(true);
 
     try {
@@ -48,10 +58,21 @@ export default function LoginPage() {
       // Guardians land in the parent portal; staff go to the admin dashboard.
       navigate(res.user?.role === "guardian" ? "/guardian" : "/dashboard");
     } catch (err) {
-      setError(
-        err?.response?.data?.detail ||
-          "Login failed. Please check your credentials."
-      );
+      const status = err?.response?.status;
+      if (!err?.response) {
+        // No response at all: the server is down or unreachable. This used
+        // to say "check your credentials", sending people to retype a
+        // password that was never the problem.
+        setError("Can't reach the server. Check your connection, then try again.");
+      } else if (status === 429) {
+        setError("Too many sign-in attempts from this network. Wait a minute, then try again.");
+      } else if (status >= 500) {
+        setError("The server ran into a problem. Please try again in a moment.");
+      } else {
+        const detail = err.response.data?.detail;
+        setError(typeof detail === "string" && detail ? detail : "Login failed. Please check your credentials.");
+        setShowLockoutHint(status === 400);
+      }
     } finally {
       setLoading(false);
     }
@@ -273,6 +294,11 @@ export default function LoginPage() {
                 role="alert"
               >
                 {error}
+                {showLockoutHint && (
+                  <div style={{ marginTop: 4, fontSize: 12, color: "#9a3030" }}>
+                    After 5 wrong tries, sign-in pauses for an hour. An admin can reset your password to unlock it sooner.
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -292,7 +318,7 @@ export default function LoginPage() {
                   marginBottom: 8,
                 }}
               >
-                Email or username
+                Email or full name
               </label>
               <div
                 style={{

@@ -19,7 +19,9 @@ from unittest.mock import patch
 
 import pytest
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import AccessToken
+from datetime import timedelta
+
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from accounts.views import REFRESH_COOKIE_PATH
 
@@ -75,29 +77,94 @@ def test_logout_clears_current_session_id_so_the_old_access_token_stops_working(
         mock_filter.return_value.first.return_value = user
         APIClient().post("/api/auth/logout/", HTTP_AUTHORIZATION=f"Bearer {token}")
 
-        mock_filter.assert_any_call(user_id=user.user_id)
+        # Scoped to the session being ended, so a login that lands in
+        # between is not the one cleared.
+        mock_filter.assert_any_call(user_id=user.user_id, current_session_id=session_id)
         mock_filter.return_value.update.assert_called_once_with(current_session_id=None)
 
 
-@pytest.mark.django_db
-def test_logout_without_a_bearer_token_is_rejected():
-    response = APIClient().post("/api/auth/logout/")
-    assert response.status_code == 401
+def _refresh_cookie(user_id, session_id):
+    refresh = RefreshToken()
+    refresh["user_id"] = user_id
+    refresh["sid"] = str(session_id)
+    return str(refresh)
+
+
+def _expired_bearer_token(user_id, session_id):
+    token = AccessToken()
+    token["user_id"] = user_id
+    token["sid"] = str(session_id)
+    token.set_exp(lifetime=-timedelta(minutes=1))
+    return str(token)
 
 
 @pytest.mark.django_db
-def test_logout_with_a_stale_session_id_is_rejected():
+def test_logout_after_the_access_token_expired_still_ends_the_session():
     """
-    The token's sid claim must match the user's *current* session --
-    superseded by a later login elsewhere, this is treated as
-    unauthenticated (see resolve_user_from_request's fail-closed sid check).
+    The regression: open the portal, leave it past the 2-hour access token,
+    click Log out. That used to be a 401 -- session still active, refresh
+    cookie still valid for up to 7 days and still minting tokens. The cookie
+    now identifies the session.
     """
-    real_session = uuid.uuid4()
-    stale_token = _bearer_token(1, uuid.uuid4())  # different sid
-    user = _fake_user(real_session)
+    session_id = uuid.uuid4()
+    user = _fake_user(session_id)
+
+    client = APIClient()
+    client.cookies["refresh"] = _refresh_cookie(1, session_id)
 
     with patch("accounts.models.User.objects.filter") as mock_filter:
         mock_filter.return_value.first.return_value = user
-        response = APIClient().post("/api/auth/logout/", HTTP_AUTHORIZATION=f"Bearer {stale_token}")
+        response = client.post(
+            "/api/auth/logout/", HTTP_AUTHORIZATION=f"Bearer {_expired_bearer_token(1, session_id)}",
+        )
 
-    assert response.status_code == 401
+        mock_filter.return_value.update.assert_called_once_with(current_session_id=None)
+
+    assert response.status_code == 200
+    assert response.cookies["refresh"].value == ""
+
+
+@pytest.mark.django_db
+def test_logout_with_no_credentials_still_deletes_the_cookie():
+    """Idempotent: nothing to end, but the browser is told to drop the cookie."""
+    with patch("accounts.models.User.objects.filter") as mock_filter:
+        response = APIClient().post("/api/auth/logout/")
+        mock_filter.return_value.update.assert_not_called()
+
+    assert response.status_code == 200
+    assert response.cookies["refresh"]["max-age"] == 0
+
+
+@pytest.mark.django_db
+def test_a_superseded_session_does_not_sign_out_the_newer_login():
+    """
+    The token's sid must match the user's *current* session. If the user has
+    since signed in on another device, logging out this old one must leave
+    that newer session alone -- by access token or by cookie.
+    """
+    real_session = uuid.uuid4()
+    stale_session = uuid.uuid4()
+    user = _fake_user(real_session)
+
+    client = APIClient()
+    client.cookies["refresh"] = _refresh_cookie(1, stale_session)
+
+    with patch("accounts.models.User.objects.filter") as mock_filter:
+        mock_filter.return_value.first.return_value = user
+        response = client.post(
+            "/api/auth/logout/", HTTP_AUTHORIZATION=f"Bearer {_bearer_token(1, stale_session)}",
+        )
+        mock_filter.return_value.update.assert_not_called()
+
+    assert response.status_code == 200
+    assert response.cookies["refresh"].value == ""
+
+
+@pytest.mark.django_db
+def test_logout_refuses_a_foreign_origin():
+    """Now that the cookie alone can end a session, a cross-site page must
+    not be able to sign people out -- same origin check as refresh."""
+    client = APIClient()
+    client.cookies["refresh"] = "anything"
+    response = client.post("/api/auth/logout/", HTTP_ORIGIN="https://evil.example")
+    assert response.status_code == 403

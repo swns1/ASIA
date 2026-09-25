@@ -112,7 +112,7 @@ describe("refresh mutex", () => {
   });
 
   it("redirects to /login exactly once when the shared refresh fails", async () => {
-    postMock.mockRejectedValue(new Error("refresh rejected"));
+    postMock.mockRejectedValue(Object.assign(new Error("refresh rejected"), { response: { status: 401 } }));
     const clients = await freshClients(3);
 
     const settled = await Promise.allSettled(clients.map((c) => c.onError(unauthorized())));
@@ -124,6 +124,36 @@ describe("refresh mutex", () => {
     // discarded whatever the user had unsaved.
     expect(hrefAssignments).toEqual(["/login"]);
     expect(sessionStorage.getItem("access_token")).toBeNull();
+  });
+
+  it("keeps the session when the refresh is only rate-limited", async () => {
+    // A 429 says nothing about the session. Treating it as a dead one used
+    // to throw people onto the login page mid-task.
+    sessionStorage.setItem("access_token", "old-token");
+    postMock.mockRejectedValue(Object.assign(new Error("throttled"), { response: { status: 429 } }));
+    const [client] = await freshClients(1);
+
+    await expect(client.onError(unauthorized())).rejects.toThrow(/Too many requests/);
+    expect(hrefAssignments).toEqual([]);
+    expect(sessionStorage.getItem("access_token")).toBe("old-token");
+  });
+
+  it("keeps the session when the refresh never reached the server", async () => {
+    sessionStorage.setItem("access_token", "old-token");
+    postMock.mockRejectedValue(new Error("Network Error"));
+    const [client] = await freshClients(1);
+
+    await expect(client.onError(unauthorized())).rejects.toBeTruthy();
+    expect(hrefAssignments).toEqual([]);
+  });
+
+  it("stores the user a refresh returns, so a restored tab knows who is signed in", async () => {
+    postMock.mockResolvedValue({ data: { access: "t", user: { id: 4, name: "Ana", role: "registrar" } } });
+    const { refreshSession } = await import("./apiClient");
+
+    await refreshSession();
+
+    expect(JSON.parse(sessionStorage.getItem("current_user"))).toEqual({ id: 4, name: "Ana", role: "registrar" });
   });
 
   it("starts a new refresh for a later expiry instead of reusing the settled one", async () => {

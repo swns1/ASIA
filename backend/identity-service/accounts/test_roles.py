@@ -15,12 +15,18 @@ from rest_framework.test import APIClient
 def _admin_user(**overrides):
     defaults = dict(user_id=1, name="Admin User", email="admin@example.com", role="admin")
     defaults.update(overrides)
+    # What DRF's throttles read off request.user, which HasRole now sets.
+    defaults.setdefault("is_authenticated", True)
+    defaults.setdefault("pk", defaults["user_id"])
     return SimpleNamespace(**defaults)
 
 
 def _registrar_user(**overrides):
     defaults = dict(user_id=3, name="Registrar User", email="registrar@example.com", role="registrar")
     defaults.update(overrides)
+    # What DRF's throttles read off request.user, which HasRole now sets.
+    defaults.setdefault("is_authenticated", True)
+    defaults.setdefault("pk", defaults["user_id"])
     return SimpleNamespace(**defaults)
 
 
@@ -32,11 +38,47 @@ def test_registrar_can_list_users(mock_user_model, mock_resolve):
     on the My Sections page (see TeacherSectionsPage.jsx) — this must not
     403 even though registrar can't create/edit/delete users."""
     mock_resolve.return_value = _registrar_user()
-    mock_user_model.objects.all.return_value.order_by.return_value = []
+    qs = mock_user_model.objects.all.return_value.order_by.return_value
+    qs.filter.return_value = [SimpleNamespace(
+        user_id=5, name="Teacher", email="t@example.com", role="teacher",
+        profile_picture="data:image/png;base64,AAAA",
+    )]
 
     response = APIClient().get("/api/auth/users/")
 
     assert response.status_code == 200
+    # Only the two roles a registrar picks from, and nobody's photo.
+    qs.filter.assert_called_once_with(role__in={"teacher", "guardian"})
+    assert "profile_picture" not in response.data[0]
+
+
+@pytest.mark.django_db
+@patch("accounts.permissions.resolve_user_from_request")
+@patch("accounts.views.User")
+def test_registrar_cannot_widen_the_list_to_admins(mock_user_model, mock_resolve):
+    mock_resolve.return_value = _registrar_user()
+    base = mock_user_model.objects.all.return_value.order_by.return_value.filter.return_value
+    base.filter.return_value = []
+
+    APIClient().get("/api/auth/users/?role=admin,teacher")
+
+    # First scoped to what a registrar may see, then narrowed to what they
+    # asked for that is inside it -- "admin" is simply dropped.
+    base.filter.assert_called_once_with(role__in={"teacher"})
+
+
+@pytest.mark.django_db
+@patch("accounts.permissions.resolve_user_from_request")
+@patch("accounts.views.User")
+def test_admin_can_narrow_the_list_by_role(mock_user_model, mock_resolve):
+    mock_resolve.return_value = _admin_user()
+    qs = mock_user_model.objects.all.return_value.order_by.return_value
+    qs.filter.return_value = []
+
+    response = APIClient().get("/api/auth/users/?role=teacher")
+
+    assert response.status_code == 200
+    qs.filter.assert_called_once_with(role__in={"teacher"})
 
 
 @pytest.mark.django_db

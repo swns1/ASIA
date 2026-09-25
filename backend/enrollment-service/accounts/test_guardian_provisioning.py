@@ -140,6 +140,30 @@ def test_already_linked_guardian_is_left_alone():
     assert mirror.updates == []
 
 
+def test_a_link_to_a_deleted_account_is_replaced():
+    """users has no foreign keys, so an admin can delete a guardian's account
+    out from under the link. The dead id must not count as "already linked"
+    forever -- unlink, then provision like a new guardian."""
+    mirror = _MirrorStub([_guardian(pk=3, user_id=77)])
+    user_qs = MagicMock()
+    user_qs.exists.return_value = False   # account #77 is gone
+    user_qs.first.return_value = None     # and no account has this email
+    user_model = MagicMock()
+    user_model.objects.filter.return_value = user_qs
+    created = MagicMock()
+    created.user_id = 901
+    user_model.objects.create.return_value = created
+
+    with patch(f"{MODULE}.GuardianMirror") as gm, patch(f"{MODULE}.User", user_model), \
+            patch(f"{MODULE}._link_same_person_across_household"):
+        gm.objects = mirror
+        results = _provision(111)
+
+    assert results[ALREADY_LINKED] == []
+    assert len(results[CREATED]) == 1
+    assert mirror.updates == [(3, {"user_id": None}), (3, {"user_id": 901})]
+
+
 def test_losing_a_race_on_create_falls_back_to_linking():
     # Two siblings enrolled concurrently: the second create hits the UNIQUE
     # constraint, so re-read and link rather than surfacing an error.

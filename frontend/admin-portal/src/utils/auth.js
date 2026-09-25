@@ -1,5 +1,11 @@
 const CURRENT_USER_KEY = "current_user";
 
+// Fired whenever the stored user changes, so the sidebar and the guardian top
+// bar can redraw. They used to read sessionStorage once per render and never
+// hear about a change -- editing your own name left the old one on screen
+// until you signed in again. See hooks/useCurrentUser.js.
+export const CURRENT_USER_EVENT = "slis:current-user";
+
 function identityAuthBaseUrl() {
   return (import.meta.env.VITE_IDENTITY_API_URL || "http://localhost:8001/api/auth").replace(/\/+$/, "");
 }
@@ -7,9 +13,10 @@ function identityAuthBaseUrl() {
 export function setCurrentUser(user) {
   if (!user) {
     sessionStorage.removeItem(CURRENT_USER_KEY);
-    return;
+  } else {
+    sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
   }
-  sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+  window.dispatchEvent(new Event(CURRENT_USER_EVENT));
 }
 
 export function getCurrentUser() {
@@ -77,6 +84,14 @@ export const STAFF_ALL       = ["super_admin", "admin", "registrar", "teacher", 
 export function isAdminRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return ["admin", "super_admin", "superadmin"].includes(normalized);
+}
+
+// Mirrors identity-service's SUPER_ADMIN_ROLES. Only a super admin may edit,
+// delete or grant a super admin account; the Users page uses this to stop
+// offering those actions to a plain admin, who would only meet a 403.
+export function isSuperAdminRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return ["super_admin", "superadmin"].includes(normalized);
 }
 
 const PORTAL_LABELS = {
