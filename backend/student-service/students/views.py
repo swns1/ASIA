@@ -9,7 +9,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework import serializers
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from django.http import FileResponse, Http404
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
@@ -56,6 +56,30 @@ def _scope_to_teacher_roster(queryset, user, *, field="student_id__in", deny_acc
     if role == "accounting" and deny_accounting:
         return queryset.none()
     return queryset
+
+
+def _annotate_last_enrollment(queryset):
+    """
+    Where each student was last enrolled: the school year, grade and section
+    of their latest enrollment that wasn't cancelled -- a completed one still
+    counts, it is the year they finished. The Students page is the school's
+    masterlist, so this is what tells a registrar at a glance where a learner
+    stands. Annotated in one query rather than looked up per row; students
+    never enrolled come back with NULLs (see LastEnrollmentMixin).
+    """
+    from accounts.enrollment_mirror import EnrollmentMirror
+    latest = (
+        EnrollmentMirror.objects
+        .filter(student_id=OuterRef("student_id"))
+        .exclude(enrollment_status="cancelled")
+        # "2025-2026" sorts as its start year; the id breaks a tie within one.
+        .order_by("-school_year", "-enrollment_id")
+    )
+    return queryset.annotate(
+        last_school_year=Subquery(latest.values("school_year")[:1]),
+        last_grade_level=Subquery(latest.values("grade_level")[:1]),
+        last_section=Subquery(latest.values("section")[:1]),
+    )
 
 
 # Household fields that carry real meaning downstream. parent_marital_status,
@@ -149,6 +173,12 @@ class StudentViewSet(viewsets.ModelViewSet):
                 .values_list("student_id", flat=True)
             )
             queryset = queryset.exclude(student_id__in=list(covered))
+
+        # Only the masterlist shows it; other actions leave it off (and so
+        # does their serializer output -- see LastEnrollmentMixin). getattr:
+        # a view built outside DRF's routing has no `action` at all.
+        if getattr(self, "action", None) == "list":
+            queryset = _annotate_last_enrollment(queryset)
 
         # accounting keeps roster-wide access (see get_serializer_class --
         # it gets a reduced field set instead, not a filtered queryset: any

@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { useState, useEffect, useCallback, useRef } from "react";
 import RecordPaymentModal from "../components/RecordPaymentModal";
@@ -72,22 +73,22 @@ export default function PaymentsPage() {
   const [amountMax,    setAmountMax]    = useState("");
   const [sortField,    setSortField]    = useState("-payment_date");
   const [search,       setSearch]       = useState("");
-  // Defaults to the global school year, the way Enrollments and Grades do —
+  // Opens on the current school year, the way Enrollments and Grades do —
   // opening on "All years" made this the one year-scoped page that started
   // unscoped, and left its picker sitting grey while theirs read as active.
-  const { schoolYear: globalSchoolYear } = useSchoolYear();
-  const [yearFilter,   setYearFilter]   = useState(globalSchoolYear ?? "");
+  const { currentYear } = useSchoolYear();
+  const [yearFilter,   setYearFilter, yearIsDefault] = useYearFilter();
 
   const hasDateOrAmount  = dateFrom || dateTo || amountMin || amountMax;
   const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount ||
-    sortField !== "-payment_date" || search.trim() !== "" || yearFilter !== "";
+    sortField !== "-payment_date" || search.trim() !== "" || !yearIsDefault;
 
   const clearFilters = () => {
     setMethodFilter("all");
     setDateFrom(""); setDateTo("");
     setAmountMin(""); setAmountMax("");
     setSortField("-payment_date");
-    setSearch(""); setYearFilter("");
+    setSearch(""); setYearFilter(null); // back to the current school year
   };
 
   const totalCollected = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
@@ -130,8 +131,11 @@ export default function PaymentsPage() {
   // back, and an older one landing last showed its list and totals under the
   // newer filter's labels.
   const fetchSeq = useRef(0);
+  // The year the newest request asked for — see the year effect below.
+  const requestedYear = useRef(yearFilter);
   const fetchPayments = useCallback(async (p = 1, overrides = {}) => {
     const seq = ++fetchSeq.current;
+    requestedYear.current = overrides.yearFilter ?? yearFilter;
     setLoading(true);
     setLoadError(null);
     try {
@@ -155,18 +159,15 @@ export default function PaymentsPage() {
     finally { if (seq === fetchSeq.current) setLoading(false); }
   }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter]);
 
-  // The global year resolves after first paint, so seeding useState with it is
-  // not enough on a cold load — adopt it when it arrives, the way Enrollments
-  // and TeacherAdvisories do. Only while the user hasn't chosen a year
-  // themselves, so this can't yank a deliberate "All years" back.
-  const yearTouched = useRef(false);
+  // The current year can arrive from School Settings after the first load, and
+  // the filter follows it until someone picks a year. Reload when that happens
+  // — moving the picker alone kept the first load's list and totals under a
+  // label naming a different year. Changes that already fetched with their
+  // year (the picker, Clear filters) are skipped rather than fetched twice.
   useEffect(() => {
-    if (yearTouched.current || !globalSchoolYear || globalSchoolYear === yearFilter) return;
-    setYearFilter(globalSchoolYear);
-    // Reload too. Setting the filter alone moved the picker but kept the
-    // all-years list and totals from the first load underneath it.
-    fetchPayments(1, { yearFilter: globalSchoolYear });
-  }, [globalSchoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (yearFilter === requestedYear.current) return;
+    fetchPayments(1);
+  }, [yearFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPayments();
@@ -266,7 +267,7 @@ export default function PaymentsPage() {
             // collapse the picker to that single option.
             <SchoolYearPicker
               value={yearFilter}
-              onChange={(v) => { yearTouched.current = true; setYearFilter(v); fetchPayments(1, { yearFilter: v }); }}
+              onChange={(v) => { setYearFilter(v); fetchPayments(1, { yearFilter: v }); }}
               options={methodTotals.school_years ?? []}
               counts={methodTotals.year_counts ?? {}}
               allYearsCount={tilesLoading ? undefined : pageMeta.count}
@@ -274,9 +275,8 @@ export default function PaymentsPage() {
           }
           hasFilters={hasActiveFilters}
           onClearFilters={() => {
-            yearTouched.current = true;
             clearFilters();
-            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date", search:"", yearFilter:"" });
+            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date", search:"", yearFilter: currentYear });
           }}
           advanced={
             <>

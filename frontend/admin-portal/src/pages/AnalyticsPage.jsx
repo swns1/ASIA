@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { usePageTitle } from "../hooks/usePageTitle";
+import useYearFilter from "../hooks/useYearFilter";
 import useTabs from "../hooks/useTabs";
 import { pageVariants } from "../utils/motion";
 
@@ -343,10 +344,12 @@ function ClusterInsightPanel({ result }) {
 export default function AnalyticsPage() {
   usePageTitle("Analytics");
 
-  const { schoolYear: globalSchoolYear, options: globalYearOptions } = useSchoolYear();
+  const { options: globalYearOptions } = useSchoolYear();
   const canRun = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
-  const [schoolYear, setSchoolYear] = useState(globalSchoolYear || "");
+  // One specific year: the year select has no "All years", and the risk,
+  // trend and grouping requests are all per-year.
+  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [schoolLevel, setSchoolLevel] = useState("");
   const [gradeLevel, setGradeLevel] = useState("");
@@ -386,9 +389,6 @@ export default function AnalyticsPage() {
     [risk, canRun]
   );
   const { active, direction, setActive } = useTabs(TABS);
-
-  // Follow the global year selector while this page stays mounted.
-  useEffect(() => setSchoolYear(globalSchoolYear), [globalSchoolYear]);
 
   // Changing a level invalidates the narrower selections beneath it. Done in
   // the handler rather than an effect so there is no intermediate render

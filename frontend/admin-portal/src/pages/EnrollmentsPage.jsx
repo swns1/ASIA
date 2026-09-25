@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import useYearFilter from "../hooks/useYearFilter";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1086,26 +1087,14 @@ export default function EnrollmentsPage() {
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
 
-  // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered,
-  // falling back to the global school-year selector (Sidebar) rather than "All Years".
-  // Only the global year itself is needed here now — SchoolYearPicker reads the
-  // option list and per-year counts from the context directly.
-  const { schoolYear: globalSchoolYear } = useSchoolYear();
-  const [schoolYear,   setSchoolYear]   = useState(() => searchParams.get("school_year") ?? globalSchoolYear ?? "");
+  // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered.
+  // The year follows hooks/useYearFilter: the link's year if it names one, else the current school year.
+  const [schoolYear,   setSchoolYear, yearIsDefault] = useYearFilter();
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
-
-  // Follow the global school year while this page stays mounted — unless the
-  // URL explicitly pinned one (e.g. a Dashboard card link), in which case we
-  // honor that once and resync on subsequent global changes after.
-  const skipYearSync = useRef(Boolean(searchParams.get("school_year")));
-  useEffect(() => {
-    if (skipYearSync.current) { skipYearSync.current = false; return; }
-    setSchoolYear(globalSchoolYear);
-  }, [globalSchoolYear]);
 
   const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
 
@@ -1179,11 +1168,13 @@ export default function EnrollmentsPage() {
 
   const handleSearch = () => { setSearch(searchInput); };
   const clearFilters = () => {
-    setSchoolYear(""); setSchoolLevel(""); setGradeLevel("");
+    setSchoolYear(null); // back to the current school year, not All years
+    setSchoolLevel(""); setGradeLevel("");
     setStatusFilter(""); setSearch(""); setSearchInput("");
   };
 
-  const hasFilters = schoolYear || schoolLevel || gradeLevel || statusFilter || search;
+  // The current year is where the page opens, so it isn't a filter to clear.
+  const hasFilters = !yearIsDefault || schoolLevel || gradeLevel || statusFilter || search;
   const totalPages = Math.ceil(pageMeta.count / 20);
 
   const isFirstRender    = useIsFirstRender();

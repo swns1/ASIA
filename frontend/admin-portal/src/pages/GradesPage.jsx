@@ -40,7 +40,7 @@ import {
   callGemini,
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
-import { useSchoolYear } from "../context/SchoolYearContext";
+import useYearFilter from "../hooks/useYearFilter";
 import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 
 const getStudents            = (p = {}) => _getStudents(p);
@@ -105,10 +105,8 @@ const OVERVIEW_COLUMNS = [
 function OverviewTab({ onNavigate }) {
 
   // SchoolYearPicker reads the option list and per-year counts from the context
-  // itself, so only the global year is needed here.
-  const { schoolYear: globalSchoolYear } = useSchoolYear();
-  const [schoolYear,    setSchoolYear]    = useState(globalSchoolYear || "");
-  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
+  // itself, so only the year is needed here.
+  const [schoolYear,    setSchoolYear, yearIsDefault] = useYearFilter();
   const [schoolLevel,   setSchoolLevel]   = useState("");
   const [gradeLevel,    setGradeLevel]    = useState("");
   const [gradingPeriod, setGradingPeriod] = useState("");
@@ -146,10 +144,11 @@ function OverviewTab({ onNavigate }) {
   // reset cascaded filters + page when level changes
   useEffect(() => { setGradeLevel(""); setGradingPeriod(""); }, [schoolLevel]);
 
-  const hasFilters = schoolYear || schoolLevel || gradeLevel || gradingPeriod || remarks || search;
+  const hasFilters = !yearIsDefault || schoolLevel || gradeLevel || gradingPeriod || remarks || search;
 
   const clearFilters = () => {
-    setSchoolYear(""); setSchoolLevel(""); setGradeLevel("");
+    setSchoolYear(null); // back to the current school year, not All years
+    setSchoolLevel(""); setGradeLevel("");
     setGradingPeriod(""); setRemarks(""); setSearch(""); setPage(1);
   };
 

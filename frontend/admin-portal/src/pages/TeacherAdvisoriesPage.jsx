@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import useYearFilter from "../hooks/useYearFilter";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -62,13 +63,15 @@ const TABLE_COLUMNS = [
 ];
 
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
-function AdvisoryModal({ advisory, teachers, teachersUnavailable, onClose, onSaved }) {
+function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
-  const { schoolYear: globalSchoolYear } = useSchoolYear();
+  const { currentYear } = useSchoolYear();
 
   const [form, setForm] = useState({
     teacher_user_id: advisory?.teacher_user_id ?? "",
-    school_year:     advisory?.school_year     ?? globalSchoolYear,
+    // A new assignment starts in the year the list is showing, so assigning
+    // next year's advisers doesn't mean retyping the year every time.
+    school_year:     advisory?.school_year     ?? (defaultYear || currentYear),
     school_level:    advisory?.school_level    ?? "elementary",
     grade_level:     advisory?.grade_level     ?? "",
     section:         advisory?.section         ?? "",
@@ -291,12 +294,9 @@ export default function TeacherAdvisoriesPage() {
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
-  const [yearFilter, setYearFilter] = useState("all");
-  const { schoolYear: globalSchoolYear } = useSchoolYear();
-
-  // Default the list to the global school year once it resolves — still
-  // freely switchable back to "All Years" or any other year in use below.
-  useEffect(() => { if (globalSchoolYear) setYearFilter(globalSchoolYear); }, [globalSchoolYear]);
+  // Opens on the current school year — still freely switchable to "All years"
+  // ("") or any other year in use below.
+  const [yearFilter, setYearFilter, yearIsDefault] = useYearFilter();
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
@@ -351,7 +351,7 @@ export default function TeacherAdvisoriesPage() {
 
   const filtered = useMemo(() => {
     let list = advisories;
-    if (yearFilter !== "all") list = list.filter((a) => a.school_year === yearFilter);
+    if (yearFilter) list = list.filter((a) => a.school_year === yearFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((a) => {
@@ -364,7 +364,7 @@ export default function TeacherAdvisoriesPage() {
     return list;
   }, [advisories, yearFilter, search, teacherMap]);
 
-  const hasFilters = yearFilter !== "all" || search.trim() !== "";
+  const hasFilters = !yearIsDefault || search.trim() !== "";
 
   const handleDelete = async () => {
     if (!toDelete) return;
@@ -407,16 +407,13 @@ export default function TeacherAdvisoriesPage() {
           onClearSearch={() => setSearch("")}
           searchPlaceholder="Search by teacher name, grade level, or section…"
           hasFilters={hasFilters}
-          onClearFilters={() => { setYearFilter("all"); setSearch(""); }}
+          onClearFilters={() => { setYearFilter(null); setSearch(""); }}
           animate={isFirstRender}
           animateDelay={0.18}
-          // This page's "show everything" sentinel is the string "all", not the
-          // empty string the picker uses, so it's mapped at the boundary rather
-          // than changing the filter logic below.
           scope={
             <SchoolYearPicker
-              value={yearFilter === "all" ? "" : yearFilter}
-              onChange={(y) => setYearFilter(y === "" ? "all" : y)}
+              value={yearFilter}
+              onChange={setYearFilter}
               options={yearList}
               counts={yearCounts}
               allYearsCount={advisories.length}
@@ -469,6 +466,7 @@ export default function TeacherAdvisoriesPage() {
           <AdvisoryModal
             key="advisory-modal"
             advisory={modal.mode === "edit" ? modal.advisory : null}
+            defaultYear={yearFilter}
             teachers={teachers}
             teachersUnavailable={teachersUnavailable}
             onClose={() => setModal(null)}

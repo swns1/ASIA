@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import useYearFilter from "../hooks/useYearFilter";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -1433,11 +1434,10 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 export default function AcademicCalendarPage() {
   usePageTitle("Academic Calendar");
   const navigate = useNavigate();
-  const { schoolYear: globalSchoolYear, options: SCHOOL_YEARS } = useSchoolYear();
-  const [schoolYear,  setSchoolYear]  = useState(globalSchoolYear || "");
-
-  // Follow the global school year selector while this page stays mounted.
-  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
+  const { options: SCHOOL_YEARS } = useSchoolYear();
+  // A calendar is always one school year: its date bounds, month grid and
+  // print headers are all derived from it.
+  const [schoolYear,  setSchoolYear]  = useYearFilter({ allowAll: false });
   const [events,      setEvents]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");

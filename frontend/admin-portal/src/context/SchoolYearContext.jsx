@@ -4,142 +4,111 @@ import { getSchoolYears } from "../api/enrollmentApi";
 import { isTokenValid, getCurrentUser } from "../utils/auth";
 import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
 
-const STORAGE_KEY = "selected_school_year";
+// A copy of School Settings' current year, not anyone's pick: it lets pages
+// open on the right year before the settings request returns, and it is
+// overwritten from settings on every load, so it can't outlive a rollover.
+const CURRENT_KEY = "current_school_year";
+// Where the old sidebar selector kept its pick. That pick outranked School
+// Settings for good, so after a rollover every returning user kept opening on
+// last year; it is cleared rather than read.
+const LEGACY_PICK_KEY = "selected_school_year";
 const SchoolYearContext = createContext(null);
 
-function readPersisted() {
+function readCachedCurrent() {
   try {
-    return localStorage.getItem(STORAGE_KEY) || "";
+    return localStorage.getItem(CURRENT_KEY) || "";
   } catch {
     return "";
   }
 }
 
-function persist(year) {
+function cacheCurrent(year) {
   try {
-    localStorage.setItem(STORAGE_KEY, year);
+    localStorage.setItem(CURRENT_KEY, year);
   } catch {
-    /* storage unavailable (e.g. private browsing) — selection just won't survive reload */
+    /* storage unavailable — the first paint just uses the computed year */
   }
 }
 
+function clearLegacyPick() {
+  try {
+    localStorage.removeItem(LEGACY_PICK_KEY);
+  } catch {
+    /* storage unavailable — then there is nothing stored to clear either */
+  }
+}
+
+function initialCurrentYear() {
+  return readCachedCurrent() || computeDefaultSchoolYear();
+}
+
 // Extends `options` to include `year` if missing, instead of recentering the
-// whole list around it — keeps a persisted or hand-picked year selectable even
-// when it isn't in the fetched set.
+// whole list around it — keeps the current year selectable even before any
+// enrollment exists for it.
 function withYearIncluded(options, year) {
   if (!year || options.includes(year)) return options;
   return [...options, year].sort().reverse();
 }
 
+// The school-year facts every year-scoped page shares: the current year and
+// the years worth offering. Which year a page is showing is that page's own
+// state (hooks/useYearFilter), so nothing here is a selection.
 export function SchoolYearProvider({ children }) {
-  const [schoolYear, setSchoolYearState] = useState(readPersisted);
-  const [options, setOptions] = useState(() =>
-    withYearIncluded(buildSchoolYearOptions(computeDefaultSchoolYear()), readPersisted())
-  );
+  const [options, setOptions] = useState(() => buildSchoolYearOptions(initialCurrentYear()));
   // Per-year enrollment counts, keyed by year. Separate from `options` so the
-  // existing consumers keep receiving a plain string array.
+  // consumers keep receiving a plain string array.
   const [yearCounts, setYearCounts] = useState({});
-  // The current year — drives the "Current" group in the picker. The configured
-  // settings year wins, then the enrollment service's date-based one, then the
-  // computed fallback shown until either fetch lands.
-  const [currentYear, setCurrentYear] = useState(() => computeDefaultSchoolYear());
-  const fetchedDefault = useRef(false);
-  const fetchedYears = useRef(false);
-  // The year configured in school settings, once known. It outranks the
-  // backend's date-based `current`: the configured year is what the app opens
-  // on, so it is what the picker's "Current" group must show.
-  const settingsYear = useRef(null);
-
-  // Only used to seed a default the *first* time (no persisted user choice
-  // yet) — never overrides a selection already made this session or before.
-  const ensureDefault = useCallback(() => {
-    if (fetchedDefault.current || schoolYear || !isTokenValid()) return;
-    fetchedDefault.current = true;
-
-    // Guardians never see the school-year picker — their portal is scoped to
-    // their own children's enrollments, not filtered by a year — so there is
-    // nothing here for them to seed and no reason to spend a request on it.
-    // (Reads of /api/school-settings/ are no longer admin/accounting-only;
-    // they were, which is why every other role quietly ended up on the
-    // computed fallback below instead of the configured school year.)
-    if (getCurrentUser()?.role === "guardian") {
-      const fallback = computeDefaultSchoolYear();
-      setSchoolYearState((prev) => prev || fallback);
-      persist(fallback);
-      return;
-    }
-
-    getSchoolSettings()
-      .then((s) => {
-        const backendYear = s?.current_school_year?.trim();
-        const resolved = backendYear || computeDefaultSchoolYear();
-        if (backendYear) {
-          settingsYear.current = backendYear;
-          setCurrentYear(backendYear);
-          setOptions((prev) => withYearIncluded(prev, backendYear));
-        }
-        setSchoolYearState((prev) => prev || resolved);
-        persist(resolved);
-      })
-      .catch(() => {
-        const fallback = computeDefaultSchoolYear();
-        setSchoolYearState((prev) => prev || fallback);
-        persist(fallback);
-      });
-  }, [schoolYear]);
+  // The current year: what every page's year filter opens on and the
+  // "Current" group in the picker. The configured settings year wins, then the
+  // enrollment service's date-based one; until either lands it's the last
+  // settings year seen, or the computed fallback.
+  const [currentYear, setCurrentYear] = useState(initialCurrentYear);
+  const fetched = useRef(false);
 
   useEffect(() => {
-    ensureDefault();
-  }, [ensureDefault]);
+    clearLegacyPick();
+  }, []);
 
-  // The year list is fetched on its own, not chained behind ensureDefault():
-  // that function returns early once a year is already chosen (the common case
-  // for any returning user, since the choice is persisted), which would leave
-  // the picker permanently showing the computed fallback instead of real years.
-  // Like ensureDefault, it is retried from AppLayout: this provider mounts on
-  // the login page, before there is a token to fetch with.
+  // Retried from AppLayout: this provider mounts on the login page, before
+  // there is a token to fetch with.
   const ensureYears = useCallback(() => {
-    if (fetchedYears.current || !isTokenValid()) return;
-    if (getCurrentUser()?.role === "guardian") return; // no picker for guardians
-    fetchedYears.current = true;
+    if (fetched.current || !isTokenValid()) return;
+    // Guardians never see a year picker — their portal is scoped to their own
+    // children's enrollments, not filtered by a year — so there is nothing to
+    // spend a request on.
+    if (getCurrentUser()?.role === "guardian") return;
+    fetched.current = true;
 
-    // Settings are read here too, not only in ensureDefault(): that one is
-    // skipped for anyone with a persisted year, and they need the configured
-    // year in "Current" just the same.
+    // Each request fails on its own. The year list failing used to discard the
+    // settings year with it, and the current year was only applied when the
+    // list had rows -- so a school with no enrollments yet never got it.
     Promise.all([
-      getSchoolYears(),
+      getSchoolYears().catch(() => null),
       getSchoolSettings().catch(() => null),
-    ])
-      .then(([data, settings]) => {
-        const configured = settings?.current_school_year?.trim();
-        if (configured) settingsYear.current = configured;
-        const rows = data?.results ?? [];
-        if (!rows.length) return;
-        setCurrentYear(settingsYear.current || data.current || computeDefaultSchoolYear());
-        setYearCounts(Object.fromEntries(rows.map((r) => [r.school_year, r.count])));
-        setOptions(
-          withYearIncluded(
-            withYearIncluded(rows.map((r) => r.school_year), settingsYear.current),
-            readPersisted(),
-          ),
-        );
-      })
-      // Non-fatal: the computed window stays in place so the picker still works.
-      .catch(() => {});
+    ]).then(([data, settings]) => {
+      const configured = settings?.current_school_year?.trim();
+      if (configured) cacheCurrent(configured);
+      const current = configured || data?.current;
+      if (current) {
+        setCurrentYear(current);
+        setOptions((prev) => withYearIncluded(prev, current));
+      }
+
+      // Non-fatal: without a year list the computed window stays in place, so
+      // the picker still works.
+      const rows = data?.results ?? [];
+      if (!rows.length) return;
+      setYearCounts(Object.fromEntries(rows.map((r) => [r.school_year, r.count])));
+      setOptions(withYearIncluded(rows.map((r) => r.school_year), current));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
     ensureYears();
   }, [ensureYears]);
 
-  const setSchoolYear = useCallback((year) => {
-    setSchoolYearState(year);
-    persist(year);
-    setOptions((prev) => withYearIncluded(prev, year));
-  }, []);
-
   return (
-    <SchoolYearContext.Provider value={{ schoolYear, setSchoolYear, options, currentYear, yearCounts, ensureDefault, ensureYears }}>
+    <SchoolYearContext.Provider value={{ options, currentYear, yearCounts, ensureYears }}>
       {children}
     </SchoolYearContext.Provider>
   );

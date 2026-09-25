@@ -23,14 +23,10 @@ export function buildSchoolYearOptions(centerYear, { past = 3, future = 1 } = {}
 
 // ── Picker presentation ──────────────────────────────────────────────────────
 //
-// Two controls present school years, and they are deliberately different
-// widgets: the sidebar's is a native <select> (the global default), while
-// ui/SchoolYearPicker is a combobox with type-to-filter and keyboard
-// navigation (a per-page filter whose list can run to dozens of entries).
-// What they must NOT differ on is which year lands in which group and how a
-// year reads once grouped — the same year sitting under "Recent" in one and
-// "Earlier" in the other would be one dataset telling two stories. Both kept
-// their own copy of this until it moved here.
+// How ui/SchoolYearPicker groups the years it offers. Kept here rather than in
+// the component so any other year control groups them the same way: the same
+// year sitting under "Recent" in one and "Earlier" in another would be one
+// dataset telling two stories.
 
 // How many non-current years stay in "Recent" before the rest fall into
 // "Earlier". A school gains one year per year, so this only ever grows slowly;

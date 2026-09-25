@@ -17,12 +17,9 @@ import { groupYears } from "../../utils/schoolYear";
 // So year leaves the chip rows and becomes a labelled pill with a grouped
 // popover: constant height at three years or thirty.
 //
-// The Current / Recent / Earlier grouping and the `year · count` label come
-// from utils/schoolYear.js, shared with Sidebar.jsx's picker. The two are
-// deliberately different widgets — a native <select> for the global default,
-// this combobox for a per-page filter whose list can run long — but they must
-// never disagree about which year is "Recent", so the grouping lives in one
-// place rather than in each.
+// The Current / Recent / Earlier grouping comes from utils/schoolYear.js. The
+// value is the page's own: pair this with hooks/useYearFilter, which decides
+// where the page opens and what "Clear filters" goes back to.
 
 // Below this many years the list is short enough to scan directly, and a
 // search field would be chrome that earns nothing. Past it, typing beats
@@ -41,6 +38,10 @@ export default function SchoolYearPicker({
   currentYear: currentYearProp,
   includeAllYears = true,
   allYearsCount,
+  // Whether the year is narrowing the page right now. By default any chosen
+  // year is; Students passes whether "Not enrolled" is on, since its year
+  // feeds only that filter and must not look applied while the filter is off.
+  active,
   label = "School year",
   className = "",
 }) {
@@ -183,7 +184,7 @@ export default function SchoolYearPicker({
   // the whole trigger emphasises together: the focus ring already draws a red
   // border on click, and leaving the text and badge grey underneath it made
   // the control contradict itself.
-  const emphasised = Boolean(value) || open;
+  const emphasised = (active ?? Boolean(value)) || open;
   const activeId = activeIdx >= 0 ? `${baseId}-opt-${activeIdx}` : undefined;
 
   return (

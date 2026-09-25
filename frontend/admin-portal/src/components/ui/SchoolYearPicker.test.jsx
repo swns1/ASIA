@@ -9,8 +9,6 @@ import FilterBar from "./FilterBar";
 // hook keeps these tests from needing a provider (and from firing its fetches).
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
-    schoolYear: "2026-2027",
-    setSchoolYear: vi.fn(),
     options: [],
     currentYear: "2026-2027",
     yearCounts: {},
@@ -58,6 +56,21 @@ describe("SchoolYearPicker — trigger", () => {
     const btn = screen.getByRole("button");
     expect(btn.textContent).toContain("All years");
     expect(btn.textContent).toContain("1,284");
+  });
+
+  // Whole class names: the neutral pill carries `hover:border-brand-500`.
+  const classes = () => screen.getByRole("button").className.split(/\s+/);
+
+  it("reads as applied once a year is chosen", () => {
+    setup();
+    expect(classes()).toContain("border-brand-500");
+  });
+
+  it("stays neutral, still naming its year, while the page says it isn't applied", () => {
+    setup({ active: false });
+    expect(classes()).toContain("border-neutral-300");
+    expect(classes()).not.toContain("border-brand-500");
+    expect(screen.getByRole("button").textContent).toContain("2026-2027");
   });
 
   it("is collapsed until clicked", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -6,68 +6,11 @@ import {
   hasAnyRole, clearAuthSession, getCurrentUser, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
-import { useSchoolYear } from "../context/SchoolYearContext";
-import { groupYears } from "../utils/schoolYear";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { ConfirmDialog } from "./ui/Modal";
-import { Select } from "./FormField";
 import { springTransition } from "../utils/motion";
 import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
-
-// ── Global school-year filter: sets the default year every year-scoped
-// module (Dashboard, Enrollments, Grades, Attendance, Analytics,
-// Scholarships, Academic Calendar, Teacher Advisories) opens to. Individual
-// pages may still switch to a different year locally without affecting this.
-// Named for what it is in the sidebar — the GLOBAL year selector — to keep it
-// distinct from ui/SchoolYearPicker, the per-page filter combobox. Both group
-// and label years through utils/schoolYear so they can never disagree about
-// which year is "Recent"; only the widget differs, and deliberately so: this
-// one is a single line of chrome that sets a default, not a filter.
-function GlobalSchoolYearSelect() {
-  const { schoolYear, setSchoolYear, options, currentYear } = useSchoolYear();
-
-  const groups = useMemo(() => groupYears(options, currentYear), [options, currentYear]);
-
-  if (!schoolYear) return null; // still resolving the default on first load
-
-  return (
-    <div className="border-b border-neutral-200 px-3.5 pb-2.5 pt-3">
-      <label
-        htmlFor="sidebar-school-year"
-        className="mb-1 block text-xs font-bold uppercase tracking-[0.1em] text-neutral-500"
-      >
-        School Year
-      </label>
-      <Select
-        id="sidebar-school-year"
-        value={schoolYear}
-        onChange={(e) => setSchoolYear(e.target.value)}
-        title="Applies to Dashboard, Enrollments, Grades, Attendance, Analytics, Scholarships, Academic Calendar, and Teacher Advisories"
-        className="px-2.5 py-1.5 text-sm font-semibold"
-      >
-        {groups.map(([label, years]) => (
-          <optgroup key={label} label={label}>
-            {years.map((y) => (
-              // Bare year, no count. This control scopes the eight modules
-              // listed in `title` above, but the only count available to it
-              // counts enrollments -- so on Grades or Attendance it described
-              // something other than what the picker was filtering. The noun
-              // could not be supplied either, which is exactly why the label
-              // helper that used to live in utils/schoolYear omitted it, and
-              // a number nobody can label is a number nobody can read.
-              //
-              // Which years hold data is already carried by which years the
-              // endpoint returns. Per-year counts still appear on
-              // ui/SchoolYearPicker, where the page supplies the noun.
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </optgroup>
-        ))}
-      </Select>
-    </div>
-  );
-}
 
 // Sections are ordered by how often a typical staff user reaches for them,
 // not by domain area — "Frequently used" pulls the four highest-traffic
@@ -202,8 +145,6 @@ export default function Sidebar({
             </div>
           )}
         </div>
-
-        {showLabels && <GlobalSchoolYearSelect />}
 
         {/* The landmark name belongs on <nav>, not the <aside> wrapper —
             <aside> exposes a "complementary" role, so labelling it there left

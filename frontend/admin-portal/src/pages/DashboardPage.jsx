@@ -228,7 +228,9 @@ export default function DashboardPage() {
   const [financialSummary, setFinancialSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
 
-  const { schoolYear, options: schoolYearOptions } = useSchoolYear();
+  // The dashboard is about now, so it always shows the current school year.
+  // Cards with their own year chips can still look at another year.
+  const { currentYear: schoolYear, options: schoolYearOptions } = useSchoolYear();
 
   const isFirstEnrolledFetch = useRef(true);
   const isFirstPendingFetch = useRef(true);
@@ -354,7 +356,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (!schoolYear) return; // global school year still resolving
+    if (!schoolYear) return;
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolYear]);

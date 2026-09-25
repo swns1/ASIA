@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useState, useEffect, useCallback, useRef } from "react";
+import useYearFilter from "../hooks/useYearFilter";
+import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
@@ -618,12 +619,12 @@ export default function InvoicesPage() {
     const p = searchParams.get("selected");
     return p ? parseInt(p) : null;
   });
-  // Invoices default to the app-wide school year, so this page and the
-  // dashboard can't disagree about which year "now" is. "" is the explicit
-  // all-years view — the escape hatch for chasing an older balance without
-  // changing the global year for every other page.
-  const { schoolYear } = useSchoolYear();
-  const [yearFilter,   setYearFilter]   = useState(() => searchParams.get("school_year") ?? "");
+  // Invoices open on the current school year, so this page and the dashboard
+  // can't disagree about which year "now" is; a `school_year` in the link wins,
+  // so a deep link keeps pointing at the year it named. "" is the explicit
+  // all-years view — the escape hatch for chasing an older balance.
+  const { currentYear } = useSchoolYear();
+  const [yearFilter,   setYearFilter, yearIsDefault] = useYearFilter();
 
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "all");
   const [planFilter,   setPlanFilter]   = useState("all");
@@ -684,22 +685,11 @@ export default function InvoicesPage() {
     finally { setLoading(false); }
   }, [statusFilter, planFilter, search, ordering, yearFilter]);
 
-  // The context resolves its year asynchronously (it may fetch school settings),
-  // so the first load waits for it rather than firing an unscoped request that
-  // would flash all-years data before correcting itself. A `school_year` in the
-  // URL wins, so a deep link keeps pointing at the year it named.
-  const urlYear = searchParams.get("school_year");
-  const seededYear = useRef(Boolean(urlYear));
-
+  // The year is never empty on first render (useYearFilter starts from the
+  // current year), so the first load no longer waits for it; if School
+  // Settings then names a different year, the filter follows and this reloads.
   useEffect(() => {
-    if (seededYear.current || !schoolYear) return;
-    seededYear.current = true;
-    setYearFilter(schoolYear);
-  }, [schoolYear]);
-
-  useEffect(() => {
-    if (!seededYear.current) return; // still waiting on the default year
-    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id", yearFilter);
+    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id", yearFilter); // eslint-disable-line react-hooks/set-state-in-effect
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, yearFilter]);
 
@@ -725,13 +715,13 @@ export default function InvoicesPage() {
     // Clearing returns to the current school year, not to all-years: falling
     // back to every year would resurrect the mixed-year view this filter exists
     // to prevent.
-    setYearFilter(schoolYear ?? "");
-    fetchInvoices(1, "all", "all", "", "-invoice_id", schoolYear ?? "");
+    setYearFilter(null);
+    fetchInvoices(1, "all", "all", "", "-invoice_id", currentYear);
   };
 
   const hasActiveFilters =
     search || statusFilter !== "all" || planFilter !== "all" ||
-    ordering !== "-invoice_id" || (schoolYear ? yearFilter !== schoolYear : Boolean(yearFilter));
+    ordering !== "-invoice_id" || !yearIsDefault;
 
   const totalPages = Math.ceil(pageMeta.count / 20);
 

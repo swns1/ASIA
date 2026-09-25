@@ -37,7 +37,37 @@ class HouseholdSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class StudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
+class LastEnrollmentMixin(serializers.Serializer):
+    """
+    `last_enrollment`: where the student was last enrolled -- `school_year`,
+    `grade_level` and `section` of their latest enrollment that wasn't
+    cancelled -- or null if they have never been enrolled.
+
+    Only the masterlist looks it up (StudentViewSet's list annotates it, see
+    views._annotate_last_enrollment). Every other response leaves the key out
+    rather than report "never enrolled" for a student nobody checked.
+    """
+
+    last_enrollment = serializers.SerializerMethodField()
+
+    def get_last_enrollment(self, obj):
+        year = getattr(obj, "last_school_year", None)
+        if not year:
+            return None
+        return {
+            "school_year": year,
+            "grade_level": getattr(obj, "last_grade_level", None),
+            "section": getattr(obj, "last_section", None),
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not hasattr(instance, "last_school_year"):
+            data.pop("last_enrollment", None)
+        return data
+
+
+class StudentSerializer(LastEnrollmentMixin, LrnFormatMixin, serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
@@ -78,7 +108,7 @@ class StudentSerializer(LrnFormatMixin, serializers.ModelSerializer):
         return attrs
 
 
-class StudentBillingSummarySerializer(serializers.ModelSerializer):
+class StudentBillingSummarySerializer(LastEnrollmentMixin, serializers.ModelSerializer):
     """
     Reduced-field view of Student for the accounting role: enough to look
     up and identify a student for invoicing (name, LRN/student number,
@@ -100,6 +130,9 @@ class StudentBillingSummarySerializer(serializers.ModelSerializer):
             "suffix",
             "status",
             "household",
+            # Year, grade and section only -- where the student is placed,
+            # which invoicing already deals in, not demographic PII.
+            "last_enrollment",
         )
         read_only_fields = fields
 
