@@ -33,6 +33,10 @@ class EnrollmentMirror(models.Model):
 
 class ScholarshipTypeMirror(models.Model):
     scholarship_type_id = models.BigAutoField(primary_key=True)
+    # Read by services._is_voucher to tell a government voucher (ESC, SHS
+    # voucher) from a school scholarship. Missing here, every invoice for a
+    # learner with any scholarship failed with an AttributeError -> 500.
+    scholarship_code    = models.CharField(max_length=50, blank=True, null=True)
     scholarship_name    = models.CharField(max_length=150)
     discount_mode       = models.CharField(max_length=20)
     discount_value      = models.DecimalField(max_digits=10, decimal_places=2)

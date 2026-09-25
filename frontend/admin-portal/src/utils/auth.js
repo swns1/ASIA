@@ -79,6 +79,11 @@ export const STAFF_ADMIN     = ["super_admin", "admin"];
 export const ACADEMIC_STAFF  = ["super_admin", "admin", "registrar"];
 export const GRADE_ROLES     = ["super_admin", "admin", "registrar", "teacher"];
 export const BILLING_ROLES   = ["super_admin", "admin", "accounting"];
+// Who may READ invoices and a student's financial history. The registrar
+// isn't billing staff, but sees what a family owes while enrolling them and
+// generates or closes out the invoice as part of that work -- the same split
+// billing-service's BILLING_READ_ROLES / registrar_actions make.
+export const BILLING_READ_ROLES = [...BILLING_ROLES, "registrar"];
 export const STAFF_ALL       = ["super_admin", "admin", "registrar", "teacher", "accounting"];
 
 export function isAdminRole(role) {

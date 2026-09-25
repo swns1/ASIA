@@ -34,6 +34,8 @@ import {
   getInvoiceSummary as _getInvoiceSummary,
   generateInvoice as _generateInvoice,
   voidInvoice as _voidInvoice,
+  reissueInvoice as _reissueInvoice,
+  getDiscountTypes as _getDiscountTypes,
 } from "../api/billingApi";
 import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
 import { fmtDate } from "../utils/format";
@@ -43,6 +45,7 @@ const getInvoice        = (id)     => _getInvoice(id);
 const getInvoiceSummary = (p = {}) => _getInvoiceSummary(p);
 const generateInvoice   = (p)      => _generateInvoice(p);
 const voidInvoice       = (id)     => _voidInvoice(id);
+const reissueInvoice    = (id, p)  => _reissueInvoice(id, p);
 const getEnrollments    = (p = {}) => _getEnrollments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -89,8 +92,71 @@ const PAYMENT_COLUMNS = [
 const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
 
 
+const PLAN_INSTALLMENTS = {
+  monthly: "10 installments (Jun–Mar)",
+  quarterly: "4 installments",
+  semi_annual: "2 installments",
+  annual: "1 installment",
+};
+const PLAN_DISCOUNT_CODE = { semi_annual: "SEMI_ANNUAL_PLAN", annual: "ANNUAL_PLAN" };
+
+/** The plan-discount percentages as configured, keyed by plan. The labels used
+ *  to hardcode 3% and 5%, which stop being true the moment the rate is edited. */
+function usePlanRates() {
+  const [rates, setRates] = useState({ semi_annual: 3, annual: 5 });
+  useEffect(() => {
+    let cancelled = false;
+    _getDiscountTypes()
+      .then((data) => {
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? data : data?.results ?? [];
+        const byCode = Object.fromEntries(rows.map((r) => [r.discount_code, Number(r.discount_value)]));
+        setRates((prev) => {
+          const next = { ...prev };
+          for (const [plan, code] of Object.entries(PLAN_DISCOUNT_CODE)) {
+            if (byCode[code] !== undefined) next[plan] = byCode[code];
+          }
+          return next;
+        });
+      })
+      .catch(() => { /* keep the defaults */ });
+    return () => { cancelled = true; };
+  }, []);
+  return rates;
+}
+
+function PlanChoice({ plan, onChange }) {
+  const rates = usePlanRates();
+  return (
+    <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:8 }}>
+      {Object.entries(PLAN_META).map(([val, meta]) => {
+        const active = plan === val;
+        const pct = rates[val];
+        const discountNote = pct ? ` · ${pct}% off tuition` : "";
+        return (
+          <motion.button key={val} type="button" onClick={() => onChange(val)}
+            aria-pressed={active}
+            animate={{
+              borderColor:    active ? meta.color : "#f0e4e4",
+              backgroundColor: active ? meta.bg   : "#ffffff",
+            }}
+            whileHover={{ scale:1.01 }}
+            whileTap={{ scale:0.98 }}
+            transition={{ duration:0.15, ease:"easeOut" }}
+            style={{ padding:"12px 14px", borderRadius:12, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textAlign:"left" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:active ? meta.color : "#1a0a0a" }}>{meta.label}</div>
+            <div style={{ fontSize:11, color:active ? meta.color : "#8a6a6a", marginTop:2, opacity:0.85 }}>
+              {PLAN_INSTALLMENTS[val]}{discountNote}
+            </div>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Generate Invoice Modal ────────────────────────────────────────────────────
-function GenerateModal({ onClose, onGenerated }) {
+function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
   const [search,      setSearch]      = useState("");
   const [enrollments, setEnrollments] = useState([]);
   const [loading,     setLoading]     = useState(false);
@@ -98,6 +164,9 @@ function GenerateModal({ onClose, onGenerated }) {
   const [plan,        setPlan]        = useState("monthly");
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState("");
+  // The student's live invoice for the year, when Generate finds one: one
+  // invoice per student per year, so the way forward is to open (or re-issue) it.
+  const [existing,    setExisting]    = useState(null);
   const [open,        setOpen]        = useState(false);
 
   useEffect(() => {
@@ -115,12 +184,16 @@ function GenerateModal({ onClose, onGenerated }) {
 
   const handleGenerate = async () => {
     if (!selected) { setError("Select an enrollment."); return; }
-    setSaving(true); setError("");
+    setSaving(true); setError(""); setExisting(null);
     try {
       const inv = await generateInvoice({ enrollment_id: selected.enrollment_id, payment_plan: plan });
       onGenerated(inv);
       onClose();
-    } catch (e) { setError(e.message || "Failed to generate."); }
+    } catch (e) {
+      const data = e?.response?.data;
+      if (data?.code === "already_invoiced") setExisting({ id: data.invoice_id, no: data.invoice_no });
+      setError(data?.detail || e.message || "Failed to generate.");
+    }
     finally { setSaving(false); }
   };
 
@@ -154,7 +227,13 @@ function GenerateModal({ onClose, onGenerated }) {
               animate={{ opacity:1, y:0 }}
               style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}
             >
-              <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
+              <i className="ti ti-alert-circle" style={{ fontSize:14 }} />
+              <span style={{ flex:1 }}>{error}</span>
+              {existing && (
+                <Button size="sm" variant="secondary" onClick={() => { onOpenExisting?.(existing.id); onClose(); }}>
+                  Open {existing.no}
+                </Button>
+              )}
             </motion.div>
           )}
 
@@ -214,29 +293,7 @@ function GenerateModal({ onClose, onGenerated }) {
           {/* Payment plan */}
           <div style={{ marginBottom:6 }}>
             <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
-            <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:8 }}>
-              {Object.entries(PLAN_META).map(([val, meta]) => {
-                const active = plan === val;
-                const discountNote = val === "semi_annual" ? " · 3% off tuition" : val === "annual" ? " · 5% off tuition" : "";
-                return (
-                  <motion.button key={val} type="button" onClick={() => setPlan(val)}
-                    animate={{
-                      borderColor:    active ? meta.color : "#f0e4e4",
-                      backgroundColor: active ? meta.bg   : "#ffffff",
-                    }}
-                    whileHover={{ scale:1.01 }}
-                    whileTap={{ scale:0.98 }}
-                    transition={{ duration:0.15, ease:"easeOut" }}
-                    style={{ padding:"12px 14px", borderRadius:12, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textAlign:"left" }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:active ? meta.color : "#1a0a0a" }}>{meta.label}</div>
-                    <div style={{ fontSize:11, color:active ? meta.color : "#8a6a6a", marginTop:2, opacity:0.85 }}>
-                      {val === "monthly" ? "10 installments (Jun–Mar)" : val === "quarterly" ? "4 installments" : val === "semi_annual" ? "2 installments" : "1 installment"}
-                      {discountNote}
-                    </div>
-                  </motion.button>
-                );
-              })}
-            </div>
+            <PlanChoice plan={plan} onChange={setPlan} />
           </div>
         </div>
 
@@ -244,13 +301,79 @@ function GenerateModal({ onClose, onGenerated }) {
   );
 }
 
+// ── Re-issue Invoice Modal ────────────────────────────────────────────────────
+// Voiding an invoice someone has paid against stranded the payments: the new
+// invoice asked for the whole year again and the ledger counted both. Re-issue
+// voids it and builds the corrected one with the payments carried across --
+// it is also how a family changes payment plan.
+function ReissueModal({ invoice, onClose, onReissued }) {
+  const [plan,   setPlan]   = useState(invoice.payment_plan);
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
+  const paid = parseFloat(invoice.total_paid ?? 0);
+
+  const handleReissue = async () => {
+    setSaving(true); setError("");
+    try {
+      const res = await reissueInvoice(invoice.invoice_id, { payment_plan: plan });
+      toast.success(
+        paid > 0
+          ? `Re-issued as ${res.invoice.invoice_no}. ${fmt(paid)} in payments moved across.`
+          : `Re-issued as ${res.invoice.invoice_no}.`,
+      );
+      onReissued(res.invoice);
+      onClose();
+    } catch (e) {
+      setError(e?.response?.data?.detail || e.message || "Could not re-issue this invoice.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={saving}
+      icon="ti-refresh"
+      title={`Re-issue ${invoice.invoice_no}`}
+      description="Voids this invoice and issues a corrected one from the current fee schedule."
+      closeOnBackdrop={false}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button icon="ti-refresh" loading={saving} onClick={handleReissue}>
+            {saving ? "Re-issuing…" : "Re-issue invoice"}
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ padding:"18px 24px", display:"flex", flexDirection:"column", gap:14 }}>
+        {error && (
+          <div role="alert" style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c" }}>{error}</div>
+        )}
+        <div style={{ fontSize:13, color:"#5a4a4a", lineHeight:1.5 }}>
+          {paid > 0
+            ? <>The <strong>{fmt(paid)}</strong> already paid moves to the new invoice, with each payment keeping its date and reference.</>
+            : <>Nothing has been paid on this invoice yet.</>}{" "}
+          The original invoice date is kept, so an Early Bird discount already earned still applies.
+        </div>
+        <div>
+          <div style={{ fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan</div>
+          <PlanChoice plan={plan} onChange={setPlan} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Invoice Detail ────────────────────────────────────────────────────────────
-function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
+function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
   const [hasAnimated, setHasAnimated] = useState(false);
   const [invoice,    setInvoice]    = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [voiding,    setVoiding]    = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
+  const [showReissue, setShowReissue] = useState(false);
   const [tab,        setTab]        = useState("breakdown");
 
   useEffect(() => {
@@ -265,7 +388,7 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
   const handleVoid = async () => {
     setVoiding(true);
     try { await voidInvoice(invoiceId); toast.success("Invoice voided."); onVoided(); }
-    catch (e) { toast.error(e?.response?.data?.error || e.message || "Failed to void invoice. Please try again."); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message || "Failed to void invoice. Please try again."); }
     finally { setVoiding(false); setShowVoidConfirm(false); }
   };
 
@@ -323,7 +446,14 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
                 <span style={{ color:"#8a6a6a" }}> · LRN {en.lrn} · {en.grade_level} · {en.section} · S.Y. {en.school_year}</span>
               </div>
             )}
-            <div style={{ fontSize:12, color:"#8a6a6a", marginTop:4 }}>Issued {fmtDate(invoice.invoice_date)} · Next due: {fmtDate(invoice.due_date)}</div>
+            <div style={{ fontSize:12, color:"#8a6a6a", marginTop:4 }}>
+              Issued {fmtDate(invoice.invoice_date)}
+              {invoice.status !== "void" && (
+                invoice.next_due_date
+                  ? <> · Next due: <span style={{ color: invoice.is_overdue ? "#c92a2a" : undefined, fontWeight: invoice.is_overdue ? 700 : undefined }}>{fmtDate(invoice.next_due_date)}{invoice.is_overdue ? " (overdue)" : ""}</span></>
+                  : <> · Nothing left to pay</>
+              )}
+            </div>
           </div>
           {invoice.status !== "void" && (
             <div style={{ display:"flex", gap:8 }}>
@@ -341,11 +471,23 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
               <Button
                 variant="secondary"
                 size="sm"
-                icon="ti-ban"
-                onClick={() => setShowVoidConfirm(true)}
+                icon="ti-refresh"
+                onClick={() => setShowReissue(true)}
               >
-                Void
+                Re-issue
               </Button>
+              {/* Void only while nothing has been paid: voiding a paid-into
+                  invoice stranded the money. Re-issue carries it across. */}
+              {totalPaid === 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="ti-ban"
+                  onClick={() => setShowVoidConfirm(true)}
+                >
+                  Void
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -588,13 +730,23 @@ function InvoiceDetail({ invoiceId, onVoided, onRecordPayment }) {
         })()}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showReissue && (
+          <ReissueModal
+            invoice={invoice}
+            onClose={() => setShowReissue(false)}
+            onReissued={(created) => onReissued?.(created)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Void confirm modal */}
       <AnimatePresence>
         {showVoidConfirm && (
           <ConfirmModal
             icon="ti-ban"
             title="Void invoice?"
-            message={<>This will mark invoice <strong>{invoice.invoice_no}</strong> as void. This cannot be undone.</>}
+            message={<>This will mark invoice <strong>{invoice.invoice_no}</strong> as void. Nothing has been paid on it. This cannot be undone.</>}
             confirmLabel="Yes, void"
             loading={voiding}
             onConfirm={handleVoid}
@@ -932,7 +1084,10 @@ export default function InvoicesPage() {
                     const isSelected = selectedId === inv.invoice_id;
                     const en = inv.enrollment_detail;
                     const balance = parseFloat(inv.balance ?? 0);
-                    const isOverdue = inv.due_date && new Date(inv.due_date) < new Date() && inv.status !== "paid" && inv.status !== "void";
+                    // From the installments (server-side), not invoice.due_date:
+                    // that is the first installment's date and never moves, so
+                    // every open invoice read as overdue from July on.
+                    const isOverdue = Boolean(inv.is_overdue);
                     return (
                       <motion.div
                         key={inv.invoice_id}
@@ -989,7 +1144,7 @@ export default function InvoicesPage() {
             {/* Aggregate totals footer */}
             {!loading && invoices.length > 0 && (() => {
               const pageTotal    = invoices.reduce((s, i) => s + parseFloat(i.balance ?? 0), 0);
-              const overdueCount = invoices.filter((i) => i.due_date && new Date(i.due_date) < new Date() && i.status !== "paid" && i.status !== "void").length;
+              const overdueCount = invoices.filter((i) => i.is_overdue).length;
               return (
                 <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", gap:12, flexWrap:"wrap" }}>
                   <div style={{ fontSize:11, color:"#8a6a6a" }}>
@@ -1019,6 +1174,7 @@ export default function InvoicesPage() {
                   key={`${selectedId}-${refreshKey}`}
                   invoiceId={selectedId}
                   onVoided={() => { setSelectedId(null); setRefreshKey((k) => k + 1); }}
+                  onReissued={(created) => { setSelectedId(created.invoice_id); setRefreshKey((k) => k + 1); }}
                   onRecordPayment={(id) => setPayModalInvoiceId(id)}
                   onPaymentSaved={() => setRefreshKey((k) => k + 1)}
                 />
@@ -1050,6 +1206,7 @@ export default function InvoicesPage() {
           <GenerateModal
             onClose={() => setShowGenModal(false)}
             onGenerated={(inv) => { setRefreshKey((k) => k + 1); setSelectedId(inv.invoice_id); }}
+            onOpenExisting={(id) => setSelectedId(id)}
           />
         )}
       </AnimatePresence>

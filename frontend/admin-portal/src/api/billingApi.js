@@ -24,6 +24,14 @@ export const deleteFeeSchedule = (id) =>
 export const recalculateFeeSchedule = (id) =>
   billingClient.post(`/fee-schedules/${id}/recalculate/`).then((r) => r.data);
 
+// Starts one school year's price list from another's: every schedule (with
+// its items) the target year doesn't have yet. -> { created, skipped_existing }
+export const copyFeeSchedulesToYear = (fromSchoolYear, toSchoolYear) =>
+  billingClient.post("/fee-schedules/copy-year/", {
+    from_school_year: fromSchoolYear,
+    to_school_year: toSchoolYear,
+  }).then((r) => r.data);
+
 // ── Fee schedule items ────────────────────────────────────────────────────────
 export const createFeeScheduleItem = (payload) =>
   billingClient.post("/fee-schedule-items/", payload).then((r) => r.data);
@@ -66,11 +74,19 @@ export const getFinancialSummary = (schoolYear) =>
 export const generateInvoice = (payload) =>
   billingClient.post("/invoices/generate/", payload).then((r) => r.data);
 
-export const updateInvoice = (id, payload) =>
-  billingClient.patch(`/invoices/${id}/`, payload).then((r) => r.data);
+// No updateInvoice: an invoice changes only through its actions. The generic
+// PATCH it used could mark an invoice paid with nothing paid.
 
+// Only for an invoice with no payments; the server answers 409
+// (code "invoice_has_payments") otherwise -- use reissueInvoice.
 export const voidInvoice = (id) =>
-  billingClient.patch(`/invoices/${id}/`, { status: "void" }).then((r) => r.data);
+  billingClient.post(`/invoices/${id}/void/`).then((r) => r.data);
+
+// Voids the invoice and builds its replacement from the current fee schedule
+// with `payment_plan`, moving every payment across. How a bill is corrected
+// or a family changes plan. -> { voided_invoice_no, invoice }
+export const reissueInvoice = (id, payload) =>
+  billingClient.post(`/invoices/${id}/reissue/`, payload).then((r) => r.data);
 
 // Voids/caps remaining installments due after a student's transfer-out
 // effective_date — unlike voidInvoice(), this keeps child installments

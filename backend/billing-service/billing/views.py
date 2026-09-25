@@ -1,9 +1,11 @@
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
@@ -24,14 +26,20 @@ from .serializers import (
     FeeScheduleSerializer, FeeScheduleItemSerializer,
     StudentInvoiceSerializer, StudentInvoiceItemSerializer, StudentInvoiceDiscountSerializer,
     StudentPaymentSerializer, InvoiceInstallmentSerializer, DiscountTypeSerializer,
+    SYSTEM_DISCOUNT_CODES, enrollment_details_for, invoice_details_for,
 )
 from .services import (
+    AlreadyInvoiced,
     generate_invoice_for_enrollment,
     recalculate_invoices_for_schedule,
+    reissue_invoice,
     apply_payment,
     close_out_invoice_for_transfer,
     compute_discount_waterfall,
 )
+from shared import school_year as school_year_rules
+
+PAYMENT_PLANS = {"monthly", "quarterly", "semi_annual", "annual"}
 
 
 def _parse_date(value):
@@ -45,25 +53,91 @@ def _parse_date(value):
         return None
 
 
+def _strict_date_param(params, name):
+    """A YYYY-MM-DD query parameter, or None when absent. A malformed one is a
+    400 naming the parameter; handed straight to a date filter it raised a
+    Django ValidationError and answered 500."""
+    raw = params.get(name)
+    if not raw:
+        return None
+    parsed = _parse_date(raw)
+    if parsed is None:
+        raise ValidationError({name: "Use a date in the form YYYY-MM-DD."})
+    return parsed
+
+
+def _pk_or_404(pk):
+    from django.http import Http404
+    try:
+        return int(pk)
+    except (TypeError, ValueError):
+        raise Http404
+
+
 # ── Fee schedules ────────────────────────────────────────────────────────────
 
 class FeeScheduleViewSet(viewsets.ModelViewSet):
     """
     /api/fee-schedules/                       GET, POST
     /api/fee-schedules/{id}/                  GET, PATCH, DELETE
-    /api/fee-schedules/{id}/recalculate/      POST  — recalc all invoices for this level
+    /api/fee-schedules/{id}/recalculate/      POST  — recalc this schedule's unpaid invoices
+    /api/fee-schedules/copy-year/             POST  — copy one year's schedules into another
+
+    Each schedule belongs to one school year (?school_year= filters).
     """
-    queryset = FeeSchedule.objects.prefetch_related("items").all()
+    queryset = FeeSchedule.objects.prefetch_related("items").all().order_by("school_level", "grade_level")
     serializer_class = FeeScheduleSerializer
     permission_classes = [HasRole]
     required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = ("school_level", "grade_level", "is_active")
+    filterset_fields = ("school_level", "grade_level", "is_active", "school_year")
 
     @action(detail=True, methods=["post"], url_path="recalculate")
     def recalculate(self, request, pk=None):
-        result = recalculate_invoices_for_schedule(int(pk))
+        result = recalculate_invoices_for_schedule(_pk_or_404(pk))
         return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="copy-year")
+    def copy_year(self, request):
+        """
+        POST /api/fee-schedules/copy-year/  {from_school_year, to_school_year}
+
+        Starts next year's price list from this year's: every schedule, with
+        its items, that the target year doesn't have yet. Grades the target
+        year already has are left alone and counted as skipped.
+        """
+        try:
+            source = school_year_rules.normalize(request.data.get("from_school_year"))
+            target = school_year_rules.normalize(request.data.get("to_school_year"))
+        except school_year_rules.InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=400)
+        if source == target:
+            return Response({"detail": "Choose two different school years."}, status=400)
+
+        created = skipped = 0
+        with transaction.atomic():
+            for schedule in FeeSchedule.objects.filter(school_year=source).prefetch_related("items"):
+                if FeeSchedule.objects.filter(
+                    school_level=schedule.school_level, grade_level=schedule.grade_level, school_year=target,
+                ).exists():
+                    skipped += 1
+                    continue
+                copy = FeeSchedule.objects.create(
+                    school_level=schedule.school_level, grade_level=schedule.grade_level,
+                    school_year=target, is_active=schedule.is_active, notes=schedule.notes,
+                )
+                FeeScheduleItem.objects.bulk_create([
+                    FeeScheduleItem(
+                        fee_schedule=copy, item_category=item.item_category,
+                        item_name=item.item_name, amount=item.amount, sort_order=item.sort_order,
+                    )
+                    for item in schedule.items.all()
+                ])
+                created += 1
+        return Response(
+            {"created": created, "skipped_existing": skipped},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class FeeScheduleItemViewSet(viewsets.ModelViewSet):
@@ -71,8 +145,10 @@ class FeeScheduleItemViewSet(viewsets.ModelViewSet):
     /api/fee-schedule-items/                  GET, POST
     /api/fee-schedule-items/{id}/             GET, PATCH, DELETE
 
-    On any write operation, automatically triggers recalculation of all
-    affected invoices for the parent fee schedule.
+    On any write operation, automatically triggers recalculation of the
+    parent schedule's invoices that have no payments yet; the outcome comes
+    back as `recalculation` on create/update so the page can say how many
+    invoices kept their original amounts.
     """
     queryset = FeeScheduleItem.objects.all()
     serializer_class = FeeScheduleItemSerializer
@@ -81,18 +157,37 @@ class FeeScheduleItemViewSet(viewsets.ModelViewSet):
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("fee_schedule", "item_category")
 
+    recalculation = None
+
+    # Atomic with the recalculation: an item saved but its invoices left
+    # un-rebuilt (the recalculation failing) is the one outcome that can't be
+    # read back from either.
+    @transaction.atomic
     def perform_create(self, serializer):
         item = serializer.save()
-        recalculate_invoices_for_schedule(item.fee_schedule_id)
+        self.recalculation = recalculate_invoices_for_schedule(item.fee_schedule_id)
 
+    @transaction.atomic
     def perform_update(self, serializer):
         item = serializer.save()
-        recalculate_invoices_for_schedule(item.fee_schedule_id)
+        self.recalculation = recalculate_invoices_for_schedule(item.fee_schedule_id)
 
+    @transaction.atomic
     def perform_destroy(self, instance):
         sid = instance.fee_schedule_id
         instance.delete()
-        recalculate_invoices_for_schedule(sid)
+        self.recalculation = recalculate_invoices_for_schedule(sid)
+
+    def _with_recalculation(self, response):
+        if isinstance(response.data, dict) and self.recalculation is not None:
+            response.data["recalculation"] = self.recalculation
+        return response
+
+    def create(self, request, *args, **kwargs):
+        return self._with_recalculation(super().create(request, *args, **kwargs))
+
+    def update(self, request, *args, **kwargs):
+        return self._with_recalculation(super().update(request, *args, **kwargs))
 
 
 # ── Discount types ───────────────────────────────────────────────────────────
@@ -104,6 +199,17 @@ class DiscountTypeViewSet(viewsets.ModelViewSet):
     required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("discount_mode",)
+
+    def destroy(self, request, *args, **kwargs):
+        # The plan and Early Bird rows are looked up by code when invoices are
+        # built; deleting one silently turned that discount off for everyone.
+        instance = self.get_object()
+        if instance.discount_code in SYSTEM_DISCOUNT_CODES:
+            return Response(
+                {"detail": f"{instance.discount_name} is used by the invoice calculation. Set it to 0% instead of deleting it."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 # ── Cross-service lookups ────────────────────────────────────────────────────
@@ -233,13 +339,25 @@ def payment_counts_by_school_year():
     return counts
 
 
-class StudentInvoiceViewSet(viewsets.ModelViewSet):
+class StudentInvoiceViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
     """
-    /api/invoices/                            GET, POST
-    /api/invoices/{id}/                       GET, PATCH, DELETE
+    /api/invoices/                            GET
+    /api/invoices/{id}/                       GET
     /api/invoices/generate/                   POST — generate invoice for an enrollment
         body: { enrollment_id, payment_plan }
+    /api/invoices/{id}/void/                  POST — void an invoice with no payments
+    /api/invoices/{id}/reissue/               POST — void and rebuild, moving payments
     /api/invoices/{id}/breakdown/             GET — full discount waterfall breakdown
+
+    Not a ModelViewSet, for the same reason payments aren't: the generic
+    POST/PATCH/DELETE bypassed every rule an invoice lives by. PATCH could mark
+    an invoice paid with nothing paid, or change its plan without touching its
+    discounts or installments; DELETE took the invoice's payments with it.
+    Every change now goes through an action that keeps those consistent.
     """
     queryset = (
         StudentInvoice.objects
@@ -249,6 +367,10 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
     )
     serializer_class = StudentInvoiceSerializer
     permission_classes = [IsBillingStaffOrOwnerGuardianReadOnly]
+    # The two billing steps that are part of a registrar's own work: invoicing
+    # a learner they've just enrolled, and closing out one they've transferred
+    # out. See accounts.permissions.BILLING_ROLES.
+    registrar_actions = {"generate", "close_out_transfer"}
     owner_enrollment_id_field = "enrollment_id"
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("status", "payment_plan", "enrollment_id")
@@ -262,6 +384,15 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         if getattr(self.request.user, "role", None) == "guardian":
             qs = qs.filter(enrollment_id__in=guardian_enrollment_ids(self.request.user))
         return qs
+
+    def get_serializer(self, *args, **kwargs):
+        # One lookup for the whole page's student details, not one per row.
+        if kwargs.get("many") and args:
+            instances = list(args[0])
+            context = kwargs.setdefault("context", self.get_serializer_context())
+            context["enrollment_details"] = enrollment_details_for(i.enrollment_id for i in instances)
+            args = (instances, *args[1:])
+        return super().get_serializer(*args, **kwargs)
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
@@ -298,7 +429,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         payment_plan  = request.data.get("payment_plan", "monthly")
         if not enrollment_id:
             return Response({"detail": "enrollment_id required."}, status=400)
-        if payment_plan not in {"monthly", "quarterly", "semi_annual", "annual"}:
+        if payment_plan not in PAYMENT_PLANS:
             return Response({"detail": "Invalid payment_plan."}, status=400)
 
         effective_date = None
@@ -318,10 +449,78 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
 
         try:
             invoice = generate_invoice_for_enrollment(enrollment_id, payment_plan, effective_date=effective_date)
+        except AlreadyInvoiced as e:
+            return Response(
+                {
+                    "detail": str(e),
+                    "code": "already_invoiced",
+                    "invoice_id": e.invoice.invoice_id,
+                    "invoice_no": e.invoice.invoice_no,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
         ser = StudentInvoiceSerializer(invoice)
         return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="void")
+    def void(self, request, pk=None):
+        """
+        POST /api/invoices/{id}/void/
+
+        Only for an invoice nobody has paid against. Voiding one with payments
+        stranded the money: the replacement asked for the whole year again,
+        collections dropped by what had been paid, and the ledger counted both
+        invoices. That case is a re-issue, which carries the payments across.
+        """
+        invoice = self.get_object()
+        with transaction.atomic():
+            invoice = StudentInvoice.objects.select_for_update().get(pk=invoice.pk)
+            if invoice.status == "void":
+                return Response({"detail": f"{invoice.invoice_no} is already void."}, status=400)
+            paid = StudentPayment.objects.filter(invoice_id=invoice.pk).aggregate(t=Sum("amount_paid"))["t"]
+            if paid:
+                return Response(
+                    {
+                        "detail": (
+                            f"{invoice.invoice_no} has \u20b1{paid:,.2f} in payments, so voiding it would lose "
+                            "track of that money. Re-issue it instead: the payments move to the new invoice."
+                        ),
+                        "code": "invoice_has_payments",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            invoice.status = "void"
+            invoice.save(update_fields=["status"])
+        return Response(StudentInvoiceSerializer(invoice).data)
+
+    @action(detail=True, methods=["post"], url_path="reissue")
+    def reissue(self, request, pk=None):
+        """
+        POST /api/invoices/{id}/reissue/  {payment_plan, effective_date?}
+
+        Voids the invoice and builds its replacement from the current fee
+        schedule with the chosen plan, moving every payment across -- how a
+        bill is corrected or a family changes payment plan.
+        """
+        invoice = self.get_object()
+        payment_plan = request.data.get("payment_plan") or invoice.payment_plan
+        if payment_plan not in PAYMENT_PLANS:
+            return Response({"detail": "Invalid payment_plan."}, status=400)
+        effective_date = None
+        if request.data.get("effective_date"):
+            effective_date = _parse_date(request.data.get("effective_date"))
+            if effective_date is None:
+                return Response({"detail": "effective_date must be a valid date (YYYY-MM-DD)."}, status=400)
+        try:
+            old, new = reissue_invoice(invoice.pk, payment_plan, effective_date=effective_date)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response(
+            {"voided_invoice_no": old.invoice_no, "invoice": StudentInvoiceSerializer(new).data},
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["post"], url_path="close-out-transfer")
     def close_out_transfer(self, request, pk=None):
@@ -375,7 +574,10 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         enrollment_id = request.query_params.get("enrollment_id")
         payment_plan  = request.query_params.get("payment_plan")
         if enrollment_id:
-            qs = qs.filter(enrollment_id=enrollment_id)
+            try:
+                qs = qs.filter(enrollment_id=int(enrollment_id))
+            except (TypeError, ValueError):
+                return Response({"enrollment_id": ["Must be a whole number."]}, status=400)
         if payment_plan:
             qs = qs.filter(payment_plan=payment_plan)
         qs = scope_invoices_to_school_year(qs, request.query_params.get("school_year"))
@@ -489,7 +691,11 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
              if d.description and "Scholarship" in d.description),
             Decimal("0"),
         )
-        # Note: voucher amounts could be embedded in scholarships; future improvement
+        voucher_amount = sum(
+            (Decimal(d.amount) for d in invoice.discounts.all()
+             if d.description and d.description.startswith("Voucher")),
+            Decimal("0"),
+        )
         eb_amount = sum(
             (Decimal(d.amount) for d in invoice.discounts.all()
              if d.discount_type and d.discount_type.discount_code == "EARLY_BIRD"),
@@ -500,7 +706,7 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
             raw_tuition=tuition,
             raw_misc=misc,
             raw_other=other,
-            voucher_amount=Decimal("0"),
+            voucher_amount=voucher_amount,
             scholarship_discount_amount=sch_amount,
             payment_plan=invoice.payment_plan,
             early_bird=eb_amount > 0,
@@ -564,7 +770,11 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
         )
 
         # Serialize and annotate each invoice with computed totals
-        serializer = StudentInvoiceSerializer(invoices_qs, many=True)
+        invoices = list(invoices_qs)
+        serializer = StudentInvoiceSerializer(
+            invoices, many=True,
+            context={"enrollment_details": enrollment_details_for(i.enrollment_id for i in invoices)},
+        )
         invoices_data = serializer.data
 
         # Group by school year using the enrollment mirror
@@ -586,9 +796,14 @@ class StudentInvoiceViewSet(viewsets.ModelViewSet):
                     "year_paid":         Decimal("0"),
                 }
 
+            year_map[sy]["invoices"].append(inv)
+            # A void invoice stays listed as history but owes nothing. Counting
+            # it doubled "billed" after every void and re-issue -- in the
+            # parent portal too, which shows this ledger's balance.
+            if inv.get("status") == "void":
+                continue
             net    = Decimal(str(inv.get("net_amount",   0) or 0))
             paid   = Decimal(str(inv.get("total_paid",   0) or 0))
-            year_map[sy]["invoices"].append(inv)
             year_map[sy]["year_billed"] += net
             year_map[sy]["year_paid"]   += paid
 
@@ -689,8 +904,8 @@ class StudentPaymentViewSet(
         differently from the rows they sit above — the summary deliberately
         skips `payment_method`, since each tile reports its own method.
         """
-        date_from  = params.get("date_from")
-        date_to    = params.get("date_to")
+        date_from  = _strict_date_param(params, "date_from")
+        date_to    = _strict_date_param(params, "date_to")
         amount_min = params.get("amount_min")
         amount_max = params.get("amount_max")
         # `search` is the name the shared FilterBar sends; `student_name` is
@@ -736,6 +951,15 @@ class StudentPaymentViewSet(
     def get_queryset(self):
         qs = StudentPayment.objects.all().order_by("-payment_id")
         return self._apply_filters(qs, self.request.query_params)
+
+    def get_serializer(self, *args, **kwargs):
+        # One lookup for the page's student names, not one per payment.
+        if kwargs.get("many") and args:
+            instances = list(args[0])
+            context = kwargs.setdefault("context", self.get_serializer_context())
+            context["invoice_details"] = invoice_details_for(p.invoice_id for p in instances)
+            args = (instances, *args[1:])
+        return super().get_serializer(*args, **kwargs)
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):

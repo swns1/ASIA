@@ -166,13 +166,20 @@ class TestIsBillingStaffOrOwnerGuardianReadOnly:
         post_request.user = _user("accounting")
         assert self.perm.has_permission(post_request, None) is True
 
-    def test_registrar_full_access(self):
+    def test_registrar_reads_and_runs_only_their_own_billing_actions(self):
+        """A registrar invoices a learner they enroll and closes out one they
+        transfer out; the rest of billing (void, re-issue) is not theirs."""
+        view = SimpleNamespace(action="list", registrar_actions={"generate", "close_out_transfer"})
         get_request = factory.get("/")
         get_request.user = _user("registrar")
-        assert self.perm.has_permission(get_request, None) is True
-        post_request = factory.post("/")
-        post_request.user = _user("registrar")
-        assert self.perm.has_permission(post_request, None) is True
+        assert self.perm.has_permission(get_request, view) is True
+
+        for action, allowed in (("generate", True), ("close_out_transfer", True),
+                                ("void", False), ("reissue", False)):
+            view.action = action
+            post_request = factory.post("/")
+            post_request.user = _user("registrar")
+            assert self.perm.has_permission(post_request, view) is allowed, action
 
     def test_guardian_read_allowed_write_denied(self):
         get_request = factory.get("/")

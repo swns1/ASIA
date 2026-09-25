@@ -894,6 +894,7 @@ CREATE TABLE public.fee_schedules (
     fee_schedule_id bigint NOT NULL,
     school_level character varying(20) NOT NULL,
     grade_level character varying(20) NOT NULL,
+    school_year character varying(20) NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     notes text,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
@@ -2567,11 +2568,11 @@ ALTER TABLE ONLY public.fee_schedules
 
 
 --
--- Name: fee_schedules fee_schedules_school_level_grade_level_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fee_schedules fee_schedules_level_grade_year_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.fee_schedules
-    ADD CONSTRAINT fee_schedules_school_level_grade_level_key UNIQUE (school_level, grade_level);
+    ADD CONSTRAINT fee_schedules_level_grade_year_key UNIQUE (school_level, grade_level, school_year);
 
 
 --

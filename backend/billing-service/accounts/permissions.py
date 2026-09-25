@@ -7,13 +7,26 @@ __all__ = [
     "IsAdminRegistrarOrReadOnly",
     "WRITE_ROLES_DEFAULT",
     "BILLING_ROLES",
+    "BILLING_READ_ROLES",
     "guardian_student_ids",
     "guardian_enrollment_ids",
     "IsBillingStaffOrOwnerGuardianReadOnly",
 ]
 
 
-BILLING_ROLES = {"super_admin", "admin", "accounting", "registrar"}
+# Who handles money: record payments, set fees and discounts, void and
+# re-issue invoices. Matches the frontend's BILLING_ROLES, which is who sees
+# the Invoices, Payments and Billing Settings pages.
+#
+# The registrar used to be in this set -- added "for consistency" when some
+# viewsets allowed them and others didn't -- which let them record payments,
+# add fees and create a 100% discount through the API while the app showed
+# them none of it. Their work needs two billing actions, not all of billing:
+# generating an invoice when they enroll a learner, and closing it out when
+# they record a transfer-out. Those are granted per action below
+# (`registrar_actions`), alongside read access.
+BILLING_ROLES = {"super_admin", "admin", "accounting"}
+BILLING_READ_ROLES = BILLING_ROLES | {"registrar"}
 
 
 def guardian_student_ids(user):
@@ -54,7 +67,9 @@ class IsBillingStaffOrOwnerGuardianReadOnly(BasePermission):
     """
     For invoice / installment viewsets a guardian may READ, scoped to their
     own child(ren):
-      - super_admin/admin/accounting/registrar: full access (billing staff).
+      - super_admin/admin/accounting: full access (billing staff).
+      - registrar: read, plus the actions the view lists in
+        `registrar_actions` (generating and closing out invoices).
       - guardian: read-only, scoped by the view's get_queryset() (list) and
         has_object_permission() (detail), keyed on enrollment_id.
       - everyone else (teacher): no access.
@@ -72,6 +87,11 @@ class IsBillingStaffOrOwnerGuardianReadOnly(BasePermission):
         role = getattr(request.user, "role", None)
         if role == "guardian":
             return request.method in SAFE_METHODS
+        if role == "registrar":
+            return (
+                request.method in SAFE_METHODS
+                or getattr(view, "action", None) in getattr(view, "registrar_actions", ())
+            )
         return role in BILLING_ROLES
 
     def has_object_permission(self, request, view, obj):

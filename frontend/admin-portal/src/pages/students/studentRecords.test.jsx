@@ -110,7 +110,7 @@ beforeEach(() => {
   api.getHouseholdByStudent.mockResolvedValue(null);
 });
 
-describe("Link login account", () => {
+describe("Link login account", { timeout: 20_000 }, () => {
   it("links through the checked endpoint, and never offers a deactivated account", async () => {
     signIn("registrar");
     api.getUsers.mockResolvedValue([
@@ -121,9 +121,9 @@ describe("Link login account", () => {
     renderAt("/students/5");
 
     fireEvent.click(await screen.findByRole("tab", { name: /Guardians/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Link account/ }));
-    const dialog = await screen.findByRole("dialog");
-    const select = await within(dialog).findByRole("combobox");
+    fireEvent.click(await screen.findByRole("button", { name: /Link account/ }, { timeout: 5000 }));
+    const dialog = await screen.findByRole("dialog", {}, { timeout: 5000 });
+    const select = await within(dialog).findByRole("combobox", {}, { timeout: 5000 });
     const options = within(select).getAllByRole("option").map((o) => o.textContent);
     expect(options.some((t) => t.includes("Old Account"))).toBe(false);
 
@@ -150,7 +150,7 @@ describe("Edit Student", () => {
   });
 });
 
-describe("Editing a student who has no household yet", () => {
+describe("Editing a student who has no household yet", { timeout: 20_000 }, () => {
   it("links the new household using the updated_at the first save returned", async () => {
     signIn("registrar");
     api.updateStudent

@@ -21,7 +21,7 @@ from django.utils import timezone
 from .models import (
     FeeSchedule, FeeScheduleItem,
     StudentInvoice, StudentInvoiceItem, StudentInvoiceDiscount,
-    InvoiceInstallment, DiscountType,
+    StudentPayment, InvoiceInstallment, DiscountType,
 )
 
 
@@ -268,11 +268,16 @@ def generate_installment_schedule_prorated(grand_total: Decimal, payment_plan: s
 
 # ── Invoice generation ───────────────────────────────────────────────────────
 
-def _read_fee_schedule(school_level: str, grade_level: str):
-    """Returns dict {tuition_total, misc_items[], other_items[], items[]} or None."""
+def _read_fee_schedule(school_level: str, grade_level: str, school_year: str):
+    """Returns dict {tuition_total, misc_items[], other_items[], items[]} or None.
+
+    The schedule for the enrollment's own school year -- never "whichever one
+    exists". Schedules used to have no year, so entering next year's fees
+    changed what this year's families were charged."""
     schedule = FeeSchedule.objects.filter(
         school_level=school_level,
         grade_level=grade_level,
+        school_year=school_year,
         is_active=True,
     ).first()
     if not schedule:
@@ -412,11 +417,74 @@ def _scholarship_discount_on_tuition(tuition: Decimal, scholarships: list) -> De
     return voucher + scholarship
 
 
+class AlreadyInvoiced(ValueError):
+    """The student already has a live invoice for this school year.
+
+    A ValueError so callers that already turn ValueError into a 400, or a
+    skip (seed_demo_billing), keep working; the view answers 409 for it."""
+
+    def __init__(self, invoice, school_year):
+        self.invoice = invoice
+        self.school_year = school_year
+        super().__init__(
+            f"Already invoiced for SY {school_year}: {invoice.invoice_no} "
+            f"({invoice.get_payment_plan_display().lower()} plan). To change the "
+            f"payment plan or correct it, re-issue that invoice."
+        )
+
+
+# Enrollments that can't be billed: nobody is attending. A transfer-out is
+# settled by close_out_invoice_for_transfer on the invoice it already has.
+UNBILLABLE_ENROLLMENT_STATUSES = {"cancelled", "transferred_out"}
+
+
+def _ensure_billable(enrollment):
+    if enrollment["enrollment_status"] in UNBILLABLE_ENROLLMENT_STATUSES:
+        raise ValueError(
+            f"Enrollment #{enrollment['enrollment_id']} is "
+            f"{enrollment['enrollment_status'].replace('_', ' ')}, so it can't be invoiced."
+        )
+
+
+def _lock_student_year(student_id: int):
+    """Serialises invoicing for one student. Keyed on the student rather than
+    the enrollment: a senior high learner has one enrollment per semester, and
+    the one-invoice-per-year check below has to see both."""
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s, %s)",
+            [_INVOICE_GEN_LOCK_NAMESPACE, int(student_id)],
+        )
+
+
+def live_invoice_for_student_year(student_id: int, school_year: str):
+    """The student's non-void invoice for that school year, on any of their
+    enrollments, or None."""
+    from .enrollment_mirror import EnrollmentMirror
+    enrollment_ids = EnrollmentMirror.objects.filter(
+        student_id=student_id, school_year=school_year,
+    ).values_list("enrollment_id", flat=True)
+    return (
+        StudentInvoice.objects.filter(enrollment_id__in=enrollment_ids)
+        .exclude(status="void")
+        .order_by("invoice_id")
+        .first()
+    )
+
+
 @transaction.atomic
 def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "monthly", effective_date: date = None):
     """
-    Auto-generate an invoice for an enrollment. Idempotent — if an invoice
-    already exists for this enrollment, returns the existing one.
+    Auto-generate an invoice for an enrollment.
+
+    One invoice per student per school year. The fee schedule is an annual
+    price list, but a senior high learner has a separate enrollment for each
+    semester -- so invoicing per enrollment billed Grade 11 and 12 families the
+    full year twice, the second time with installments already past due.
+    Raises AlreadyInvoiced when a live invoice for the year exists, whichever
+    enrollment it hangs off. (This used to hand back the existing invoice as if
+    it were new, which also meant a different payment plan was silently
+    ignored.)
 
     When effective_date is given (a mid-year transfer-in student), the
     installment schedule is prorated via generate_installment_schedule_prorated()
@@ -438,22 +506,17 @@ def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "mon
     # the durable backstop -- uq_student_invoices_live_per_enrollment, in
     # scripts/2026-09-integrity-hardening.sql.
     with transaction.atomic():
-        with connection.cursor() as cur:
-            cur.execute(
-                "SELECT pg_advisory_xact_lock(%s, %s)",
-                [_INVOICE_GEN_LOCK_NAMESPACE, int(enrollment_id)],
-            )
+        enrollment = _fetch_enrollment(enrollment_id)
+        if not enrollment:
+            raise ValueError(f"Enrollment #{enrollment_id} not found.")
+        _ensure_billable(enrollment)
+        _lock_student_year(enrollment["student_id"])
 
-        # Idempotency check
-        existing = (
-            StudentInvoice.objects.filter(enrollment_id=enrollment_id)
-            .exclude(status="void")
-            .first()
-        )
+        existing = live_invoice_for_student_year(enrollment["student_id"], enrollment["school_year"])
         if existing:
-            return existing
+            raise AlreadyInvoiced(existing, enrollment["school_year"])
 
-        return _build_invoice_for_enrollment(enrollment_id, payment_plan, effective_date)
+        return _build_invoice_for_enrollment(enrollment, payment_plan, effective_date)
 
 
 # Arbitrary but stable namespace for pg_advisory_xact_lock's (int4, int4) form,
@@ -461,19 +524,25 @@ def generate_invoice_for_enrollment(enrollment_id: int, payment_plan: str = "mon
 _INVOICE_GEN_LOCK_NAMESPACE = 8021
 
 
-def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effective_date: date = None):
-    """The actual construction, called by generate_invoice_for_enrollment()
-    once it holds the per-enrollment lock and has confirmed none exists."""
+def _build_invoice_for_enrollment(enrollment: dict, payment_plan: str, effective_date: date = None,
+                                  early_bird_on: date = None):
+    """The actual construction, called once the caller holds the student lock
+    and has confirmed no live invoice exists for the year.
 
-    # 1) Fetch enrollment + fee schedule + scholarships
-    enrollment = _fetch_enrollment(enrollment_id)
-    if not enrollment:
-        raise ValueError(f"Enrollment #{enrollment_id} not found.")
+    `early_bird_on` is the date Early Bird eligibility is judged on (default:
+    today). A re-issue passes the original invoice's date, so correcting a bill
+    after the cutoff doesn't take away a discount the family already earned.
+    """
+    enrollment_id = enrollment["enrollment_id"]
 
-    fee_data = _read_fee_schedule(enrollment["school_level"], enrollment["grade_level"])
+    # 1) Fee schedule for the enrollment's own year + scholarships
+    fee_data = _read_fee_schedule(
+        enrollment["school_level"], enrollment["grade_level"], enrollment["school_year"],
+    )
     if not fee_data:
         raise ValueError(
-            f"No active fee schedule for {enrollment['school_level']} / {enrollment['grade_level']}."
+            f"No active fee schedule for {enrollment['grade_level']} in SY {enrollment['school_year']}. "
+            "Set one up in Billing Settings (you can copy last year's)."
         )
 
     scholarships = _fetch_enrollment_scholarships(enrollment_id)
@@ -491,7 +560,7 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     # the singleton three times only invites the three to disagree.
     settings_row = _get_school_settings()
     today = timezone.localdate()
-    eb = _is_early_bird(today)
+    eb = _is_early_bird(early_bird_on or today)
 
     # 3) Run discount waterfall
     waterfall = compute_discount_waterfall(
@@ -608,35 +677,30 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
 def recalculate_invoices_for_schedule(fee_schedule_id: int):
     """
     Called when a fee_schedule's items are edited.
-    Finds all non-void invoices for enrollments at this (school_level, grade_level)
-    and rebuilds their line items + discounts + installments.
+    Rebuilds the line items, discounts and installments of the invoices built
+    from this schedule: non-void, same level and grade, same school year.
 
-    Already-paid amounts are preserved — installment.amount_paid stays as-is.
+    An invoice that has taken any payment is left exactly as billed and
+    counted under `skipped_with_payments`. Rebuilding those re-priced families
+    who had already paid in full -- adding one fee item turned fully paid
+    invoices back into money owed. A family pays against the amount they were
+    billed; if that amount was wrong, the invoice is re-issued on its own
+    (reissue_invoice), which carries its payments across.
     """
     schedule = FeeSchedule.objects.filter(fee_schedule_id=fee_schedule_id).first()
     if not schedule:
         return {"updated": 0}
 
-    fee_data = _read_fee_schedule(schedule.school_level, schedule.grade_level)
+    fee_data = _read_fee_schedule(schedule.school_level, schedule.grade_level, schedule.school_year)
     if not fee_data:
         return {"updated": 0}
 
-    # Find enrollments at this level/grade IN THE CURRENT SCHOOL YEAR.
-    #
-    # Without the year this rewrote every past year's invoices at this grade
-    # as well -- charging a closed year at today's rates, and, because the
-    # schedule below is built from the CURRENT sy_start_date, moving those
-    # families' due dates into the present year. An invoice carries no school
-    # year of its own, only enrollment_id; the year lives on enrollments,
-    # which is how views.scope_invoices_to_school_year resolves it for the
-    # list and summary endpoints.
-    #
-    # Fail closed when the singleton settings row is missing: with no year
-    # there is no safe set of invoices to rewrite.
+    # Enrollments at this level/grade in the SCHEDULE'S school year. An invoice
+    # carries no year of its own, only enrollment_id; the year lives on
+    # enrollments, which is how views.scope_invoices_to_school_year resolves
+    # it for the list and summary endpoints too.
     settings = _get_school_settings()
-    current_sy = (getattr(settings, "current_school_year", "") or "").strip()
-    if not current_sy:
-        return {"updated": 0, "skipped_no_school_year": True}
+    schedule_year = schedule.school_year
 
     from django.db import connection
     with connection.cursor() as cur:
@@ -646,7 +710,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
               FROM enrollments
              WHERE school_level = %s AND grade_level = %s AND school_year = %s
             """,
-            [schedule.school_level, schedule.grade_level, current_sy],
+            [schedule.school_level, schedule.grade_level, schedule_year],
         )
         enrollment_ids = [r[0] for r in cur.fetchall()]
 
@@ -656,7 +720,12 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
 
     updated_count = 0
     skipped_closed_out = 0
+    skipped_with_payments = 0
     for inv in invoices:
+        if StudentPayment.objects.filter(invoice_id=inv.invoice_id).exists():
+            skipped_with_payments += 1
+            continue
+
         # An invoice closed out for a transfer-out is finished, and rebuilding
         # it was actively wrong: the discounts.all().delete() below removed the
         # compensating "Transfer-out adjustment" row that is the only thing
@@ -811,7 +880,11 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
         inv.save()
         updated_count += 1
 
-    return {"updated": updated_count, "skipped_closed_out": skipped_closed_out}
+    return {
+        "updated": updated_count,
+        "skipped_closed_out": skipped_closed_out,
+        "skipped_with_payments": skipped_with_payments,
+    }
 
 
 # ── Apply payment to invoice + installments ──────────────────────────────────
@@ -901,7 +974,11 @@ def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
         raise ValueError(f"Invoice #{invoice_id} not found.")
 
     total_waived = Decimal("0")
-    for inst in invoice.installments.filter(due_date__gt=effective_date):
+    # Voided rows keep their amount for the audit trail, so without the
+    # exclusion a second close-out (a retry, a double click) counted them as
+    # outstanding again and added a second waiver -- a P9,200 balance became a
+    # P9,200 credit.
+    for inst in invoice.installments.filter(due_date__gt=effective_date).exclude(status="voided"):
         outstanding = Decimal(inst.amount) - Decimal(inst.amount_paid)
         if outstanding <= 0:
             continue
@@ -937,6 +1014,70 @@ def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
     invoice.save(update_fields=["status"])
 
     return invoice
+
+
+# ── Re-issue: void and rebuild, carrying the payments across ─────────────────
+
+def is_closed_out_for_transfer(invoice) -> bool:
+    return (
+        invoice.installments.filter(status="voided").exists()
+        or invoice.discounts.filter(description__startswith="Transfer-out adjustment").exists()
+    )
+
+
+@transaction.atomic
+def reissue_invoice(invoice_id: int, payment_plan: str, effective_date: date = None):
+    """
+    Voids an invoice and issues its replacement from the current fee schedule,
+    with the chosen payment plan, moving every payment across.
+
+    This is how a bill is corrected or a family changes plan. Voiding alone
+    used to leave the payments stranded on the void invoice: the replacement
+    asked for the whole year again, the school's collections dropped by what
+    the family had paid, and the ledger counted both invoices as billed.
+
+    The replacement keeps the original invoice date, so Early Bird is judged
+    as it was when the family first enrolled. Each moved payment keeps its own
+    date, amount and reference, with a note saying where it came from.
+
+    Returns (old_invoice, new_invoice).
+    """
+    old = StudentInvoice.objects.select_for_update().filter(invoice_id=invoice_id).first()
+    if not old:
+        raise ValueError(f"Invoice #{invoice_id} not found.")
+    if old.status == "void":
+        raise ValueError(f"{old.invoice_no} is already void.")
+    if is_closed_out_for_transfer(old):
+        raise ValueError(
+            f"{old.invoice_no} was closed out for a transfer, so it can't be re-issued."
+        )
+
+    enrollment = _fetch_enrollment(old.enrollment_id)
+    if not enrollment:
+        raise ValueError(f"Enrollment #{old.enrollment_id} not found.")
+    _ensure_billable(enrollment)
+    _lock_student_year(enrollment["student_id"])
+
+    old.status = "void"
+    old.save(update_fields=["status"])
+
+    new = _build_invoice_for_enrollment(
+        enrollment, payment_plan, effective_date, early_bird_on=old.invoice_date,
+    )
+    StudentInvoice.objects.filter(pk=new.pk).update(invoice_date=old.invoice_date)
+
+    moved = Decimal("0")
+    for payment in StudentPayment.objects.filter(invoice_id=old.invoice_id).order_by("payment_date", "payment_id"):
+        note = f"Moved from {old.invoice_no} when it was re-issued as {new.invoice_no}."
+        payment.invoice = new
+        payment.notes = f"{payment.notes} · {note}" if payment.notes else note
+        payment.save(update_fields=["invoice", "notes"])
+        moved += Decimal(payment.amount_paid)
+    if moved > 0:
+        apply_payment(new.invoice_id, moved)
+
+    new.refresh_from_db()
+    return old, new
 
 
 # ── Collections over time ─────────────────────────────────────────────────────

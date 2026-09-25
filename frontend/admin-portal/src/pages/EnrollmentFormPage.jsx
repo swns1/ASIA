@@ -1410,6 +1410,10 @@ function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose,
   const [plan, setPlan] = useState("monthly");
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  // Set when the student is already invoiced for this school year -- the
+  // usual case for a senior high 2nd semester, which shares the year's
+  // invoice with the 1st rather than being billed the full year again.
+  const [alreadyInvoiced, setAlreadyInvoiced] = useState("");
 
   async function handleGenerate() {
     setGenerating(true);
@@ -1422,7 +1426,13 @@ function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose,
       });
       setDone(true);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Failed to generate invoice.");
+      const data = err?.response?.data;
+      if (data?.code === "already_invoiced") {
+        setAlreadyInvoiced(data.detail);
+        setDone(true);
+      } else {
+        setError(data?.detail || "Failed to generate invoice.");
+      }
     } finally {
       setGenerating(false);
     }
@@ -1449,8 +1459,12 @@ function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose,
                   style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
                   <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
                 </motion.div>
-                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Invoice Generated</h3>
-                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</p>
+                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>{alreadyInvoiced ? "Already Invoiced" : "Invoice Generated"}</h3>
+                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
+                  {alreadyInvoiced
+                    ? <><strong>{studentName}</strong> already has this school year&apos;s invoice, so no second one was made. {alreadyInvoiced}</>
+                    : <>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</>}
+                </p>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}

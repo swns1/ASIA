@@ -13,7 +13,7 @@ import RequirementDocumentsPanel from "../components/requirements/RequirementDoc
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 
 import { updateStudentStatus } from "../api/studentApi";
-import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, BILLING_READ_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { todayISO, fmtDate } from "../utils/format";
@@ -97,11 +97,11 @@ export default function EnrollmentDetailPage() {
   const [transferReason, setTransferReason] = useState("");
   const [transferDestSchool, setTransferDestSchool] = useState("");
 
-  // Invoice data is billing-service-gated (BILLING_ROLES only) even though
-  // this route allows every staff role — skip the doomed fetch for roles
-  // that would just get a 403, and show an accurate message instead of a
-  // misleading "No invoice generated yet." for enrollments that do have one.
-  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+  // Invoice data is billing-service-gated (billing staff and the registrar
+  // may read it) even though this route allows every staff role — skip the
+  // doomed fetch for roles that would just get a 403, and show an accurate
+  // message instead of a misleading "No invoice generated yet."
+  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_READ_ROLES);
 
   useEffect(() => {
     if (!id) return;
@@ -370,8 +370,10 @@ export default function EnrollmentDetailPage() {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                      <span style={{ color: C.muted }}>Due</span>
-                      <span style={{ fontWeight: 600, color: C.dark }}>{fmtDate(invoice.due_date)}</span>
+                      <span style={{ color: C.muted }}>Next due</span>
+                      <span style={{ fontWeight: 600, color: invoice.is_overdue ? "#c92a2a" : C.dark }}>
+                        {invoice.next_due_date ? fmtDate(invoice.next_due_date) : "—"}{invoice.is_overdue ? " · overdue" : ""}
+                      </span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                       <span style={{ color: C.muted }}>Plan</span>

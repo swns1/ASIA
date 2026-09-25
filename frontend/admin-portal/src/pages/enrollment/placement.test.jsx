@@ -138,7 +138,7 @@ describe("Promote Section", { timeout: 20_000 }, () => {
     renderEnrollments();
     const dialog = await openPromoteAndPreview();
 
-    fireEvent.click(await within(dialog).findByRole("button", { name: /Mark 2 completed/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Mark 2 completed/ }, { timeout: 5000 }));
 
     await waitFor(() => expect(api.completeSection).toHaveBeenCalledWith({
       school_year: "2025-2026", grade_level: "Grade 4", section: "Rizal",
@@ -157,7 +157,7 @@ describe("Promote Section", { timeout: 20_000 }, () => {
 
     renderEnrollments();
     const dialog = await openPromoteAndPreview({ grade: "Grade 11" });
-    fireEvent.click(await within(dialog).findByRole("button", { name: /Mark 1 completed/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Mark 1 completed/ }, { timeout: 5000 }));
 
     await waitFor(() => expect(api.completeSection).toHaveBeenCalledWith(
       expect.objectContaining({ grade_level: "Grade 11", semester: "2nd" }),

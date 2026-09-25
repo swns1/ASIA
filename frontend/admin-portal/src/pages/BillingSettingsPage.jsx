@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 import {
   getSchoolSettings as _getSettings,
@@ -18,6 +19,9 @@ import {
   updateFeeScheduleItem as _updateItem,
   deleteFeeScheduleItem as _deleteItem,
   recalculateFeeSchedule as _recalculateSchedule,
+  copyFeeSchedulesToYear as _copyYear,
+  getDiscountTypes as _getDiscountTypes,
+  updateDiscountType as _updateDiscountType,
 } from "../api/billingApi";
 
 const getFeeSchedules     = (p = {}) => _getFeeSchedules(p);
@@ -26,6 +30,18 @@ const createItem          = (p)      => _createItem(p);
 const updateItem          = (id, p)  => _updateItem(id, p);
 const deleteItem          = (id)     => _deleteItem(id);
 const recalculateSchedule = (id)     => _recalculateSchedule(id);
+
+/** What a fee change did to existing invoices, in words. Invoices that have
+ *  taken payments keep the amount they were billed; they are corrected one at
+ *  a time with Re-issue, which carries their payments across. */
+function describeRecalculation(result) {
+  if (!result) return "";
+  const n = result.updated ?? 0;
+  const kept = result.skipped_with_payments ?? 0;
+  let msg = `${n} unpaid invoice${n !== 1 ? "s" : ""} updated`;
+  if (kept) msg += `; ${kept} already paid into keep${kept === 1 ? "s its" : " their"} original amount (re-issue from Invoices to change ${kept === 1 ? "it" : "them"})`;
+  return msg + ".";
+}
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const C = {
@@ -152,12 +168,114 @@ const inputStyle = {
   transition: "border-color 0.15s, box-shadow 0.15s",
 };
 
-const PAYMENT_PLANS = [
-  { label: "Monthly plan",     detail: "10 installments — end of June through March",  color: "#1455a0", bg: "#e3f0fd" },
-  { label: "Quarterly plan",   detail: "4 installments — end of Aug, Nov, Feb, May",   color: "#2e6b0d", bg: "#e8f5e0" },
-  { label: "Semi-annual (3%)", detail: "2 installments — end of Oct and Mar",          color: "#7c3aed", bg: "#f0e8fd" },
-  { label: "Annual (5%)",      detail: "1 installment — end of October",               color: "#854f0b", bg: "#fdf5e8" },
+// The discount rows the invoice math reads by code. Rates were only
+// changeable through the API before; the labels here hardcoded 3% and 5%, and
+// the due months described a calendar the installment schedule no longer used.
+const RATE_ROWS = [
+  { code: "MONTHLY_PLAN",     label: "Monthly plan",     plan: "monthly",     color: "#1455a0", bg: "#e3f0fd" },
+  { code: "QUARTERLY_PLAN",   label: "Quarterly plan",   plan: "quarterly",   color: "#2e6b0d", bg: "#e8f5e0" },
+  { code: "SEMI_ANNUAL_PLAN", label: "Semi-annual plan", plan: "semi_annual", color: "#7c3aed", bg: "#f0e8fd" },
+  { code: "ANNUAL_PLAN",      label: "Annual plan",      plan: "annual",      color: "#854f0b", bg: "#fdf5e8" },
+  { code: "EARLY_BIRD",       label: "Early Bird",       plan: null,          color: "#c92a2a", bg: "#fff0f0" },
 ];
+// Mirrors billing-service's PLAN_SHAPE: (installments, months apart), counted
+// from the month the school year opens.
+const PLAN_SHAPE = { monthly: [10, 1], quarterly: [4, 3], semi_annual: [2, 5], annual: [1, 1] };
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function planDueMonths(plan, syStart) {
+  const [count, step] = PLAN_SHAPE[plan];
+  const start = syStart ? new Date(`${syStart}T00:00:00`).getMonth() : 5;
+  const months = Array.from({ length: count }, (_, i) => MONTHS[(start + i * step) % 12]);
+  if (plan === "monthly") return `10 installments — end of ${months[0]} through ${months[9]}`;
+  return `${count} installment${count > 1 ? "s" : ""} — end of ${months.join(", ")}`;
+}
+
+function DiscountRatesCard({ syStart, earlyBirdDays }) {
+  const [rows, setRows]     = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [savingCode, setSavingCode] = useState(null);
+  const [error, setError]   = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    _getDiscountTypes()
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : data?.results ?? [];
+        setRows(Object.fromEntries(list.map((r) => [r.discount_code, r])));
+      })
+      .catch(() => { if (!cancelled) setError("Couldn't load the discount rates."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function save(code) {
+    const row = rows[code];
+    const value = drafts[code];
+    const pct = Number(value);
+    if (value === "" || Number.isNaN(pct) || pct < 0 || pct > 100) {
+      setError("A rate is a percentage from 0 to 100.");
+      return;
+    }
+    setSavingCode(code); setError("");
+    try {
+      const updated = await _updateDiscountType(row.discount_type_id, { discount_value: pct });
+      setRows((prev) => ({ ...prev, [code]: updated }));
+      setDrafts((prev) => { const next = { ...prev }; delete next[code]; return next; });
+      toast.success(`${RATE_ROWS.find((r) => r.code === code).label} discount set to ${pct}%. It applies to invoices generated from now on.`);
+    } catch (e) {
+      setError(e?.response?.data?.discount_value?.[0] || e.message || "Couldn't save the rate.");
+    } finally { setSavingCode(null); }
+  }
+
+  if (!rows) {
+    return error
+      ? <div style={{ fontSize: 13, color: "#b91c1c" }}>{error}</div>
+      : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>{[1, 2, 3, 4, 5].map((i) => <Sk key={i} h={58} r={10} />)}</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {error && <div role="alert" style={{ fontSize: 13, color: "#b91c1c" }}>{error}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+        {RATE_ROWS.filter((r) => rows[r.code]).map((r) => {
+          const current = String(Number(rows[r.code].discount_value));
+          const draft = drafts[r.code];
+          const dirty = draft !== undefined && draft !== current;
+          return (
+            <div key={r.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: r.bg, borderRadius: 10, border: `1px solid ${r.color}22` }}>
+              <i className={`ti ${r.plan ? "ti-calendar-due" : "ti-clock-bolt"}`} style={{ fontSize: 16, color: r.color, flexShrink: 0 }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: r.color }}>{r.label}</div>
+                <div style={{ fontSize: 11, color: r.color, opacity: 0.75, marginTop: 1 }}>
+                  {r.plan ? planDueMonths(r.plan, syStart) : `Invoiced within ${earlyBirdDays || 7} days of the school year opening`}
+                </div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: r.color, fontWeight: 600 }}>
+                <span className="sr-only">{r.label} discount, percent off tuition</span>
+                <input
+                  type="number" min="0" max="100" step="0.5"
+                  value={draft ?? current}
+                  onChange={(e) => setDrafts((prev) => ({ ...prev, [r.code]: e.target.value }))}
+                  style={{ width: 64, border: "1.5px solid #fde2de", borderRadius: 8, padding: "5px 8px", fontSize: 13, textAlign: "right", background: "white" }}
+                />%
+              </label>
+              {dirty && (
+                <button type="button" onClick={() => save(r.code)} disabled={savingCode === r.code}
+                  style={{ border: "none", background: r.color, color: "white", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {savingCode === r.code ? "Saving…" : "Save"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: C.pale }}>
+        Percent off tuition. Changing a rate affects invoices generated from now on; existing invoices keep theirs unless re-issued.
+      </div>
+    </div>
+  );
+}
 
 function syProgress(startDate, endDate) {
   if (!startDate || !endDate) return null;
@@ -429,29 +547,10 @@ function GeneralSettingsTab() {
             )}
           </SectionCard>
 
-          <SectionCard title="Payment Plans" subtitle="Installment schedules available at enrollment" icon="ti-calendar-due" delay={0.12} span>
-            {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
-                {[1, 2, 3, 4].map(i => <Sk key={i} h={58} r={10} />)}
-              </div>
-            ) : (
-              <motion.div
-                variants={listVariants.container} initial="hidden" animate="visible"
-                style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}
-              >
-                {PAYMENT_PLANS.map(p => (
-                  <motion.div key={p.label} variants={listVariants.item}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: p.bg, borderRadius: 10, border: `1px solid ${p.color}22` }}
-                  >
-                    <i className="ti ti-calendar-due" style={{ fontSize: 16, color: p.color, flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.label}</div>
-                      <div style={{ fontSize: 11, color: p.color, opacity: 0.75, marginTop: 1 }}>{p.detail}</div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
+          <SectionCard title="Payment Plans & Discount Rates" subtitle="Installment schedules and the discounts off tuition" icon="ti-calendar-due" delay={0.12} span>
+            {loading
+              ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>{[1, 2, 3, 4].map(i => <Sk key={i} h={58} r={10} />)}</div>
+              : <DiscountRatesCard syStart={form.sy_start_date} earlyBirdDays={form.early_bird_days} />}
           </SectionCard>
         </div>
       </div>
@@ -498,7 +597,7 @@ function AnimatedAmount({ value, style }) {
   return <span style={style}>{shown}</span>;
 }
 
-function NewScheduleModal({ onClose, onSaved }) {
+function NewScheduleModal({ schoolYear, onClose, onSaved }) {
   const [schoolLevel, setSchoolLevel] = useState("elementary");
   const [gradeLevel,  setGradeLevel]  = useState("Grade 1");
   const [saving,      setSaving]      = useState(false);
@@ -509,12 +608,12 @@ function NewScheduleModal({ onClose, onSaved }) {
   const handleCreate = async () => {
     setSaving(true); setError("");
     try {
-      const created = await createFeeSchedule({ school_level: schoolLevel, grade_level: gradeLevel, is_active: true });
+      const created = await createFeeSchedule({ school_level: schoolLevel, grade_level: gradeLevel, school_year: schoolYear, is_active: true });
       toast.success("Fee schedule created.");
       onSaved(created);
       onClose();
     } catch (e) {
-      const msg = e.message || "Failed to create. This level/grade may already exist.";
+      const msg = e.message || `Failed to create. SY ${schoolYear} may already have this grade.`;
       setError(msg);
       toast.error(msg);
     } finally { setSaving(false); }
@@ -540,7 +639,7 @@ function NewScheduleModal({ onClose, onSaved }) {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>For SY {schoolYear} — select a level and grade</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
@@ -630,8 +729,8 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
     if (!name.trim() || !amount || parseFloat(amount) < 0) return;
     setSaving(true);
     try {
-      await updateItem(item.fee_schedule_item_id, { item_name: name.trim(), amount: parseFloat(amount) });
-      toast.success("Fee item updated.");
+      const res = await updateItem(item.fee_schedule_item_id, { item_name: name.trim(), amount: parseFloat(amount) });
+      toast.success(`Fee item updated. ${describeRecalculation(res?.recalculation)}`.trim());
       setEditing(false);
       onUpdated();
     } catch (e) {
@@ -738,7 +837,8 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
     if (!amount || parseFloat(amount) < 0) { setError("Amount required."); return; }
     setSaving(true); setError("");
     try {
-      await createItem({ fee_schedule: scheduleId, item_category: category, item_name: name.trim(), amount: parseFloat(amount) });
+      const res = await createItem({ fee_schedule: scheduleId, item_category: category, item_name: name.trim(), amount: parseFloat(amount) });
+      if (res?.recalculation) toast.success(`Fee item added. ${describeRecalculation(res.recalculation)}`);
       setName(""); setAmount("");
       onAdded();
     } catch (e) { setError(e.message || "Failed to add."); }
@@ -791,7 +891,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
     setRecalcing(true); setRecalcMsg("");
     try {
       const result = await recalculateSchedule(schedule.fee_schedule_id);
-      const msg = `${result.updated} invoice${result.updated !== 1 ? "s" : ""} updated`;
+      const msg = describeRecalculation(result);
       setRecalcMsg(msg);
       toast.success(msg);
       setTimeout(() => setRecalcMsg(""), 4000);
@@ -822,7 +922,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>{schedule.grade_level}</div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: lvl.bg, color: lvl.color, marginTop: 3 }}>
-              <i className={`ti ${lvl.icon}`} style={{ fontSize: 11 }} />{lvl.label}
+              <i className={`ti ${lvl.icon}`} style={{ fontSize: 11 }} />{lvl.label} · SY {schedule.school_year}
             </div>
           </div>
         </div>
@@ -918,16 +1018,26 @@ function ScheduleDetail({ schedule, onUpdated }) {
 }
 
 function FeeSchedulesTab() {
+  // Fee schedules belong to a school year: next year's fees are their own
+  // schedules, so setting them never touches this year's invoices.
+  const { currentYear } = useSchoolYear();
+  const [year,         setYear]         = useState(currentYear);
   const [schedules,    setSchedules]    = useState([]);
   const [selected,     setSelected]     = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [levelFilter,  setLevelFilter]  = useState("all");
   const [showNewModal, setShowNewModal] = useState(false);
+  const [copying,      setCopying]      = useState(false);
+  const yearOptions = buildSchoolYearOptions(currentYear, { past: 3, future: 1 });
+  const previousYear = (() => {
+    const start = parseInt(String(year).slice(0, 4), 10);
+    return Number.isNaN(start) ? "" : `${start - 1}-${start}`;
+  })();
 
-  const fetchSchedules = useCallback(async (lvl = levelFilter) => {
+  const fetchSchedules = useCallback(async (lvl = levelFilter, sy = year) => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { school_year: sy };
       if (lvl !== "all") params.school_level = lvl;
       const data = await getFeeSchedules(params);
       const results = Array.isArray(data) ? data : data?.results ?? [];
@@ -938,7 +1048,26 @@ function FeeSchedulesTab() {
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [levelFilter, selected]);
+  }, [levelFilter, selected, year]);
+
+  const changeYear = (sy) => {
+    setYear(sy);
+    setSelected(null);
+    fetchSchedules(levelFilter, sy);
+  };
+
+  async function copyFromPreviousYear() {
+    setCopying(true);
+    try {
+      const res = await _copyYear(previousYear, year);
+      toast.success(res.created
+        ? `Copied ${res.created} schedule${res.created !== 1 ? "s" : ""} from SY ${previousYear}. Adjust the amounts for SY ${year}.`
+        : `SY ${previousYear} has no schedules to copy.`);
+      fetchSchedules(levelFilter, year);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message || "Couldn't copy the schedules.");
+    } finally { setCopying(false); }
+  }
 
   useEffect(() => {
     fetchSchedules("all"); // eslint-disable-line react-hooks/set-state-in-effect
@@ -953,8 +1082,17 @@ function FeeSchedulesTab() {
 
       {/* Mini header */}
       <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ fontSize: 12, color: C.pale }}>
-          {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} configured`}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, fontWeight: 600 }}>
+            School year
+            <select aria-label="Fee schedule school year" value={year} onChange={(e) => changeYear(e.target.value)}
+              style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "5px 8px", fontSize: 12, background: "white", color: "#1a0a0a" }}>
+              {yearOptions.map((sy) => <option key={sy} value={sy}>{sy}{sy === currentYear ? " (current)" : ""}</option>)}
+            </select>
+          </label>
+          <span style={{ fontSize: 12, color: C.pale }}>
+            {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} configured`}
+          </span>
         </div>
         <motion.button
           whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
@@ -1011,8 +1149,16 @@ function FeeSchedulesTab() {
                 ? (
                   <div style={{ padding: "40px 16px", textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>
                     <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a", display: "block", marginBottom: 10 }} />
-                    No fee schedules yet.<br />
-                    <span style={{ fontSize: 12 }}>Click "New Schedule" to create one.</span>
+                    No fee schedules for SY {year} yet.<br />
+                    <span style={{ fontSize: 12 }}>Start from last year&apos;s and adjust, or click &quot;New Schedule&quot;.</span>
+                    {previousYear && (
+                      <div style={{ marginTop: 12 }}>
+                        <button type="button" onClick={copyFromPreviousYear} disabled={copying}
+                          style={{ border: "1px solid #fca5a5", background: "#fff0f0", color: "#c92a2a", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: copying ? "not-allowed" : "pointer" }}>
+                          {copying ? "Copying…" : `Copy from SY ${previousYear}`}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
                 : (
@@ -1097,6 +1243,7 @@ function FeeSchedulesTab() {
         {showNewModal && (
           <NewScheduleModal
             key="new-modal"
+            schoolYear={year}
             onClose={() => setShowNewModal(false)}
             onSaved={(s) => { fetchSchedules(levelFilter); setSelected(s); }}
           />

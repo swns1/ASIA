@@ -17,7 +17,7 @@ import { getPreviousSchoolsByStudent } from "../api/previousSchoolApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudentLedger } from "../api/billingApi";
 import { getUsers, createUser } from "../api/identityApi";
-import { getCurrentUser, hasAnyRole, isAdminRole, ACADEMIC_STAFF, BILLING_ROLES } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, isAdminRole, ACADEMIC_STAFF, BILLING_READ_ROLES } from "../utils/auth";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
@@ -511,12 +511,12 @@ export default function StudentDetailPage() {
   // Only these roles can save a student; teachers and accounting were shown
   // the Edit button and a form whose every save the server refused.
   const canEdit = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
-  // getStudentLedger hits a billing-service endpoint that's BILLING_ROLES-only
-  // even though this route allows every staff role — skip the doomed fetch
-  // for teacher/registrar and show an accurate message instead of "Failed to
+  // getStudentLedger hits a billing-service endpoint that billing staff and
+  // the registrar may read, though this route allows every staff role — skip
+  // the doomed fetch for a teacher and show an accurate message instead of "Failed to
   // load financial history. Check that the billing service is running."
   // (which is misleading — the service is fine, the role just can't see it).
-  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+  const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_READ_ROLES);
 
   // Direction tracking for the slide transition now lives in useTabs, replacing
   // the hand-rolled prevTabRef/tabDirection state machine this page carried.

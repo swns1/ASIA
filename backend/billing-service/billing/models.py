@@ -17,6 +17,9 @@ class FeeSchedule(models.Model):
     fee_schedule_id = models.BigAutoField(primary_key=True)
     school_level    = models.CharField(max_length=20, choices=SCHOOL_LEVEL_CHOICES)
     grade_level     = models.CharField(max_length=20)
+    # Each year has its own price list, so setting next year's fees never
+    # touches this year's invoices (migration 0003_fee_schedule_school_year).
+    school_year     = models.CharField(max_length=20)
     is_active       = models.BooleanField(default=True)
     notes           = models.TextField(null=True, blank=True)
     updated_at      = models.DateTimeField(auto_now=True)
@@ -24,10 +27,10 @@ class FeeSchedule(models.Model):
     class Meta:
         managed = False
         db_table = "fee_schedules"
-        unique_together = (("school_level", "grade_level"),)
+        unique_together = (("school_level", "grade_level", "school_year"),)
 
     def __str__(self):
-        return f"{self.get_school_level_display()} — {self.grade_level}"
+        return f"{self.get_school_level_display()} — {self.grade_level} (SY {self.school_year})"
 
 
 class FeeScheduleItem(models.Model):

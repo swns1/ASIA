@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -7,13 +7,21 @@ from .models import SchoolSetting
 from .serializers import SchoolSettingSerializer
 
 
-class SchoolSettingViewSet(viewsets.ModelViewSet):
+class SchoolSettingViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     /api/school-settings/        GET (list returns singleton in array)
     /api/school-settings/current/ GET (returns the singleton directly)
     /api/school-settings/{id}/   GET, PATCH
 
-    Treated as a singleton table — there's only ever one row.
+    Treated as a singleton table — there's only ever one row. No POST or
+    DELETE: it was a full ModelViewSet, so the one row could be deleted --
+    taking the letterhead off every printed form and switching off Early Bird
+    and fee recalculation -- and POST overwrote it (save() forces pk=1).
     """
     queryset = SchoolSetting.objects.all()
     serializer_class = SchoolSettingSerializer
