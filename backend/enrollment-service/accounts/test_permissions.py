@@ -131,12 +131,13 @@ class TestTeacherStudentIds:
         )
         mock_advisory.objects.filter.return_value = [advisory]
         mock_qs = MagicMock()
-        mock_qs.values_list.return_value = [10, 11, 12]
+        mock_qs.values_list.return_value = [(100, 10), (101, 11), (102, 12)]
         mock_enrollment.objects.filter.return_value = mock_qs
 
         result = teacher_student_ids(_user("teacher", user_id=7))
 
         assert result == {10, 11, 12}
+        mock_qs.values_list.assert_called_once_with("enrollment_id", "student_id")
         mock_enrollment.objects.filter.assert_called_once_with(
             school_year="2025-2026", school_level="junior_highschool",
             grade_level="Grade 7", section="Rizal", enrollment_status="enrolled",
@@ -152,7 +153,7 @@ class TestTeacherStudentIds:
         )
         mock_advisory.objects.filter.return_value = [advisory]
         mock_qs = MagicMock()
-        mock_qs.filter.return_value.values_list.return_value = [1]
+        mock_qs.filter.return_value.values_list.return_value = [(500, 1)]
         mock_enrollment.objects.filter.return_value = mock_qs
 
         result = teacher_student_ids(_user("teacher", user_id=9))
@@ -226,16 +227,43 @@ class TestIsAdvisoryTeacherOrStaff:
         )
         mock_advisory.objects.filter.return_value = [advisory]
         mock_qs = MagicMock()
-        mock_qs.values_list.return_value = [99]
+        mock_qs.values_list.return_value = [(500, 99)]
         mock_enrollment.objects.filter.return_value = mock_qs
 
         view = SimpleNamespace(owner_student_id_field="enrollment__student_id")
-        obj = SimpleNamespace(enrollment=SimpleNamespace(student_id=99))
+        obj = SimpleNamespace(enrollment_id=500, enrollment=SimpleNamespace(student_id=99))
 
         request = factory.patch("/")
         request.user = _user("teacher", user_id=5)
 
         assert self.perm.has_object_permission(request, view, obj) is True
+
+    @patch("enrollments.models.Enrollment")
+    @patch("enrollments.models.SectionAdvisory")
+    def test_teacher_reads_but_cannot_edit_their_learners_other_years(self, mock_advisory, mock_enrollment):
+        """
+        A learner's student id covers every year they spent here. A teacher
+        may read their current learner's history, but editing it -- last
+        year's final grades, entered by that year's adviser -- is not theirs.
+        """
+        mock_advisory.objects.filter.return_value = [SimpleNamespace(
+            school_year="2026-2027", school_level="junior_highschool",
+            grade_level="Grade 7", section="Rizal", strand=None,
+        )]
+        mock_qs = MagicMock()
+        mock_qs.values_list.return_value = [(500, 99)]
+        mock_enrollment.objects.filter.return_value = mock_qs
+
+        view = SimpleNamespace(owner_student_id_field="enrollment__student_id")
+        last_year = SimpleNamespace(enrollment_id=410, enrollment=SimpleNamespace(student_id=99))
+
+        read = factory.get("/")
+        read.user = _user("teacher", user_id=5)
+        assert self.perm.has_object_permission(read, view, last_year) is True
+
+        edit = factory.patch("/")
+        edit.user = _user("teacher", user_id=5)
+        assert self.perm.has_object_permission(edit, view, last_year) is False
 
     def test_guardian_read_allowed_at_permission_level(self):
         # guardians pass has_permission for reads (scoped later by object/queryset)

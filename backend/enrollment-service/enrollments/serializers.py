@@ -3,6 +3,12 @@ from rest_framework import serializers
 
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from .models import Enrollment, EnrollmentTransfer, SectionAdvisory, Student
+from .rules import (
+    ATTENDED_STATUSES,
+    GRADE_ORDER,
+    placement_problems,
+    status_change_problem,
+)
 
 
 class SchoolYearField(serializers.CharField):
@@ -35,6 +41,45 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("advisory_id", "created_at")
 
+    def validate_teacher_user_id(self, value):
+        """
+        An adviser is an active teacher account.
+
+        Nothing checked this, so a section could be given to a guardian's
+        account or to a user id that does not exist -- and the section then
+        read as covered while no teacher could ever open it. Read straight from
+        `users`: this service's User stub always reports is_active=True.
+        """
+        from django.db import connection
+
+        with connection.cursor() as cur:
+            cur.execute("SELECT role, is_active FROM users WHERE user_id = %s", [value])
+            row = cur.fetchone()
+        if row is None:
+            raise serializers.ValidationError("No user account has this id.")
+        role, is_active = row
+        if role != "teacher":
+            raise serializers.ValidationError("An adviser must be a teacher account.")
+        if not is_active:
+            raise serializers.ValidationError("This teacher's account is deactivated.")
+        return value
+
+    def validate(self, attrs):
+        grade_level = attrs.get("grade_level", getattr(self.instance, "grade_level", None))
+        school_level = attrs.get("school_level", getattr(self.instance, "school_level", None))
+        strand = attrs.get("strand", getattr(self.instance, "strand", None))
+        problems = placement_problems(
+            school_level=school_level, grade_level=grade_level, strand=strand,
+        )
+        # A senior high advisory without a strand covers every strand in the
+        # section, so unlike an enrollment it doesn't need one.
+        problems.pop("strand", None)
+        if problems:
+            raise serializers.ValidationError(problems)
+        if school_level != "senior_highschool":
+            attrs["strand"] = None
+        return attrs
+
 
 class EnrollmentTransferSerializer(serializers.ModelSerializer):
     student_id = serializers.IntegerField(source="enrollment.student_id", read_only=True)
@@ -52,12 +97,33 @@ class EnrollmentTransferSerializer(serializers.ModelSerializer):
         read_only_fields = ("transfer_id", "initiated_by", "created_at")
 
 # ── Grade progression helpers ─────────────────────────────────────────────────
-GRADE_ORDER = [
-    "Nursery", "Kindergarten",
-    "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6",
-    "Grade 7", "Grade 8", "Grade 9", "Grade 10",
-    "Grade 11", "Grade 12",
-]
+# GRADE_ORDER lives in enrollments.rules and is re-exported from here, where
+# the views have always imported it from.
+
+
+def promotion_grades(last_completed):
+    """
+    The grade rows a move up from `last_completed` is judged on.
+
+    Grade 11 is enrolled per semester, so moving up from it is judged on both
+    semesters of that year -- the rows Promote reads. Judging only the last
+    completed row (the 2nd semester) let a learner who failed a 1st-semester
+    subject into Grade 12 one learner at a time while Promote refused them.
+    """
+    from grades.models import Grade
+    from .promotion import SEMESTERED_SOURCE
+
+    if last_completed.grade_level == SEMESTERED_SOURCE:
+        year_rows = list(
+            Enrollment.objects.filter(
+                student_id=last_completed.student_id,
+                school_year=last_completed.school_year,
+                grade_level=SEMESTERED_SOURCE,
+                enrollment_status="completed",
+            ).values_list("enrollment_id", flat=True)
+        )
+        return Grade.objects.filter(enrollment_id__in=year_rows).select_related("subject")
+    return Grade.objects.filter(enrollment=last_completed).select_related("subject")
 
 
 def get_next_grade_level(current):
@@ -175,6 +241,33 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         progression_override_reason = attrs.pop("progression_override_reason", "")
         is_transfer_in = attrs.pop("is_transfer_in", False)
 
+        # ── Who and what an edit may change ────────────────────────────────────
+        # An enrollment carries the learner's grades, attendance and invoice, so
+        # re-pointing it at another student handed that whole record to them.
+        if self.instance is not None and "student" in attrs:
+            current = getattr(self.instance, "student_id", None) or getattr(
+                getattr(self.instance, "student", None), "pk", None
+            )
+            if attrs["student"].pk != current:
+                raise serializers.ValidationError({
+                    "student": (
+                        "An enrollment's learner can't be changed. Cancel this "
+                        "enrollment and enroll the right learner instead."
+                    )
+                })
+        if "enrollment_status" in attrs:
+            if self.instance is None:
+                if attrs["enrollment_status"] == "transferred_out":
+                    raise serializers.ValidationError({
+                        "enrollment_status": "Use Transfer Out on an enrolled learner instead.",
+                    })
+            else:
+                problem = status_change_problem(
+                    self.instance.enrollment_status, attrs["enrollment_status"],
+                )
+                if problem:
+                    raise serializers.ValidationError({"enrollment_status": problem})
+
         # ── Semester / strand consistency ──────────────────────────────────────
         school_level = attrs.get("school_level", getattr(self.instance, "school_level", None))
         semester = attrs.get("semester", getattr(self.instance, "semester", None))
@@ -193,8 +286,19 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "semester": f"Semester must be empty for {school_level} enrollments."
                 })
-            if attrs.get("strand") == "":
+            if "strand" in attrs:
                 attrs["strand"] = None
+
+        # ── The placement has to agree with itself ─────────────────────────────
+        # The form only offers consistent choices, but the API took anything:
+        # elementary Grade 11 with a strand, senior high Grade 3, "Grade 99".
+        problems = placement_problems(
+            school_level=school_level,
+            grade_level=attrs.get("grade_level", getattr(self.instance, "grade_level", None)),
+            strand=attrs.get("strand", getattr(self.instance, "strand", None)),
+        )
+        if problems:
+            raise serializers.ValidationError(problems)
 
         # ── Duplicate active enrollment guard ──────────────────────────────────
         student = attrs.get("student", getattr(self.instance, "student", None))
@@ -221,8 +325,6 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
         # ── Grade progression + completion gate (create only) ─────────────────
         if self.instance is None and student:
-            from grades.models import Grade
-
             grade_level = attrs.get("grade_level")
             semester_val = attrs.get("semester")
 
@@ -236,7 +338,6 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
             if last_completed:
                 last_grade = last_completed.grade_level
-                last_semester = last_completed.semester
                 expected_next = get_next_grade_level(last_grade)
                 current_idx = get_grade_index(grade_level)
                 last_idx = get_grade_index(last_grade)
@@ -304,15 +405,14 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                                     f"{', '.join(sorted(missing))} semester(s) not yet completed."
                                 )
                             })
-                    elif grade_level == last_grade and semester_val == "2nd" and last_semester == "2nd":
-                        raise serializers.ValidationError({
-                            "semester": (
-                                f"Student already completed Grade {grade_level} 2nd semester."
-                            )
-                        })
-                    elif grade_level == last_grade and semester_val == "1st" and last_semester == "1st":
-                        # Repeating 1st sem of same grade — allowed (retention)
-                        pass
+                        # A new grade opens with its 1st semester. The branch
+                        # below that checked this never ran for Grade 12 --
+                        # this one returns first -- so Grade 12 2nd semester
+                        # could be entered straight after Grade 11.
+                        if semester_val != "1st":
+                            raise serializers.ValidationError({
+                                "semester": "Grade 12 starts with its 1st semester.",
+                            })
                     elif semester_val == "2nd":
                         # Enrolling in 2nd sem: last completed must be 1st sem of same grade
                         first_sem_done = Enrollment.objects.filter(
@@ -329,20 +429,32 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                                 )
                             })
 
-                # ── Failed/incomplete subjects block promotion ─────────────────
-                # On the YEAR, per learning area -- enrollments.promotion, the
-                # rule Promote and the report card use. This used to match any
-                # per-quarter "failed" remark, so a learner Promote had carried
-                # up (failed Q1, finished at 84) was refused here, one learner
-                # at a time, by the same system.
+                # ── Moving up is judged the way Promote judges it ──────────────
+                # On the YEAR, per learning area, over both Grade 11 semesters,
+                # and "no grades recorded" is not a pass -- enrollments.promotion
+                # is the one answer, so a learner can't be refused by Promote
+                # and let through here, or the reverse.
                 if not progression_override and grade_level != last_grade:
-                    from .promotion import failed_learning_areas
+                    from .promotion import SKIP_NO_GRADES, assess, failed_learning_areas
 
-                    failed = failed_learning_areas(
-                        Grade.objects.filter(enrollment=last_completed).select_related("subject")
+                    year_grades = list(promotion_grades(last_completed))
+                    _avg, skip = assess(
+                        year_grades,
+                        from_grade_level=last_grade,
+                        to_school_year=school_year,
+                        # The semester sequencing above already requires both.
+                        first_semester_done=True,
                     )
-                    if failed:
-                        names = ", ".join(failed)
+                    if skip and skip["kind"] == SKIP_NO_GRADES:
+                        raise serializers.ValidationError({
+                            "grade_level": (
+                                f"Cannot promote from {last_grade} — no final grades are "
+                                f"recorded for it. Record the grades, repeat {last_grade}, "
+                                f"or use admin override."
+                            )
+                        })
+                    if skip:
+                        names = ", ".join(failed_learning_areas(year_grades))
                         raise serializers.ValidationError({
                             "grade_level": (
                                 f"Cannot promote from {last_grade} — student has "
@@ -385,7 +497,13 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             # activation the row already exists, so counting it would classify
             # every activation as "continuing" and silently switch off the
             # transferee rules on the exact path this gate exists for.
-            prior = Enrollment.objects.filter(student=student)
+            #
+            # And only rows the learner actually attended: a cancelled
+            # application is not a year spent here, and counting it made a
+            # Grade 7 walk-in "continuing", owing neither Good Moral nor Form 137.
+            prior = Enrollment.objects.filter(
+                student=student, enrollment_status__in=ATTENDED_STATUSES,
+            )
             if self.instance is not None:
                 prior = prior.exclude(pk=self.instance.pk)
 
@@ -419,7 +537,10 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
         # ── Grade placement change guard on UPDATE ─────────────────────────────
         if self.instance is not None:
-            PLACEMENT_FIELDS = ("grade_level", "school_level", "strand", "semester")
+            # school_year included: moving a row to another year re-files its
+            # grades, attendance and invoice under that year, and it used to go
+            # through with no reason and no trace.
+            PLACEMENT_FIELDS = ("school_year", "grade_level", "school_level", "strand", "semester")
             changed = [
                 f for f in PLACEMENT_FIELDS
                 if f in attrs and attrs[f] != getattr(self.instance, f, None)
@@ -427,7 +548,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             if changed and not progression_override:
                 raise serializers.ValidationError({
                     "non_field_errors": [
-                        "Grade placement fields (grade_level, school_level, strand, semester) "
+                        "Placement fields (school_year, grade_level, school_level, strand, semester) "
                         "cannot be changed on an existing enrollment without admin override. "
                         "Send progression_override=true with a progression_override_reason."
                     ]

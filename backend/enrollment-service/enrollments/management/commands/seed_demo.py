@@ -79,6 +79,15 @@ CORE_SHS = [
     "Understanding Culture, Society and Politics", "Personal Development",
     "Physical Education and Health",
 ]
+# Senior high takes each learning area in one semester, and enrolls each
+# semester as its own row. These were seeded with no semester at all -- which
+# the subjects CHECK lets through, since it compares NULL -- and the Subjects
+# page then refused to edit them.
+SHS_SEMESTER = {name: ("1st" if i < 3 else "2nd") for i, name in enumerate(CORE_SHS)}
+
+# The demo teacher account seed_data.sql creates, given sections of the year in
+# progress so My Sections, grade entry and attendance have learners in them.
+DEMO_TEACHER_EMAIL = "teacher@slis.test"
 EARLY_YEARS = [
     "Language, Literacy and Communication", "Mathematics",
     "Physical Health and Motor Development", "Socio-Emotional Development",
@@ -219,6 +228,8 @@ class Command(BaseCommand):
                     f"{counts['attendance']} attendance, {counts['grades']} grades"
                 )
 
+            self._ensure_demo_advisories(school_years[-1], students, wipe=opts["wipe"])
+
         self.stdout.write(self.style.SUCCESS(
             f"Seeded {totals['enrollments']} enrollments, {totals['attendance']} "
             f"attendance records, {totals['grades']} grades, "
@@ -280,6 +291,7 @@ class Command(BaseCommand):
             for name in names:
                 key = (level, grade, name)
                 subject = existing.get(key)
+                semester = SHS_SEMESTER.get(name, "1st") if level == "senior_highschool" else None
                 if subject is None:
                     code = self._subject_code(grade, name, taken_codes)
                     taken_codes.add(code)
@@ -288,14 +300,22 @@ class Command(BaseCommand):
                         subject_name=name,
                         school_level=level,
                         grade_level=grade,
+                        semester=semester,
                         grading_template=template,
                     )
                     created += 1
-                elif subject.grading_template_id is None and template:
-                    # A subject with no template answers 400 from compute_grade
-                    # for every learner taking it.
-                    subject.grading_template = template
-                    subject.save(update_fields=["grading_template"])
+                else:
+                    changed = []
+                    if subject.grading_template_id is None and template:
+                        # A subject with no template answers 400 from
+                        # compute_grade for every learner taking it.
+                        subject.grading_template = template
+                        changed.append("grading_template")
+                    if semester and not subject.semester:
+                        subject.semester = semester
+                        changed.append("semester")
+                    if changed:
+                        subject.save(update_fields=changed)
                 bucket.append(subject)
             by_grade[grade] = bucket
 
@@ -342,6 +362,56 @@ class Command(BaseCommand):
                     )
                     made += 1
         self.stdout.write(f"  calendar: {made} events created")
+
+    def _ensure_demo_advisories(self, current_sy, students, *, wipe):
+        """
+        Give the demo teacher three sections of the year in progress: the
+        largest elementary, junior high and senior high class.
+
+        seed_data.sql assigns this teacher sections of 2025-2026 -- the current
+        year when it was written -- and this command assigned none, so in the
+        year actually in progress the teacher's My Sections, grade entry and
+        attendance pages had no learners at all.
+        """
+        from django.db.models import Count
+
+        from accounts.models import User
+        from enrollments.models import SectionAdvisory
+
+        teacher = User.objects.filter(email=DEMO_TEACHER_EMAIL, role="teacher").first()
+        if teacher is None:
+            self.stdout.write(f"  advisories: skipped, no {DEMO_TEACHER_EMAIL} account")
+            return
+
+        if wipe:
+            SectionAdvisory.objects.filter(
+                teacher_user_id=teacher.user_id, section__in=SECTIONS,
+            ).delete()
+
+        classes = (
+            Enrollment.objects.filter(
+                school_year=current_sy, student__in=students, enrollment_status="enrolled",
+            )
+            .values("school_level", "grade_level", "section")
+            .annotate(n=Count("pk"))
+            .order_by("-n", "grade_level", "section")
+        )
+        largest = {}
+        for c in classes:
+            largest.setdefault(c["school_level"], c)
+
+        made = 0
+        for level in ("elementary", "junior_highschool", "senior_highschool"):
+            c = largest.get(level)
+            if c is None:
+                continue
+            _, created = SectionAdvisory.objects.get_or_create(
+                teacher_user_id=teacher.user_id, school_year=current_sy,
+                school_level=level, grade_level=c["grade_level"],
+                section=c["section"], strand=None,
+            )
+            made += created
+        self.stdout.write(f"  advisories: {made} created for {DEMO_TEACHER_EMAIL} in {current_sy}")
 
     # ── per-year seeding ────────────────────────────────────────────────────
 
@@ -391,6 +461,18 @@ class Command(BaseCommand):
             started.add(SEMESTERS[1])
         return started
 
+    def _second_semester_opens(self, sy):
+        """The day the 2nd semester starts: the end of the semestral break
+        (the second quarter break), as `_periods_started` counts it. None
+        when the calendar has no such break."""
+        breaks = list(
+            CalendarEvent.objects
+            .filter(school_year=sy, event_type="quarter_break")
+            .order_by("start_date")
+            .values_list("end_date", flat=True)
+        )
+        return breaks[1] if len(breaks) >= 2 else None
+
     def _seed_year(self, rng, students, sy, start_year, subjects_by_grade,
                    categories, is_current):
         sy_start = date(start_year, 6, 1)
@@ -403,6 +485,15 @@ class Command(BaseCommand):
             sy_end = max(sy_start, self.as_of)
         school_days = self._school_days(sy_start, sy_end, self._blocked_dates(sy))
         open_periods = self._periods_started(sy, sy_end)
+        # Senior high enrolls each semester as its own row (the enrollments
+        # CHECK and every progression rule assume it), so a learner's year is
+        # two rows split at the semestral break: grades, attendance and
+        # observed values each land on the semester they belong to. One "1st"
+        # row carrying both semesters' grades left Promote with no
+        # 2nd-semester row to read and eligibility saying "Grade 11 2nd" for
+        # learners already in Grade 12.
+        second_semester_opens = self._second_semester_opens(sy)
+        second_semester_open = SEMESTERS[1] in open_periods
 
         # Past years are closed; the current one is live. A handful of the
         # current year's rows carry the other statuses so the Enrollments
@@ -429,46 +520,67 @@ class Command(BaseCommand):
             section = SECTIONS[student.student_id % 2 + (0 if level != "senior_highschool" else 2)]
             strand = (STRANDS[student.student_id % len(STRANDS)]
                       if level == "senior_highschool" else None)
-            semester = "1st" if level == "senior_highschool" else None
 
-            enrollments.append(Enrollment(
-                student=student, school_year=sy, school_level=level,
-                grade_level=grade, section=section, strand=strand,
-                semester=semester, enrollment_status=status,
-            ))
-            plans.append((student, grade, level, ability, engagement, status))
+            if level != "senior_highschool":
+                rows = [(None, status)]
+            elif not is_current:
+                rows = [("1st", "completed"), ("2nd", "completed")]
+            elif second_semester_open:
+                # Only one row per school year may be active, so the 1st
+                # semester is closed by the time the 2nd is under way.
+                rows = [("1st", "completed"), ("2nd", status)]
+            else:
+                rows = [("1st", status)]
+
+            for semester, row_status in rows:
+                enrollments.append(Enrollment(
+                    student=student, school_year=sy, school_level=level,
+                    grade_level=grade, section=section, strand=strand,
+                    semester=semester, enrollment_status=row_status,
+                ))
+                plans.append((student, grade, level, ability, engagement, row_status, semester))
 
         Enrollment.objects.bulk_create(enrollments, batch_size=200)
         # bulk_create against an unmanaged table does not reliably populate
-        # PKs, so read them back keyed by student.
+        # PKs, so read them back keyed by student and semester.
         saved = {
-            e.student_id: e
+            (e.student_id, e.semester): e
             for e in Enrollment.objects.filter(school_year=sy, student__in=students)
         }
 
         att_rows, grade_rows, narr_rows = [], [], []
-        for student, grade, level, ability, engagement, status in plans:
-            enrollment = saved.get(student.student_id)
+        for student, grade, level, ability, engagement, status, semester in plans:
+            enrollment = saved.get((student.student_id, semester))
             if enrollment is None or status in ("cancelled", "pending"):
                 # A cancelled or not-yet-approved enrollment has no academic
                 # record, which is the whole reason those statuses exist.
                 continue
 
-            srng = random.Random(f"{self.seed}:{student.student_id}:{sy}")
+            # The 2nd-semester row draws its own numbers; everything else keeps
+            # the stream it always had, so a rerun reproduces the same school.
+            suffix = ":2nd" if semester == "2nd" else ""
+            srng = random.Random(f"{self.seed}:{student.student_id}:{sy}{suffix}")
             days = school_days
+            subjects = subjects_by_grade[grade]
+            all_periods = QUARTERS
+            if semester and second_semester_opens:
+                days = [d for d in school_days
+                        if (d >= second_semester_opens) == (semester == "2nd")]
+            if semester:
+                subjects = [s for s in subjects if (s.semester or "1st") == semester]
+                all_periods = [f"{semester}_semester"]
             if status == "transferred_out":
-                days = school_days[: int(len(school_days) * srng.uniform(0.25, 0.6))]
+                days = days[: int(len(days) * srng.uniform(0.25, 0.6))]
 
             absence_rate = self._absence_rate(engagement, srng)
             att_rows.extend(self._attendance_for(enrollment, days, absence_rate, srng))
 
-            all_periods = SEMESTERS if level == "senior_highschool" else QUARTERS
             periods = [p for p in all_periods if p in open_periods] or all_periods[:1]
             if status == "transferred_out":
                 periods = periods[: max(1, len(periods) // 2)]
 
             grade_rows.extend(self._grades_for(
-                enrollment, subjects_by_grade[grade], periods,
+                enrollment, subjects, periods,
                 ability, engagement, absence_rate, srng,
             ))
             narr_rows.extend(self._narratives_for(

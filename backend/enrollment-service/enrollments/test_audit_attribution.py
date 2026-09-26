@@ -73,6 +73,22 @@ def test_internal_move_logged_with_the_real_user_id(mock_create):
 
 
 @patch("enrollments.views.EnrollmentTransfer.objects.create")
+def test_moving_a_row_to_another_school_year_is_logged_with_the_years(mock_create):
+    view = _view_with_user(7)
+    enrollment = SimpleNamespace(
+        school_year="2023-2024", grade_level="9", school_level="jhs", section="A", strand=None,
+    )
+    before = {"school_year": "2024-2025", "grade_level": "9", "school_level": "jhs",
+              "strand": None, "section": "A"}
+
+    view._log_internal_move_if_changed(_serializer("typed into the wrong year"), before, enrollment)
+
+    reason = mock_create.call_args.kwargs["reason"]
+    assert reason.startswith("School year 2024-2025 → 2023-2024.")
+    assert "typed into the wrong year" in reason
+
+
+@patch("enrollments.views.EnrollmentTransfer.objects.create")
 def test_internal_move_not_logged_when_nothing_tracked_changed(mock_create):
     view = _view_with_user(7)
     enrollment = SimpleNamespace(grade_level="9", section="A", strand=None, school_level="jhs")

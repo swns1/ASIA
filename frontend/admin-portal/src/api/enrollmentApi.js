@@ -47,9 +47,6 @@ export const createEnrollment = (payload) =>
 export const updateEnrollment = (id, payload) =>
   enrollmentClient.patch(`/enrollments/${id}/`, payload).then((r) => r.data);
 
-export const deleteEnrollment = (id) =>
-  enrollmentClient.delete(`/enrollments/${id}/`).then((r) => r.data);
-
 export const bulkCreateEnrollments = (payload) =>
   enrollmentClient.post("/enrollments/bulk/", payload).then((r) => r.data);
 

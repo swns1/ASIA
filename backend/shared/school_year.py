@@ -63,6 +63,12 @@ def is_valid(value):
     return True
 
 
+def following(value):
+    """The school year after `value`: "2025-2026" -> "2026-2027"."""
+    start = int(normalize(value)[:4]) + 1
+    return f"{start}-{start + 1}"
+
+
 def current(today=None):
     """The canonical school year `today` falls in, on the July-June calendar."""
     if today is None:

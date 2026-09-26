@@ -11,6 +11,13 @@ export function computeDefaultSchoolYear(today = new Date()) {
   return today.getMonth() >= 6 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
 
+// "2025-2026" -> "2026-2027". Promote carries a class into exactly this year;
+// the server refuses any other.
+export function followingSchoolYear(year) {
+  const start = parseInt(String(year).slice(0, 4), 10);
+  return Number.isNaN(start) ? "" : `${start + 1}-${start + 2}`;
+}
+
 export function buildSchoolYearOptions(centerYear, { past = 3, future = 1 } = {}) {
   const center = parseInt(String(centerYear).slice(0, 4), 10) || new Date().getFullYear();
   const length = past + future + 1;

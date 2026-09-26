@@ -1,8 +1,14 @@
 from rest_framework import serializers
+
+from enrollments.serializers import SchoolYearField
 from .models import CalendarEvent
 
 
 class CalendarEventSerializer(serializers.ModelSerializer):
+    # Same canonical "YYYY-YYYY" as every other school_year column; free text
+    # here filed an event under a year no screen ever selects.
+    school_year = SchoolYearField()
+
     class Meta:
         model = CalendarEvent
         fields = (

@@ -100,10 +100,46 @@ class ScoreEntrySerializer(serializers.ModelSerializer):
         return 0
 
     def validate(self, attrs):
+        # The table's CHECK constraints refuse all of these too, but a refusal
+        # from the database is a 500 to the person typing the score.
         score = attrs.get("score", getattr(self.instance, "score", 0))
         max_score = attrs.get("max_score", getattr(self.instance, "max_score", 1))
+        if max_score is not None and max_score <= 0:
+            raise serializers.ValidationError({"max_score": "Must be more than 0."})
+        if score is not None and score < 0:
+            raise serializers.ValidationError({"score": "Can't be negative."})
         if score > max_score:
             raise serializers.ValidationError(
                 {"score": "Score cannot exceed max_score."}
             )
+
+        from grades.serializers import attended_problem, period_problem
+
+        enrollment = attrs.get("enrollment", getattr(self.instance, "enrollment", None))
+        subject = attrs.get("subject", getattr(self.instance, "subject", None))
+        component = attrs.get("grading_component", getattr(self.instance, "grading_component", None))
+        period = attrs.get("grading_period", getattr(self.instance, "grading_period", None))
+
+        if enrollment is not None:
+            problem = attended_problem(enrollment, "Scores")
+            if problem:
+                raise serializers.ValidationError({"enrollment": problem})
+            problem = period_problem(enrollment, period)
+            if problem:
+                raise serializers.ValidationError({"grading_period": problem})
+            if subject is not None and (
+                subject.school_level != enrollment.school_level
+                or subject.grade_level != enrollment.grade_level
+            ):
+                raise serializers.ValidationError({
+                    "subject": f"'{subject.subject_name}' is a {subject.grade_level} subject; "
+                               f"this learner is in {enrollment.grade_level}.",
+                })
+        if subject is not None and component is not None and (
+            component.grading_template_id != subject.grading_template_id
+        ):
+            raise serializers.ValidationError({
+                "grading_component": "This component belongs to a different grading template "
+                                     "than the subject uses.",
+            })
         return attrs

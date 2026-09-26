@@ -12,6 +12,7 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from enrollment_service.deletes import InUseDeleteMixin
 from enrollments.models import Enrollment
 from subjects.models import Subject
 from .deped import (
@@ -29,7 +30,11 @@ from .serializers import (
 )
 
 
-class GradingTemplateViewSet(viewsets.ModelViewSet):
+class GradingTemplateViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
+    in_use_message = (
+        "Scores are already recorded under this template, so it can't be deleted. "
+        "Deactivate it instead."
+    )
     queryset = GradingTemplate.objects.prefetch_related("components").all()
     serializer_class = GradingTemplateSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
@@ -46,7 +51,8 @@ class GradingTemplateViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class GradingComponentViewSet(viewsets.ModelViewSet):
+class GradingComponentViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
+    in_use_message = "Scores are already recorded under this component, so it can't be deleted."
     queryset = GradingComponent.objects.all()
     serializer_class = GradingComponentSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
@@ -128,6 +134,12 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "enrollment_id, subject_id, and grading_period are required."},
                 status=400,
+            )
+        try:
+            enrollment_id, subject_id = int(enrollment_id), int(subject_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "enrollment_id and subject_id must be whole numbers."}, status=400,
             )
 
         role = getattr(request.user, "role", None)

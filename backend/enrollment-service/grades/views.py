@@ -9,6 +9,7 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from enrollment_service.deletes import InUseDeleteMixin
 from .models import Grade, NarrativeCategory, NarrativeReport
 from .serializers import GradeSerializer, NarrativeCategorySerializer, NarrativeReportSerializer
 
@@ -49,8 +50,21 @@ class GradeViewSet(viewsets.ModelViewSet):
         )
         serializer.save()
 
+    def perform_update(self, serializer):
+        # The object check saw the grade where it was; a PATCH can move it onto
+        # another learner's enrollment, so check where it is going too.
+        assert_teacher_may_write_enrollment(
+            self.request.user,
+            serializer.validated_data.get("enrollment") or serializer.instance.enrollment,
+        )
+        serializer.save()
 
-class NarrativeCategoryViewSet(viewsets.ModelViewSet):
+
+class NarrativeCategoryViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
+    in_use_message = (
+        "Observed values are already recorded under this category, so it can't be "
+        "deleted. Turn it off (inactive) instead."
+    )
     queryset           = NarrativeCategory.objects.all()
     serializer_class   = NarrativeCategorySerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
@@ -76,5 +90,12 @@ class NarrativeReportViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
+        )
+        serializer.save()
+
+    def perform_update(self, serializer):
+        assert_teacher_may_write_enrollment(
+            self.request.user,
+            serializer.validated_data.get("enrollment") or serializer.instance.enrollment,
         )
         serializer.save()

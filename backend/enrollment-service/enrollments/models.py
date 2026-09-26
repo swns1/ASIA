@@ -275,9 +275,9 @@ class EmailDeliveryFailure(models.Model):
     email_views.py). There's only one outbound mail path (SMTP) in this
     codebase and no task queue to retry through later, so this is the
     fallback for "the send failed": instead of the error vanishing into an
-    HTTP response nobody reads, it's durable and visible here (and in the
-    Django admin) so a failed enrollment confirmation can be noticed and
-    resent by hand.
+    HTTP response nobody reads, it's durable in this table so a failed
+    enrollment confirmation can be noticed and resent by hand. The registrar
+    also sees the failure at the moment it happens (the form reports it).
     """
 
     email_delivery_failure_id = models.BigAutoField(primary_key=True)

@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 from rest_framework import viewsets, status
-from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.exceptions import MethodNotAllowed, ValidationError as DRFValidationError
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -33,12 +33,13 @@ from .models import (
 from .serializers import (
     EnrollmentSerializer,
     EnrollmentTransferSerializer,
-    GRADE_ORDER,
     get_next_grade_level,
+    promotion_grades,
     SectionAdvisorySerializer,
     StudentSummarySerializer,
 )
 from .filters import EnrollmentFilter
+from .rules import ATTENDED_STATUSES, SCHOOL_LEVEL_OF_GRADE, date_outside_school_year
 from . import promotion
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,23 @@ def _parse_date(value):
         return date.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
+
+
+# Ids and dates arrive as text on query strings and in hand-built bodies, and
+# passing "abc" straight into a filter raised ValueError -- a 500 -- on more
+# than a dozen routes. A DRF ValidationError raised from a view is a 400.
+def _int_param(value, name):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise DRFValidationError({name: "Must be a whole number."})
+
+
+def _date_param(value, name):
+    parsed = _parse_date(value)
+    if parsed is None:
+        raise DRFValidationError({name: "Must be a date (YYYY-MM-DD)."})
+    return parsed
 
 
 class SectionAdvisoryViewSet(viewsets.ModelViewSet):
@@ -273,9 +291,10 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 {"detail": f"Missing required fields: {', '.join(missing)}."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        subject_id = _int_param(subject_id, "subject_id")
 
         advisory = SectionAdvisory.objects.filter(
-            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+            advisory_id=_int_param(advisory_id, "advisory_id"), teacher_user_id=teacher_user_id
         ).first()
         if advisory is None:
             return Response(
@@ -399,7 +418,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             )
 
         advisory = SectionAdvisory.objects.filter(
-            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+            advisory_id=_int_param(advisory_id, "advisory_id"), teacher_user_id=teacher_user_id
         ).first()
         if advisory is None:
             return Response(
@@ -504,17 +523,18 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
 
         params = request.data if request.method == "POST" else request.query_params
         advisory_id = params.get("advisory_id")
-        date = params.get("date")
+        day = params.get("date")
 
-        missing = [f for f, v in [("advisory_id", advisory_id), ("date", date)] if not v]
+        missing = [f for f, v in [("advisory_id", advisory_id), ("date", day)] if not v]
         if missing:
             return Response(
                 {"detail": f"Missing required fields: {', '.join(missing)}."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        day = _date_param(day, "date")
 
         advisory = SectionAdvisory.objects.filter(
-            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+            advisory_id=_int_param(advisory_id, "advisory_id"), teacher_user_id=teacher_user_id
         ).first()
         if advisory is None:
             return Response(
@@ -541,6 +561,14 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                     {"detail": "A non-empty 'records' list is required."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if day > timezone.localdate():
+                return Response(
+                    {"detail": "Attendance can't be recorded for a day that hasn't happened yet."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            outside = date_outside_school_year(day, advisory.school_year)
+            if outside:
+                return Response({"detail": outside}, status=status.HTTP_400_BAD_REQUEST)
             saved, failed = [], []
             recorded_by = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
             with transaction.atomic():
@@ -556,7 +584,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                         continue
                     record, _ = AttendanceRecord.objects.update_or_create(
                         enrollment=enrollment,
-                        date=date,
+                        date=day,
                         defaults={
                             "status": entry_status,
                             "remarks": entry.get("remarks") or "",
@@ -574,7 +602,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         existing_records = {
             r.enrollment.student_id: r
             for r in AttendanceRecord.objects.filter(
-                enrollment__in=enrollments_by_student.values(), date=date,
+                enrollment__in=enrollments_by_student.values(), date=day,
             ).select_related("enrollment")
         }
 
@@ -635,7 +663,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             )
 
         advisory = SectionAdvisory.objects.filter(
-            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+            advisory_id=_int_param(advisory_id, "advisory_id"), teacher_user_id=teacher_user_id
         ).first()
         if advisory is None:
             return Response(
@@ -661,9 +689,9 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         date_from = request.query_params.get("date_from")
         date_to = request.query_params.get("date_to")
         if date_from:
-            records_qs = records_qs.filter(date__gte=date_from)
+            records_qs = records_qs.filter(date__gte=_date_param(date_from, "date_from"))
         if date_to:
-            records_qs = records_qs.filter(date__lte=date_to)
+            records_qs = records_qs.filter(date__lte=_date_param(date_to, "date_to"))
 
         totals = records_qs.aggregate(
             total_marks=Count("attendance_id"),
@@ -764,7 +792,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
             )
 
         advisory = SectionAdvisory.objects.filter(
-            advisory_id=advisory_id, teacher_user_id=teacher_user_id
+            advisory_id=_int_param(advisory_id, "advisory_id"), teacher_user_id=teacher_user_id
         ).first()
         if advisory is None:
             return Response(
@@ -980,6 +1008,16 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     )
     ordering = ("-enrollment_id",)
 
+    def destroy(self, request, *args, **kwargs):
+        # Deleting an enrollment cascaded away its grades, attendance, observed
+        # values, score entries and transfer history (and 500ed on an invoiced
+        # one). Nothing in the app deletes enrollments; a wrong one is cancelled,
+        # the same rule students and invoices already follow.
+        raise MethodNotAllowed(
+            request.method,
+            detail="Enrollments can't be deleted. Cancel the enrollment instead.",
+        )
+
     def _save_override_audit(self, serializer, enrollment):
         """Create or update the override audit record for this enrollment."""
         user_id = getattr(self.request.user, "user_id", None) or getattr(self.request.user, "id", None) or 0
@@ -996,7 +1034,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     # SLIS) can touch. Deliberately wider than serializers.PLACEMENT_FIELDS —
     # that guard excludes `section` (freely PATCHable, no override required),
     # but a section-only change is still a real move worth an audit row.
-    _MOVE_TRACKED_FIELDS = ("grade_level", "school_level", "strand", "section")
+    _MOVE_TRACKED_FIELDS = ("school_year", "grade_level", "school_level", "strand", "section")
 
     def _log_internal_move_if_changed(self, serializer, before, enrollment):
         """Write an append-only EnrollmentTransfer row when a PATCH actually
@@ -1011,6 +1049,11 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             return
         user_id = getattr(self.request.user, "user_id", None) or getattr(self.request.user, "id", None) or 0
         reason = getattr(serializer, "_progression_override_reason", "") or ""
+        # The transfer row has no school-year columns, so a move between years
+        # is spelled out in its reason rather than lost.
+        if before.get("school_year") != getattr(enrollment, "school_year", None):
+            moved = f"School year {before.get('school_year')} → {enrollment.school_year}."
+            reason = f"{moved} {reason}".strip()
         EnrollmentTransfer.objects.create(
             enrollment=enrollment,
             transfer_type="internal_move",
@@ -1088,6 +1131,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        outside = date_outside_school_year(effective_date, enrollment.school_year)
+        if outside:
+            return Response({"detail": outside}, status=status.HTTP_400_BAD_REQUEST)
 
         destination_school_name = (request.data.get("destination_school_name") or "").strip() or None
 
@@ -1137,12 +1183,29 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         enrollment = self.get_object()
 
+        # Recorded right after the learner's new enrollment is created, once.
+        # It used to be accepted on any row any number of times -- two
+        # "arrivals" on a closed 2024-2025 row, dated 2030.
+        if enrollment.enrollment_status not in ("pending", "enrolled"):
+            return Response(
+                {"detail": "A transfer-in is recorded on the learner's new pending or enrolled enrollment."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if EnrollmentTransfer.objects.filter(enrollment=enrollment, transfer_type="transfer_in").exists():
+            return Response(
+                {"detail": "This enrollment already has its transfer-in recorded."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         effective_date = _parse_date(request.data.get("effective_date"))
         if effective_date is None:
             return Response(
                 {"detail": "effective_date is required and must be a valid date (YYYY-MM-DD)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        outside = date_outside_school_year(effective_date, enrollment.school_year)
+        if outside:
+            return Response({"detail": outside}, status=status.HTTP_400_BAD_REQUEST)
 
         reason = (request.data.get("reason") or "").strip()
         origin_school_name = (request.data.get("origin_school_name") or "").strip() or None
@@ -1205,6 +1268,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
         # get_queryset() is already scoped to this guardian's children, so
         # another family's row is simply not found here.
+        try:
+            pk = int(pk)
+        except (TypeError, ValueError):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         enrollment = self.get_queryset().filter(pk=pk).first()
         if enrollment is None:
             return Response(
@@ -1423,6 +1490,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 {"detail": "semester ('1st' or '2nd') is required for senior high sections."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            school_year = school_year_rules.normalize(school_year)
+        except school_year_rules.InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         qs = Enrollment.objects.filter(
             school_year=school_year,
@@ -1459,6 +1530,22 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Promote carries a class into the NEXT school year. Neither year was
+        # checked: promoting into the same year created next-grade rows beside
+        # the completed ones, "2031-2032" skipped four years, and "next year"
+        # was written to the rows verbatim as their school year.
+        try:
+            from_school_year = school_year_rules.normalize(from_school_year)
+            to_school_year = school_year_rules.normalize(to_school_year)
+        except school_year_rules.InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        expected_year = school_year_rules.following(from_school_year)
+        if to_school_year != expected_year:
+            return Response(
+                {"detail": f"A class from {from_school_year} is promoted into {expected_year}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         to_grade_level = get_next_grade_level(from_grade_level)
         if to_grade_level is None:
             return Response(
@@ -1466,16 +1553,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Determine destination school_level from to_grade_level
-        from .serializers import GRADE_ORDER
-        LEVEL_MAP = {}
-        for g in ["Nursery"]:                                              LEVEL_MAP[g] = "nursery"
-        for g in ["Kindergarten"]:                                         LEVEL_MAP[g] = "kindergarten"
-        for g in ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"]: LEVEL_MAP[g] = "elementary"
-        for g in ["Grade 7","Grade 8","Grade 9","Grade 10"]:               LEVEL_MAP[g] = "junior_highschool"
-        for g in ["Grade 11","Grade 12"]:                                  LEVEL_MAP[g] = "senior_highschool"
-        to_school_level = LEVEL_MAP.get(to_grade_level, "junior_highschool")
-        from_school_level = LEVEL_MAP.get(from_grade_level)
+        to_school_level = SCHOOL_LEVEL_OF_GRADE[to_grade_level]
+        from_school_level = SCHOOL_LEVEL_OF_GRADE.get(from_grade_level)
 
         # Crossing a school level is a registrar decision, not a batch
         # operation: the section names don't carry over, and Grade 10 -> 11
@@ -1712,6 +1791,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 {"detail": "You do not have access to this record."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        try:
+            pk = int(pk)
+        except (TypeError, ValueError):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         if role in ("teacher", "guardian"):
             student_id = Enrollment.objects.filter(pk=pk).values_list("student_id", flat=True).first()
             allowed = teacher_student_ids(request.user) if role == "teacher" else guardian_student_ids(request.user)
@@ -1738,7 +1821,6 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         can be enrolled, their next allowed grade, any blocking issues, and
         missing required documents.
         """
-        from grades.models import Grade
         from requirements.models import RequirementType, StudentRequirementSubmission
 
         # Enrollment eligibility is a staff planning tool, not part of the
@@ -1757,6 +1839,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         student_id = request.query_params.get("student_id")
         if not student_id:
             return Response({"detail": "student_id is required."}, status=400)
+        student_id = _int_param(student_id, "student_id")
 
         # A teacher may only run this for a student in their own advisory --
         # matches {enrollment_id}/grades/ above. This was previously
@@ -1764,13 +1847,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         # teacher pull eligibility, failed subjects with grades, and
         # missing-document status for any student in the school, not just
         # their own class.
-        if role == "teacher":
-            try:
-                allowed = int(student_id) in teacher_student_ids(request.user)
-            except (TypeError, ValueError):
-                allowed = False
-            if not allowed:
-                return Response({"detail": "You do not have access to this record."}, status=403)
+        if role == "teacher" and student_id not in teacher_student_ids(request.user):
+            return Response({"detail": "You do not have access to this record."}, status=403)
 
         # ── Fetch student's enrollment history ─────────────────────────────────
         # `exclude_enrollment_id` is the row the caller is about to create or
@@ -1855,10 +1933,15 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             # ── Check for learning areas failed ON THE YEAR ────────────────────
             # Same reduction as the bulk promotion path and the report card
             # (grading.deped.summarize_subjects), so a student is never told
-            # they are blocked by a subject their own report card passes.
-            outcomes = summarize_subjects(
-                Grade.objects.filter(enrollment=last_completed).select_related("subject")
-            )
+            # they are blocked by a subject their own report card passes --
+            # over the same rows Promote reads (both Grade 11 semesters), and
+            # with the same "no grades is not a pass" rule.
+            year_grades = list(promotion_grades(last_completed))
+            if not year_grades and last_completed.grade_level not in promotion.UNGRADED_LEVELS:
+                blocking_reasons.append(
+                    f"No final grades are recorded for {last_completed.grade_level}."
+                )
+            outcomes = summarize_subjects(year_grades)
             failed_outcomes = [
                 o for o in outcomes.values()
                 if o["remarks"] in ("failed", "incomplete", "dropped")
@@ -1895,8 +1978,11 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             or getattr(last_any, "grade_level", None)
         is_transfer_in = str(q.get("is_transfer_in", "")).lower() in ("1", "true", "yes")
 
+        # Only years actually spent here make a learner continuing -- the rule
+        # the gate in EnrollmentSerializer.validate() applies.
+        attended = any(e.enrollment_status in ATTENDED_STATUSES for e in all_enrollments)
         entry_status = derive_entry_status(
-            has_prior_enrollment=last_any is not None,
+            has_prior_enrollment=attended,
             is_transfer_in=is_transfer_in,
             grade_level=grade_level,
         )
@@ -1977,7 +2063,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "documents_assessed": documents_assessed,
             "can_repeat": can_repeat,
             "admin_override_required": has_grade_blocks,
-            "is_new_student": last_any is None,
+            "is_new_student": not attended,
         })
 
 
@@ -2013,5 +2099,5 @@ class EnrollmentTransferViewSet(viewsets.ReadOnlyModelViewSet):
 
         student_id = self.request.query_params.get("student")
         if student_id:
-            qs = qs.filter(enrollment__student_id=student_id)
+            qs = qs.filter(enrollment__student_id=_int_param(student_id, "student"))
         return qs

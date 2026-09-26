@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
+from enrollment_service.deletes import InUseDeleteMixin
 from .filters import EnrollmentScholarshipFilter
 from .models import ScholarshipType, EnrollmentScholarship
 from .serializers import (
@@ -14,7 +15,7 @@ from .serializers import (
 )
 
 
-class ScholarshipTypeViewSet(viewsets.ModelViewSet):
+class ScholarshipTypeViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
     """
     /api/scholarship-types/
 
@@ -22,6 +23,10 @@ class ScholarshipTypeViewSet(viewsets.ModelViewSet):
     Writes: admin/registrar/super_admin only.
     Filters: ?is_active=true, ?discount_mode=percentage
     """
+    in_use_message = (
+        "This scholarship has already been awarded, so it can't be deleted. "
+        "Deactivate it instead."
+    )
     queryset = ScholarshipType.objects.all().order_by("scholarship_name")
     serializer_class = ScholarshipTypeSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]

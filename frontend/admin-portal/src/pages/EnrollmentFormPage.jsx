@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
 import toast from "react-hot-toast";
-import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_ROLES } from "../utils/auth";
+import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_READ_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API calls ─────────────────────────────────────────────────────────────
@@ -84,6 +84,25 @@ const ENROLLMENT_STATUSES = [
   { value: "cancelled", label: "Cancelled", bg: "#fde8e8", color: "#9b2020", dot: "#f44336" },
   { value: "completed", label: "Completed", bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3" },
 ];
+const TRANSFERRED_OUT = { value: "transferred_out", label: "Transferred Out", bg: "#f1f5f9", color: "#475569", dot: "#64748b" };
+
+// Which status an existing enrollment may move to — the server's rule
+// (enrollments/rules.py STATUS_CHANGES). Cancelled goes back through Pending so
+// the document check runs; Transferred Out is set only by Transfer Out.
+const STATUS_CHANGES = {
+  pending:         ["enrolled", "cancelled"],
+  enrolled:        ["completed", "cancelled"],
+  cancelled:       ["pending"],
+  completed:       ["enrolled"],
+  transferred_out: [],
+};
+
+function statusOptionsFor(current) {
+  const all = [...ENROLLMENT_STATUSES, TRANSFERRED_OUT];
+  if (!current) return ENROLLMENT_STATUSES;
+  const allowed = new Set([current, ...(STATUS_CHANGES[current] ?? [])]);
+  return all.filter((s) => allowed.has(s.value));
+}
 
 const nullify = (obj, fields) => {
   const out = { ...obj };
@@ -524,11 +543,10 @@ export default function EnrollmentFormPage() {
     !isEdit && searchParams.get("continuing") === "1" && Boolean(searchParams.get("student"));
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const isAdmin  = canViewAuditTrail(getCurrentUser());
-  // Invoice generation is BILLING_ROLES-only on billing-service, even though
-  // this route allows every staff role — skip the "Generate Invoice?" prompt
-  // entirely for teacher/registrar rather than offering an action that ends
-  // in "This action is forbidden." if clicked.
-  const canGenerateInvoice = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+  // Billing staff and the registrar may generate an invoice (billing-service's
+  // registrar_actions); teachers may not, so they're never offered an action
+  // that ends in "This action is forbidden."
+  const canGenerateInvoice = hasAnyRole(getCurrentUser(), BILLING_READ_ROLES);
 
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
@@ -576,6 +594,9 @@ export default function EnrollmentFormPage() {
 
   // Original grade fields when editing — used to detect if they actually changed
   const [originalGradeFields, setOriginalGradeFields] = useState(null);
+  // The status the enrollment had when opened: limits which statuses the edit
+  // offers, and tells an activation (Pending → Enrolled) from any other save.
+  const [originalStatus, setOriginalStatus] = useState(null);
 
   const [form, setForm] = useState({
     school_year:       defaultSchoolYear(),
@@ -618,6 +639,7 @@ export default function EnrollmentFormPage() {
           strand:       e.strand ?? "",
           semester:     e.semester ?? "",
         });
+        setOriginalStatus(e.enrollment_status);
         if (e.student_id) {
           const s = await getStudent(e.student_id).catch(() => null);
           if (s) setStudent(s);
@@ -854,6 +876,29 @@ export default function EnrollmentFormPage() {
     return "";
   }, [student, form, isSHS, isEdit, eligibility, nextAllowedGrade, placementChoice, studentLastGrade, overrideMode, overrideReason, gradePlacementChanged, gradePlacementReason, isTransferIn, transferInDate, transferInSchoolName, transferInSchoolAddress]);
 
+    // Once a learner is Enrolled: send the confirmation, and offer billing the
+    // invoice. Both used to happen only when a row was CREATED as Enrolled —
+    // but Mass Enroll and Promote create Pending rows, so most learners are
+    // activated on an edit and got neither. Returns true when the invoice
+    // prompt is showing (it navigates on close).
+    const onEnrolled = (enrollmentId, effectiveDate) => {
+      // The server picks the address (the guardian's and/or the learner's) and
+      // derives the content itself; we only pass the id.
+      sendEnrollmentEmail({ enrollment_id: enrollmentId }).catch((e) => {
+        if (e?.response?.data?.code === "no_recipient") return; // nobody to write to
+        console.warn("Enrollment email failed (non-critical):", e);
+        toast.error("Enrollment saved, but the confirmation email could not be sent.");
+      });
+      if (!canGenerateInvoice) return false;
+      const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ");
+      setInvoicePrompt({
+        enrollmentId,
+        studentName: fullName || `Enrollment #${enrollmentId}`,
+        effectiveDate,
+      });
+      return true;
+    };
+
     const handleSubmit = async () => {
       setError("");
       if (validationError) { setError(validationError); return; }
@@ -875,6 +920,13 @@ export default function EnrollmentFormPage() {
             payload.progression_override_reason = gradePlacementReason.trim();
           }
           await updateEnrollment(id, payload);
+          // Activation — the moment a Pending row (from Mass Enroll, Promote
+          // or an application) becomes a place in class.
+          if (originalStatus === "pending" && form.enrollment_status === "enrolled"
+              && onEnrolled(Number(id), null)) {
+            setSaving(false);
+            return;
+          }
         } else {
           const created = await createEnrollment(payload);
 
@@ -904,26 +956,8 @@ export default function EnrollmentFormPage() {
             }).catch((e) => console.error("scholarship attach failed", e));
           }
 
-          // Send enrollment confirmation email (non-blocking). The backend
-          // derives all content server-side from the enrollment record now
-          // (registrar/admin only) -- we only pass the id.
-          if (student?.email) {
-            sendEnrollmentEmail({ enrollment_id: created.enrollment_id })
-              .catch((e) => {
-                console.warn("Enrollment email failed (non-critical):", e);
-                toast.error("Enrollment saved, but the confirmation email could not be sent.");
-              });
-          }
-
-          // Prompt to generate invoice when enrollment status is enrolled
-          // (billing roles only — see canGenerateInvoice above)
-          if (form.enrollment_status === "enrolled" && canGenerateInvoice) {
-            const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ");
-            setInvoicePrompt({
-              enrollmentId: created.enrollment_id,
-              studentName: fullName || `Enrollment #${created.enrollment_id}`,
-              effectiveDate: isTransferIn ? transferInDate : null,
-            });
+          if (form.enrollment_status === "enrolled"
+              && onEnrolled(created.enrollment_id, isTransferIn ? transferInDate : null)) {
             setSaving(false);
             return;
           }
@@ -943,7 +977,7 @@ export default function EnrollmentFormPage() {
 
   const isFirstRender = useIsFirstRender();
 
-  const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
+  const statusMeta = [...ENROLLMENT_STATUSES, TRANSFERRED_OUT].find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
 
   return (
     <>
@@ -1119,7 +1153,7 @@ export default function EnrollmentFormPage() {
                 </Field>
                 <Field label="Enrollment Status" required>
                   <Select value={form.enrollment_status} onChange={(e) => setField("enrollment_status", e.target.value)}>
-                    {ENROLLMENT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {statusOptionsFor(isEdit ? originalStatus : null).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </Select>
                 </Field>
               </div>

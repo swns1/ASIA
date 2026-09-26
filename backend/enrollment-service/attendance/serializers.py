@@ -1,5 +1,25 @@
+from django.utils import timezone
 from rest_framework import serializers
+
+from enrollments.rules import ATTENDED_STATUSES, date_outside_school_year
 from .models import AttendanceRecord
+
+
+def attendance_problem(enrollment, day):
+    """
+    Why attendance for `day` can't go on `enrollment`, or None.
+
+    Nothing checked either: a day in 2031 went onto a 2026-2027 roster, and a
+    cancelled application could collect a year of attendance.
+    """
+    if enrollment.enrollment_status not in ATTENDED_STATUSES:
+        return (
+            f"Attendance can only be recorded for a learner who attended; "
+            f"this enrollment is {enrollment.enrollment_status}."
+        )
+    if day > timezone.localdate():
+        return "Attendance can't be recorded for a day that hasn't happened yet."
+    return date_outside_school_year(day, enrollment.school_year)
 
 
 class StudentBriefSerializer(serializers.Serializer):
@@ -38,6 +58,15 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["attendance_id", "recorded_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        enrollment = attrs.get("enrollment", getattr(self.instance, "enrollment", None))
+        day = attrs.get("date", getattr(self.instance, "date", None))
+        if enrollment is not None and day is not None:
+            problem = attendance_problem(enrollment, day)
+            if problem:
+                raise serializers.ValidationError({"date": problem})
+        return attrs
 
 
 class BulkAttendanceItemSerializer(serializers.Serializer):

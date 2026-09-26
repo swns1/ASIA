@@ -50,20 +50,43 @@ def email_configured() -> bool:
     return True
 
 
-def _render(student_name, school_level, grade_level, section, school_year):
+def _guardian_contact(student_id):
+    """(name, email) of the guardian to write to -- the primary contact first,
+    else any guardian with an address -- or None."""
+    from accounts.guardian_mirror import GuardianMirror
+
+    for g in GuardianMirror.objects.filter(student_id=student_id).order_by(
+        "-is_primary_contact", "guardian_id",
+    ):
+        email = (g.email_address or "").strip()
+        if email:
+            return g.full_name, email
+    return None
+
+
+def _render(student_name, school_level, grade_level, section, school_year, guardian_name=None):
     """Plain-text and HTML bodies. Every value is escaped before it goes into
-    the HTML — the student's name is free text typed at intake."""
+    the HTML — the student's name is free text typed at intake.
+
+    Addressed to the guardian when there is one to write to, else to the
+    learner themselves."""
     rows = [
         ("School Level", school_level),
         ("Grade Level", grade_level),
         ("Section", section),
         ("School Year", school_year),
     ]
+    greeting = guardian_name or student_name
+    whose_text = f"the enrollment of {student_name}" if guardian_name else "your enrollment"
+    whose_html = (
+        f"the enrollment of <strong>{escape(student_name)}</strong>" if guardian_name
+        else "your enrollment"
+    )
 
     text = "\n".join([
-        f"Dear {student_name},",
+        f"Dear {greeting},",
         "",
-        "We are pleased to inform you that your enrollment at South Lakes "
+        f"We are pleased to inform you that {whose_text} at South Lakes "
         f"Integrated School has been successfully processed for the {school_year} "
         "school year.",
         "",
@@ -93,10 +116,10 @@ def _render(student_name, school_level, grade_level, section, school_year):
                 <p style="color:#7a5050;font-size:13px;margin:0;">Enrollment Confirmation</p>
               </div>
 
-              <p style="color:#1a0a0a;font-size:15px;">Dear <strong>{escape(student_name)}</strong>,</p>
+              <p style="color:#1a0a0a;font-size:15px;">Dear <strong>{escape(greeting)}</strong>,</p>
 
               <p style="color:#4a3a3a;font-size:14px;line-height:1.7;">
-                We are pleased to inform you that your enrollment at
+                We are pleased to inform you that {whose_html} at
                 <strong>South Lakes Integrated School</strong> has been successfully
                 processed for the <strong>{escape(school_year or "")}</strong> school year.
               </p>
@@ -130,6 +153,10 @@ def send_enrollment_email(request):
     enrollment_id = request.data.get("enrollment_id")
     if not enrollment_id:
         return Response({"detail": "enrollment_id is required."}, status=400)
+    try:
+        enrollment_id = int(enrollment_id)
+    except (TypeError, ValueError):
+        return Response({"detail": "enrollment_id must be a whole number."}, status=400)
 
     enrollment = (
         Enrollment.objects.select_related("student")
@@ -139,9 +166,29 @@ def send_enrollment_email(request):
     if not enrollment:
         return Response({"detail": "Enrollment not found."}, status=404)
 
+    # It says the enrollment "has been successfully processed", which is only
+    # true once it is Enrolled -- a pending or cancelled row used to get it too.
+    if enrollment.enrollment_status != "enrolled":
+        return Response(
+            {"detail": "Only an enrolled learner gets a confirmation.", "code": "not_enrolled"},
+            status=409,
+        )
+
+    # To the family, not only the learner: most learners are children with no
+    # address of their own (99 of 238 had one), so the confirmation mostly
+    # went nowhere even when a guardian's email was on file.
     student = enrollment.student
-    if not student.email:
-        return Response({"detail": "No email address on file for this student."}, status=400)
+    guardian = _guardian_contact(enrollment.student_id)
+    recipients = []
+    for address in ([guardian[1]] if guardian else []) + [(student.email or "").strip()]:
+        if address and address.lower() not in (r.lower() for r in recipients):
+            recipients.append(address)
+    if not recipients:
+        return Response(
+            {"detail": "No email address on file for this learner or their guardian.",
+             "code": "no_recipient"},
+            status=400,
+        )
 
     # Not a delivery failure: nothing was attempted, so nothing is logged for
     # follow-up. The school simply hasn't set up a mailbox (see .env.example).
@@ -162,13 +209,14 @@ def send_enrollment_email(request):
         enrollment.grade_level,
         enrollment.section,
         school_year,
+        guardian_name=guardian[0] if guardian else None,
     )
 
     message = EmailMultiAlternatives(
         subject=subject,
         body=text,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[student.email],
+        to=recipients,
     )
     message.attach_alternative(html, "text/html")
 
@@ -179,13 +227,13 @@ def send_enrollment_email(request):
             is_transient=is_transient_send_error,
             label="email",
         )
-        return Response({"success": True})
+        return Response({"success": True, "sent_to": recipients})
     except Exception as e:
-        logger.exception("Enrollment email to %s failed after retries", student.email)
+        logger.exception("Enrollment email to %s failed after retries", ", ".join(recipients))
         EmailDeliveryFailure.objects.create(
-            to_email=student.email,
+            to_email=recipients[0],
             subject=subject,
-            context={"enrollment_id": enrollment_id},
+            context={"enrollment_id": enrollment_id, "recipients": recipients},
             error_message=str(e),
         )
         return Response(

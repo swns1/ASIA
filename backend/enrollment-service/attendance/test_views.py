@@ -58,6 +58,24 @@ def test_perform_update_attributes_the_real_user_id():
     view = _view_with_user(11)
     serializer = MagicMock()
 
-    view.perform_update(serializer)
+    # The destination guard has its own test below.
+    with patch("attendance.views.assert_teacher_may_write_enrollment"):
+        view.perform_update(serializer)
 
     serializer.save.assert_called_once_with(recorded_by=11)
+
+
+def test_perform_update_checks_where_the_record_is_moving_to():
+    """A PATCH onto another learner's enrollment is checked against that one."""
+    view = _view_with_user(11)
+    serializer = MagicMock()
+    elsewhere = SimpleNamespace(enrollment_id=999)
+    serializer.validated_data = {"enrollment": elsewhere}
+
+    with patch("attendance.views.assert_teacher_may_write_enrollment",
+               side_effect=PermissionDenied()) as guard:
+        with pytest.raises(PermissionDenied):
+            view.perform_update(serializer)
+
+    assert guard.call_args.args[1] is elsewhere
+    serializer.save.assert_not_called()

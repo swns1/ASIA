@@ -59,8 +59,8 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         # (PSA birth certificates, Form 137s) for any student in the school.
         #
         # The student-service twin of this viewset has always been scoped
-        # (students.views._scope_to_teacher_roster), as has this viewset's own
-        # `summary` action below; only this list path was missed.
+        # (students.views._scope_to_teacher_roster). The `summary` action below
+        # applies the same rule.
         role = getattr(self.request.user, "role", None)
         if role == "teacher":
             qs = qs.filter(student_id__in=teacher_student_ids(self.request.user))
@@ -89,14 +89,24 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
         student_id = request.query_params.get("student_id")
         if not student_id:
             return Response({"detail": "student_id is required."}, status=400)
+        try:
+            student_id = int(student_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "student_id must be an integer."}, status=400)
 
-        if getattr(request.user, "role", None) == "guardian":
-            try:
-                requested_id = int(student_id)
-            except (TypeError, ValueError):
-                return Response({"detail": "student_id must be an integer."}, status=400)
-            if requested_id not in guardian_student_ids(request.user):
-                return Response({"detail": "You do not have access to this record."}, status=403)
+        # The same reach as the list above. This action only ever checked
+        # guardians, so accounting and every teacher could open any student's
+        # checklist -- and each row carries a working signed download link to
+        # the file itself (PSA birth certificate, Form 137).
+        role = getattr(request.user, "role", None)
+        if role == "guardian":
+            allowed = student_id in guardian_student_ids(request.user)
+        elif role == "teacher":
+            allowed = student_id in teacher_student_ids(request.user)
+        else:
+            allowed = role != "accounting"
+        if not allowed:
+            return Response({"detail": "You do not have access to this record."}, status=403)
 
         # Optional placement scoping. Without it the summary lists the whole
         # catalogue and marks each row required-or-not on its own terms; with

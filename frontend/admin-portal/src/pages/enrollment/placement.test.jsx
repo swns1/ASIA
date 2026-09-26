@@ -95,11 +95,12 @@ function renderEnrollments() {
 async function openPromoteAndPreview({ grade = "Grade 4" } = {}) {
   fireEvent.click(await screen.findByRole("button", { name: /Promote Section/ }));
   const dialog = await screen.findByRole("dialog");
-  const [fromYear, fromGrade, toYear] = within(dialog).getAllByRole("combobox");
+  const [fromYear, fromGrade] = within(dialog).getAllByRole("combobox");
   fireEvent.change(fromYear, { target: { value: "2025-2026" } });
   fireEvent.change(fromGrade, { target: { value: grade } });
   fireEvent.change(within(dialog).getByPlaceholderText("e.g. Rizal"), { target: { value: "Rizal" } });
-  fireEvent.change(toYear, { target: { value: "2026-2027" } });
+  // Not a choice any more: a class is promoted into the following year only.
+  expect(within(dialog).getByLabelText("Destination school year").value).toBe("2026-2027");
   fireEvent.click(within(dialog).getByRole("button", { name: /Preview/ }));
   return dialog;
 }

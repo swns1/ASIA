@@ -92,7 +92,10 @@ UNREADABLE_ENTRY_ERRORS = (
     AttributeError,
     ImportError,
     IndexError,
+    KeyError,
     MemoryError,
+    # A garbled length prefix: "BYTEARRAY8 exceeds system's maximum size".
+    OverflowError,
     TypeError,
     ValueError,
 )

@@ -33,7 +33,7 @@ import { getStudents as apiGetStudents, markStudentsGraduated } from "../api/stu
 import toast from "react-hot-toast";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { yearOptionsForEntry } from "../utils/schoolYear";
+import { followingSchoolYear, yearOptionsForEntry } from "../utils/schoolYear";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -558,6 +558,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                             )}
                           </div>
                         </div>
+                        {/* Removing cancels the enrollment, which only a pending or
+                            enrolled row can be — a completed year stays on record. */}
+                        {(en.enrollment_status === "pending" || en.enrollment_status === "enrolled") && (
                         <motion.button
                           whileHover={!isRemoving ? { scale: 1.08, backgroundColor: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" } : {}}
                           whileTap={!isRemoving ? { scale: 0.93 } : {}}
@@ -570,6 +573,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                             ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} />
                             : <i className="ti ti-x" style={{ fontSize:12 }} />}
                         </motion.button>
+                        )}
                       </div>
                       {/* Inline remove confirmation */}
                       <AnimatePresence>
@@ -656,7 +660,9 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
   const [fromSchoolYear,  setFromSchoolYear]  = useState(initSchoolYear  || "");
   const [fromGradeLevel,  setFromGradeLevel]  = useState(initGradeLevel  || "Grade 7");
   const [fromSection,     setFromSection]     = useState(initSection     || "");
-  const [toSchoolYear,    setToSchoolYear]    = useState("");
+  // Always the year after: promoting into the same year, or skipping years,
+  // is refused by the server, so the choice isn't offered.
+  const toSchoolYear = fromSchoolYear ? followingSchoolYear(fromSchoolYear) : "";
   const [toSection,       setToSection]       = useState(initSection     || "");
 
   const [previewing,  setPreviewing]  = useState(false);
@@ -889,11 +895,14 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                     <div style={{ fontSize:11, fontWeight:700, color:"#855c5c", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:12 }}>To (Destination)</div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                       <div>
-                        <label style={lbl}>School Year <span style={{ color:"#c92a2a" }}>*</span></label>
-                        <select value={toSchoolYear} onChange={(e) => setToSchoolYear(e.target.value)} style={sel}>
-                          <option value="">— Select —</option>
-                          {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
-                        </select>
+                        <label style={lbl}>School Year</label>
+                        <input
+                          aria-label="Destination school year"
+                          value={toSchoolYear || "—"}
+                          readOnly
+                          style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }}
+                        />
+                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>The year after the source year</div>
                       </div>
                       <div>
                         <label style={lbl}>Grade Level</label>

@@ -9,6 +9,7 @@ __all__ = [
     "STAFF_FULL_WRITE_ROLES",
     "GRADE_READ_ROLES",
     "teacher_student_ids",
+    "teacher_enrollment_ids",
     "guardian_student_ids",
     "IsAdvisoryTeacherOrStaff",
     "IsStaffOrOwnerGuardianReadOnly",
@@ -32,23 +33,17 @@ STAFF_FULL_WRITE_ROLES = {"super_admin", "admin"}
 GRADE_READ_ROLES = {"super_admin", "admin", "registrar", "teacher"}
 
 
-def teacher_student_ids(user):
-    """
-    Resolve a role=teacher user's `SectionAdvisory` assignment(s) into the set
-    of student_ids they're allowed to touch. Only students currently
-    `enrolled` count — once a student is dropped/transferred out of the
-    section, their former teacher loses access to that student's records,
-    matching the my-sections/section-grades scoping. Returns an empty set
-    (never raises) when the teacher has no advisory assignment yet — fail
-    closed.
-    """
+def _teacher_roster(user):
+    """(enrollment_id, student_id) for every `enrolled` row in the teacher's
+    SectionAdvisory sections. Empty -- never raises -- for a teacher with no
+    advisory yet: fail closed."""
     from enrollments.models import Enrollment, SectionAdvisory
 
     teacher_user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
     if not teacher_user_id:
         return set()
 
-    student_ids = set()
+    roster = set()
     for advisory in SectionAdvisory.objects.filter(teacher_user_id=teacher_user_id):
         qs = Enrollment.objects.filter(
             school_year=advisory.school_year,
@@ -59,8 +54,35 @@ def teacher_student_ids(user):
         )
         if advisory.strand:
             qs = qs.filter(strand=advisory.strand)
-        student_ids.update(qs.values_list("student_id", flat=True))
-    return student_ids
+        roster.update(qs.values_list("enrollment_id", "student_id"))
+    return roster
+
+
+def teacher_student_ids(user):
+    """
+    Resolve a role=teacher user's `SectionAdvisory` assignment(s) into the set
+    of student_ids they may READ. Only students currently `enrolled` count —
+    once a student is dropped/transferred out of the section, their former
+    teacher loses access to that student's records, matching the
+    my-sections/section-grades scoping. Returns an empty set (never raises)
+    when the teacher has no advisory assignment yet — fail closed.
+
+    Writes are narrower: see teacher_enrollment_ids().
+    """
+    return {student_id for _enrollment_id, student_id in _teacher_roster(user)}
+
+
+def teacher_enrollment_ids(user):
+    """
+    The enrollment rows a teacher may WRITE to: this year's rows of the
+    learners in their own sections.
+
+    Writes used to be checked by student, and a learner's student id also
+    covers every other year they spent here -- so a teacher could change the
+    final grades a colleague recorded for their learner last year, which is
+    exactly what Promote and the report card read.
+    """
+    return {enrollment_id for enrollment_id, _student_id in _teacher_roster(user)}
 
 
 def guardian_student_ids(user):
@@ -122,7 +144,9 @@ class IsAdvisoryTeacherOrStaff(BasePermission):
         if role == "registrar":
             return request.method in SAFE_METHODS
         if role == "teacher":
-            return _resolve_student_id(view, obj) in teacher_student_ids(request.user)
+            if request.method in SAFE_METHODS:
+                return _resolve_student_id(view, obj) in teacher_student_ids(request.user)
+            return getattr(obj, "enrollment_id", None) in teacher_enrollment_ids(request.user)
         if role == "guardian":
             return (
                 request.method in SAFE_METHODS
@@ -185,6 +209,13 @@ def assert_teacher_may_write_enrollment(user, enrollment):
     attendance action already guarded this (attendance/views.py); this is the
     same rule for the single-record paths.
 
+    Also call it from perform_update with the row's destination: DRF checks
+    has_object_permission against the record as it already exists, so a PATCH
+    that moved a grade or attendance record onto another enrollment was only
+    ever checked against the one it left.
+
+    Checked by enrollment, not student -- see teacher_enrollment_ids().
+
     Staff roles pass through untouched. Raises PermissionDenied for a teacher
     writing outside their advisory roster, and fails closed on an unresolvable
     enrollment.
@@ -194,18 +225,9 @@ def assert_teacher_may_write_enrollment(user, enrollment):
     if getattr(user, "role", None) != "teacher":
         return
 
-    student_id = getattr(enrollment, "student_id", None)
-    if student_id is None:
-        from enrollments.models import Enrollment
-
-        enrollment_id = getattr(enrollment, "enrollment_id", enrollment)
-        student_id = (
-            Enrollment.objects.filter(enrollment_id=enrollment_id)
-            .values_list("student_id", flat=True)
-            .first()
-        )
-
-    if student_id is None or student_id not in teacher_student_ids(user):
+    enrollment_id = getattr(enrollment, "enrollment_id", enrollment)
+    if enrollment_id is None or enrollment_id not in teacher_enrollment_ids(user):
         raise PermissionDenied(
-            "You can only record this for students in your own advisory section."
+            "You can only record this for students in your own advisory section, "
+            "for the current school year."
         )

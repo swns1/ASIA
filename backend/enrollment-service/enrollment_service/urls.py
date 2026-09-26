@@ -1,16 +1,12 @@
-from django.contrib import admin
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from enrollments.views import EnrollmentViewSet
 from enrollments.email_views import send_enrollment_email
 from enrollments.report_views import report_card
 from shared.health import health_check
 
-router = DefaultRouter()
-router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
-
+# No Django admin: it was mounted at /admin/ but could never log anyone in --
+# the accounts.User stub it authenticates against has no password check, so
+# every login attempt answered 500. Same as the student and billing services.
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("health/", health_check, name="health-check"),
 
     path("api/enrollments/<int:enrollment_id>/report-card/", report_card, name="report_card"),

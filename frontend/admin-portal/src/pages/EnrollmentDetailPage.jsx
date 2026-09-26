@@ -102,6 +102,10 @@ export default function EnrollmentDetailPage() {
   // doomed fetch for roles that would just get a 403, and show an accurate
   // message instead of a misleading "No invoice generated yet."
   const canViewBilling = hasAnyRole(getCurrentUser(), BILLING_READ_ROLES);
+  // A learner's documents (birth certificate, Form 137) aren't billing
+  // material; the server refuses accounting, so don't render a card that can
+  // only fail.
+  const canViewDocuments = getCurrentUser()?.role !== "accounting";
 
   useEffect(() => {
     if (!id) return;
@@ -396,23 +400,25 @@ export default function EnrollmentDetailPage() {
                 This is where the completeness gate actually blocks a
                 registrar, so it is where fixing it belongs; before this the
                 page could only show a count and offered no way anywhere. */}
-            <Card title="Requirements" icon="ti-file-check">
-              <RequirementDocumentsPanel
-                studentId={enrollment.student_id ?? enrollment.student}
-                student={enrollment.student_detail}
-                variant="compact"
-                context={{ schoolLevel: enrollment.school_level, entryStatus }}
-                emptyMessage="No requirement types configured."
-              />
-              <button
-                type="button"
-                onClick={() => navigate(`/requirements?student=${enrollment.student_id ?? enrollment.student}`)}
-                style={{ marginTop: 12, background: "none", border: "none", padding: 0,
-                         cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: C.red }}
-              >
-                Open full document view →
-              </button>
-            </Card>
+            {canViewDocuments && (
+              <Card title="Requirements" icon="ti-file-check">
+                <RequirementDocumentsPanel
+                  studentId={enrollment.student_id ?? enrollment.student}
+                  student={enrollment.student_detail}
+                  variant="compact"
+                  context={{ schoolLevel: enrollment.school_level, entryStatus }}
+                  emptyMessage="No requirement types configured."
+                />
+                <button
+                  type="button"
+                  onClick={() => navigate(`/requirements?student=${enrollment.student_id ?? enrollment.student}`)}
+                  style={{ marginTop: 12, background: "none", border: "none", padding: 0,
+                           cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: C.red }}
+                >
+                  Open full document view →
+                </button>
+              </Card>
+            )}
 
             {/* Scholarships */}
             <Card title="Scholarships" icon="ti-award">

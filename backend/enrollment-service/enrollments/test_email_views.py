@@ -24,12 +24,14 @@ LOCMEM = "django.core.mail.backends.locmem.EmailBackend"
 SMTP = "django.core.mail.backends.smtp.EmailBackend"
 
 
-def _enrollment(email="parent@example.com", first_name="Juan"):
+def _enrollment(email="parent@example.com", first_name="Juan", status="enrolled"):
     student = SimpleNamespace(
         first_name=first_name, middle_name=None, last_name="Dela Cruz", email=email,
     )
     return SimpleNamespace(
         student=student,
+        student_id=31,
+        enrollment_status=status,
         school_year="2026-2027",
         grade_level="Grade 7",
         section="Diamond",
@@ -38,8 +40,9 @@ def _enrollment(email="parent@example.com", first_name="Juan"):
 
 
 @contextmanager
-def _setup(enrollment):
+def _setup(enrollment, guardian=None):
     with patch("enrollments.email_views.Enrollment.objects") as objects, \
+         patch("enrollments.email_views._guardian_contact", return_value=guardian), \
          patch("enrollments.email_views.EmailDeliveryFailure.objects") as failures, \
          patch("rest_framework.views.APIView.check_throttles"), \
          patch("shared.resilience.time.sleep"):
@@ -86,12 +89,67 @@ def test_student_name_is_escaped_in_the_html():
 
 
 @override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
-def test_student_without_email_is_rejected():
+def test_no_address_for_learner_or_guardian_is_rejected():
     with _setup(_enrollment(email="")):
         response = _post()
 
     assert response.status_code == 400
+    assert response.data["code"] == "no_recipient"
     assert mail.outbox == []
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
+def test_a_learner_without_an_address_is_confirmed_to_their_guardian():
+    """
+    Most learners are children with no email of their own. The confirmation
+    used to stop there, with the guardian's address on file.
+    """
+    with _setup(_enrollment(email=""), guardian=("Maria Dela Cruz", "maria@example.com")):
+        response = _post()
+
+    assert response.status_code == 200
+    message = mail.outbox[0]
+    assert message.to == ["maria@example.com"]
+    assert message.body.startswith("Dear Maria Dela Cruz,")
+    assert "the enrollment of Juan Dela Cruz" in message.body
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
+def test_guardian_and_learner_both_get_it_once():
+    with _setup(_enrollment(email="Juan@Example.com"),
+                guardian=("Maria Dela Cruz", "maria@example.com")):
+        response = _post()
+
+    assert response.status_code == 200
+    assert mail.outbox[0].to == ["maria@example.com", "Juan@Example.com"]
+    assert response.data["sent_to"] == ["maria@example.com", "Juan@Example.com"]
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
+def test_same_address_on_guardian_and_learner_is_sent_once():
+    with _setup(_enrollment(email="MARIA@example.com"),
+                guardian=("Maria Dela Cruz", "maria@example.com")):
+        _post()
+
+    assert mail.outbox[0].to == ["maria@example.com"]
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
+def test_a_pending_enrollment_gets_no_confirmation():
+    """It says the enrollment has been processed, which a pending one hasn't."""
+    with _setup(_enrollment(status="pending")):
+        response = _post()
+
+    assert response.status_code == 409
+    assert response.data["code"] == "not_enrolled"
+    assert mail.outbox == []
+
+
+def test_a_non_numeric_id_is_a_400():
+    with _setup(_enrollment()):
+        response = _post("abc")
+
+    assert response.status_code == 400
 
 
 @override_settings(EMAIL_BACKEND=SMTP, EMAIL_HOST_USER="")
