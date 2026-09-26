@@ -1,10 +1,18 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useId } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import { ConfirmDialog } from "../components/ui/Modal";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import Alert from "../components/ui/Alert";
+import Badge, { StatusBadge } from "../components/ui/Badge";
+import ChipGroup from "../components/ui/ChipGroup";
+import { Field, Input, Select, Textarea } from "../components/FormField";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { readinessChecks, canSwitchToPending } from "./enrollment/enrollmentReadiness";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { modalVariants, springTransition } from "../utils/motion";
@@ -40,19 +48,15 @@ const getStudentEligibility       = (sid, placement) => _getEligibility(sid, pla
 const transferInEnrollment        = (id, p)  => _transferInEnrollment(id, p);
 const createPreviousSchool        = (p)      => _createPreviousSchool(p);
 
-// ─── Style tokens ────────────────────────────────────────────────────────────
-const C = {
-  red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
-  redMid: "#fde2de", dark: "#1a0a0a", muted: "#7a5050",
-  bg: "#fff8f6", white: "#ffffff", shadow: "0 4px 24px rgba(224,49,49,0.10)",
-};
-
+// `tone` is ChipGroup's categorical colour for the level and `badge` the same
+// colour as literal classes for the summary card, so a level reads the same
+// here as in the Enrollments filters. Short labels match those filters too.
 const SCHOOL_LEVELS = [
-  { value: "nursery",           label: "Nursery",            icon: "ti-baby-carriage" },
-  { value: "kindergarten",      label: "Kindergarten",       icon: "ti-star"          },
-  { value: "elementary",        label: "Elementary",         icon: "ti-book"          },
-  { value: "junior_highschool", label: "Junior High School", icon: "ti-school"        },
-  { value: "senior_highschool", label: "Senior High School", icon: "ti-certificate"   },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery",      badge: "bg-nursery-50 text-nursery-500" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten", badge: "bg-kindergarten-50 text-kindergarten-500" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary",   badge: "bg-elementary-50 text-elementary-500" },
+  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh",   badge: "bg-juniorhigh-50 text-juniorhigh-500" },
+  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh",   badge: "bg-seniorhigh-50 text-seniorhigh-500" },
 ];
 
 // Flat ordered list of all grade levels for progression lookup
@@ -76,13 +80,6 @@ function getSchoolLevelForGrade(grade) {
 const SEMESTERS = [
   { value: "1st", label: "1st Semester" },
   { value: "2nd", label: "2nd Semester" },
-];
-
-const ENROLLMENT_STATUSES = [
-  { value: "enrolled",  label: "Enrolled",  bg: "#e8f5e0", color: "#2e6b0d", dot: "#4caf50" },
-  { value: "pending",   label: "Pending",   bg: "#fef3e2", color: "#7a4a08", dot: "#ff9800" },
-  { value: "cancelled", label: "Cancelled", bg: "#fde8e8", color: "#9b2020", dot: "#f44336" },
-  { value: "completed", label: "Completed", bg: "#e3f0fd", color: "#1455a0", dot: "#2196f3" },
 ];
 
 const nullify = (obj, fields) => {
@@ -111,77 +108,157 @@ const PALETTES = [
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
 
-// ─── Form primitives ─────────────────────────────────────────────────────────
-const inputStyle = {
-  width: "100%", border: `1.5px solid ${C.redMid}`, borderRadius: 10,
-  padding: "10px 14px", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
-  color: C.dark, background: "#fffbfb", outline: "none",
-  boxSizing: "border-box", transition: "border-color .15s, box-shadow .15s",
+const discountLabel = (sc) =>
+  sc.discount_mode === "percentage"
+    ? `${parseFloat(sc.discount_value)}%`
+    : `₱ ${parseFloat(sc.discount_value).toLocaleString()}`;
+
+// What each status means for the learner, shown on the status choices. Labels
+// and colours come from ENROLLMENT_STATUS_MAP so they match every status badge.
+const STATUS_CHOICES = [
+  { value: "enrolled",  desc: "Joins class lists and grades." },
+  { value: "pending",   desc: "Held until documents are in. Not on class lists and no grades yet." },
+  { value: "completed", desc: "The school year is finished. For recording past years." },
+  { value: "cancelled", desc: "Withdrawn or voided. Kept for the record only." },
+];
+
+// Complete literal class strings per Badge variant (tokens.css rule 1: never
+// build a utility name dynamically).
+const CHOICE_TONES = {
+  success: { on: "border-success-500 bg-success-50", text: "text-success-500", ring: "border-success-500", fill: "bg-success-500" },
+  warning: { on: "border-warning-500 bg-warning-50", text: "text-warning-500", ring: "border-warning-500", fill: "bg-warning-500" },
+  info:    { on: "border-info-500 bg-info-50",       text: "text-info-500",    ring: "border-info-500",    fill: "bg-info-500" },
+  muted:   { on: "border-muted-500 bg-muted-50",     text: "text-muted-500",   ring: "border-muted-500",   fill: "bg-muted-500" },
 };
 
-const labelStyle = {
-  display: "block", fontSize: 11, fontWeight: 700, color: C.muted,
-  letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5,
-};
+// ─── Layout pieces ───────────────────────────────────────────────────────────
 
-function Field({ label, hint, children, required }) {
+// FormSection — one numbered block of the form. Same frame as Panel
+// (components/ui/Card.jsx); the step number stands in for Panel's icon so the
+// order of the form is visible at a glance.
+function FormSection({ step, title, subtitle, action, children }) {
+  const headingId = useId();
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={labelStyle}>{label}{required && <span style={{ color: C.red }}> *</span>}</label>
-      {children}
-      {hint && <div style={{ fontSize: 11, color: C.muted, marginTop: 5, fontStyle: "italic" }}>{hint}</div>}
+    <Card padding="none" role="group" aria-labelledby={headingId}>
+      <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-600"
+            aria-hidden="true"
+          >
+            {step}
+          </span>
+          <div className="min-w-0">
+            <h2 id={headingId} className="truncate text-sm font-bold text-neutral-900">{title}</h2>
+            {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}
+          </div>
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="p-5">{children}</div>
+    </Card>
+  );
+}
+
+// Label row for a group of chips, styled like FormField's label. A chip row
+// isn't one control, so there is nothing for a <label htmlFor> to point at;
+// the ChipGroup carries its own aria-label instead.
+function GroupLabel({ required = false, aside, children }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <span className="text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">
+        {children}
+        {required && (
+          <span className="text-brand-600">
+            {" *"}
+            <span className="sr-only"> (required)</span>
+          </span>
+        )}
+      </span>
+      {aside}
     </div>
   );
 }
 
-function Input({ style, ...props }) {
-  const [focused, setFocused] = useState(false);
+function LockNote({ children }) {
   return (
-    <input {...props}
-      style={{ ...inputStyle, ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}), ...style }}
-      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
+    <span className="inline-flex items-center gap-1 text-xs text-neutral-500">
+      <i className="ti ti-lock text-[12px]" aria-hidden="true" />
+      {children}
+    </span>
   );
 }
 
-function Select({ children, style, ...props }) {
-  return <select {...props} style={{ ...inputStyle, ...style, cursor: "pointer" }}>{children}</select>;
-}
-
-function Textarea({ style, ...props }) {
-  const [focused, setFocused] = useState(false);
+// A value that is shown but can't be changed here. Looks like FormField's
+// read-only control, so it isn't mistaken for an empty input.
+function LockedValue({ children }) {
   return (
-    <textarea {...props}
-      style={{ ...inputStyle, minHeight: 70, resize: "vertical", ...(focused ? { borderColor: C.red, boxShadow: `0 0 0 3px rgba(224,49,49,.10)`, background: C.white } : {}), ...style }}
-      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
+    <div className="flex w-full items-center gap-2 rounded-lg border-[1.5px] border-neutral-200 bg-neutral-200 px-3.5 py-2.5 text-base font-semibold text-neutral-700">
+      <i className="ti ti-lock text-[13px] text-neutral-600" aria-hidden="true" />
+      {children}
+    </div>
   );
 }
 
-function SectionCard({ title, icon, badge, children, motionProps = {} }) {
+const AVATAR_SIZES = {
+  xs: "h-8 w-8 text-xs",
+  sm: "h-9 w-9 text-sm",
+  md: "h-10 w-10 text-base",
+};
+
+function Avatar({ student, size = "md" }) {
+  const p = getPalette(student.last_name ?? "X");
+  const initials = `${student.first_name?.[0] ?? ""}${student.last_name?.[0] ?? ""}`.toUpperCase();
   return (
-    <motion.div
-      whileHover={{ y: -2, boxShadow: "0 8px 32px rgba(224,49,49,0.13)" }}
-      transition={{ duration: 0.18 }}
-      {...motionProps}
-      style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`, boxShadow: C.shadow, marginBottom: 0, overflow: "hidden", ...motionProps.style }}>
-      <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${C.redMid}`, background: "#fff8f8" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <i className={`ti ${icon}`} style={{ fontSize: 16, color: C.red }} />
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full font-bold ${AVATAR_SIZES[size] ?? AVATAR_SIZES.md}`}
+      style={{ background: p.bg, color: p.color }}
+      aria-hidden="true"
+    >
+      {initials || "?"}
+    </div>
+  );
+}
+
+// ─── Eligibility ─────────────────────────────────────────────────────────────
+// One bordered list under the student, one row per question the server
+// answers: can they take this grade, and do they owe documents. The two used
+// to share a single panel whose colour came from `is_eligible`, and the server
+// folds missing documents into that flag. So a learner whose only gap was a
+// document got a red "Enrollment Blocked" panel, although saving as Pending
+// was allowed. Grade blocks (`blocking_reasons`, `admin_override_required`)
+// and documents (`missing_docs`) are separate on the server, and separate here.
+
+const ROW_TONES = {
+  ok:    { chip: "bg-success-50 text-success-500", title: "text-neutral-900" },
+  warn:  { chip: "bg-warning-50 text-warning-500", title: "text-warning-500" },
+  block: { chip: "bg-error-50 text-error-500",     title: "text-error-500" },
+  info:  { chip: "bg-info-50 text-info-500",       title: "text-info-500" },
+  busy:  { chip: "bg-brand-100 text-brand-600",    title: "text-neutral-700" },
+};
+
+function EligibilityRow({ tone, icon, title, detail, action, children }) {
+  const t = ROW_TONES[tone] ?? ROW_TONES.info;
+  return (
+    <div className="flex items-start gap-3 px-3.5 py-3">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${t.chip}`} aria-hidden="true">
+        <i className={`ti ${icon} text-[15px]`} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1 pt-1 text-sm">
+            <span className={`font-bold ${t.title}`}>{title}</span>
+            {detail && <span className="text-neutral-500"> · {detail}</span>}
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.dark, fontFamily: "'DM Sans', sans-serif" }}>{title}</span>
+          {action && <div className="shrink-0">{action}</div>}
         </div>
-        {badge != null && (
-          <span style={{ background: C.redLight, color: C.red, borderRadius: 99, fontSize: 11, fontWeight: 700, padding: "3px 10px", border: `1px solid ${C.redBorder}` }}>{badge}</span>
-        )}
+        {children}
       </div>
-      <div style={{ padding: "18px 22px" }}>{children}</div>
-    </motion.div>
+    </div>
   );
 }
 
-// ─── EligibilityPanel ────────────────────────────────────────────────────────
-// The missing-documents block, shared by both branches of EligibilityPanel.
+// The missing-documents row, shared by both branches of EligibilityList.
 // It used to live only in the returning-student branch, so a brand-new student
 // -- an applicant just approved from the kiosk, or a student created moments
 // ago at the counter -- saw a green "can be enrolled in any grade level" panel
@@ -193,192 +270,181 @@ function SectionCard({ title, icon, badge, children, motionProps = {} }) {
 // `defaultOpen` is for the hand-off from registration or from an approved
 // application: on that path the document set is known to be empty, so the
 // upload belongs in front of the registrar rather than behind a disclosure.
-function MissingDocsBlock({ missingDocs, student, eligibility, onDocumentsChanged, defaultOpen = false }) {
+function MissingDocsRow({ missingDocs, student, eligibility, onDocumentsChanged, defaultOpen = false }) {
+  const [uploadOpen, setUploadOpen] = useState(defaultOpen);
+
   // documents_assessed=false means "we could not work out which documents
   // apply", not "none are missing" -- enrollments/views.py says so explicitly
   // and warns clients not to read the empty list as a clean bill of health.
   if (eligibility?.documents_assessed === false) {
     return (
-      <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "flex-start", gap: 7 }}>
-        <i className="ti ti-help-circle" style={{ fontSize: 14, marginTop: 1, flexShrink: 0 }} />
-        <span>Required documents could not be checked without a school level. Pick one above to see what this learner still owes.</span>
-      </div>
+      <EligibilityRow
+        tone="info"
+        icon="ti-help-circle"
+        title="Documents not checked"
+        detail="They can't be worked out without a school level. Pick one under Placement to see what this learner still owes."
+      />
     );
   }
-  if (!missingDocs?.length) return null;
+  if (!missingDocs?.length) {
+    return <EligibilityRow tone="ok" icon="ti-file-check" title="All required documents are in" />;
+  }
   return (
-    <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-        <i className="ti ti-file-x" style={{ marginRight: 5 }} />Missing Required Documents ({missingDocs.length})
-      </div>
-      <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+    <EligibilityRow
+      tone="warn"
+      icon="ti-file-alert"
+      title={`Missing required documents (${missingDocs.length})`}
+      action={
+        // Fix it here rather than sending the registrar off to find another
+        // page. Submissions belong to the student, not the enrollment, so
+        // uploading before this enrollment exists is perfectly valid.
+        student && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={uploadOpen ? "ti-chevron-up" : "ti-upload"}
+            aria-expanded={uploadOpen}
+            onClick={() => setUploadOpen((v) => !v)}
+          >
+            {uploadOpen ? "Hide upload" : "Upload now"}
+          </Button>
+        )
+      }
+    >
+      <ul className="mt-1.5 list-disc pl-5 text-sm text-neutral-700">
         {missingDocs.map((d) => (
-          <li key={d.requirement_type_id} style={{ fontSize: 12, color: "#7c2d12" }}>{d.requirement_name}</li>
+          <li key={d.requirement_type_id}>{d.requirement_name}</li>
         ))}
       </ul>
-      <div style={{ fontSize: 11, color: "#78350f", marginTop: 8, fontStyle: "italic" }}>
+      <p className="mt-1.5 text-xs text-neutral-500">
         Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
-      </div>
-      {/* Fix it here rather than sending the registrar off to find another
-          page. Submissions belong to the student, not the enrollment, so
-          uploading before this enrollment exists is perfectly valid. */}
-      {student && (
-        <details style={{ marginTop: 10 }} open={defaultOpen}>
-          <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#92400e" }}>
-            Upload documents now
-          </summary>
-          <div style={{ marginTop: 10, background: "white", borderRadius: 10, padding: "12px 14px" }}>
-            <RequirementDocumentsPanel
-              studentId={student.student_id}
-              student={student}
-              variant="compact"
-              context={{
-                schoolLevel: eligibility.school_level_used,
-                entryStatus: eligibility.entry_status,
-              }}
-              onChange={onDocumentsChanged}
-            />
-          </div>
-        </details>
+      </p>
+      {student && uploadOpen && (
+        <div className="mt-3 rounded-lg border border-neutral-200 bg-white p-3.5">
+          <RequirementDocumentsPanel
+            studentId={student.student_id}
+            student={student}
+            variant="compact"
+            context={{
+              schoolLevel: eligibility.school_level_used,
+              entryStatus: eligibility.entry_status,
+            }}
+            onChange={onDocumentsChanged}
+          />
+        </div>
       )}
-    </div>
+    </EligibilityRow>
   );
 }
 
-function EligibilityPanel({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin, student, onDocumentsChanged, continuing = false }) {
+function EligibilityList({ eligibility, loading, overrideMode, overrideReason, onToggleOverride, onChangeReason, isAdmin, student, onDocumentsChanged, continuing = false }) {
+  const box = "divide-y divide-neutral-200 rounded-lg border border-neutral-200";
+
   if (loading) {
     return (
-      <div style={{ background: "#fff8f6", border: `1px solid ${C.redMid}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 13 }}>
-        <i className="ti ti-loader-2" style={{ fontSize: 15, color: C.red, animation: "spin 1s linear infinite" }} />
-        Checking enrollment eligibility…
+      <div className={box}>
+        <EligibilityRow tone="busy" icon="ti-loader-2 animate-spin" title="Checking enrollment eligibility…" />
       </div>
     );
   }
 
   if (!eligibility) return null;
 
-  const { is_eligible, is_new_student, blocking_reasons, missing_docs, can_repeat, admin_override_required, next_allowed_grade, last_enrollment } = eligibility;
+  const { is_new_student, blocking_reasons, missing_docs, can_repeat, admin_override_required, next_allowed_grade, last_enrollment } = eligibility;
+
+  const docsRow = (
+    <MissingDocsRow
+      missingDocs={missing_docs}
+      student={student}
+      eligibility={eligibility}
+      onDocumentsChanged={onDocumentsChanged}
+      defaultOpen={continuing}
+    />
+  );
 
   // A new student has no grade history to block on -- but they are also the
   // learner most likely to owe every document, so the documents they still owe
-  // are rendered here too. This branch used to return the green panel alone,
-  // which read as a clean bill of health and left the registrar to discover the
-  // requirement only when the server refused to activate the enrollment.
+  // are listed here too.
   if (is_new_student) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 20px", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-star" style={{ fontSize: 15, color: "#2e6b0d" }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>New Student</div>
-            <div style={{ fontSize: 12, color: "#166534", marginTop: 1 }}>No prior enrollment records. Student can be enrolled in any grade level.</div>
-          </div>
-        </div>
-        <MissingDocsBlock
-          missingDocs={missing_docs}
-          student={student}
-          eligibility={eligibility}
-          onDocumentsChanged={onDocumentsChanged}
-          defaultOpen={continuing}
-        />
+      <div className={box}>
+        <EligibilityRow tone="ok" icon="ti-star" title="New student" detail="No prior enrollment records. Can be enrolled in any grade level." />
+        {docsRow}
       </div>
     );
   }
 
-  const panelBg    = is_eligible ? "#f0fdf4"  : overrideMode ? "#fffbeb"  : "#fef2f2";
-  const panelBord  = is_eligible ? "#bbf7d0"  : overrideMode ? "#fde68a"  : "#fca5a5";
-  const iconColor  = is_eligible ? "#16a34a"  : overrideMode ? "#d97706"  : C.red;
-  const iconBg     = is_eligible ? "#dcfce7"  : overrideMode ? "#fef3c7"  : C.redLight;
-  const iconName   = is_eligible ? "ti-circle-check" : overrideMode ? "ti-alert-triangle" : "ti-circle-x";
-  const titleColor = is_eligible ? "#15803d"  : overrideMode ? "#92400e"  : "#991b1b";
-  const titleText  = is_eligible ? "Eligible for Enrollment" : overrideMode ? "Override Active — Proceed with Caution" : "Enrollment Blocked";
+  const gradeBlocked = admin_override_required || blocking_reasons.length > 0;
+  const lastLine = last_enrollment
+    ? `Last enrolled in ${last_enrollment.grade_level}` +
+      (last_enrollment.semester ? ` (${last_enrollment.semester} Sem)` : "") +
+      (last_enrollment.school_year ? `, S.Y. ${last_enrollment.school_year}` : "")
+    : null;
 
   return (
-    <div style={{ background: panelBg, border: `1px solid ${panelBord}`, borderRadius: 14, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <i className={`ti ${iconName}`} style={{ fontSize: 16, color: iconColor }} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: titleColor }}>{titleText}</div>
-          {last_enrollment && (
-            <div style={{ fontSize: 11, color: "#666", marginTop: 1 }}>
-              Last completed: <strong>{last_enrollment.grade_level}</strong>
-              {last_enrollment.semester ? ` (${last_enrollment.semester} Sem)` : ""}
-              {next_allowed_grade && <> → Next allowed: <strong style={{ color: iconColor }}>{next_allowed_grade}</strong></>}
-            </div>
+    <div className={box}>
+      {gradeBlocked ? (
+        <EligibilityRow
+          tone={overrideMode ? "warn" : "block"}
+          icon={overrideMode ? "ti-alert-triangle" : "ti-circle-x"}
+          title={overrideMode ? "Override active. Proceed with caution" : "Failed or incomplete subjects"}
+          detail={[lastLine, next_allowed_grade && `next allowed: ${next_allowed_grade}`].filter(Boolean).join(" · ") || null}
+        >
+          {blocking_reasons.length > 0 && (
+            <ul className="mt-1.5 list-disc pl-5 text-sm text-neutral-700">
+              {blocking_reasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
           )}
-        </div>
-      </div>
-
-      {/* Blocking reasons */}
-      {blocking_reasons.length > 0 && (
-        <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 9, padding: "10px 14px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#991b1b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-            <i className="ti ti-alert-circle" style={{ marginRight: 5 }} />Failed / Incomplete Subjects
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
-            {blocking_reasons.map((r, i) => (
-              <li key={i} style={{ fontSize: 12, color: "#7f1d1d" }}>{r}</li>
-            ))}
-          </ul>
           {can_repeat && (
-            <div style={{ fontSize: 11, color: "#92400e", marginTop: 8, fontStyle: "italic" }}>
-              Student may repeat the same grade level (retention).
+            <p className="mt-1.5 text-xs italic text-neutral-500">Student may repeat the same grade level (retention).</p>
+          )}
+
+          {/* Admin override toggle — only shown to admin users */}
+          {admin_override_required && isAdmin && (
+            <div className="mt-3 flex flex-col gap-3">
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={overrideMode ? "ti-lock-open" : "ti-lock"}
+                  aria-pressed={overrideMode}
+                  onClick={onToggleOverride}
+                >
+                  {overrideMode ? "Override Active" : "Admin Override"}
+                </Button>
+              </div>
+              {overrideMode && (
+                <div className="-mb-3.5">
+                  <Field label="Override Reason" required>
+                    <Textarea
+                      value={overrideReason}
+                      onChange={(e) => onChangeReason(e.target.value)}
+                      placeholder="Explain why the grade progression rule is being bypassed (e.g. transferee with incomplete records, admin approval)…"
+                      rows={2}
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </EligibilityRow>
+      ) : (
+        <EligibilityRow
+          tone="ok"
+          icon="ti-circle-check"
+          title={next_allowed_grade ? `Eligible for ${next_allowed_grade}` : "Eligible for enrollment"}
+          detail={lastLine}
+        />
       )}
-
-      <MissingDocsBlock
-        missingDocs={missing_docs}
-        student={student}
-        eligibility={eligibility}
-        onDocumentsChanged={onDocumentsChanged}
-        defaultOpen={continuing}
-      />
-
-      {/* Admin override toggle — only shown to admin users */}
-      {admin_override_required && isAdmin && (
-        <div style={{ borderTop: `1px solid ${panelBord}`, paddingTop: 12 }}>
-          <button
-            type="button"
-            onClick={onToggleOverride}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 7,
-              padding: "7px 14px", borderRadius: 99, fontSize: 12, fontWeight: 700,
-              border: `1.5px solid ${overrideMode ? "#d97706" : "#d1d5db"}`,
-              background: overrideMode ? "#fef3c7" : "white",
-              color: overrideMode ? "#92400e" : "#374151",
-              cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s",
-            }}>
-            <i className={`ti ${overrideMode ? "ti-lock-open" : "ti-lock"}`} style={{ fontSize: 13 }} />
-            {overrideMode ? "Override Active" : "Admin Override"}
-          </button>
-          {overrideMode && (
-            <div style={{ marginTop: 10 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
-                Override Reason <span style={{ color: C.red }}>*</span>
-              </label>
-              <textarea
-                value={overrideReason}
-                onChange={(e) => onChangeReason(e.target.value)}
-                placeholder="Explain why the grade progression rule is being bypassed (e.g. transferee with incomplete records, admin approval)…"
-                rows={2}
-                style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {docsRow}
     </div>
   );
 }
 
-function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
+// ─── Student picker ──────────────────────────────────────────────────────────
+function StudentPicker({ value, onChange, disabled }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
   const [gradeMap, setGradeMap] = useState({});
@@ -419,88 +485,226 @@ function StudentPicker({ value, onChange, disabled, currentGrade, nextGrade }) {
   }, [query, disabled]);
 
   if (value) {
-    const p = getPalette(value.last_name ?? "X");
-    const initials = `${value.first_name?.[0] ?? ""}${value.last_name?.[0] ?? ""}`.toUpperCase();
     const fullName = [value.first_name, value.middle_name, value.last_name, value.suffix].filter(Boolean).join(" ");
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", border: `1.5px solid ${C.redMid}`, borderRadius: 12, background: "linear-gradient(to right, #fff8f6, white)" }}>
-        <div style={{ width: 46, height: 46, borderRadius: "50%", background: p.bg, color: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{initials || "?"}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>{fullName}</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            {value.student_number && <span><i className="ti ti-id-badge" style={{ fontSize: 11, marginRight: 3 }} />{value.student_number}</span>}
-            {value.lrn && <span><i className="ti ti-fingerprint" style={{ fontSize: 11, marginRight: 3 }} />LRN {value.lrn}</span>}
-            {currentGrade && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fff0e8", color: "#b45309", border: "1px solid #fcd9a8", borderRadius: 99, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
-                <i className="ti ti-school" style={{ fontSize: 10 }} />Current: {currentGrade}
-                {nextGrade && <> → <span style={{ color: C.red }}>{nextGrade}</span></>}
-              </span>
-            )}
-            {!currentGrade && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 99, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
-                <i className="ti ti-star" style={{ fontSize: 10 }} />New student
-              </span>
-            )}
+      <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+        <Avatar student={value} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-base font-bold text-neutral-900">{fullName}</div>
+          <div className="flex flex-wrap gap-x-3 text-sm text-neutral-500">
+            {value.student_number && <span>{value.student_number}</span>}
+            {value.lrn && <span>LRN {value.lrn}</span>}
           </div>
         </div>
         {!disabled && (
-          <button type="button" onClick={() => onChange(null)}
-            style={{ background: "transparent", border: `1px solid ${C.redMid}`, borderRadius: 8, padding: "6px 12px", fontSize: 12, color: C.muted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
+          <Button variant="secondary" size="sm" onClick={() => onChange(null)}>
             Change
-          </button>
+          </Button>
         )}
       </div>
     );
   }
 
   return (
-    <div style={{ position: "relative" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: `1.5px solid ${C.redMid}`, borderRadius: 12, padding: "0 14px", height: 44 }}>
-        <i className="ti ti-search" style={{ fontSize: 15, color: "#8a6a6a" }} />
-        <input placeholder="Search by name, LRN, or student number…" value={query}
+    <div className="relative">
+      <div className="relative">
+        <i
+          className="ti ti-search pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-neutral-500"
+          aria-hidden="true"
+        />
+        <Input
+          type="text"
+          autoComplete="off"
+          placeholder="Search by name, LRN, or student number…"
+          value={query}
+          disabled={disabled}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          style={{ flex: 1, border: "none", background: "transparent", fontSize: 14, color: C.dark, outline: "none", fontFamily: "'DM Sans', sans-serif" }} />
-        {loading && <i className="ti ti-loader-2" style={{ fontSize: 14, color: C.red, animation: "spin 1s linear infinite" }} />}
+          className="pl-10 pr-10"
+        />
+        {loading && (
+          <i
+            className="ti ti-loader-2 absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin text-[15px] text-brand-500"
+            aria-hidden="true"
+          />
+        )}
       </div>
       {open && query && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 6, background: "white", borderRadius: 12, border: `1px solid ${C.redMid}`, boxShadow: "0 12px 40px rgba(224,49,49,0.14)", maxHeight: 320, overflowY: "auto", zIndex: 9999 }}>
+        // z-20 keeps the list above the cards below it but under the sticky
+        // page header (z-30) when the page scrolls.
+        <div className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-80 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg">
           {results.length === 0 && !loading && (
-            <div style={{ padding: "20px 16px", textAlign: "center", color: C.muted, fontSize: 13 }}>No students match "{query}".</div>
+            <div className="px-4 py-5 text-center text-sm text-neutral-500">No students match "{query}".</div>
           )}
-          {results.map((st) => {
-            const p = getPalette(st.last_name ?? "X");
-            const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
-            const fullName = [st.last_name + ",", st.first_name, st.middle_name].filter(Boolean).join(" ");
-            const lastGrade = gradeMap[st.student_id];
-            const next = lastGrade ? getNextGradeLevel(lastGrade) : null;
-            return (
-              <div key={st.student_id} onClick={() => { onChange(st, lastGrade); setOpen(false); setQuery(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f9f0f0", transition: "background .12s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#fff8f6")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                <div style={{ width: 34, height: 34, borderRadius: "50%", background: p.bg, color: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{initials || "?"}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{fullName}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span>LRN {st.lrn} · {st.student_number ?? "—"}</span>
-                    {lastGrade ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#fff0e8", color: "#b45309", border: "1px solid #fcd9a8", borderRadius: 99, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>
-                        {lastGrade}{next ? <> → <span style={{ color: C.red }}>{next}</span></> : " (final grade)"}
-                      </span>
-                    ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 99, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>
-                        New
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <ul>
+            {results.map((st) => {
+              const fullName = [st.last_name + ",", st.first_name, st.middle_name].filter(Boolean).join(" ");
+              const lastGrade = gradeMap[st.student_id];
+              const next = lastGrade ? getNextGradeLevel(lastGrade) : null;
+              return (
+                <li key={st.student_id} className="border-b border-neutral-200 last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => { onChange(st, lastGrade); setOpen(false); setQuery(""); }}
+                    className="focus-ring flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-brand-50"
+                  >
+                    <Avatar student={st} size="xs" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-neutral-900">{fullName}</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                        <span>LRN {st.lrn} · {st.student_number ?? "—"}</span>
+                        {lastGrade ? (
+                          <Badge variant="info" size="sm">
+                            {lastGrade}{next ? ` → ${next}` : " (final grade)"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="success" size="sm">New</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Summary card ────────────────────────────────────────────────────────────
+
+const CHECK_TONES = {
+  ok:      { chip: "bg-success-50 text-success-500", icon: "ti-check",                 title: "text-neutral-900", sr: "Done" },
+  todo:    { chip: "bg-neutral-200 text-neutral-600", icon: "ti-circle-dashed",        title: "text-neutral-900", sr: "To do" },
+  warn:    { chip: "bg-warning-50 text-warning-500", icon: "ti-exclamation-mark",      title: "text-warning-500", sr: "Needs attention" },
+  block:   { chip: "bg-error-50 text-error-500",     icon: "ti-x",                     title: "text-error-500",   sr: "Blocked" },
+  info:    { chip: "bg-info-50 text-info-500",       icon: "ti-info-small",            title: "text-info-500",    sr: "Note" },
+  loading: { chip: "bg-brand-100 text-brand-600",    icon: "ti-loader-2 animate-spin", title: "text-neutral-700", sr: "Checking" },
+};
+
+function CheckItem({ check }) {
+  const t = CHECK_TONES[check.state] ?? CHECK_TONES.info;
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className={`mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${t.chip}`} aria-hidden="true">
+        <i className={`ti ${t.icon} text-[12px]`} />
+      </span>
+      <div className="min-w-0">
+        <div className={`text-sm font-semibold ${t.title}`}>
+          <span className="sr-only">{t.sr}: </span>
+          {check.title}
+        </div>
+        {check.detail && <div className="text-xs text-neutral-500">{check.detail}</div>}
+      </div>
+    </li>
+  );
+}
+
+function SummaryRow({ label, children }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-neutral-500">{label}</dt>
+      <dd className="min-w-0 text-right font-semibold text-neutral-900">{children}</dd>
+    </div>
+  );
+}
+
+const NotSet = ({ children = "Not set" }) => <span className="font-normal text-neutral-500">{children}</span>;
+
+// SummaryCard — stays in view beside the form (below it on narrow screens) so
+// the registrar always sees what will be saved, what is still outstanding, and
+// the one button that saves it.
+function SummaryCard({
+  isEdit, student, form, isSHS, levelMeta, chosenScholarships, checks,
+  validationError, saving, submitLabel, onSubmit, showSwitchToPending, onSwitchToPending,
+}) {
+  const name = student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : "";
+  const semesterLabel = SEMESTERS.find((s) => s.value === form.semester)?.label;
+  return (
+    <aside aria-label="Enrollment summary" className="w-full lg:sticky lg:top-28 lg:w-[340px] lg:shrink-0">
+      <Card padding="none">
+        <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3.5">
+          <h2 className="text-sm font-bold text-neutral-900">Enrollment summary</h2>
+          <StatusBadge status={form.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
+        </div>
+
+        <div className="flex items-center gap-3 border-b border-neutral-200 px-5 py-4">
+          {student ? (
+            <>
+              <Avatar student={student} size="sm" />
+              <div className="min-w-0">
+                <div className="truncate text-base font-bold text-neutral-900">{name}</div>
+                {student.lrn && <div className="text-xs text-neutral-500">LRN {student.lrn}</div>}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-neutral-500">No student selected yet.</p>
+          )}
+        </div>
+
+        <dl className="flex flex-col gap-2.5 border-b border-neutral-200 px-5 py-3.5 text-sm">
+          <SummaryRow label="School year">{form.school_year || <NotSet />}</SummaryRow>
+          <SummaryRow label="Level">
+            {levelMeta ? (
+              <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold leading-none ${levelMeta.badge}`}>
+                {levelMeta.label}
+              </span>
+            ) : (
+              <NotSet />
+            )}
+          </SummaryRow>
+          <SummaryRow label="Grade">{form.grade_level || <NotSet />}</SummaryRow>
+          {isSHS && (
+            <>
+              <SummaryRow label="Strand">{form.strand || <NotSet />}</SummaryRow>
+              <SummaryRow label="Semester">{semesterLabel || <NotSet />}</SummaryRow>
+            </>
+          )}
+          <SummaryRow label="Section">{form.section.trim() || <NotSet />}</SummaryRow>
+          {!isEdit && (
+            <SummaryRow label="Scholarships">
+              {chosenScholarships.length
+                ? chosenScholarships.map((sc) => sc.scholarship_name).join(", ")
+                : <NotSet>None</NotSet>}
+            </SummaryRow>
+          )}
+        </dl>
+
+        <div className="flex flex-col gap-2.5 px-5 py-3.5">
+          <h3 className="text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">
+            {isEdit ? "Before you save" : "Before you submit"}
+          </h3>
+          <ul className="flex flex-col gap-2.5">
+            {checks.map((c) => <CheckItem key={c.id} check={c} />)}
+          </ul>
+        </div>
+
+        <div className="flex flex-col gap-2 px-5 pb-5 pt-1">
+          <Button
+            fullWidth
+            icon={isEdit ? "ti-device-floppy" : "ti-check"}
+            loading={saving}
+            disabled={Boolean(validationError)}
+            onClick={onSubmit}
+          >
+            {submitLabel}
+          </Button>
+          {showSwitchToPending && (
+            <Button variant="secondary" fullWidth icon="ti-clock" onClick={onSwitchToPending}>
+              Switch to Pending
+            </Button>
+          )}
+          {/* The first thing still blocking the save, word for word from the
+              gate itself. It used to exist only as the disabled button's
+              hover tooltip. */}
+          <p className="text-xs text-neutral-600 empty:hidden" aria-live="polite">
+            {validationError && !saving ? validationError : null}
+          </p>
+        </div>
+      </Card>
+    </aside>
   );
 }
 
@@ -913,412 +1117,408 @@ export default function EnrollmentFormPage() {
       }
     };
 
-  const isFirstRender = useIsFirstRender();
+  // ── Presentation only below: nothing here changes what is sent to the API.
+  const checks = readinessChecks({
+    isEdit, student, form, isSHS, eligibility, eligibilityLoading,
+    overrideMode, overrideReason, nextAllowedGrade, studentLastGrade,
+    isTransferIn, transferInDate, transferInSchoolName, transferInSchoolAddress,
+    gradePlacementChanged, gradePlacementReason,
+  });
+  const showSwitchToPending = canSwitchToPending({ isEdit, form, eligibility });
 
-  const statusMeta = ENROLLMENT_STATUSES.find((s) => s.value === form.enrollment_status) ?? ENROLLMENT_STATUSES[0];
+  const title = isEdit ? "Edit Enrollment" : "New Enrollment";
+  const levelMeta = SCHOOL_LEVELS.find((l) => l.value === form.school_level);
+  // School level and grade: locked on an edit until unlocked, and on a new
+  // enrollment whenever the student's history fixes the next grade.
+  const levelLocked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(nextAllowedGrade));
+  // School year, strand and semester: locked on an edit until unlocked.
+  const placementLocked = isEdit && !gradePlacementUnlocked;
+  const chosenScholarships = scholarshipTypes.filter((sc) => selectedScholarships.includes(sc.scholarship_type_id));
+  const submitLabel = saving
+    ? "Saving…"
+    : isEdit
+      ? "Update Enrollment"
+      : form.enrollment_status === "pending" ? "Save as Pending" : "Submit Enrollment";
+
+  const studentSubtitle = isEdit
+    ? "The student on this enrollment"
+    : student && eligibility?.is_new_student
+      ? "New student · no prior enrollments"
+      : student && eligibility?.last_enrollment?.school_year
+        ? `Returning student · last enrolled S.Y. ${eligibility.last_enrollment.school_year}`
+        : "Who is being enrolled";
 
   return (
     <>
-    <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
-      <style>{`
-        @keyframes spin { to{transform:rotate(360deg)} }
-        * { box-sizing:border-box; }
-      `}</style>
+    <div className="min-h-screen bg-neutral-50">
+      <PageHeader
+        title={title}
+        icon={isEdit ? "ti-pencil" : "ti-clipboard-plus"}
+        subtitle={isEdit ? "Update class assignment, status, or term details." : "Enroll an existing student into a school year and section."}
+        // "Enrollments" is deliberately not a link: leaving goes through
+        // Cancel's confirm, so a stray click can't drop a half-filled form.
+        breadcrumbs={[{ label: "Enrollments" }, { label: title }]}
+        actions={
+          <Button variant="secondary" onClick={() => setLeaveConfirm(true)}>
+            Cancel
+          </Button>
+        }
+      />
 
-      <div style={{ maxWidth: 820, margin: "0 auto" }}>
-
-        {/* Header */}
-        <motion.div
-          initial={isFirstRender ? { opacity: 0, y: -10 } : false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
-          style={{ marginBottom: 24 }}>
-          <motion.button
-            whileHover={{ x: -2 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ duration: 0.12 }}
-            onClick={() => setLeaveConfirm(true)}
-            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif" }}>
-            <i className="ti ti-arrow-left" style={{ fontSize: 13 }} />Back to Enrollments
-          </motion.button>
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 28, color: C.dark, fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>
-                {isEdit ? "Edit Enrollment" : "New Enrollment"}
-              </h2>
-              <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                {isEdit ? "Update class assignment, status, or term details." : "Enroll an existing student into a school year and section."}
-              </div>
-            </div>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 14px", borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, fontSize: 12, fontWeight: 700 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusMeta.dot }} />{statusMeta.label}
-            </span>
-          </div>
-        </motion.div>
+      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-4 px-4 py-6 sm:px-6">
 
         {/* Arrived straight from registration or from approving an
             application: say so, so this reads as the second half of one task
             rather than an unrelated form, and name what Pending will mean if
             they stop here. */}
         {continuing && (
-          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#1e40af", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 9 }}>
-            <i className="ti ti-arrow-narrow-right" style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }} />
-            <div>
-              <strong>Step 2 of 2 — enrolling {student ? `${student.first_name} ${student.last_name}`.trim() : "this student"}.</strong>
-              <div style={{ marginTop: 2, color: "#1d4ed8" }}>
-                The student record is already saved. Saving as <strong>Pending</strong> is fine — they are not enrolled, and take no section or grades, until the required documents are in.
-              </div>
-            </div>
-          </div>
+          <Alert
+            variant="info"
+            icon="ti-arrow-narrow-right"
+            title={`Step 2 of 2 — enrolling ${student ? `${student.first_name} ${student.last_name}`.trim() : "this student"}.`}
+          >
+            The student record is already saved. Saving as <strong>Pending</strong> is fine — they are not enrolled, and take no section or grades, until the required documents are in.
+          </Alert>
         )}
 
         <AnimatePresence>
-          {error && (
-            <motion.div
-              key="error-banner"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-              style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 18, display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
-            </motion.div>
-          )}
+          {error && <Alert key="error-banner" variant="error">{error}</Alert>}
         </AnimatePresence>
 
         {loading ? (
-          <div style={{ background: C.white, borderRadius: 16, padding: 60, textAlign: "center", color: C.muted, border: `1px solid ${C.redMid}`, boxShadow: C.shadow }}>Loading enrollment…</div>
+          <Card className="py-14 text-center text-sm text-neutral-500">Loading enrollment…</Card>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <div className="flex flex-col items-start gap-5 lg:flex-row">
 
-            {/* 1. Student */}
-            <SectionCard title="Student" icon="ti-user-search"
-              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.06 : 0 } }}>
-              {isEdit ? (
-                <>
-                  <Field label="Enrolling Student"><StudentPicker value={student} onChange={() => {}} disabled /></Field>
-                  <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>The student cannot be changed on an existing enrollment.</div>
-                </>
-              ) : (
-                <Field label="Enrolling Student" required hint="Find an existing student record. Need to register a new one first? Use the Students page.">
-                  <StudentPicker value={student} onChange={handleStudentChange} currentGrade={studentLastGrade} nextGrade={nextAllowedGrade} />
-                </Field>
-              )}
-            </SectionCard>
+            {/* ── Form column ── */}
+            <div className="flex w-full min-w-0 flex-1 flex-col gap-4">
 
-            {/* Eligibility panel — new enrollments only */}
-            <AnimatePresence>
-              {!isEdit && student && (
-                <motion.div
-                  key="eligibility"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}>
-                  <EligibilityPanel
-                    eligibility={eligibility}
-                    loading={eligibilityLoading}
-                    overrideMode={overrideMode}
-                    overrideReason={overrideReason}
-                    onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
-                    onChangeReason={setOverrideReason}
-                    isAdmin={isAdmin}
-                    student={student}
-                    onDocumentsChanged={refreshEligibility}
-                    continuing={continuing}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Transfer-in toggle — only makes sense for a student with no prior local records */}
-            <AnimatePresence>
-              {!isEdit && student && eligibility?.is_new_student && (
-                <motion.div
-                  key="transfer-in"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
-                  style={{ background: "#fff8f0", border: "1px solid #f0d9a8", borderRadius: 14, padding: "16px 20px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                    <input type="checkbox" checked={isTransferIn}
-                      onChange={(e) => setIsTransferIn(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: C.red, cursor: "pointer" }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#7a4a08" }}>
-                      This student is transferring in from another school mid-year
-                    </span>
-                  </label>
-                  {isTransferIn && (
-                    <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
-                      <Field label="Effective Date" required>
-                        <Input type="date" value={transferInDate} onChange={(e) => setTransferInDate(e.target.value)} />
+              {/* 1. Student */}
+              <FormSection step={1} title="Student" subtitle={studentSubtitle}>
+                <div className="flex flex-col gap-3">
+                  <div className="-mb-3.5">
+                    {isEdit ? (
+                      <Field label="Enrolling Student" hint="The student cannot be changed on an existing enrollment.">
+                        <StudentPicker value={student} onChange={() => {}} disabled />
                       </Field>
-                      <Field label="Previous School Name" required>
-                        <Input type="text" value={transferInSchoolName} onChange={(e) => setTransferInSchoolName(e.target.value)}
-                          placeholder="e.g. Iloilo National High School" />
+                    ) : (
+                      <Field label="Enrolling Student" required hint="Find an existing student record. Need to register a new one first? Use the Students page.">
+                        <StudentPicker value={student} onChange={handleStudentChange} />
                       </Field>
-                      <Field label="Previous School Address" required>
-                        <Input type="text" value={transferInSchoolAddress} onChange={(e) => setTransferInSchoolAddress(e.target.value)}
-                          placeholder="e.g. Iloilo City" />
-                      </Field>
-                      <Field label="Reason / Notes" hint="Optional">
-                        <Input type="text" value={transferInReason} onChange={(e) => setTransferInReason(e.target.value)}
-                          placeholder="e.g. Family relocated" />
-                      </Field>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* 2. Term */}
-            <SectionCard title="Academic Term" icon="ti-calendar-event"
-              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.1 : 0 } }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
-                <Field label="School Year" required
-                  hint={isEdit && !gradePlacementUnlocked ? "Locked — unlock grade placement to change." : undefined}>
-                  {isEdit && !gradePlacementUnlocked ? (
-                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
-                      {form.school_year}
-                    </div>
-                  ) : (
-                    <Select value={form.school_year} onChange={(e) => setField("school_year", e.target.value)}>
-                      {buildSchoolYearOptions().map((sy) => <option key={sy} value={sy}>{sy}</option>)}
-                    </Select>
-                  )}
-                </Field>
-                <Field label="Enrollment Status" required>
-                  <Select value={form.enrollment_status} onChange={(e) => setField("enrollment_status", e.target.value)}>
-                    {ENROLLMENT_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </Select>
-                </Field>
-              </div>
-            </SectionCard>
-
-            {/* 3. Class Assignment */}
-            <SectionCard title="Class Assignment" icon="ti-school"
-              badge={isEdit && gradePlacementChanged ? "Modified" : null}
-              motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.14 : 0 } }}>
-
-              {/* Edit-mode: lock banner + unlock toggle */}
-              {isEdit && (
-                <div style={{
-                  marginBottom: 16, padding: "12px 16px", borderRadius: 10,
-                  background: gradePlacementUnlocked ? "#fffbeb" : "#f8fafc",
-                  border: `1px solid ${gradePlacementUnlocked ? "#fde68a" : "#e2e8f0"}`,
-                  display: "flex", alignItems: "flex-start", gap: 12,
-                }}>
-                  <i className={`ti ${gradePlacementUnlocked ? "ti-lock-open" : "ti-lock"}`}
-                    style={{ fontSize: 16, color: gradePlacementUnlocked ? "#d97706" : "#64748b", marginTop: 1, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: gradePlacementUnlocked ? "#92400e" : "#334155" }}>
-                      {gradePlacementUnlocked ? "Grade placement unlocked — changes will be audited" : "Grade placement is locked"}
-                    </div>
-                    <div style={{ fontSize: 11, color: gradePlacementUnlocked ? "#a16207" : "#64748b", marginTop: 2 }}>
-                      {gradePlacementUnlocked
-                        ? "You may now change grade level, school level, strand, or semester. A reason is required."
-                        : "School level, grade level, strand, and semester cannot be changed without admin override."}
-                    </div>
-                    <AnimatePresence>
-                      {gradePlacementUnlocked && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          transition={{ duration: 0.18 }}
-                          style={{ marginTop: 10 }}>
-                          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#92400e", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>
-                            Reason for change <span style={{ color: C.red }}>*</span>
-                          </label>
-                          <textarea
-                            value={gradePlacementReason}
-                            onChange={(e) => setGradePlacementReason(e.target.value)}
-                            placeholder="Explain why the grade placement is being corrected (e.g. data entry error, transferee re-classification)…"
-                            rows={2}
-                            style={{ width: "100%", border: "1.5px solid #fcd34d", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: "#1c1917", background: "#fffbeb", outline: "none", resize: "vertical", boxSizing: "border-box" }}
-                          />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    )}
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} transition={{ duration: 0.12 }}
-                    type="button"
-                    onClick={() => {
-                      setGradePlacementUnlocked((v) => !v);
-                      setGradePlacementReason("");
-                      if (gradePlacementUnlocked && originalGradeFields) {
-                        setForm((f) => ({ ...f, ...originalGradeFields }));
-                      }
-                    }}
-                    style={{
-                      flexShrink: 0, padding: "6px 13px", borderRadius: 99, fontSize: 12, fontWeight: 700,
-                      border: `1.5px solid ${gradePlacementUnlocked ? "#fcd34d" : "#cbd5e1"}`,
-                      background: gradePlacementUnlocked ? "#fef3c7" : "white",
-                      color: gradePlacementUnlocked ? "#92400e" : "#475569",
-                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                    }}>
-                    {gradePlacementUnlocked ? "Re-lock" : "Unlock"}
-                  </motion.button>
-                </div>
-              )}
 
-              <Field label="School Level" required>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {SCHOOL_LEVELS.map((lvl) => {
-                    const active = form.school_level === lvl.value;
-                    const locked = (isEdit && !gradePlacementUnlocked) || (!isEdit && Boolean(nextAllowedGrade));
-                    return (
-                      <motion.button key={lvl.value} type="button"
-                        whileHover={!locked ? { scale: 1.04 } : {}}
-                        whileTap={!locked ? { scale: 0.93 } : {}}
-                        transition={{ duration: 0.12 }}
-                        onClick={() => !locked && setField("school_level", lvl.value)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 99, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "white", color: active ? C.red : C.muted, fontSize: 13, fontWeight: active ? 700 : 500, cursor: locked ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: locked && !active ? 0.45 : 1 }}>
-                        <i className={`ti ${lvl.icon}`} style={{ fontSize: 14 }} />{lvl.label}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
-                <Field label="Grade Level" required hint={!isEdit && nextAllowedGrade ? `Locked to ${nextAllowedGrade} based on student's last grade (${studentLastGrade}).` : undefined}>
-                  {(isEdit && !gradePlacementUnlocked) || (!isEdit && nextAllowedGrade) ? (
-                    <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                      <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
-                      {form.grade_level}
+                  {/* Eligibility — new enrollments only */}
+                  <AnimatePresence>
+                    {!isEdit && student && (
+                      <motion.div
+                        key="eligibility"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                      >
+                        <EligibilityList
+                          eligibility={eligibility}
+                          loading={eligibilityLoading}
+                          overrideMode={overrideMode}
+                          overrideReason={overrideReason}
+                          onToggleOverride={() => { setOverrideMode((v) => !v); setOverrideReason(""); }}
+                          onChangeReason={setOverrideReason}
+                          isAdmin={isAdmin}
+                          student={student}
+                          onDocumentsChanged={refreshEligibility}
+                          continuing={continuing}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Transfer-in — only makes sense for a student with no prior local records */}
+                  {!isEdit && student && eligibility?.is_new_student && (
+                    <div className="rounded-lg border border-neutral-200 px-3.5 py-3">
+                      <label className="flex cursor-pointer items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isTransferIn}
+                          onChange={(e) => setIsTransferIn(e.target.checked)}
+                          className="h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
+                        />
+                        <span className="text-sm font-semibold text-neutral-900">
+                          This student is transferring in from another school mid-year
+                        </span>
+                      </label>
+                      {isTransferIn && (
+                        <div className="-mb-3.5 mt-3.5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+                          <Field label="Effective Date" required>
+                            <Input type="date" value={transferInDate} onChange={(e) => setTransferInDate(e.target.value)} />
+                          </Field>
+                          <Field label="Previous School Name" required>
+                            <Input type="text" value={transferInSchoolName} onChange={(e) => setTransferInSchoolName(e.target.value)}
+                              placeholder="e.g. Iloilo National High School" />
+                          </Field>
+                          <Field label="Previous School Address" required>
+                            <Input type="text" value={transferInSchoolAddress} onChange={(e) => setTransferInSchoolAddress(e.target.value)}
+                              placeholder="e.g. Iloilo City" />
+                          </Field>
+                          <Field label="Reason / Notes" hint="Optional">
+                            <Input type="text" value={transferInReason} onChange={(e) => setTransferInReason(e.target.value)}
+                              placeholder="e.g. Family relocated" />
+                          </Field>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <Select value={form.grade_level} onChange={(e) => setField("grade_level", e.target.value)}>
-                      {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-                    </Select>
                   )}
-                </Field>
-                <Field label="Section" required>
-                  <Input value={form.section} onChange={(e) => setField("section", e.target.value)} placeholder="e.g. Sampaguita, Section A" />
-                </Field>
-              </div>
-              <AnimatePresence>
-                {isSHS && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.2 }}
-                    style={{ marginTop: 6, padding: "16px 18px", background: "linear-gradient(to right, #fff8f6, #fff)", border: `1px dashed ${C.redBorder}`, borderRadius: 12 }}>
-                    <div style={{ fontSize: 11, color: C.red, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Senior HS specifics</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 20px" }}>
-                      <Field label="Strand" required>
-                        {isEdit && !gradePlacementUnlocked ? (
-                          <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
-                            {form.strand || "—"}
-                          </div>
-                        ) : (
-                          <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
-                            <option value="">— Select strand —</option>
-                            {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                          </Select>
-                        )}
-                      </Field>
-                      <Field label="Semester" required>
-                        {isEdit && !gradePlacementUnlocked ? (
-                          <div style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569", fontWeight: 700, cursor: "not-allowed" }}>
-                            <i className="ti ti-lock" style={{ fontSize: 13, color: "#8a6a6a" }} />
-                            {form.semester || "—"}
-                          </div>
-                        ) : (
-                          <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
-                            {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                          </Select>
-                        )}
-                      </Field>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </SectionCard>
+                </div>
+              </FormSection>
 
-            {/* 4. Scholarships (create only) */}
-            {!isEdit && (
-              <SectionCard title="Scholarships" icon="ti-discount" badge={selectedScholarships.length > 0 ? selectedScholarships.length : null}
-                motionProps={{ initial: isFirstRender ? { opacity:0, y:14 } : false, animate:{ opacity:1, y:0 }, transition:{ duration:0.24, ease:"easeOut", delay: isFirstRender ? 0.18 : 0 } }}>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontStyle: "italic" }}>Optional. Attach any scholarships this enrollment qualifies for.</div>
-                {scholarshipTypes.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>No active scholarship types available.</div>
-                ) : (
-                  <>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* 2. Placement */}
+              <FormSection
+                step={2}
+                title="Placement"
+                subtitle="School year, level, grade and section"
+                action={isEdit && gradePlacementChanged ? <Badge variant="warning">Modified</Badge> : null}
+              >
+                <div className="flex flex-col gap-5">
+
+                  {/* Edit-mode: lock banner + unlock toggle */}
+                  {isEdit && (
+                    <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${gradePlacementUnlocked ? "border-warning-dot/40 bg-warning-50" : "border-neutral-200 bg-neutral-50"}`}>
+                      <i
+                        className={`ti ${gradePlacementUnlocked ? "ti-lock-open text-warning-500" : "ti-lock text-neutral-600"} mt-0.5 shrink-0 text-[16px]`}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-sm font-bold ${gradePlacementUnlocked ? "text-warning-500" : "text-neutral-800"}`}>
+                          {gradePlacementUnlocked ? "Grade placement unlocked — changes will be audited" : "Grade placement is locked"}
+                        </div>
+                        <div className={`mt-0.5 text-xs ${gradePlacementUnlocked ? "text-warning-500" : "text-neutral-600"}`}>
+                          {gradePlacementUnlocked
+                            ? "You may now change grade level, school level, strand, or semester. A reason is required."
+                            : "School level, grade level, strand, and semester cannot be changed without admin override."}
+                        </div>
+                        {gradePlacementUnlocked && (
+                          <div className="-mb-3.5 mt-3">
+                            <Field label="Reason for change" required>
+                              <Textarea
+                                value={gradePlacementReason}
+                                onChange={(e) => setGradePlacementReason(e.target.value)}
+                                placeholder="Explain why the grade placement is being corrected (e.g. data entry error, transferee re-classification)…"
+                                rows={2}
+                              />
+                            </Field>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={gradePlacementUnlocked ? "ti-lock" : "ti-lock-open"}
+                        onClick={() => {
+                          setGradePlacementUnlocked((v) => !v);
+                          setGradePlacementReason("");
+                          if (gradePlacementUnlocked && originalGradeFields) {
+                            setForm((f) => ({ ...f, ...originalGradeFields }));
+                          }
+                        }}
+                      >
+                        {gradePlacementUnlocked ? "Re-lock" : "Unlock"}
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="-mb-3.5 grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+                    <Field label="School Year" required
+                      hint={placementLocked ? "Locked — unlock grade placement to change." : undefined}>
+                      {placementLocked ? (
+                        <LockedValue>{form.school_year}</LockedValue>
+                      ) : (
+                        <Select value={form.school_year} onChange={(e) => setField("school_year", e.target.value)}>
+                          {buildSchoolYearOptions().map((sy) => <option key={sy} value={sy}>{sy}</option>)}
+                        </Select>
+                      )}
+                    </Field>
+                    <Field label="Section" required>
+                      <Input value={form.section} onChange={(e) => setField("section", e.target.value)} placeholder="e.g. Sampaguita, Section A" />
+                    </Field>
+                  </div>
+
+                  <div>
+                    <GroupLabel
+                      required
+                      aside={levelLocked ? <LockNote>{isEdit ? "Locked" : "Set by grade progression"}</LockNote> : null}
+                    >
+                      School Level
+                    </GroupLabel>
+                    <ChipGroup
+                      label="School level"
+                      value={form.school_level}
+                      onChange={(v) => setField("school_level", v)}
+                      disabled={levelLocked}
+                      options={SCHOOL_LEVELS.map(({ value, label, icon, tone }) => ({ value, label, icon, tone }))}
+                    />
+                  </div>
+
+                  <div>
+                    <GroupLabel required>Grade Level</GroupLabel>
+                    <ChipGroup
+                      label="Grade level"
+                      value={form.grade_level}
+                      onChange={(v) => setField("grade_level", v)}
+                      disabled={levelLocked}
+                      stagger
+                      generation={form.school_level}
+                      options={gradeOptions.map((g) => ({ value: g, label: g, tone: levelMeta?.tone ?? "brand" }))}
+                    />
+                    {!isEdit && nextAllowedGrade && (
+                      <p className="mt-2 text-xs italic text-neutral-500">
+                        Locked to {nextAllowedGrade} based on student's last grade ({studentLastGrade}).
+                      </p>
+                    )}
+                  </div>
+
+                  {isSHS && (
+                    <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 p-4">
+                      <div className="mb-3 text-xs font-bold uppercase tracking-[0.07em] text-brand-600">Senior High details</div>
+                      <div className="-mb-3.5 grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+                        <Field label="Strand" required>
+                          {placementLocked ? (
+                            <LockedValue>{form.strand || "—"}</LockedValue>
+                          ) : (
+                            <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
+                              <option value="">— Select strand —</option>
+                              {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
+                            </Select>
+                          )}
+                        </Field>
+                        <Field label="Semester" required>
+                          {placementLocked ? (
+                            <LockedValue>{form.semester || "—"}</LockedValue>
+                          ) : (
+                            <Select value={form.semester} onChange={(e) => setField("semester", e.target.value)}>
+                              {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </Select>
+                          )}
+                        </Field>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </FormSection>
+
+              {/* 3. Status */}
+              <FormSection step={3} title="Enrollment status" subtitle="What saving this record will do">
+                <fieldset>
+                  <legend className="sr-only">Enrollment status</legend>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {STATUS_CHOICES.map((choice) => {
+                      const meta = ENROLLMENT_STATUS_MAP[choice.value];
+                      const tone = CHOICE_TONES[meta.variant] ?? CHOICE_TONES.muted;
+                      const checked = form.enrollment_status === choice.value;
+                      // Only a new enrollment saved as Enrolled offers the
+                      // invoice prompt, and only to billing roles.
+                      const desc = choice.value === "enrolled" && !isEdit && canGenerateInvoice
+                        ? `${choice.desc} You can generate the invoice next.`
+                        : choice.desc;
+                      return (
+                        <label
+                          key={choice.value}
+                          className={[
+                            "flex cursor-pointer items-start gap-2.5 rounded-lg border-[1.5px] px-3.5 py-3 transition-colors",
+                            "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand-500/25",
+                            checked ? tone.on : "border-neutral-300 bg-white hover:border-brand-300",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="radio"
+                            name="enrollment_status"
+                            value={choice.value}
+                            checked={checked}
+                            onChange={() => setField("enrollment_status", choice.value)}
+                            className="sr-only"
+                          />
+                          <span
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${checked ? tone.ring : "border-neutral-400"}`}
+                            aria-hidden="true"
+                          >
+                            {checked && <span className={`h-2 w-2 rounded-full ${tone.fill}`} />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className={`block text-base font-bold ${checked ? tone.text : "text-neutral-900"}`}>{meta.label}</span>
+                            <span className="block text-xs text-neutral-600">{desc}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              </FormSection>
+
+              {/* 4. Scholarships (create only) */}
+              {!isEdit && (
+                <FormSection
+                  step={4}
+                  title="Scholarships"
+                  subtitle="Optional. Attach any this enrollment qualifies for."
+                  action={selectedScholarships.length > 0 ? <Badge variant="brand">{selectedScholarships.length} selected</Badge> : null}
+                >
+                  {scholarshipTypes.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-neutral-500">No active scholarship types available.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
                       {scholarshipTypes.map((sc) => {
                         const active = selectedScholarships.includes(sc.scholarship_type_id);
-                        const valLabel = sc.discount_mode === "percentage" ? `${parseFloat(sc.discount_value)}%` : `₱ ${parseFloat(sc.discount_value).toLocaleString()}`;
                         return (
-                          <motion.div key={sc.scholarship_type_id}
-                            whileHover={{ y: -1, boxShadow: "0 4px 16px rgba(224,49,49,0.10)" }}
-                            whileTap={{ scale: 0.985 }}
-                            transition={{ duration: 0.14 }}
-                            onClick={() => toggleScholarship(sc.scholarship_type_id)}
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${active ? C.red : "#f0e4e4"}`, background: active ? C.redLight : "#fffbfb", cursor: "pointer" }}>
-                            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${active ? C.red : "#8a6a6a"}`, background: active ? C.red : "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              {active && <i className="ti ti-check" style={{ fontSize: 12, color: "white" }} />}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{sc.scholarship_name}</div>
-                              {sc.description && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sc.description}</div>}
-                            </div>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: active ? C.red : C.muted, background: active ? "white" : "#f9f4f4", padding: "4px 10px", borderRadius: 99, whiteSpace: "nowrap" }}>{valLabel} off</span>
-                          </motion.div>
+                          <label
+                            key={sc.scholarship_type_id}
+                            className={[
+                              "flex cursor-pointer items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-3 transition-colors",
+                              active ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-white hover:border-brand-300",
+                            ].join(" ")}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleScholarship(sc.scholarship_type_id)}
+                              className="h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-base font-semibold text-neutral-900">{sc.scholarship_name}</span>
+                              {sc.description && <span className="block text-xs text-neutral-500">{sc.description}</span>}
+                            </span>
+                            <Badge variant="accent" className="whitespace-nowrap">{discountLabel(sc)} off</Badge>
+                          </label>
                         );
                       })}
-                    </div>
-                    <AnimatePresence>
                       {selectedScholarships.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          transition={{ duration: 0.18 }}
-                          style={{ marginTop: 14 }}>
+                        <div className="-mb-3.5 mt-2">
                           <Field label="Notes" hint="Optional remarks applied to all selected scholarships.">
                             <Textarea value={scholarshipNotes} onChange={(e) => setScholarshipNotes(e.target.value)} placeholder="e.g. Approved by registrar on 2026-06-10" />
                           </Field>
-                        </motion.div>
+                        </div>
                       )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </SectionCard>
-            )}
+                    </div>
+                  )}
+                </FormSection>
+              )}
+            </div>
 
-            {/* Actions */}
-            <motion.div
-              initial={isFirstRender ? { opacity: 0, y: 14 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.22 : 0 }}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 12 }}>
-              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                type="button" onClick={() => setLeaveConfirm(true)}
-                style={{ background: "transparent", color: C.muted, border: `1.5px solid ${C.redMid}`, borderRadius: 50, padding: "10px 24px", fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
-                Cancel
-              </motion.button>
-              <motion.button
-                whileHover={!validationError && !saving ? { scale: 1.03 } : {}}
-                whileTap={!validationError && !saving ? { scale: 0.96 } : {}}
-                transition={{ duration: 0.12 }}
-                type="button" onClick={handleSubmit} disabled={saving || Boolean(validationError)}
-                style={{ background: validationError ? "#f0c4c4" : "linear-gradient(135deg, #e03131, #c92a2a)", color: "#fff", border: "none", borderRadius: 50, padding: "11px 28px", fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", cursor: validationError ? "not-allowed" : "pointer", letterSpacing: ".02em", boxShadow: validationError ? "none" : "0 6px 20px rgba(224,49,49,0.28)", display: "inline-flex", alignItems: "center", gap: 8, opacity: saving ? 0.7 : 1 }}
-                title={validationError || ""}>
-                {saving ? (
-                  <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Saving…</>
-                ) : isEdit ? (
-                  <><i className="ti ti-device-floppy" style={{ fontSize: 15 }} />Update Enrollment</>
-                ) : (
-                  <><i className="ti ti-check" style={{ fontSize: 15 }} />Submit Enrollment</>
-                )}
-              </motion.button>
-            </motion.div>
+            {/* ── Summary rail ── */}
+            <SummaryCard
+              isEdit={isEdit}
+              student={student}
+              form={form}
+              isSHS={isSHS}
+              levelMeta={levelMeta}
+              chosenScholarships={chosenScholarships}
+              checks={checks}
+              validationError={validationError}
+              saving={saving}
+              submitLabel={submitLabel}
+              onSubmit={handleSubmit}
+              showSwitchToPending={showSwitchToPending}
+              onSwitchToPending={() => setField("enrollment_status", "pending")}
+            />
           </div>
         )}
       </div>

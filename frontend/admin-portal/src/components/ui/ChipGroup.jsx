@@ -73,6 +73,10 @@ export default function ChipGroup({
   // Without it the chips would animate in once and then swap silently, since
   // React reuses elements whose keys match.
   generation = "",
+  // `disabled` locks the row: the selected chip keeps its colour, the rest
+  // fade to half opacity. Used where a value is fixed by a rule rather than
+  // chosen (the enrollment form's grade progression lock).
+  disabled = false,
   className = "",
 }) {
   // "md" text is 12px, matching EnrollmentsPage's original chips exactly —
@@ -102,6 +106,9 @@ export default function ChipGroup({
             }
             animate={{
               ...(stagger ? { opacity: 1, y: 0 } : null),
+              // Opacity goes through `animate`, not a class, because the
+              // stagger above animates it too and would override a class.
+              ...(disabled ? { opacity: selected ? 1 : 0.5 } : null),
               backgroundColor: selected ? tone.bg : REST.bg,
               color: selected ? tone.color : REST.color,
               borderColor: selected ? tone.border : REST.border,
@@ -120,8 +127,10 @@ export default function ChipGroup({
             }
             onClick={() => onChange?.(opt.value)}
             aria-pressed={selected}
+            disabled={disabled}
             className={[
               "focus-ring inline-flex items-center gap-1.5 rounded-full border-[1.5px] font-semibold",
+              disabled ? "cursor-not-allowed" : "",
               sizeClass,
             ].join(" ")}
           >
