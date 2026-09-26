@@ -32,9 +32,15 @@ export default function CORPrintPage() {
         const studentId = enr.student_detail?.student_id ?? enr.student;
         const [stu, subs, settings] = await Promise.all([
           getStudent(studentId),
+          // This learner's grade only, every subject of it, and for senior
+          // high the core subjects plus their strand's. It asked for the whole
+          // school level on the default page of 20, so a Grade 6 certificate
+          // printed Grade 1-3 subjects.
           getSubjects({
             school_level: enr.school_level,
-            ...(enr.strand   ? { strand:   enr.strand   } : {}),
+            grade_level: enr.grade_level,
+            page_size: 100,
+            ...(enr.strand   ? { for_strand: enr.strand } : {}),
             ...(enr.semester ? { semester: enr.semester } : {}),
           }),
           getSchoolSettings().catch(() => null),

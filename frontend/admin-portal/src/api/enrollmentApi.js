@@ -47,6 +47,17 @@ export const createEnrollment = (payload) =>
 export const updateEnrollment = (id, payload) =>
   enrollmentClient.patch(`/enrollments/${id}/`, payload).then((r) => r.data);
 
+// Marks every still-Enrolled row of a FINISHED school year completed. The
+// server refuses the year in progress (its classes close one at a time via
+// Complete Section).
+export const closeSchoolYear = (schoolYear) =>
+  enrollmentClient.post("/enrollments/close-year/", { school_year: schoolYear }).then((r) => r.data);
+
+// Confirmation emails for this enrollment that failed and haven't gone
+// through since: { failures: [{ id, to_email, recipients, created_at }] }.
+export const getEnrollmentEmailStatus = (id) =>
+  enrollmentClient.get(`/enrollments/${id}/email-status/`).then((r) => r.data);
+
 export const bulkCreateEnrollments = (payload) =>
   enrollmentClient.post("/enrollments/bulk/", payload).then((r) => r.data);
 

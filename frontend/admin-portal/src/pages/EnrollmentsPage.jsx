@@ -28,6 +28,7 @@ import {
   promoteConfirm,
   completeSection,
   getUnplacedStudents,
+  closeSchoolYear,
 } from "../api/enrollmentApi";
 import { getStudents as apiGetStudents, markStudentsGraduated } from "../api/studentApi";
 import toast from "react-hot-toast";
@@ -1192,6 +1193,11 @@ export default function EnrollmentsPage() {
   const [markingGraduated, setMarkingGraduated] = useState(false);
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
+  const [countsReload,   setCountsReload]   = useState(0);
+  // "Close SY": a finished year that still has learners marked Enrolled.
+  const { currentYear } = useSchoolYear();
+  const [closeYearAsk,   setCloseYearAsk]   = useState(false);
+  const [closingYear,    setClosingYear]    = useState(false);
 
   // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered.
   // The year follows hooks/useYearFilter: the link's year if it names one, else the current school year.
@@ -1277,7 +1283,32 @@ export default function EnrollmentsPage() {
         cancelled: cancelled.count ?? 0,
       });
     }).catch(() => {}).finally(() => setCountsLoading(false));
-  }, [token, schoolYear, schoolLevel, gradeLevel]);
+  }, [token, schoolYear, schoolLevel, gradeLevel, countsReload]);
+
+  // A year that has ended but still lists learners as Enrolled was never
+  // closed: they read as enrolled in two years, their old advisers can still
+  // edit them, and analytics sees that year through the leftovers. Offered
+  // only for a past year, on the unfiltered counts, so the number is the
+  // whole year's.
+  const openPastYear = canManage && schoolYear && currentYear && schoolYear < currentYear
+    && !schoolLevel && !gradeLevel && !countsLoading && statusCounts.enrolled > 0;
+  useEffect(() => { setCloseYearAsk(false); }, [schoolYear]);
+
+  async function handleCloseYear() {
+    setClosingYear(true);
+    try {
+      const res = await closeSchoolYear(schoolYear);
+      toast.success(`SY ${res.school_year} closed — ${res.completed} enrollment${res.completed === 1 ? "" : "s"} marked completed.`);
+      setCloseYearAsk(false);
+      setCountsReload((k) => k + 1);
+      setUnplacedReload((k) => k + 1);
+      fetchEnrollments(1);
+    } catch (e) {
+      toast.error(e.message || "Could not close the school year.");
+    } finally {
+      setClosingYear(false);
+    }
+  }
 
   // Distinguishes "this request failed" from "there are no enrollments".
   const [loadError, setLoadError] = useState(null);
@@ -1378,6 +1409,37 @@ export default function EnrollmentsPage() {
                 </div>
               ))}
             </div>
+
+            {/* ── A finished year still open ── */}
+            {openPastYear && (
+              <Card padding="none" className="overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-2.5 text-sm text-neutral-800">
+                    <i className="ti ti-calendar-exclamation text-lg text-warning-500" aria-hidden="true" />
+                    <span>
+                      SY {schoolYear} has ended, but <strong>{statusCounts.enrolled}</strong> learner{statusCounts.enrolled !== 1 ? "s are" : " is"} still marked Enrolled.
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {closeYearAsk ? (
+                      <>
+                        <span className="text-xs text-neutral-600">Mark all {statusCounts.enrolled} completed?</span>
+                        <Button variant="primary" size="sm" loading={closingYear} onClick={handleCloseYear}>
+                          Close SY {schoolYear}
+                        </Button>
+                        <Button variant="ghost" size="sm" disabled={closingYear} onClick={() => setCloseYearAsk(false)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="secondary" size="sm" icon="ti-lock" onClick={() => setCloseYearAsk(true)}>
+                        Close SY {schoolYear}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {/* ── Not yet placed ── */}
             {canManage && unplaced?.school_year === schoolYear && unplaced.count > 0 && (

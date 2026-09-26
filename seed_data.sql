@@ -491,10 +491,12 @@ OVERRIDING SYSTEM VALUE VALUES
   (13, 'MATH10',  'Mathematics 10',         'junior_highschool', 'Grade 10', NULL,   NULL,  3),
   (14, 'SCI10',   'Science 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
   (15, 'ENG10',   'English 10',             'junior_highschool', 'Grade 10', NULL,   NULL,  3),
-  -- Senior High Grade 11 (STEM, 1st semester)
-  (16, 'GENMATH', 'General Mathematics',    'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
-  (17, 'EARTHLI', 'Earth and Life Science', 'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
-  (18, 'ORALCOM', 'Oral Communication',     'senior_highschool', 'Grade 11', 'STEM', '1st', 4),
+  -- Senior High Grade 11 core subjects (1st semester). Every strand takes
+  -- these, so they carry no strand -- tagged STEM, an ABM or HUMSS learner
+  -- could not be graded in them.
+  (16, 'GENMATH', 'General Mathematics',    'senior_highschool', 'Grade 11', NULL,   '1st', 4),
+  (17, 'EARTHLI', 'Earth and Life Science', 'senior_highschool', 'Grade 11', NULL,   '1st', 4),
+  (18, 'ORALCOM', 'Oral Communication',     'senior_highschool', 'Grade 11', NULL,   '1st', 4),
   -- Senior High Grade 12 (STEM, 1st semester)
   (19, 'BUSFIN',  'Business Finance',       'senior_highschool', 'Grade 12', 'STEM', '1st', 4),
   (20, 'PR2',     'Practical Research 2',   'senior_highschool', 'Grade 12', 'STEM', '1st', 4)

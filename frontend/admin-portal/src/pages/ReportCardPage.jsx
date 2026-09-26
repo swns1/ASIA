@@ -19,6 +19,65 @@ const LEVEL_LABELS = {
   junior_highschool: "Junior High School", senior_highschool: "Senior High School",
 };
 
+// Senior high is enrolled one semester at a time, but its report card is the
+// year's: DepEd's SF9 for senior high lists each semester's learning areas
+// with a General Average for that semester. One table per semester, each
+// subject under the semester it was taken in.
+function SemesterTables({ semesters, subjects }) {
+  const th = { padding: "12px 14px", color: "white", fontWeight: 700, fontSize: 13 };
+  return semesters.map((sem, si) => {
+    const rows = subjects.filter((s) => s.semester === sem.key);
+    return (
+      <table key={sem.key} style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, marginTop: si === 0 ? 22 : 18 }}>
+        <thead>
+          <tr style={{ background: C.dark }}>
+            <th style={{ ...th, textAlign: "left", borderRadius: "8px 0 0 0", width: "60%" }}>{sem.label}</th>
+            <th style={{ ...th, textAlign: "center" }}>Final Grade</th>
+            <th style={{ ...th, textAlign: "center", borderRadius: "0 8px 0 0" }}>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={3} style={{ textAlign: "center", padding: "18px 0", color: C.muted, fontSize: 13 }}>
+                {sem.enrollment_id ? "No grades recorded yet." : "Not yet enrolled for this semester."}
+              </td>
+            </tr>
+          ) : rows.map((subj, idx) => (
+            <tr key={subj.subject_id} style={{ background: idx % 2 === 0 ? "white" : C.bg, borderBottom: `1px solid ${C.border}` }}>
+              <td style={{ padding: "13px 14px", color: C.dark }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{subj.subject_name}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>{subj.subject_code}</div>
+              </td>
+              <td style={{ textAlign: "center", padding: "13px 10px", fontWeight: 700, color: gradeColor(subj.average) }}>
+                {subj.average != null ? subj.average.toFixed(2) : "—"}
+              </td>
+              <td style={{ textAlign: "center", padding: "13px 14px" }}>
+                {subj.overall_remarks
+                  ? <StatusBadge status={subj.overall_remarks} meta={GRADE_REMARKS_META} />
+                  : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: C.redBg, borderTop: `2px solid ${C.border}` }}>
+            <td style={{ padding: "13px 14px", fontWeight: 700, color: C.dark, textAlign: "right" }}>
+              General Average for the Semester
+            </td>
+            <td style={{ textAlign: "center", padding: "13px 10px", fontWeight: 800, fontSize: 17, color: gradeColor(sem.general_average) }}>
+              {sem.general_average ?? "—"}
+            </td>
+            <td style={{ textAlign: "center", padding: "13px 14px", fontSize: 12, fontWeight: 700, color: sem.general_average == null ? C.muted : sem.general_average >= 75 ? C.green : C.red }}>
+              {sem.general_average == null ? "" : sem.general_average >= 75 ? "Passed" : "Failed"}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    );
+  });
+}
+
 export default function ReportCardPage() {
   usePageTitle("Report Card");
   const { enrollmentId } = useParams();
@@ -142,14 +201,17 @@ export default function ReportCardPage() {
           <InfoItem label="Section" value={enrollment.section} />
           <InfoItem label="School Level" value={LEVEL_LABELS[enrollment.school_level] || enrollment.school_level} />
           {enrollment.strand && <InfoItem label="Strand" value={enrollment.strand} />}
-          {enrollment.semester && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
+          {/* A senior high card covers both semesters (see SemesterTables). */}
+          {enrollment.semester && !data.semesters && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
           <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</span>
             <StatusBadge status={enrollment.enrollment_status} meta={ENROLLMENT_STATUS_META} defaultKey="enrolled" />
           </div>
         </InfoGrid>
 
-        {subjects.length === 0 ? (
+        {data.semesters ? (
+          <SemesterTables semesters={data.semesters} subjects={subjects} />
+        ) : subjects.length === 0 ? (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
             No grade records found for this enrollment.
           </div>

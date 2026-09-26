@@ -694,7 +694,8 @@ CREATE TABLE public.email_delivery_failures (
     subject character varying(200) NOT NULL,
     context jsonb NOT NULL,
     error_message text NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    resolved_at timestamp with time zone
 );
 
 

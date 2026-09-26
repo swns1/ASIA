@@ -89,7 +89,8 @@ export default function SF10PrintPage() {
                   school_level: enr.school_level,
                   grade_level: enr.grade_level,
                   page_size: 100,
-                  ...(enr.strand   ? { strand:   enr.strand   } : {}),
+                  // Core subjects plus this strand's, not the strand's alone.
+                  ...(enr.strand   ? { for_strand: enr.strand } : {}),
                   ...(enr.semester ? { semester: enr.semester } : {}),
                 }).then(d => Array.isArray(d) ? d : d.results ?? []),
                 `subjects (${year})`, [],

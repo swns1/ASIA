@@ -142,8 +142,14 @@ function AwardModal({ scholarshipTypes, schoolYear, onClose, onSaved }) {
     if (!schTypeId)  { setError("Please select a scholarship type."); return; }
     setSaving(true); setError("");
     try {
-      await createEnrollmentScholarship({ enrollment:enrollment.enrollment_id, scholarship_type:parseInt(schTypeId), notes:notes.trim()||null });
-      toast.success("Scholarship awarded.");
+      const award = await createEnrollmentScholarship({ enrollment:enrollment.enrollment_id, scholarship_type:parseInt(schTypeId), notes:notes.trim()||null });
+      // An invoice is priced from the scholarships on file when it is built,
+      // so one already issued stays as it was until it is re-issued.
+      if (award?.invoice_to_reissue) {
+        toast.success(`Scholarship awarded. Re-issue invoice ${award.invoice_to_reissue} in Invoices to apply it.`, { duration: 8000 });
+      } else {
+        toast.success("Scholarship awarded.");
+      }
       onSaved(); onClose();
     } catch (e) {
       const msg = e.message || "Failed to award scholarship.";
@@ -289,12 +295,13 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
     if (!schTypeId) { setError("Please select a scholarship type."); return; }
     if (eligible.length === 0) { setError("No students to award."); return; }
     setApplying(true); setError("");
-    const res = { success:[], failed:[] };
+    const res = { success:[], failed:[], reissue:[] };
     for (const elig of eligible) {
       try {
-        await createEnrollmentScholarship({ enrollment:elig.enrollment_id, scholarship_type:parseInt(schTypeId), notes:notes.trim()||null });
+        const award = await createEnrollmentScholarship({ enrollment:elig.enrollment_id, scholarship_type:parseInt(schTypeId), notes:notes.trim()||null });
         res.success.push(elig.student_name);
-      } catch { res.failed.push(elig.student_name); }
+        if (award?.invoice_to_reissue) res.reissue.push(`${elig.student_name} — ${award.invoice_to_reissue}`);
+      } catch (e) { res.failed.push(e?.message ? `${elig.student_name} — ${e.message}` : elig.student_name); }
     }
     setResults(res);
     setApplying(false);
@@ -347,9 +354,19 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                   style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"14px 16px" }}>
                   <div style={{ fontSize:13, fontWeight:700, color:"#b91c1c", marginBottom:8 }}>
                     <i className="ti ti-alert-circle" style={{ fontSize:15, marginRight:6 }} />
-                    {results.failed.length} failed (may already have this scholarship)
+                    {results.failed.length} not awarded
                   </div>
                   {results.failed.map((n, i) => <div key={i} style={{ fontSize:12, color:"#b91c1c", marginLeft:20 }}>• {n}</div>)}
+                </motion.div>
+              )}
+              {results.reissue?.length > 0 && (
+                <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.12 }}
+                  style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, padding:"14px 16px", marginTop:12 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#7a4a08", marginBottom:8 }}>
+                    <i className="ti ti-file-invoice" style={{ fontSize:15, marginRight:6 }} />
+                    Already invoiced — re-issue these in Invoices to apply the scholarship
+                  </div>
+                  {results.reissue.map((n, i) => <div key={i} style={{ fontSize:12, color:"#7a4a08", marginLeft:20 }}>• {n}</div>)}
                 </motion.div>
               )}
             </div>
@@ -490,7 +507,10 @@ function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yea
 
   const handleRevoke = async () => {
     if (!toRevoke) return;
-    await deleteEnrollmentScholarship(toRevoke.enrollment_scholarship_id);
+    const result = await deleteEnrollmentScholarship(toRevoke.enrollment_scholarship_id);
+    if (result?.invoice_to_reissue) {
+      toast(`Scholarship revoked. Re-issue invoice ${result.invoice_to_reissue} in Invoices to remove it from the bill.`, { duration: 8000 });
+    }
     setToRevoke(null);
     fetchAwards();
   };

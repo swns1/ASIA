@@ -159,6 +159,21 @@ def _section_sort_key(key):
     return (level_rank, _grade_sort_value(grade), strand.lower(), section.lower())
 
 
+def advisers_for(key, advisers):
+    """
+    The advisers of one section row. An advisory with no strand covers the
+    whole section -- every strand in it -- which is how teacher scoping and My
+    Sections read it (accounts.permissions.teacher_student_ids). Matching on
+    the strand alone showed a senior high section with a whole-section adviser
+    as having none, once per strand.
+    """
+    level, grade, section, strand = key
+    names = list(advisers.get(key, []))
+    if strand:
+        names += advisers.get((level, grade, section, ""), [])
+    return sorted(set(names))
+
+
 def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, period, no_classes):
     """
     sections:        {key: [enrollment_id, ...]} — enrolled students per section
@@ -212,7 +227,7 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
             "section":          section,
             "strand":           strand or None,
             "students":         len(students),
-            "advisers":         sorted(advisers.get(key, [])),
+            "advisers":         advisers_for(key, advisers),
             "attendance_taken": key in taken,
             "grades":           grades,
         })

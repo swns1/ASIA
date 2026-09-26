@@ -290,6 +290,9 @@ class EmailDeliveryFailure(models.Model):
     error_message = models.TextField()
 
     created_at = models.DateTimeField(auto_now_add=True)
+    # Set when a later send for the same enrollment goes through. Open
+    # failures are what the enrollment page offers to resend.
+    resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = True

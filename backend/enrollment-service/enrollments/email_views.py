@@ -3,6 +3,7 @@ import smtplib
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 from django.utils.html import escape
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -227,6 +228,10 @@ def send_enrollment_email(request):
             is_transient=is_transient_send_error,
             label="email",
         )
+        # Earlier failures for this enrollment are settled by this send.
+        EmailDeliveryFailure.objects.filter(
+            context__enrollment_id=enrollment_id, resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now())
         return Response({"success": True, "sent_to": recipients})
     except Exception as e:
         logger.exception("Enrollment email to %s failed after retries", ", ".join(recipients))

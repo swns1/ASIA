@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   getEnrollment,
+  getEnrollments,
   getSubjects,
   getGrades,
   getNarrativeCategories,
@@ -42,6 +43,23 @@ const OBSERVED_MARKS = {
   needs_improvement: "RO",
 };
 
+// Senior high is enrolled one semester at a time, but SF9 reports the year:
+// each semester's learning areas with a General Average for the semester.
+const SHS = "senior_highschool";
+const ATTENDED = ["enrolled", "completed", "transferred_out"];
+const SHS_SEMESTERS = [
+  { key: "1st_semester", short: "1st", label: "First Semester" },
+  { key: "2nd_semester", short: "2nd", label: "Second Semester" },
+];
+
+// The same whole-number mean as grading/deped.py's general_average.
+function wholeMean(values) {
+  const v = values.filter((x) => x != null);
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+}
+
+const listOf = (d) => (Array.isArray(d) ? d : d?.results ?? []);
+
 function observedMark(rating) {
   if (!rating) return "—";
   return OBSERVED_MARKS[rating] ?? String(rating).toUpperCase().slice(0, 2);
@@ -55,6 +73,8 @@ export default function SF9PrintPage() {
   const district = searchParams.get("district") || "";
 
   const [enrollment,     setEnrollment]     = useState(null);
+  // Senior high: every row of the learner's year (one per semester).
+  const [yearRows,       setYearRows]       = useState([]);
   const [student,        setStudent]        = useState(null);
   const [subjects,       setSubjects]       = useState([]);
   const [gradeMap,       setGradeMap]       = useState({});
@@ -79,20 +99,36 @@ export default function SF9PrintPage() {
         setEnrollment(enr);
         const studentId = enr.student_detail?.student_id ?? enr.student;
 
+        // A senior high year is two rows; read both. Every other level is one.
+        let rowsOfYear = [enr];
+        if (enr.school_level === SHS) {
+          const all = listOf(await getEnrollments({ student: studentId, school_year: enr.school_year, page_size: 20 }));
+          rowsOfYear = all.filter((r) => r.enrollment_id === enr.enrollment_id || (
+            r.school_level === SHS && r.grade_level === enr.grade_level && ATTENDED.includes(r.enrollment_status)
+          ));
+          if (!rowsOfYear.some((r) => r.enrollment_id === enr.enrollment_id)) rowsOfYear.push(enr);
+        }
+        setYearRows(rowsOfYear);
+        const ids = rowsOfYear.map((r) => r.enrollment_id);
+        const perRow = (fetch) => Promise.all(ids.map(fetch)).then((lists) => lists.flatMap(listOf));
+
         const [stu, subs, allGrades, recs, settings, valueCats, valueReports] = await Promise.all([
           getStudent(studentId),
           getSubjects({
             school_level: enr.school_level,
             grade_level: enr.grade_level,
             page_size: 100,
-            ...(enr.strand   ? { strand:   enr.strand   } : {}),
-            ...(enr.semester ? { semester: enr.semester } : {}),
+            // for_strand: the core subjects plus this strand's. An exact
+            // strand match left out every core subject. No semester filter for
+            // senior high: the card covers both.
+            ...(enr.strand   ? { for_strand: enr.strand } : {}),
+            ...(enr.semester && enr.school_level !== SHS ? { semester: enr.semester } : {}),
           }),
-          getGrades({ enrollment: enrollmentId, page_size: 200 }),
-          soft(getAttendance({ enrollment: enrollmentId, page_size: 500 }), "attendance", []),
+          perRow((id) => getGrades({ enrollment: id, page_size: 200 })),
+          soft(perRow((id) => getAttendance({ enrollment: id, page_size: 500 })), "attendance", []),
           getSchoolSettings().catch(() => null),
           soft(getNarrativeCategories({ is_active: true, page_size: 100 }), "observed values", []),
-          soft(getNarrativeReports({ enrollment: enrollmentId, page_size: 200 }), "observed values", []),
+          soft(perRow((id) => getNarrativeReports({ enrollment: id, page_size: 200 })), "observed values", []),
         ]);
 
         setStudent(stu);
@@ -176,16 +212,42 @@ export default function SF9PrintPage() {
     return { sub, pGrades, final };
   });
 
-  const allFinals = rows.map(r => r.final).filter(g => g != null);
-  const gwa = allFinals.length
-    ? parseFloat((allFinals.reduce((a, b) => a + b, 0) / allFinals.length).toFixed(2))
-    : null;
+  const isShs = enrollment.school_level === SHS;
+  // Senior high: each learning area sits under the semester it was graded in
+  // (else the subject's own semester), and each semester has its own General
+  // Average; the year's is the mean of the two.
+  const semesterGroups = isShs ? SHS_SEMESTERS.map((sem) => {
+    const semRows = rows.filter(({ sub, pGrades }) => {
+      const graded = cfg.periods.findIndex((_, i) => pGrades[i] != null);
+      const key = graded >= 0 ? cfg.periods[graded] : sub.semester ? `${sub.semester}_semester` : null;
+      return key === sem.key;
+    });
+    return {
+      ...sem,
+      rows: semRows,
+      enrolled: yearRows.some((r) => r.semester === sem.short),
+      ga: wholeMean(semRows.map((r) => r.final)),
+    };
+  }) : null;
 
+  const allFinals = rows.map(r => r.final).filter(g => g != null);
+  const gwa = isShs
+    ? wholeMean(semesterGroups.map((g) => g.ga))
+    : allFinals.length
+      ? parseFloat((allFinals.reduce((a, b) => a + b, 0) / allFinals.length).toFixed(2))
+      : null;
+
+  // Senior high attendance goes in the column of the semester row it was
+  // recorded on; the month-based split puts the weeks after the semestral
+  // break in the wrong semester.
+  const semesterOfRow = Object.fromEntries(yearRows.map((r) => [r.enrollment_id, r.semester === "2nd" ? 1 : 0]));
   const n  = cfg.periods.length;
   const pP = Array(n).fill(0);
   const pA = Array(n).fill(0);
   attRecs.forEach(rec => {
-    const i = attIndex(rec.date, cfg.type);
+    const i = isShs && semesterOfRow[rec.enrollment] != null
+      ? semesterOfRow[rec.enrollment]
+      : attIndex(rec.date, cfg.type);
     if (i >= 0 && i < n) {
       if (rec.status === "P" || rec.status === "L") pP[i]++;
       else pA[i]++;
@@ -194,7 +256,10 @@ export default function SF9PrintPage() {
 
   const gradeIdx  = GRADE_ORDER.indexOf(enrollment.grade_level);
   const nextGrade = gradeIdx >= 0 && gradeIdx < GRADE_ORDER.length - 1 ? GRADE_ORDER[gradeIdx + 1] : null;
-  const isCompleted = enrollment.enrollment_status === "completed";
+  // A senior high year is complete when its 2nd semester is.
+  const isCompleted = isShs
+    ? yearRows.some((r) => r.semester === "2nd" && r.enrollment_status === "completed")
+    : enrollment.enrollment_status === "completed";
   const remarkChecks = {
     promoted:    isCompleted && gwa != null && gwa >= 75 && nextGrade != null,
     retained:    isCompleted && gwa != null && gwa < 75,
@@ -262,6 +327,47 @@ export default function SF9PrintPage() {
         </InfoGrid>
 
         <SectionBar>Academic Performance</SectionBar>
+        {isShs ? semesterGroups.map((sem) => (
+          <table key={sem.key} style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+            <thead>
+              <tr>
+                <th style={TH({ textAlign: "left", width: "62%" })}>{sem.label} — Learning Areas</th>
+                <th style={TH({ textAlign: "center" })}>Final Grade</th>
+                <th style={TH({ textAlign: "center" })}>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sem.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={TD({ textAlign: "center", color: "#aaa" })}>
+                    {sem.enrolled ? "No grades recorded yet." : "Not yet enrolled for this semester."}
+                  </td>
+                </tr>
+              ) : sem.rows.map(({ sub, final }, i) => (
+                <tr key={sub.subject_id ?? i} style={{ background: i % 2 === 0 ? "white" : C.bg }}>
+                  <td style={TD()}>{sub.subject_name}</td>
+                  <td style={TD({ textAlign: "center", fontWeight: 800, fontSize: 11, color: final != null ? gradeColor(final) : "#bbb" })}>
+                    {final != null ? Math.round(final) : "—"}
+                  </td>
+                  <td style={TD({ textAlign: "center", fontSize: 10 })}>
+                    {final == null ? "" : final >= 75 ? "Passed" : "Failed"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: C.redBg }}>
+                <td style={TD({ textAlign: "right", fontWeight: 800, fontSize: 11 })}>General Average for the Semester</td>
+                <td style={TD({ textAlign: "center", fontWeight: 900, fontSize: 13, color: sem.ga != null ? gradeColor(sem.ga) : "#aaa" })}>
+                  {sem.ga ?? "—"}
+                </td>
+                <td style={TD({ textAlign: "center", fontWeight: 700 })}>
+                  {sem.ga != null ? (sem.ga >= 75 ? "Passed" : "Failed") : ""}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )) : (
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
             <tr>
@@ -310,6 +416,7 @@ export default function SF9PrintPage() {
             </tr>
           </tfoot>
         </table>
+        )}
 
         <SectionBar>Attendance</SectionBar>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>

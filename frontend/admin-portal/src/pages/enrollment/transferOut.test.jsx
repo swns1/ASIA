@@ -32,6 +32,8 @@ vi.mock("../../api/enrollmentApi", () => ({
   getEnrollmentScholarships: pass("getEnrollmentScholarships"),
   updateEnrollment: pass("updateEnrollment"),
   transferOutEnrollment: pass("transferOutEnrollment"),
+  getEnrollmentEmailStatus: vi.fn(() => Promise.resolve({ failures: [] })),
+  sendEnrollmentEmail: vi.fn(),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: pass("getInvoices"),

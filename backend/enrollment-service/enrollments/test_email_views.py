@@ -273,3 +273,15 @@ def test_brevo_bad_key_is_not_retried():
     assert response.status_code == 502
     assert post.call_count == 1
     failures.create.assert_called_once()
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com")
+def test_a_send_that_goes_through_settles_earlier_failures():
+    """The enrollment page lists open failures with a Resend button; a
+    successful send is what closes them."""
+    with _setup(_enrollment()) as failures:
+        response = _post(5)
+
+    assert response.status_code == 200
+    failures.filter.assert_called_once_with(context__enrollment_id=5, resolved_at__isnull=True)
+    assert "resolved_at" in failures.filter.return_value.update.call_args.kwargs

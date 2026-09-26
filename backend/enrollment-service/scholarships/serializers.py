@@ -72,6 +72,25 @@ class EnrollmentScholarshipSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         enrollment = attrs.get("enrollment", getattr(self.instance, "enrollment", None))
         sc_type    = attrs.get("scholarship_type", getattr(self.instance, "scholarship_type", None))
+
+        # Checked when an award is made or moved, not on every later edit: an
+        # award on last year's (now completed) enrollment keeps its notes
+        # editable, and a scholarship retired since still shows who had it.
+        awarding = self.instance is None or "enrollment" in attrs or "scholarship_type" in attrs
+        if awarding and enrollment is not None and enrollment.enrollment_status not in ("pending", "enrolled"):
+            raise serializers.ValidationError({
+                "enrollment": (
+                    f"A scholarship is awarded on a pending or enrolled enrollment; "
+                    f"this one is {enrollment.enrollment_status}."
+                )
+            })
+        if awarding and sc_type is not None and not sc_type.is_active and (
+            self.instance is None or sc_type != self.instance.scholarship_type
+        ):
+            raise serializers.ValidationError({
+                "scholarship_type": "This scholarship has been deactivated and can't be awarded.",
+            })
+
         if enrollment and sc_type:
             qs = EnrollmentScholarship.objects.filter(
                 enrollment=enrollment, scholarship_type=sc_type

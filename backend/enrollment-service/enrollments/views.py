@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
@@ -23,6 +24,7 @@ from accounts.permissions import (
     teacher_student_ids,
 )
 from .models import (
+    EmailDeliveryFailure,
     Enrollment,
     EnrollmentOverride,
     EnrollmentTransfer,
@@ -199,10 +201,14 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 school_level=advisory.school_level,
                 grade_level=advisory.grade_level,
             )
-            subject_qs = (
-                subject_qs.filter(strand=advisory.strand) if advisory.strand
-                else subject_qs.filter(strand__isnull=True)
-            )
+            # A strand's section takes the core subjects (no strand) as well as
+            # its own; a whole-section advisory covers every strand in the
+            # section, so it gets them all. This used to be the exact strand,
+            # or core only -- each half of the list missing from one of them.
+            if advisory.strand:
+                subject_qs = subject_qs.filter(
+                    Q(strand__isnull=True) | Q(strand="") | Q(strand__iexact=advisory.strand)
+                )
             subjects = [
                 {
                     "subject_id": s.subject_id,
@@ -937,9 +943,14 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         except school_year_rules.InvalidSchoolYear as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        # A learner who transferred out this year left the school; there is
+        # nothing to place. Their student record should say "transferred", but
+        # that is a second call from the browser after Transfer Out, and a
+        # learner it missed still reads as active -- 5 of the 68 names on this
+        # list had left.
         placed = Enrollment.objects.filter(
             school_year=year,
-            enrollment_status__in=("enrolled", "pending"),
+            enrollment_status__in=("enrolled", "pending", "transferred_out"),
         ).values("student_id")
         students = list(
             Student.objects.filter(status="active")
@@ -1508,6 +1519,71 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             completed = qs.update(enrollment_status="completed")
 
         return Response({"completed": completed})
+
+    @action(detail=True, methods=["get"], url_path="email-status")
+    def email_status(self, request, pk=None):
+        """
+        GET /api/enrollments/{id}/email-status/
+
+        Confirmation emails for this enrollment that failed and have not gone
+        through since. Failures were written to email_delivery_failures "for
+        follow-up", but no screen read that table -- the registrar only knew
+        from the toast at the moment of sending. The enrollment page shows
+        these with a Resend button; a successful send settles them.
+        """
+        if getattr(request.user, "role", None) not in ACADEMIC_STAFF_ROLES:
+            return Response({"detail": "You do not have access to this record."}, status=403)
+        enrollment = self.get_object()
+        failures = EmailDeliveryFailure.objects.filter(
+            context__enrollment_id=enrollment.enrollment_id, resolved_at__isnull=True,
+        ).order_by("-created_at")
+        return Response({"failures": [
+            {
+                "id":         f.email_delivery_failure_id,
+                "to_email":   f.to_email,
+                "recipients": (f.context or {}).get("recipients") or [f.to_email],
+                "created_at": f.created_at,
+            }
+            for f in failures
+        ]})
+
+    @action(detail=False, methods=["post"], url_path="close-year")
+    def close_year(self, request):
+        """
+        POST /api/enrollments/close-year/   {"school_year": "2025-2026"}
+
+        Marks every row of a FINISHED school year that is still `enrolled` as
+        `completed`, in one transaction, and returns how many.
+
+        Complete Section does this a class at a time, which is right for the
+        end of the year in progress, when each adviser finishes grades on their
+        own schedule. A year nobody closed stayed open forever: its learners
+        read as enrolled in two years, their old advisers could still edit
+        them, and analytics saw that year through the leftovers alone. The
+        year in progress (and any later one) is refused -- closing it early
+        would lock every class out of its own grades.
+        """
+        raw = (request.data.get("school_year") or "").strip()
+        try:
+            year = school_year_rules.normalize(raw)
+        except school_year_rules.InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        current = school_year_rules.current(timezone.localdate())
+        if year >= current:
+            return Response(
+                {"detail": (
+                    f"SY {year} is not over yet. Close its classes one at a time with "
+                    f"Complete Section in Promote, once their grades are in."
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            completed = Enrollment.objects.filter(
+                school_year=year, enrollment_status="enrolled",
+            ).update(enrollment_status="completed")
+        return Response({"school_year": year, "completed": completed})
 
     def _promote_logic(self, request, dry_run):
         from grades.models import Grade

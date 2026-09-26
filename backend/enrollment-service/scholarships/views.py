@@ -15,6 +15,32 @@ from .serializers import (
 )
 
 
+def live_invoice_no(enrollment):
+    """
+    The invoice number of the learner's live (not void) invoice for the
+    enrollment's school year, or None. One live invoice per student per year is
+    billing's rule, and a senior high learner's may sit on the other semester's
+    row. `student_invoices` is billing-service's table, read over the shared
+    database the way billing reads `enrollments`.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            SELECT i.invoice_no
+              FROM student_invoices i
+              JOIN enrollments e ON e.enrollment_id = i.enrollment_id
+             WHERE e.student_id = %s AND e.school_year = %s AND i.status <> 'void'
+             ORDER BY i.invoice_id DESC
+             LIMIT 1
+            """,
+            [enrollment.student_id, enrollment.school_year],
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 class ScholarshipTypeViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
     """
     /api/scholarship-types/
@@ -78,6 +104,30 @@ class EnrollmentScholarshipViewSet(viewsets.ModelViewSet):
         "enrollment__grade_level",
     )
     ordering = ("-enrollment_scholarship_id",)
+
+    # An invoice is priced from the scholarships on file when it is built;
+    # awarding or revoking one afterwards leaves it as it was until it is
+    # re-issued (billing's rule). Nothing used to say so, so each write that
+    # changes a priced invoice's scholarships names the invoice to re-issue.
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        award = EnrollmentScholarship.objects.select_related("enrollment").get(
+            pk=response.data["enrollment_scholarship_id"],
+        )
+        response.data["invoice_to_reissue"] = live_invoice_no(award.enrollment)
+        return response
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        if "scholarship_type" in request.data or "enrollment" in request.data:
+            response.data["invoice_to_reissue"] = live_invoice_no(self.get_object().enrollment)
+        return response
+
+    def destroy(self, request, *args, **kwargs):
+        award = self.get_object()
+        invoice_no = live_invoice_no(award.enrollment)
+        self.perform_destroy(award)
+        return Response({"invoice_to_reissue": invoice_no})
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):

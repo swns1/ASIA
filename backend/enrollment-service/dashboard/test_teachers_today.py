@@ -205,6 +205,22 @@ class TestShapeTeachersToday:
         assert by[("Grade 3", "Rizal")]["advisers"] == ["Ana Lim"]
         assert by[("Grade 3", "Mabini")]["advisers"] == []
 
+    def test_a_whole_section_adviser_covers_every_strand(self):
+        """
+        An advisory with no strand is the whole section's -- teacher scoping
+        and My Sections read it that way. The card matched on strand alone and
+        showed each strand of the section as having no adviser.
+        """
+        g11_abm = section_key("senior_highschool", "Grade 11", "A", "ABM")
+        whole = section_key("senior_highschool", "Grade 11", "A", None)
+        out = _shape(
+            sections={G11_STEM: [4], g11_abm: [5]},
+            advisers={whole: ["Ben Cruz"], G11_STEM: ["Ana Lim"]},
+        )
+        by = {s["strand"]: s["advisers"] for s in out["sections"]}
+        assert by["ABM"] == ["Ben Cruz"]
+        assert by["STEM"] == ["Ana Lim", "Ben Cruz"]
+
     def test_sections_run_in_school_order(self):
         out = _shape(sections={
             G11_STEM: [4],

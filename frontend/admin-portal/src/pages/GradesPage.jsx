@@ -463,6 +463,27 @@ const GRADING_PERIODS_BY_LEVEL = {
   senior_highschool: ["1st_semester","2nd_semester"],
 };
 
+// A senior high enrollment is one semester: it takes that semester's period
+// and subjects only — the core subjects plus the learner's own strand. The
+// server refuses the rest, so offering every semester and strand only led the
+// teacher to an error.
+function periodsFor(enrollment) {
+  if (!enrollment) return [];
+  if (enrollment.school_level === "senior_highschool" && enrollment.semester) {
+    return [`${enrollment.semester}_semester`];
+  }
+  return GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? [];
+}
+
+function subjectParamsFor(enrollment) {
+  const params = { school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 };
+  if (enrollment.school_level === "senior_highschool") {
+    if (enrollment.strand) params.for_strand = enrollment.strand;
+    if (enrollment.semester) params.semester = enrollment.semester;
+  }
+  return params;
+}
+
 const PERIOD_LABELS = {
   "1st_quarter":  "1st Quarter",
   "2nd_quarter":  "2nd Quarter",
@@ -647,7 +668,7 @@ function GeneralAverageCell({ grades }) {
 }
 
 function SummaryTable({ enrollment, grades, subjects, loading }) {
-  const periods = GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? [];
+  const periods = periodsFor(enrollment);
   const lvlMeta = SCHOOL_LEVEL_META[enrollment.school_level] ?? SCHOOL_LEVEL_META.elementary;
 
   const gradeMap = useMemo(() => {
@@ -1148,7 +1169,7 @@ export default function GradesPage() {
     Promise.all([
       getGrades({ enrollment: enrollment.enrollment_id, page_size: 200 })
         .then((d) => Array.isArray(d) ? d : d?.results ?? []),
-      getSubjects({ school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
+      getSubjects(subjectParamsFor(enrollment))
         .then((d) => Array.isArray(d) ? d : d?.results ?? []),
     ])
       .then(([g, s]) => { setSumGrades(g); setSumSubjects(s); })
@@ -1159,10 +1180,10 @@ export default function GradesPage() {
   // ── Entry: load subjects when enrollment changes ──────────────────────────
   useEffect(() => {
     if (!enrollment) { setEntSubjects([]); setSubject(null); return; }
-    getSubjects({ school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
+    getSubjects(subjectParamsFor(enrollment))
       .then((d) => setEntSubjects(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => setEntSubjects([]));
-    const periods = GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? [];
+    const periods = periodsFor(enrollment);
     setGradingPeriod(periods[0] ?? "");
     setSubject(null);
     setComputation(null);
@@ -1271,7 +1292,7 @@ export default function GradesPage() {
   const handleUpdateScore = async (id, payload) => { await updateScore(id, payload); await loadScores(); setComputation(null); };
   const handleDeleteScore = async (id) => { await deleteScore(id); await loadScores(); setComputation(null); };
 
-  const periods    = enrollment ? (GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? []) : [];
+  const periods    = periodsFor(enrollment);
   const template   = subject?.grading_template_detail;
   const components = template?.components ?? [];
 

@@ -262,7 +262,7 @@ class RiskAssessmentRunView(APIView):
 
         if not student_data:
             return Response(
-                {"detail": "No enrolled students with grade data found for the given filters."},
+                {"detail": "No students with grade data found for the given filters."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

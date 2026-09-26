@@ -314,6 +314,13 @@ class Command(BaseCommand):
                     if semester and not subject.semester:
                         subject.semester = semester
                         changed.append("semester")
+                    # Core subjects are every strand's. seed_data.sql used to
+                    # tag three of them STEM, and this command grades learners
+                    # of every strand in them -- which the grade rules refuse
+                    # for a strand subject outside the learner's strand.
+                    if level == "senior_highschool" and name in SHS_SEMESTER and subject.strand:
+                        subject.strand = None
+                        changed.append("strand")
                     if changed:
                         subject.save(update_fields=changed)
                 bucket.append(subject)

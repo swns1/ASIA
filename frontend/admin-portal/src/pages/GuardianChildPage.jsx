@@ -387,6 +387,17 @@ function ReportCardTab({ data, error }) {
           </tbody>
         </table>
       </div>
+      {/* Senior high reports a General Average per semester; the badge above
+          is the year's, the mean of the two. */}
+      {data.semesters && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-neutral-200/70 px-[18px] py-3 text-sm text-neutral-700">
+          {data.semesters.map((sem) => (
+            <span key={sem.key}>
+              {sem.label} general average: <strong>{sem.general_average ?? "—"}</strong>
+            </span>
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }

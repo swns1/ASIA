@@ -32,6 +32,7 @@ import numpy as np
 from django.db.models import Count, Q
 
 from attendance.models import AttendanceRecord
+from enrollments.models import Enrollment
 from grades.models import Grade, NarrativeReport
 from grading.deped import PASSING_GRADE as DEPED_PASSING_GRADE
 from subjects.models import Subject
@@ -187,6 +188,30 @@ def resolve_period_window(school_year, grading_period):
     return {"from": window_from, "to": window_to, "source": "calendar"}
 
 
+# Rows a learner spent the year on. `enrolled` alone -- what this read until
+# 2026-09 -- left every finished year empty (its rows are all completed), so
+# analytics answered "Not enough students (0)" for 2024-2025, and a senior high
+# learner's 1st-semester row (completed once the 2nd starts) dropped out of
+# the year they were still in. Cancelled and pending rows never had a class;
+# a transferred-out learner left and is not this year's to warn about.
+FEATURE_STATUSES = ("enrolled", "completed")
+
+
+def pick_primary_enrollment(rows):
+    """
+    The row a learner's features are reported against: the one they are
+    studying on now (enrolled), else their latest. A senior high learner holds
+    one row per semester, so a year can have two.
+
+    `rows` is any iterable of objects carrying `.enrollment_id` and
+    `.enrollment_status`.
+    """
+    rows = list(rows)
+    if not rows:
+        return None
+    return max(rows, key=lambda r: (r.enrollment_status == "enrolled", r.enrollment_id))
+
+
 def build_student_features(school_year, grading_period, subject_id=None,
                             school_level=None, grade_level=None):
     """
@@ -216,7 +241,10 @@ def build_student_features(school_year, grading_period, subject_id=None,
     callers turn that into their own 404 Response; this module stays
     DRF-agnostic so it's equally usable from a non-request context later.
 
-    Only enrollment_status="enrolled" students are considered.
+    Reads each learner's enrolled and completed rows for the year
+    (FEATURE_STATUSES), merged per student: a senior high learner has one row
+    per semester. "enrollment_id", "grade_level" and "section" come from the
+    row they are on now -- see pick_primary_enrollment.
     """
     is_overall_period = grading_period == "overall"
 
@@ -224,7 +252,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
         "enrollment", "enrollment__student", "subject"
     ).filter(
         enrollment__school_year=school_year,
-        enrollment__enrollment_status="enrolled",
+        enrollment__enrollment_status__in=FEATURE_STATUSES,
     )
 
     if not is_overall_period:
@@ -289,7 +317,30 @@ def build_student_features(school_year, grading_period, subject_id=None,
         else:
             sd["lowest_subject"] = None
 
-    enrollment_ids = [sd["enrollment_id"] for sd in student_data.values()]
+    # ── Every row each learner spent this year on ───────────────────────
+    # Attendance, observed values and the previous period are read across all
+    # of them. A senior high learner's 1st-semester grades sit on a different
+    # row from their 2nd semester's, so a trend looked up on the current row
+    # alone never found a previous period at all.
+    rows_by_student = defaultdict(list)
+    for e in Enrollment.objects.filter(
+        student_id__in=list(student_data),
+        school_year=school_year,
+        enrollment_status__in=FEATURE_STATUSES,
+    ).only("enrollment_id", "student_id", "enrollment_status", "grade_level", "section"):
+        rows_by_student[e.student_id].append(e)
+    student_of = {}
+    for sid, sd in student_data.items():
+        rows = rows_by_student.get(sid, [])
+        for e in rows:
+            student_of[e.enrollment_id] = sid
+        primary = pick_primary_enrollment(rows)
+        if primary is not None:
+            sd["enrollment_id"] = primary.enrollment_id
+            sd["grade_level"] = primary.grade_level
+            sd["section"] = primary.section
+        student_of.setdefault(sd["enrollment_id"], sid)
+    enrollment_ids = list(student_of)
 
     # ── Previous grading period, for the trajectory signal ─────────────
     # A student sliding 88 → 79 → 72 is the strongest early-warning signal
@@ -306,10 +357,10 @@ def build_student_features(school_year, grading_period, subject_id=None,
 
         prev_accum = defaultdict(lambda: defaultdict(list))
         for g in prev_qs:
-            prev_accum[g.enrollment_id][g.subject_id].append(float(g.numeric_grade))
-        for eid, by_subject in prev_accum.items():
+            prev_accum[student_of[g.enrollment_id]][g.subject_id].append(float(g.numeric_grade))
+        for sid, by_subject in prev_accum.items():
             subject_means = [float(np.mean(vals)) for vals in by_subject.values()]
-            previous_avg[eid] = float(np.mean(subject_means)) if subject_means else np.nan
+            previous_avg[sid] = float(np.mean(subject_means)) if subject_means else np.nan
 
     # ── Fetch attendance, scoped to the grading period's window ────────
     # This previously always pulled the full school year regardless of the
@@ -329,14 +380,14 @@ def build_student_features(school_year, grading_period, subject_id=None,
     att_qs = (
         AttendanceRecord.objects
         .filter(**att_filters)
-        .values("enrollment_id")
+        .values("enrollment__student_id")
         .annotate(
             total=Count("attendance_id"),
             absent=Count("attendance_id", filter=Q(status="A")),
             excused=Count("attendance_id", filter=Q(status="E")),
         )
     )
-    att_map = {row["enrollment_id"]: row for row in att_qs}
+    att_map = {row["enrollment__student_id"]: row for row in att_qs}
 
     # ── Fetch narrative reports ───────────────────────────────────────
     narrative_qs = NarrativeReport.objects.filter(enrollment_id__in=enrollment_ids)
@@ -348,14 +399,12 @@ def build_student_features(school_year, grading_period, subject_id=None,
     for nr in narrative_qs:
         score = NARRATIVE_SCORE.get(nr.rating)
         if score is not None:
-            narrative_map[nr.enrollment_id].append(score)
-            narrative_ratings_map[nr.enrollment_id].append(nr.rating)
+            narrative_map[student_of[nr.enrollment_id]].append(score)
+            narrative_ratings_map[student_of[nr.enrollment_id]].append(nr.rating)
 
     # ── Attach attendance, trend and narrative ─────────────────────────
-    for sd in student_data.values():
-        eid = sd["enrollment_id"]
-
-        att = att_map.get(eid)
+    for sid, sd in student_data.items():
+        att = att_map.get(sid)
         if att and att["total"] >= MIN_ATTENDANCE_DAYS:
             # Present + Late count as attended; Excused still counts against
             # the rate (it's the reason that's excused, not the absence
@@ -386,7 +435,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
 
         sd["attendance_window"] = window["source"]
 
-        prev = previous_avg.get(eid, np.nan)
+        prev = previous_avg.get(sid, np.nan)
         sd["previous_grade"] = prev
         sd["previous_period"] = previous_period
         current = sd.get("grade")
@@ -395,9 +444,9 @@ def build_student_features(school_year, grading_period, subject_id=None,
         else:
             sd["grade_delta"] = np.nan
 
-        scores = narrative_map.get(eid, [])
+        scores = narrative_map.get(sid, [])
         sd["avg_narrative"] = float(np.mean(scores)) if scores else np.nan
-        sd["narrative_ratings"] = narrative_ratings_map.get(eid, [])
+        sd["narrative_ratings"] = narrative_ratings_map.get(sid, [])
 
     return student_data, subject_name
 

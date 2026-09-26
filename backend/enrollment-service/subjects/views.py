@@ -4,6 +4,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
 from enrollment_service.deletes import InUseDeleteMixin
+from .filters import SubjectFilter
 from .models import Subject
 from .serializers import SubjectSerializer
 
@@ -19,7 +20,7 @@ class SubjectViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminRegistrarOrReadOnly]
 
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
-    filterset_fields = ("school_level", "grade_level", "strand", "semester")
+    filterset_class = SubjectFilter
     search_fields = ("subject_code", "subject_name")
     ordering_fields = ("school_level", "grade_level", "subject_name", "subject_code")
     ordering = ("school_level", "grade_level", "subject_name")

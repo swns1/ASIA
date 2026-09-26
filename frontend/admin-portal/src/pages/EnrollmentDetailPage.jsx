@@ -8,12 +8,14 @@ import {
   getEnrollmentScholarships,
   updateEnrollment,
   transferOutEnrollment,
+  getEnrollmentEmailStatus,
+  sendEnrollmentEmail,
 } from "../api/enrollmentApi";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 
 import { updateStudentStatus } from "../api/studentApi";
-import { getCurrentUser, hasAnyRole, BILLING_READ_ROLES } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, BILLING_READ_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { todayISO, fmtDate } from "../utils/format";
@@ -106,6 +108,36 @@ export default function EnrollmentDetailPage() {
   // material; the server refuses accounting, so don't render a card that can
   // only fail.
   const canViewDocuments = getCurrentUser()?.role !== "accounting";
+
+  // Confirmation emails that failed and haven't gone through since. They were
+  // logged server-side "for follow-up" with no screen that read them, so the
+  // only notice a registrar ever got was the toast at the moment of sending.
+  const canResendEmail = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  const [emailFailures, setEmailFailures] = useState([]);
+  const [resending,     setResending]     = useState(false);
+  const [resendError,   setResendError]   = useState("");
+  const enrolledNow = enrollment?.enrollment_status === "enrolled";
+  useEffect(() => {
+    if (!id || !canResendEmail || !enrolledNow) { setEmailFailures([]); return; }
+    let cancelled = false;
+    getEnrollmentEmailStatus(id)
+      .then((d) => { if (!cancelled) setEmailFailures(d?.failures ?? []); })
+      .catch(() => { if (!cancelled) setEmailFailures([]); });
+    return () => { cancelled = true; };
+  }, [id, canResendEmail, enrolledNow]);
+
+  async function handleResendEmail() {
+    setResending(true);
+    setResendError("");
+    try {
+      await sendEnrollmentEmail({ enrollment_id: Number(id) });
+      setEmailFailures([]);
+    } catch (e) {
+      setResendError(e?.response?.data?.detail || e.message || "The email could not be sent.");
+    } finally {
+      setResending(false);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -328,6 +360,21 @@ export default function EnrollmentDetailPage() {
               )}
             </div>
           </div>
+
+          {emailFailures.length > 0 && (
+            <div role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#7a4a08" }}>
+              <span>
+                <i className="ti ti-mail-exclamation" style={{ fontSize: 15, marginRight: 6 }} />
+                The enrollment confirmation to {emailFailures[0].recipients.join(", ")} didn't go through
+                {" "}({fmtDate(emailFailures[0].created_at)}).
+                {resendError && <strong style={{ marginLeft: 6 }}>{resendError}</strong>}
+              </span>
+              <button onClick={handleResendEmail} disabled={resending}
+                style={{ background: "white", border: "1.5px solid #f0a830", color: "#7a4a08", borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: resending ? "wait" : "pointer" }}>
+                <i className="ti ti-send" style={{ fontSize: 11, marginRight: 4 }} />{resending ? "Sending…" : "Resend"}
+              </button>
+            </div>
+          )}
 
           {/* ── Horizontal info strip ── */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 0, background: "white", borderRadius: 12, border: "1px solid #f5eaea", marginBottom: 16, overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.04)" }}>
