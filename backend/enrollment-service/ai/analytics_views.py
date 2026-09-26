@@ -304,6 +304,40 @@ def _impute_col_mean(arr: np.ndarray) -> None:
             arr[mask, i] = float(np.nanmean(col))
 
 
+def _fit_candidate_ks(features_scaled: np.ndarray):
+    """
+    K-Means at every workable k (2 to 7), keeping only the fits that really
+    produced k groups. Returns ({k: (fitted KMeans, silhouette)}, k_search).
+
+    Students with identical grade, attendance and behavior are one point to
+    K-Means, however many of them there are. When the cohort has fewer
+    distinct points than k, K-Means hands back fewer than k groups -- and with
+    a single group silhouette_score raises, which answered 500 for something
+    as ordinary as a test section where everyone was given the same grade.
+    With two or more groups it didn't raise, but the page announced "3 groups"
+    while drawing 2. So k is capped at the number of distinct points, and any
+    fit that still collapsed is dropped. An empty result means these students
+    can't be split at all.
+    """
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+
+    n_samples = len(features_scaled)
+    n_distinct = len(np.unique(features_scaled, axis=0))
+    # silhouette_score needs 2 <= groups <= n_samples - 1.
+    max_k = min(7, n_samples - 1, n_distinct)
+
+    fits, k_search = {}, []
+    for k in range(2, max_k + 1):
+        km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(features_scaled)
+        if len(set(km.labels_)) != k:
+            continue
+        score = float(silhouette_score(features_scaled, km.labels_))
+        fits[k] = (km, score)
+        k_search.append({"n_clusters": k, "silhouette_score": round(score, 4)})
+    return fits, k_search
+
+
 class ClusterAnalyticsView(APIView):
     """
     GET /api/ai/cluster/
@@ -405,8 +439,6 @@ class ClusterAnalyticsView(APIView):
         features = np.hstack([grade_features, extra_features])
 
         # ── K-Means ───────────────────────────────────────────────────────
-        from sklearn.cluster import KMeans
-        from sklearn.metrics import silhouette_score
         from sklearn.preprocessing import StandardScaler
 
         scaler = StandardScaler()
@@ -416,24 +448,28 @@ class ClusterAnalyticsView(APIView):
         # Sweep k first, so the quality metric can actually drive the choice
         # when the caller asked for "auto" rather than only describing a
         # choice already made.
-        max_k = min(7, len(features_scaled) - 1)
-        k_search = []
-        fits = {}
-        for k in range(2, max_k + 1):
-            km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(features_scaled)
-            score = float(silhouette_score(features_scaled, km.labels_))
-            fits[k] = (km, score)
-            k_search.append({"n_clusters": k, "silhouette_score": round(score, 4)})
+        fits, k_search = _fit_candidate_ks(features_scaled)
+        if not fits:
+            return Response(
+                {
+                    "error": (
+                        f"These {n_students} students have the same grade, attendance and "
+                        "behavior ratings, so there is nothing to split into groups. "
+                        "Widen the filters or choose another grading period."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        suggested_k = (
-            max(k_search, key=lambda r: r["silhouette_score"])["n_clusters"] if k_search else None
-        )
+        suggested_k = max(k_search, key=lambda r: r["silhouette_score"])["n_clusters"]
 
         if auto_k:
-            n_clusters = suggested_k or 2
+            n_clusters = suggested_k
         else:
-            # A caller-supplied k can exceed what this cohort supports.
-            n_clusters = max(2, min(n_clusters, max_k))
+            # A caller-supplied k can exceed what this cohort supports; take
+            # the nearest k that produced real groups (the smaller on a tie).
+            requested_k = n_clusters
+            n_clusters = min(fits, key=lambda k: (abs(k - requested_k), k))
 
         kmeans, chosen_silhouette = fits[n_clusters]
         labels = kmeans.labels_

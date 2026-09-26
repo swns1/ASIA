@@ -203,6 +203,7 @@ REST_FRAMEWORK = {
         "anon":    "30/minute",   # unauthenticated (should be rare)
         "user":    "300/minute",  # authenticated — shared across 9 sub-apps, raised from 120 to stop false 429s on normal staff usage
         "cluster": "20/minute",   # clustering is CPU-heavy but needs room for iteration
+        "ai_interpret": "10/minute",  # each call spends paid AI-provider quota (ai/views.py)
         # Signed document downloads (requirements/views.py::file). These are
         # fetched by <img>/<iframe> and so arrive without an Authorization
         # header, which put them on the 30/min anon bucket — one student's

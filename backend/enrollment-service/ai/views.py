@@ -10,7 +10,21 @@ from rest_framework import status
 from accounts.permissions import HasRole
 from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
 
+from .analytics_views import ClusterRateThrottle
+
 logger = logging.getLogger(__name__)
+
+
+class InterpretRateThrottle(ClusterRateThrottle):
+    """
+    Per-user limit on AI interpretation. Every call spends quota on a
+    third-party API (Gemini, then Groq), and up to four provider attempts sit
+    behind one request, so the general 300/minute user rate let a single
+    session -- or a script with a stolen token -- drain the key. Both buttons
+    that call this are click-only, so a person never gets near the limit.
+    Keyed by user id like the clustering throttle it extends.
+    """
+    scope = "ai_interpret"
 
 _client = None
 
@@ -119,6 +133,7 @@ ALLOWED_PAYLOAD_FIELDS = {
 class GeminiInterpretView(APIView):
     permission_classes = [HasRole]
     required_roles = {"super_admin", "admin", "registrar"}
+    throttle_classes = [InterpretRateThrottle]
 
     def post(self, request):
         context_type = request.data.get("context_type", "")

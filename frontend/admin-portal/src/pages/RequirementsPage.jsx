@@ -127,7 +127,6 @@ export default function RequirementsPage() {
       .then((student) => { if (!cancelled && student) selectStudent(student); })
       .catch(() => { /* a bad id just leaves the picker empty */ });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkId]);
 
   // Load recent students — re-fetches when filters or page change

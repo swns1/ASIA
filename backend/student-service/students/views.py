@@ -594,6 +594,47 @@ class GuardianViewSet(viewsets.ModelViewSet):
             self._demote_other_primaries(serializer)
             serializer.save()
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        A learner's last guardian can't be removed.
+
+        Registration and the kiosk both require a guardian, but deleting was
+        unguarded, so a record could be left with nobody to contact, no name
+        for the SF forms, and -- if the removed row carried the portal link --
+        no parent able to see the child. The edit form creates a replacement
+        before it deletes, so swapping one guardian for another still works.
+
+        Removing the primary contact hands the star to the longest-standing
+        remaining guardian, so the student never goes without one.
+
+        Every guardian row of the student is locked, in id order, before the
+        count: two removals racing on a two-guardian record would otherwise
+        each see the other still there and both go through.
+        """
+        guardian = self.get_object()
+        with transaction.atomic():
+            rows = list(
+                Guardian.objects.select_for_update()
+                .filter(student_id=guardian.student_id)
+                .order_by("guardian_id")
+            )
+            others = [g for g in rows if g.pk != guardian.pk]
+            if not others:
+                return Response(
+                    {
+                        "detail": (
+                            f"{guardian.full_name} is this learner's only guardian. "
+                            "Add another guardian before removing this one."
+                        ),
+                        "code": "last_guardian",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            self.perform_destroy(guardian)
+            if guardian.is_primary_contact and not any(g.is_primary_contact for g in others):
+                Guardian.objects.filter(pk=others[0].pk).update(is_primary_contact=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["post"], url_path="link-account")
     def link_account(self, request, pk=None):
         """

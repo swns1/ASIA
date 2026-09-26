@@ -12,10 +12,11 @@ through _get_school_settings(), which is patched.
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from billing import services
 from billing.services import (
     _is_early_bird,
     _split_voucher_and_scholarship,
@@ -23,6 +24,7 @@ from billing.services import (
     early_bird_cutoff,
     generate_installment_schedule,
     generate_installment_schedule_prorated,
+    sy_start_for,
 )
 
 
@@ -169,6 +171,100 @@ def test_default_sy_start_cuts_at_july_like_the_rest_of_the_app():
     """
     assert default_sy_start(date(2026, 6, 30)) == date(2025, 7, 1)
     assert default_sy_start(date(2026, 7, 1)) == date(2026, 7, 1)
+
+
+# -- Invoicing a school year other than the configured one --------------------
+
+def configured(current="2026-2027", sy_start=date(2026, 6, 1), early_bird_days=7):
+    return SimpleNamespace(
+        current_school_year=current, sy_start_date=sy_start, early_bird_days=early_bird_days,
+    )
+
+
+def test_configured_year_opens_on_the_configured_date():
+    assert sy_start_for("2026-2027", configured()) == date(2026, 6, 1)
+
+
+@pytest.mark.parametrize("school_year,expected", [
+    ("2027-2028", date(2027, 6, 1)),
+    ("2025-2026", date(2025, 6, 1)),
+])
+def test_other_years_keep_the_opening_day_in_their_own_year(school_year, expected):
+    """
+    The defect: every invoice used settings.sy_start_date whatever year it was
+    for, so next year's enrollments were billed on this year's calendar.
+    """
+    assert sy_start_for(school_year, configured()) == expected
+
+
+def test_unreadable_school_year_falls_back_to_the_configured_date():
+    assert sy_start_for("", configured()) == date(2026, 6, 1)
+    assert sy_start_for(None, configured()) == date(2026, 6, 1)
+
+
+def test_settings_without_a_named_year_are_read_as_their_start_dates_year():
+    assert sy_start_for("2027-2028", settings_row(sy_start=date(2026, 8, 1))) == date(2027, 8, 1)
+
+
+def test_unconfigured_calendar_opens_the_school_years_own_july():
+    assert sy_start_for("2027-2028", None) == date(2027, 7, 1)
+
+
+def test_a_29_february_opening_moves_to_the_28th():
+    leap = configured(current="2028-2029", sy_start=date(2028, 2, 29))
+    assert sy_start_for("2029-2030", leap) == date(2029, 2, 28)
+
+
+def test_next_years_early_enroller_is_early_by_next_years_calendar():
+    """Invoiced in February for the year opening in June: Early Bird. It was
+    refused against this year's cutoff, which had passed eight months before."""
+    assert early_bird_cutoff(configured(), "2027-2028") == date(2027, 6, 7)
+    assert _is_early_bird(date(2027, 2, 10), "2027-2028", configured()) is True
+
+
+def test_a_late_transferee_is_not_granted_next_years_early_bird():
+    """With settings already moved to next year, a February transferee into
+    the year still running was judged against next year's cutoff -- and with
+    no lower bound on the window, granted a discount for enrolling late."""
+    moved_on = configured(current="2027-2028", sy_start=date(2027, 6, 1))
+    assert _is_early_bird(date(2027, 2, 10), "2026-2027", moved_on) is False
+
+
+def test_next_years_invoice_is_scheduled_on_next_years_calendar():
+    """
+    End to end through _build_invoice_for_enrollment, with the database
+    patched out: a Grade 4 learner enrolled for 2027-2028, invoiced on
+    10 February 2027 while settings still name 2026-2027. Eight of the ten
+    monthly installments used to be dated before the invoice itself.
+    """
+    enrollment = {
+        "enrollment_id": 20, "student_id": 5, "school_level": "elementary",
+        "grade_level": "Grade 4", "school_year": "2027-2028", "enrollment_status": "enrolled",
+    }
+    fee_data = {"items": [], "tuition_total": Decimal("10000"),
+                "misc_total": Decimal("0"), "other_total": Decimal("0")}
+    early_bird = SimpleNamespace(discount_value=Decimal("5"), discount_name="Early Bird")
+
+    with patch.object(services, "_read_fee_schedule", return_value=fee_data), \
+            patch.object(services, "_fetch_enrollment_scholarships", return_value=[]), \
+            patch.object(services, "_get_school_settings", return_value=configured()), \
+            patch.object(services, "_get_discount_type",
+                         side_effect=lambda code: early_bird if code == "EARLY_BIRD" else None), \
+            patch.object(services.timezone, "localdate", return_value=date(2027, 2, 10)), \
+            patch.object(services.StudentInvoice, "objects") as invoices, \
+            patch.object(services.StudentInvoiceItem, "objects"), \
+            patch.object(services.StudentInvoiceDiscount, "objects") as discounts, \
+            patch.object(services.InvoiceInstallment, "objects") as installments:
+        invoices.create.return_value = MagicMock(invoice_id=7)
+        services._build_invoice_for_enrollment(enrollment, "monthly")
+
+    due_dates = [c.kwargs["due_date"] for c in installments.create.call_args_list]
+    assert due_dates[0] == date(2027, 6, 30)
+    assert due_dates[-1] == date(2028, 3, 31)
+    assert all(d > date(2027, 2, 10) for d in due_dates)
+
+    discount_rows = [c.kwargs["description"] for c in discounts.create.call_args_list]
+    assert any(d.startswith("Early Bird (invoiced on or before 2027-06-07)") for d in discount_rows)
 
 
 # -- Voucher vs scholarship ---------------------------------------------------

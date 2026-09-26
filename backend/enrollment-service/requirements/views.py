@@ -4,6 +4,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404
 from rest_framework import viewsets, filters
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -71,6 +72,11 @@ class StudentRequirementSubmissionViewSet(viewsets.ModelViewSet):
 
         student_id = self.request.query_params.get("student_id")
         if student_id:
+            # A non-number went straight into the filter and answered 500.
+            try:
+                student_id = int(student_id)
+            except (TypeError, ValueError):
+                raise ValidationError({"student_id": "Must be a whole number."})
             qs = qs.filter(student_id=student_id)
         return qs
 

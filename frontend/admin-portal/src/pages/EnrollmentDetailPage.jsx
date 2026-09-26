@@ -174,7 +174,7 @@ export default function EnrollmentDetailPage() {
       })
       .catch(() => setError("Failed to load enrollment details."))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, canViewBilling]);
 
   async function handleMarkCompleted() {
     setCompleting(true);

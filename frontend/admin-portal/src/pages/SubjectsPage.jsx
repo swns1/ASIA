@@ -282,10 +282,11 @@ export default function SubjectsPage() {
     finally { setLoading(false); }
   }, [search, levelFilter, gradeFilter]);
 
+  // First load only; filter changes call fetchSubjects themselves.
   useEffect(() => {
     fetchSubjects(1, "", "all");
     getTemplates().then((d) => setTemplates(Array.isArray(d) ? d : d?.results ?? [])).catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (id, payload) => {
     if (id) await updateSubject(id, payload);

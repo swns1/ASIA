@@ -157,7 +157,9 @@ export default function PaymentsPage() {
       setPageMeta({ count: 0, next: null, previous: null });
     }
     finally { if (seq === fetchSeq.current) setLoading(false); }
-  }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter]);
+  // buildParams/buildSummaryParams are rebuilt every render from exactly the
+  // filters listed here; naming them would recreate this callback per render.
+  }, [methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The current year can arrive from School Settings after the first load, and
   // the filter follows it until someone picks a year. Reload when that happens
@@ -169,9 +171,10 @@ export default function PaymentsPage() {
     fetchPayments(1);
   }, [yearFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // On mount and on an explicit refresh only; filter changes fetch themselves.
   useEffect(() => {
     fetchPayments();
-  }, [refreshKey]);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Search fires on a delay so typing a name doesn't hit the endpoint per
   // keystroke — every other control here fetches immediately on change, which

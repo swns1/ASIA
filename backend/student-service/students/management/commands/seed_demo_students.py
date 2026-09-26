@@ -39,7 +39,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.utils import timezone
 
-from students.models import Household, Student
+from students.models import Guardian, Household, Student
 
 # Reserved LRN block for generated learners. Real Philippine LRNs begin with a
 # region code, so nothing a registrar enters lands in 9900.
@@ -97,6 +97,16 @@ LADDER_AGES = {
 }
 LADDER = list(LADDER_AGES)
 
+OCCUPATIONS = [
+    "Teacher", "Nurse", "Engineer", "Driver", "Vendor", "Farmer", "OFW",
+    "Office Clerk", "Electrician", "Housekeeper", "Sales Associate",
+    "Barangay Staff", "Call Center Agent", "Carpenter", "Self-employed",
+]
+
+# example.com is reserved (RFC 2606) and never delivers, so switching email on
+# can't send a learner's details to whoever owns a real mailbox.
+GUARDIAN_EMAIL_DOMAIN = "example.com"
+
 
 class Command(BaseCommand):
     help = "Create demo households and learners (LRN block 9900)."
@@ -112,8 +122,19 @@ class Command(BaseCommand):
                                  "the same rule enrollment-service's seed_demo uses.")
         parser.add_argument("--wipe", action="store_true",
                             help="Delete previously seeded learners and their households first.")
+        parser.add_argument("--guardians", action="store_true",
+                            help="Only give seeded learners that have no guardian one, then "
+                                 "stop. Safe on a database already seeded; touches nothing else.")
 
     def handle(self, *args, **opts):
+        if opts["guardians"]:
+            with transaction.atomic():
+                made, learners = self._make_guardians(opts["seed"])
+            self.stdout.write(self.style.SUCCESS(
+                f"Added {made} guardian rows for {learners} seeded learners that had none."
+            ))
+            return
+
         rng = random.Random(opts["seed"])
         count = opts["students"]
 
@@ -141,10 +162,11 @@ class Command(BaseCommand):
 
             households = self._make_households(rng, count)
             created = self._make_students(rng, count, sy_year, households)
+            guardians, _ = self._make_guardians(opts["seed"])
 
         self.stdout.write(self.style.SUCCESS(
-            f"Created {len(households)} households and {created} learners "
-            f"(LRN {SEED_LRN_PREFIX}…)."
+            f"Created {len(households)} households, {created} learners "
+            f"(LRN {SEED_LRN_PREFIX}…) and {guardians} guardian rows."
         ))
         self.stdout.write(
             "Next: enrollment-service `manage.py seed_demo`, "
@@ -356,3 +378,106 @@ class Command(BaseCommand):
         # still race (see its own comment, which claims otherwise).
         Student.objects.bulk_create(rows, batch_size=200)
         return len(rows)
+
+    # ── guardians ───────────────────────────────────────────────────────────
+
+    def _make_guardians(self, seed):
+        """Guardians for every seeded learner that has none. Returns
+        (guardian rows created, learners covered).
+
+        This command used to create none, so every seeded learner -- the whole
+        current cohort on a demo database -- had no guardian, although
+        registration requires one: no contact on the profile, no parent name
+        for the SF forms, and nothing for guardian_provisioning to build a
+        portal login from. It also left the household design above pointless,
+        since a shared login is keyed off guardian rows.
+
+        Guardians are drawn per household, so siblings get the same parents
+        (same name, email and number), which is what lets provisioning give
+        one login several children. Each household's draw is seeded from
+        (seed, household) alone, so a re-run -- or a backfill over an existing
+        roster -- is reproducible. Learners who already have any guardian are
+        left alone; scoped to the reserved LRN block like --wipe.
+        """
+        learners = list(
+            Student.objects.filter(lrn__startswith=SEED_LRN_PREFIX, guardian__isnull=True)
+            .order_by("student_id")
+            .values("student_id", "last_name", "household_id")
+        )
+        if not learners:
+            return 0, 0
+
+        arrangements = dict(
+            Household.objects.filter(
+                household_id__in={s["household_id"] for s in learners if s["household_id"]}
+            ).values_list("household_id", "living_arrangement")
+        )
+
+        families = {}
+        for s in learners:
+            # A learner with no household is a family of one.
+            key = s["household_id"] or f"s{s['student_id']}"
+            families.setdefault(key, []).append(s)
+
+        rows = []
+        for key, members in families.items():
+            parents = guardians_for_household(
+                random.Random(f"{seed}-household-{key}"),
+                family_name=members[0]["last_name"],
+                living_arrangement=arrangements.get(key),
+                household_key=key,
+            )
+            for member in members:
+                rows.extend(
+                    Guardian(student_id=member["student_id"], **parent) for parent in parents
+                )
+
+        Guardian.objects.bulk_create(rows, batch_size=500)
+        return len(rows), len(learners)
+
+
+def guardians_for_household(rng, *, family_name, living_arrangement, household_key):
+    """
+    The guardian rows one household's learners share, primary contact first.
+    Follows the household's living arrangement: both parents, one parent, or
+    a guardian (another relative, so a different surname).
+
+    Pure, so it is tested without a database.
+    """
+    def person(first_names, surname):
+        first = rng.choice(first_names)
+        return first, f"{first} {surname}"
+
+    def email(first, surname):
+        local = f"{first}.{surname}".lower().replace(" ", "")
+        return f"{local}.{household_key}@{GUARDIAN_EMAIL_DOMAIN}"
+
+    def mobile():
+        return f"09{rng.randrange(10**8, 10**9)}"
+
+    if living_arrangement == "father_only":
+        plan = [("father", FIRST_NAMES_M, family_name)]
+    elif living_arrangement == "mother_only":
+        plan = [("mother", FIRST_NAMES_F, family_name)]
+    elif living_arrangement in ("guardian", "relative"):
+        surname = rng.choice([n for n in LAST_NAMES if n != family_name])
+        names = rng.choice([FIRST_NAMES_F, FIRST_NAMES_M])
+        plan = [("guardian", names, surname)]
+    else:  # both_parents, or not recorded
+        plan = [("mother", FIRST_NAMES_F, family_name), ("father", FIRST_NAMES_M, family_name)]
+
+    rows = []
+    for i, (relationship, first_names, surname) in enumerate(plan):
+        first, full_name = person(first_names, surname)
+        primary = i == 0
+        rows.append({
+            "relationship": relationship,
+            "full_name": full_name,
+            "occupation": rng.choice(OCCUPATIONS),
+            # The primary contact always has an address -- it's what a
+            # portal login is made from. A second parent often doesn't.
+            "email_address": email(first, surname) if primary or rng.random() < 0.5 else None,
+            "mobile_number": mobile(),
+            "is_primary_contact": primary,
+        })
+    return rows

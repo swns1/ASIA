@@ -1340,7 +1340,7 @@ export default function EnrollmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, schoolYear, schoolLevel, gradeLevel, statusFilter, activeParentAnswer, search, navigate]);
+  }, [token, schoolYear, schoolLevel, gradeLevel, statusFilter, activeParentAnswer, search]);
 
   useEffect(() => { fetchEnrollments(1); }, [fetchEnrollments]);
 

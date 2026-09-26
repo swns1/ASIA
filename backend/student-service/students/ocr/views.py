@@ -285,6 +285,12 @@ class ReconciledLedgerView(APIView):
         if not student_id:
             return Response({"detail": "student_id is required."},
                             status=status.HTTP_400_BAD_REQUEST)
+        # A non-number reached the pk lookup and answered 500.
+        try:
+            student_id = int(student_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "student_id must be a whole number."},
+                            status=status.HTTP_400_BAD_REQUEST)
         get_object_or_404(Student, pk=student_id)
         return Response({
             "student_id": int(student_id),

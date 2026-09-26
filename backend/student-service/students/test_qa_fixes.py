@@ -217,6 +217,47 @@ class TestPrimaryContactDemotion:
         assert order == ["demote", "save"]
 
 
+class TestLastGuardianDelete:
+    """Registration requires a guardian, but DELETE didn't: a learner could be
+    left with nobody to contact and, when the row carried the portal link, no
+    parent able to see them."""
+
+    def _destroy(self, target, rows):
+        view = _action_view(GuardianViewSet, method="delete")
+        view.get_object = lambda: target
+        view.perform_destroy = MagicMock()
+        with _no_db_transaction(), patch("students.views.Guardian") as guardian_model:
+            (guardian_model.objects.select_for_update.return_value
+             .filter.return_value.order_by.return_value) = rows
+            response = view.destroy(view.request)
+        return response, view.perform_destroy, guardian_model
+
+    def _g(self, pk, primary=False):
+        return SimpleNamespace(pk=pk, student_id=9, full_name=f"Parent {pk}", is_primary_contact=primary)
+
+    def test_the_only_guardian_is_refused(self):
+        only = self._g(1, primary=True)
+        response, destroyed, _ = self._destroy(only, [only])
+        assert response.status_code == 409
+        assert response.data["code"] == "last_guardian"
+        destroyed.assert_not_called()
+
+    def test_one_of_several_is_removed_and_nobody_is_promoted(self):
+        primary, other = self._g(1, primary=True), self._g(2)
+        response, destroyed, model = self._destroy(other, [primary, other])
+        assert response.status_code == 204
+        destroyed.assert_called_once_with(other)
+        model.objects.filter.assert_not_called()
+
+    def test_removing_the_primary_hands_the_star_to_the_longest_standing(self):
+        primary, second, third = self._g(1, primary=True), self._g(2), self._g(3)
+        response, destroyed, model = self._destroy(primary, [primary, second, third])
+        assert response.status_code == 204
+        destroyed.assert_called_once_with(primary)
+        model.objects.filter.assert_called_once_with(pk=2)
+        model.objects.filter.return_value.update.assert_called_once_with(is_primary_contact=True)
+
+
 # ── 6. user_id on the registration endpoint ──────────────────────────────────
 
 def test_registration_cannot_set_a_guardian_login_account():

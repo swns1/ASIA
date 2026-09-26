@@ -133,7 +133,6 @@ describe("GuardianChildPage — one failed call can't strand the other sections"
     // so they must say so — the bug left them as skeletons instead.
     for (const tab of ["Billing", "Documents"]) {
       openTab(tab);
-      // eslint-disable-next-line no-await-in-loop
       expect(await screen.findByText("This section couldn't be loaded")).toBeTruthy();
     }
   });
