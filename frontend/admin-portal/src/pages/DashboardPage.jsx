@@ -8,12 +8,14 @@ import Button from "../components/ui/Button";
 import { Panel, StatCard } from "../components/ui/Card";
 import BillingPanel from "../components/ui/BillingPanel";
 import Alert from "../components/ui/Alert";
+import NotificationBell from "../components/ui/NotificationBell";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { describeApiError } from "../utils/apiError";
 import { pageVariants } from "../utils/motion";
 import { AttendanceBand, PipelineBand, RiskBand } from "./dashboard/DashboardBands";
+import AdminHome from "./dashboard/AdminHome";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import { getStudents as _getStudents } from "../api/studentApi";
@@ -24,7 +26,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
   const motionVal = useMotionValue(0);
@@ -174,8 +176,17 @@ const RECENT_ENROLLMENT_COLUMNS = [
   { key: "status",  label: "Status" },
 ];
 
+/**
+ * super_admin and admin land on their own task-first home (AdminHome, the
+ * approved "Principal / Admin" board). Every other staff role keeps the shared
+ * dashboard below until its own home is designed.
+ */
 export default function DashboardPage() {
   usePageTitle("Dashboard");
+  return hasAnyRole(getCurrentUser(), STAFF_ADMIN) ? <AdminHome /> : <StaffDashboard />;
+}
+
+function StaffDashboard() {
   const navigate = useNavigate();
   const now = useClock();
 
@@ -192,6 +203,11 @@ export default function DashboardPage() {
   // role) but the links to /scholarships are hidden for roles that can't use them.
   const canViewScholarships = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const canViewAnalytics = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  // Approving an enrollment is a write, which the backend limits to
+  // super_admin/admin/registrar (WRITE_ROLES_DEFAULT) — the same set as
+  // ACADEMIC_STAFF. Teachers and accounting can read enrollments but can't act
+  // on a pending one, so the "pending approval" notification is not for them.
+  const canApproveEnrollments = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [enrolledFilters, setEnrolledFilters] = useState({ year: null, level: null, grade: null });
   const [pendingFilters, setPendingFilters]   = useState({ year: null, level: null, grade: null });
@@ -222,7 +238,9 @@ export default function DashboardPage() {
   const [financialSummary, setFinancialSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
 
-  const { schoolYear, options: schoolYearOptions } = useSchoolYear();
+  // The dashboard is about now, so it always shows the current school year.
+  // Cards with their own year chips can still look at another year.
+  const { currentYear: schoolYear, options: schoolYearOptions } = useSchoolYear();
 
   const isFirstEnrolledFetch = useRef(true);
   const isFirstPendingFetch = useRef(true);
@@ -322,12 +340,16 @@ export default function DashboardPage() {
         // Billing-service-gated — skip entirely for non-billing roles rather
         // than making a call that's always going to 403.
         canViewFinancials ? _getInvoices({ status: "unpaid", page_size: 1 }).catch(() => null) : Promise.resolve(null),
-        _getEnrollments({ enrollment_status: "pending", school_year: schoolYear, page_size: 1 }).catch(() => null),
+        // Only for roles that can approve one — see canApproveEnrollments.
+        canApproveEnrollments
+          ? _getEnrollments({ enrollment_status: "pending", school_year: schoolYear, page_size: 1 }).catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (unpaidData?.count > 0) {
         newAlerts.push({
           id: "unpaid", icon: "ti-receipt-off", tone: "error",
           message: `${unpaidData.count} unpaid invoice${unpaidData.count !== 1 ? "s" : ""}`,
+          hint: "Open Invoices to follow up",
           link: "/invoices?status=unpaid",
         });
       }
@@ -335,6 +357,7 @@ export default function DashboardPage() {
         newAlerts.push({
           id: "pending_enr", icon: "ti-clock", tone: "warning",
           message: `${pendingEnrData.count} enrollment${pendingEnrData.count !== 1 ? "s" : ""} pending approval`,
+          hint: "Open Enrollments to review",
           link: `/enrollments?enrollment_status=pending&school_year=${schoolYear}`,
         });
       }
@@ -343,7 +366,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (!schoolYear) return; // global school year still resolving
+    if (!schoolYear) return;
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolYear]);
@@ -379,13 +402,19 @@ export default function DashboardPage() {
         icon="ti-layout-dashboard"
         subtitle={`S.Y. ${schoolYear} · ${now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`}
         actions={
-          <div className="text-right">
-            <div className="text-xl font-bold tabular-nums tracking-[-0.02em] text-neutral-900">
-              {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-xl font-bold tabular-nums tracking-[-0.02em] text-neutral-900">
+                {now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </div>
+              <div className="text-xs text-neutral-500">
+                {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
+              </div>
             </div>
-            <div className="text-xs text-neutral-500">
-              {now.toLocaleTimeString("en-PH", { timeZoneName: "short" }).split(" ").pop()}
-            </div>
+            <div className="h-8 w-px bg-neutral-200" aria-hidden="true" />
+            {/* Things needing attention. Used to be a row of chips above the
+                metrics; the bell's red dot now carries that signal. */}
+            <NotificationBell items={alerts} />
           </div>
         }
       />
@@ -403,29 +432,6 @@ export default function DashboardPage() {
             </Alert>
           )}
         </AnimatePresence>
-
-        {/* Things needing attention, surfaced before the metrics. */}
-        {alerts.length > 0 && (
-          <motion.div variants={pageVariants.item} className="flex flex-wrap gap-2.5">
-            {alerts.map((al) => (
-              <button
-                key={al.id}
-                type="button"
-                onClick={() => navigate(al.link)}
-                className={[
-                  "focus-ring flex min-w-[200px] flex-1 items-center gap-2.5 rounded-md border px-4 py-2.5 text-sm font-semibold transition-colors",
-                  al.tone === "error"
-                    ? "border-error-500/25 bg-error-50 text-error-500 hover:bg-error-50/70"
-                    : "border-warning-500/25 bg-warning-50 text-warning-500 hover:bg-warning-50/70",
-                ].join(" ")}
-              >
-                <i className={`ti ${al.icon} text-[16px]`} aria-hidden="true" />
-                {al.message}
-                <i className="ti ti-arrow-right ml-auto text-[13px]" aria-hidden="true" />
-              </button>
-            ))}
-          </motion.div>
-        )}
 
         {/* Headline metrics */}
         <motion.div variants={pageVariants.item} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -35,16 +35,29 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from academic_calendar.models import CalendarEvent
+from accounts.models import User
 from accounts.permissions import HasRole, teacher_student_ids
 from ai.models import RiskAssessmentRun, StudentRiskScore
 from attendance.models import AttendanceRecord
-from enrollments.models import Enrollment
+from enrollments.models import Enrollment, SectionAdvisory
+from grades.models import Grade
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
+from subjects.models import Subject
 
 from .services import (
     shape_attendance_series,
     shape_level_distribution,
     shape_pipeline,
     shape_risk_bands,
+)
+from .teachers_today import (
+    NO_CLASS_EVENT_TYPES,
+    QUARTERS,
+    current_grading_period,
+    no_classes_today,
+    section_key,
+    shape_teachers_today,
 )
 
 DASHBOARD_ROLES = {"super_admin", "admin", "registrar", "teacher", "accounting"}
@@ -162,3 +175,117 @@ class DashboardSummaryView(APIView):
             "computed_at": run.updated_at,
             **shape_risk_bands(rows),
         }
+
+
+# Only the admin home shows this card for now. Registrar and accounting homes
+# haven't been designed yet, and a teacher's own sections live on My Sections.
+TEACHERS_TODAY_ROLES = {"super_admin", "admin"}
+
+
+class TeachersTodayView(APIView):
+    """
+    GET /api/dashboard/teachers-today/?school_year=2026-2027
+
+    Per section with enrolled students: its advisers, whether attendance was
+    taken today, and how many of the current grading period's grades are in.
+    All decisions live in teachers_today.py; this only gathers the rows.
+    """
+    permission_classes = [HasRole]
+    required_roles     = TEACHERS_TODAY_ROLES
+
+    def get(self, request):
+        try:
+            school_year = normalize_school_year(request.query_params.get("school_year"))
+        except InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=400)
+        today = timezone.localdate()
+
+        enrolled = Enrollment.objects.filter(school_year=school_year, enrollment_status="enrolled")
+        sections = {}
+        for eid, level, grade, section, strand in enrolled.values_list(
+            "enrollment_id", "school_level", "grade_level", "section", "strand",
+        ):
+            sections.setdefault(section_key(level, grade, section, strand), []).append(eid)
+
+        period = current_grading_period(
+            CalendarEvent.objects.filter(school_year=school_year, event_type="grading_period")
+                                 .values("grading_period", "start_date", "end_date"),
+            today,
+            graded_quarters=self._graded_quarters(school_year),
+        )
+
+        return Response({
+            "school_year": school_year,
+            "date":        today.isoformat(),
+            **shape_teachers_today(
+                sections=sections,
+                advisers=self._advisers(school_year),
+                attendance_rows=self._attendance_today(school_year, today),
+                subjects=list(Subject.objects.values(
+                    "subject_id", "school_level", "grade_level", "strand", "semester",
+                )),
+                graded=self._graded_pairs(school_year, [period["key"], period["semester"]]),
+                period=period,
+                no_classes=no_classes_today(
+                    today,
+                    CalendarEvent.objects.filter(
+                        start_date__lte=today, end_date__gte=today,
+                        event_type__in=NO_CLASS_EVENT_TYPES,
+                    ).values("event_type", "title"),
+                ),
+            ),
+        })
+
+    @staticmethod
+    def _advisers(school_year):
+        rows = list(SectionAdvisory.objects.filter(school_year=school_year).values(
+            "teacher_user_id", "school_level", "grade_level", "section", "strand",
+        ))
+        names = dict(
+            User.objects.filter(user_id__in={r["teacher_user_id"] for r in rows})
+                        .values_list("user_id", "name")
+        )
+        advisers = {}
+        for r in rows:
+            key = section_key(r["school_level"], r["grade_level"], r["section"], r["strand"])
+            advisers.setdefault(key, []).append(names.get(r["teacher_user_id"], "Unknown teacher"))
+        return advisers
+
+    @staticmethod
+    def _attendance_today(school_year, today):
+        rows = (
+            AttendanceRecord.objects
+            .filter(date=today, enrollment__school_year=school_year,
+                    enrollment__enrollment_status="enrolled")
+            .values("enrollment__school_level", "enrollment__grade_level",
+                    "enrollment__section", "enrollment__strand", "status")
+            .annotate(n=Count("attendance_id"))
+        )
+        return [
+            {
+                "key": section_key(r["enrollment__school_level"], r["enrollment__grade_level"],
+                                   r["enrollment__section"], r["enrollment__strand"]),
+                "status": r["status"],
+                "n": r["n"],
+            }
+            for r in rows
+        ]
+
+    @staticmethod
+    def _graded_quarters(school_year):
+        return set(
+            Grade.objects.filter(enrollment__school_year=school_year, grading_period__in=QUARTERS)
+                         .values_list("grading_period", flat=True).distinct()
+        )
+
+    @staticmethod
+    def _graded_pairs(school_year, periods):
+        graded = {p: set() for p in periods}
+        rows = Grade.objects.filter(
+            enrollment__school_year=school_year,
+            enrollment__enrollment_status="enrolled",
+            grading_period__in=periods,
+        ).values_list("grading_period", "enrollment_id", "subject_id")
+        for period, eid, sid in rows:
+            graded[period].add((eid, sid))
+        return graded

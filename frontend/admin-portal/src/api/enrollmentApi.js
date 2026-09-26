@@ -20,6 +20,14 @@ const enrollmentClient = createApiClient({
 export const getDashboardSummary = (params = {}) =>
   enrollmentClient.get("/dashboard/summary/", { params }).then((r) => r.data);
 
+/**
+ * GET /dashboard/teachers-today/?school_year= — the admin home's per-section
+ * check on teachers: advisers, attendance taken today, and how many of the
+ * current grading period's grades are in. super_admin/admin only.
+ */
+export const getTeachersToday = (params = {}) =>
+  enrollmentClient.get("/dashboard/teachers-today/", { params }).then((r) => r.data);
+
 // ── Enrollments ───────────────────────────────────────────────────────────────
 // Every school year that has enrollments, newest first, with a count each —
 // plus the current year even when it's still empty. Replaces the old computed

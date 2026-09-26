@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import useYearFilter from "../hooks/useYearFilter";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -65,8 +66,20 @@ const EVENT_TYPE_DEFAULTS = [
   { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
   { value: "school_day_off", label: "No Classes",    color: "#854f0b", icon: "ti-school-off" },
   { value: "event",          label: "Event",         color: "#a3266b", icon: "ti-star" },
+  { value: "grading_period", label: "Grading Period", color: "#0b6e63", icon: "ti-report-analytics" },
   { value: "other",          label: "Other",         color: "#855c5c", icon: "ti-calendar" },
 ];
+
+// A Grading Period event marks one quarter. Its end date is when that
+// quarter's grades are due; the admin home reads these to know the current
+// quarter. Senior High semesters are derived from them (Q1–Q2, Q3–Q4).
+const GRADING_QUARTERS = [
+  { value: "1st_quarter", label: "1st Quarter" },
+  { value: "2nd_quarter", label: "2nd Quarter" },
+  { value: "3rd_quarter", label: "3rd Quarter" },
+  { value: "4th_quarter", label: "4th Quarter" },
+];
+const QUARTER_LABELS = new Set(GRADING_QUARTERS.map((q) => q.label));
 
 const COLOR_STORAGE_KEY = "cal_event_colors";
 
@@ -580,24 +593,37 @@ function EventCard({ event, onEdit, onDelete }) {
 
 // ── Add / Edit Modal ──────────────────────────────────────────────────────────
 
-const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "" };
+const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "", grading_period: "" };
 const LBL = { display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
 const INP = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box" };
 
 function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   const [form, setForm] = useState(mode === "edit"
-    ? { title: initial.title, event_type: initial.event_type, start_date: initial.start_date, end_date: initial.end_date, description: initial.description ?? "" }
+    ? { title: initial.title, event_type: initial.event_type, start_date: initial.start_date, end_date: initial.end_date, description: initial.description ?? "", grading_period: initial.grading_period ?? "" }
     : { ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const selectedMeta = eventMeta(form.event_type);
+  const isGradingPeriod = form.event_type === "grading_period";
+
+  // Picking a quarter names the event after it, unless the title was typed by
+  // hand — then it's left alone.
+  function pickQuarter(value) {
+    const label = GRADING_QUARTERS.find((q) => q.value === value)?.label;
+    setForm((f) => ({
+      ...f,
+      grading_period: value,
+      title: label && (!f.title.trim() || QUARTER_LABELS.has(f.title.trim())) ? label : f.title,
+    }));
+  }
 
   const [syYear, syYear2] = schoolYear.split("-").map(Number);
   const syMin = `${syYear}-07-01`;
   const syMax = `${syYear2}-06-30`;
 
   async function handleSave() {
+    if (isGradingPeriod && !form.grading_period) { setError("Choose which quarter this is."); return; }
     if (!form.title.trim())              { setError("Title is required."); return; }
     if (!form.start_date)                { setError("Start date is required."); return; }
     if (!form.end_date)                  { setError("End date is required."); return; }
@@ -608,7 +634,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
     }
     setSaving(true); setError("");
     try {
-      const payload = { school_year: schoolYear, title: form.title.trim(), event_type: form.event_type, start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null };
+      const payload = { school_year: schoolYear, title: form.title.trim(), event_type: form.event_type, start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null, grading_period: isGradingPeriod ? form.grading_period : null };
       mode === "edit" ? await updateEvent(initial.event_id, payload) : await createEvent(payload);
       toast.success(mode === "edit" ? "Event updated." : "Event created.");
       onSaved();
@@ -686,6 +712,19 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
               })}
             </div>
           </div>
+
+          {isGradingPeriod && (
+            <div>
+              <label htmlFor="event-grading-period" style={LBL}>Which quarter *</label>
+              <select id="event-grading-period" value={form.grading_period} onChange={(e) => pickQuarter(e.target.value)} style={{ ...INP, cursor: "pointer" }}>
+                <option value="">Choose a quarter…</option>
+                {GRADING_QUARTERS.map((q) => <option key={q.value} value={q.value}>{q.label}</option>)}
+              </select>
+              <div style={{ fontSize: 11.5, color: "#855c5c", marginTop: 6 }}>
+                Set the first and last day of the quarter. The last day is when its grades are due.
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
             <div><label style={LBL}>Start Date *</label><input type="date" value={form.start_date} min={syMin} max={syMax} onChange={(e) => setF("start_date", e.target.value)} style={INP} /></div>
@@ -1433,11 +1472,10 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 export default function AcademicCalendarPage() {
   usePageTitle("Academic Calendar");
   const navigate = useNavigate();
-  const { schoolYear: globalSchoolYear, options: SCHOOL_YEARS } = useSchoolYear();
-  const [schoolYear,  setSchoolYear]  = useState(globalSchoolYear || "");
-
-  // Follow the global school year selector while this page stays mounted.
-  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
+  const { options: SCHOOL_YEARS } = useSchoolYear();
+  // A calendar is always one school year: its date bounds, month grid and
+  // print headers are all derived from it.
+  const [schoolYear,  setSchoolYear]  = useYearFilter({ allowAll: false });
   const [events,      setEvents]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");

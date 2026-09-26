@@ -17,12 +17,9 @@ import { groupYears } from "../../utils/schoolYear";
 // So year leaves the chip rows and becomes a labelled pill with a grouped
 // popover: constant height at three years or thirty.
 //
-// The Current / Recent / Earlier grouping and the `year · count` label come
-// from utils/schoolYear.js, shared with Sidebar.jsx's picker. The two are
-// deliberately different widgets — a native <select> for the global default,
-// this combobox for a per-page filter whose list can run long — but they must
-// never disagree about which year is "Recent", so the grouping lives in one
-// place rather than in each.
+// The Current / Recent / Earlier grouping comes from utils/schoolYear.js. The
+// value is the page's own: pair this with hooks/useYearFilter, which decides
+// where the page opens and what "Clear filters" goes back to.
 
 // Below this many years the list is short enough to scan directly, and a
 // search field would be chrome that earns nothing. Past it, typing beats
@@ -41,6 +38,15 @@ export default function SchoolYearPicker({
   currentYear: currentYearProp,
   includeAllYears = true,
   allYearsCount,
+  // Whether the year is narrowing the page right now. By default any chosen
+  // year is; Students passes whether "Not enrolled" is on, since its year
+  // feeds only that filter and must not look applied while the filter is off.
+  active,
+  // Which edge of the pill the popover lines up with. "start" suits the
+  // filter bar, where the pill sits left of centre; "end" is for a pill at the
+  // right edge of the page (the admin home's header), where a left-anchored
+  // 268px panel would run off the screen.
+  align = "start",
   label = "School year",
   className = "",
 }) {
@@ -132,12 +138,20 @@ export default function SchoolYearPicker({
 
   // Keep the active row in view — without this, arrowing past the visible
   // window moves an invisible cursor.
+  //
+  // Scrolls the list and nothing else. This used scrollIntoView, which also
+  // scrolls every ancestor, sideways too, including the app shell whose
+  // overflow is hidden: opened near the right edge of the page, the popover
+  // poked past it and the whole app, sidebar included, slid left and stayed.
   useEffect(() => {
     if (!open || activeIdx < 0) return;
-    const el = listRef.current?.querySelector(`[data-idx="${activeIdx}"]`);
-    // Guarded: jsdom doesn't implement scrollIntoView, and it's a nicety here
-    // rather than something the picker's correctness depends on.
-    el?.scrollIntoView?.({ block: "nearest" });
+    const list = listRef.current;
+    const el = list?.querySelector(`[data-idx="${activeIdx}"]`);
+    if (!el) return;
+    const box = list.getBoundingClientRect();
+    const row = el.getBoundingClientRect();
+    if (row.top < box.top) list.scrollTop -= box.top - row.top;
+    else if (row.bottom > box.bottom) list.scrollTop += row.bottom - box.bottom;
   }, [activeIdx, open]);
 
   const moveActive = (dir) => {
@@ -183,7 +197,7 @@ export default function SchoolYearPicker({
   // the whole trigger emphasises together: the focus ring already draws a red
   // border on click, and leaving the text and badge grey underneath it made
   // the control contradict itself.
-  const emphasised = Boolean(value) || open;
+  const emphasised = (active ?? Boolean(value)) || open;
   const activeId = activeIdx >= 0 ? `${baseId}-opt-${activeIdx}` : undefined;
 
   return (
@@ -244,10 +258,9 @@ export default function SchoolYearPicker({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            // Left-aligned: the pill sits left of centre in the search row, so
-            // anchoring right would push the panel off the panel's edge.
-            // z-40 clears the table but stays under Modal's z-[999].
-            className="absolute left-0 top-[calc(100%+6px)] z-40 w-[268px] rounded-xl border-[1.5px] border-neutral-200 bg-white p-[7px] shadow-[0_12px_40px_rgba(224,49,49,0.14)]"
+            // Anchored per `align`, so the panel always opens toward the room
+            // it has. z-40 clears the table but stays under Modal's z-[999].
+            className={`absolute ${align === "end" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-40 w-[268px] rounded-xl border-[1.5px] border-neutral-200 bg-white p-[7px] shadow-[0_12px_40px_rgba(224,49,49,0.14)]`}
           >
             {showFilter && (
               <div className="mx-[3px] mb-1 mt-[3px] flex h-[34px] items-center gap-[7px] rounded-lg border-[1.5px] border-neutral-300 px-2.5 focus-within:border-brand-500">

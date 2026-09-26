@@ -25,8 +25,7 @@ vi.mock("../../api/identityApi", () => ({ getUsers: (...a) => api.getUsers(...a)
 vi.mock("../../components/ui/SchoolYearPicker", () => ({ default: () => null }));
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
-    schoolYear: "", currentYear: "2026-2027", options: ["2026-2027", "2025-2026"],
-    counts: {}, setSchoolYear: () => {},
+    currentYear: "2026-2027", options: ["2026-2027", "2025-2026"], yearCounts: {},
   }),
 }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
@@ -43,8 +42,14 @@ function advisory(id, teacher, school_year, section) {
   };
 }
 
-function renderPage() {
-  return render(<MemoryRouter><TeacherAdvisoriesPage /></MemoryRouter>);
+// The page opens on the current year (hooks/useYearFilter); `search` can name
+// another, the way a `?school_year=` link does.
+function renderPage(search = "") {
+  return render(
+    <MemoryRouter initialEntries={[`/teacher-advisories${search}`]}>
+      <TeacherAdvisoriesPage />
+    </MemoryRouter>,
+  );
 }
 
 beforeEach(() => {
@@ -64,13 +69,20 @@ describe("TeacherAdvisoriesPage", () => {
     expect(await screen.findByText(/2 sections need a new adviser/)).toBeTruthy();
   });
 
-  it("marks those rows, and a past year's only as history", async () => {
+  it("marks those rows", async () => {
     renderPage();
     await screen.findByText("Ana Active");
 
     expect(screen.getAllByText("Needs a new adviser")).toHaveLength(2);
-    expect(screen.getByText("Adviser deactivated")).toBeTruthy();
     expect(screen.getByText("Removed account #99")).toBeTruthy();
+  });
+
+  it("marks a past year's deactivated adviser only as history", async () => {
+    renderPage("?school_year=2024-2025");
+    await screen.findByText(/Luna/);
+
+    expect(screen.getByText("Adviser deactivated")).toBeTruthy();
+    expect(screen.queryByText("Needs a new adviser")).toBeNull();
   });
 
   it("never offers a deactivated teacher, and asks for a new adviser", async () => {

@@ -12,7 +12,7 @@ import { StatusBadge as StudentStatusBadge } from "../components/ui/Badge";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getStudent, getStudents } from "../api/studentApi";
-import { useSchoolYear } from "../context/SchoolYearContext";
+import useYearFilter from "../hooks/useYearFilter";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 
 
@@ -69,9 +69,9 @@ export default function RequirementsPage() {
   const [levelFilter, setLevelFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   // Level and grade are where a learner is placed, which is per school year:
-  // the filters list students enrolled (or pending) there in the year picked
-  // in the header.
-  const { schoolYear } = useSchoolYear();
+  // the filters list students enrolled (or pending) there in the current
+  // school year, or the year a link names (see hooks/useYearFilter).
+  const [schoolYear] = useYearFilter();
   const gradeOptions = GRADE_LEVELS_BY_LEVEL[levelFilter] ?? ["All Grades"];
 
   // Reset grade when level changes

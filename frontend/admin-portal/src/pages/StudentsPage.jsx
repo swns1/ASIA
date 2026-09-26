@@ -10,8 +10,9 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card, { StatCard } from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
-import { useSchoolYear } from "../context/SchoolYearContext";
+import useYearFilter from "../hooks/useYearFilter";
 import FilterBar, { FilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
@@ -46,12 +47,15 @@ const STAT_CARDS = [
 const TABLE_COLUMNS = [
   // `key` is the API ordering field for sortable columns, so the header the
   // user clicks and the value sent to the backend can't drift apart.
-  { key: "last_name",  label: "Student",   width: "30%", sortable: true },
-  { key: "lrn",        label: "LRN",       width: "15%" },
-  { key: "birth_date", label: "Age / DOB", width: "16%", sortable: true },
-  { key: "sex",     label: "Sex",       width: "9%" },
-  { key: "status",  label: "Status",    width: "11%" },
-  { key: "contact", label: "Contact",   width: "13%" },
+  { key: "last_name",  label: "Student",   width: "24%", sortable: true },
+  { key: "lrn",        label: "LRN",       width: "13%" },
+  // The page is the school's masterlist, so it says where each learner was:
+  // their latest enrollment that wasn't cancelled, from the list response.
+  { key: "last_enrollment", label: "Last enrolled", width: "15%" },
+  { key: "birth_date", label: "Age / DOB", width: "12%", sortable: true },
+  { key: "sex",     label: "Sex",       width: "8%" },
+  { key: "status",  label: "Status",    width: "10%" },
+  { key: "contact", label: "Contact",   width: "12%" },
   { key: "actions", label: "Actions",   width: "6%", align: "right" },
 ];
 
@@ -84,8 +88,9 @@ export default function StudentsPage() {
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   const [students, setStudents]   = useState([]);
-  const [search, setSearch]       = useState("");
-  const [inputVal, setInputVal]   = useState("");
+  // ?search= is how the admin home's "Find a student" box lands here.
+  const [search, setSearch]       = useState(() => searchParams.get("search") ?? "");
+  const [inputVal, setInputVal]   = useState(() => searchParams.get("search") ?? "");
   const [page, setPage]           = useState(1);
   const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading]     = useState(true);
@@ -96,12 +101,15 @@ export default function StudentsPage() {
   const [sexFilter, setSexFilter] = useState("");
   const [ordering, setOrdering]   = useState(DEFAULT_ORDERING);
   const [isRecents, setIsRecents] = useState(false);
-  // Students registered but never enrolled for the active year. Both the
+  // Students registered but never enrolled for a given year. Both the
   // registration and enrolment forms tell the registrar that someone must
   // "enrol them later"; until this filter existed nothing in the app could
   // say who, so a learner could sit with no section and no grades unnoticed.
   const [isUnenrolled, setIsUnenrolled] = useState(false);
-  const { schoolYear } = useSchoolYear();
+  // The year "Not enrolled" checks. It opens on the current school year and
+  // its picker is always shown, so the page always says which year the filter
+  // means — during enrollment season, that can be next year.
+  const [unenrolledYear, setUnenrolledYear] = useYearFilter({ allowAll: false });
   const [statusCounts, setStatusCounts] = useState({});
   const [deletingStudent, setDeletingStudent] = useState(false);
 
@@ -126,7 +134,7 @@ export default function StudentsPage() {
         status: status === "all" ? "" : status,
         sex,
         ordering: ord,
-        unenrolled: unenrolled && schoolYear ? schoolYear : undefined,
+        unenrolled: unenrolled ? unenrolledYear : undefined,
       });
       setStudents(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
@@ -162,10 +170,19 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
-    fetchStudents(1, "", statusFilter, "", DEFAULT_ORDERING);
+    fetchStudents(1, search, statusFilter, "", DEFAULT_ORDERING);
     fetchCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reload when the year changes while "Not enrolled" is on — a pick in its
+  // picker, or the current year arriving from School Settings. It used to
+  // read the sidebar's year and never reloaded when that changed.
+  useEffect(() => {
+    if (!isUnenrolled) return;
+    fetchStudents(1, search, statusFilter, sexFilter, ordering, true); // eslint-disable-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unenrolledYear]);
 
   const handleSearch = () => {
     setSearch(inputVal);
@@ -212,10 +229,20 @@ export default function StudentsPage() {
     fetchStudents(1, search, statusFilter, sexFilter, ordering, next);
   };
 
+  // A year picked in the "Not enrolled for" picker only means something with
+  // that filter on, so picking one turns it on.
+  const handleUnenrolledYear = (year) => {
+    setUnenrolledYear(year);
+    if (isUnenrolled) return; // the year effect above reloads
+    setIsUnenrolled(true);
+    // That effect only runs when the year actually changes.
+    if (year === unenrolledYear) fetchStudents(1, search, statusFilter, sexFilter, ordering, true);
+  };
+
   const handleClearAll = () => {
     setInputVal(""); setSearch(""); setStatus("all");
     setSexFilter(""); setOrdering(DEFAULT_ORDERING); setIsRecents(false);
-    setIsUnenrolled(false);
+    setIsUnenrolled(false); setUnenrolledYear(null);
     fetchStudents(1, "", "all", "", DEFAULT_ORDERING, false);
     searchRef.current?.focus();
   };
@@ -316,6 +343,20 @@ export default function StudentsPage() {
           onClearSearch={handleClearSearch}
           hasFilters={hasActiveFilters}
           onClearFilters={handleClearAll}
+          // Always shown, so the page says which year "Not enrolled" checks —
+          // the one filter here that depends on a year. It reads as applied
+          // only while that filter is on. No counts: the context's count
+          // enrollments.
+          scope={
+            <SchoolYearPicker
+              label="Not enrolled for"
+              value={unenrolledYear}
+              onChange={handleUnenrolledYear}
+              active={isUnenrolled}
+              counts={{}}
+              includeAllYears={false}
+            />
+          }
         >
           <FilterRow label="Status">
             <ChipGroup
@@ -345,7 +386,7 @@ export default function StudentsPage() {
               />
               <span className="h-4 w-px bg-neutral-300" aria-hidden="true" />
               <ChipGroup
-                label={`Show students with no enrollment for ${schoolYear || "the active school year"}`}
+                label={`Show students with no enrollment for ${unenrolledYear}`}
                 options={[{ value: "unenrolled", label: "Not enrolled", icon: "ti-user-exclamation" }]}
                 value={isUnenrolled ? "unenrolled" : null}
                 onChange={handleUnenrolled}
@@ -427,6 +468,23 @@ export default function StudentsPage() {
                         <span className="rounded-sm bg-neutral-100 px-2 py-1 font-mono text-xs text-neutral-700">
                           {st.lrn}
                         </span>
+                      ) : <Blank />}
+                    </TableCell>
+
+                    {/* null means never enrolled; a missing key means the
+                        server didn't say, which is not the same thing. */}
+                    <TableCell>
+                      {st.last_enrollment ? (
+                        <>
+                          <div className="text-sm font-semibold text-neutral-900">
+                            S.Y. {st.last_enrollment.school_year}
+                          </div>
+                          <div className="truncate text-xs text-neutral-500">
+                            {[st.last_enrollment.grade_level, st.last_enrollment.section].filter(Boolean).join(" · ")}
+                          </div>
+                        </>
+                      ) : st.last_enrollment === null ? (
+                        <span className="text-sm italic text-neutral-500">Not enrolled yet</span>
                       ) : <Blank />}
                     </TableCell>
 

@@ -9,8 +9,6 @@ import FilterBar from "./FilterBar";
 // hook keeps these tests from needing a provider (and from firing its fetches).
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
-    schoolYear: "2026-2027",
-    setSchoolYear: vi.fn(),
     options: [],
     currentYear: "2026-2027",
     yearCounts: {},
@@ -45,6 +43,37 @@ function setup(props = {}) {
 
 const openPicker = () => fireEvent.click(screen.getByRole("button"));
 
+describe("SchoolYearPicker — popover edge", () => {
+  const panel = () => screen.getByRole("listbox").closest("div.absolute");
+
+  it("opens from the pill's left edge by default", () => {
+    setup();
+    openPicker();
+    expect(panel().className).toMatch(/\bleft-0\b/);
+  });
+
+  it("opens leftward from a pill at the right edge of the page", () => {
+    setup({ align: "end" });
+    openPicker();
+    expect(panel().className).toMatch(/\bright-0\b/);
+    expect(panel().className).not.toMatch(/\bleft-0\b/);
+  });
+
+  it("never scrolls the page to show the selected year", () => {
+    // scrollIntoView scrolled every ancestor, the app shell included.
+    const spy = vi.fn();
+    Element.prototype.scrollIntoView = spy;
+    try {
+      setup();
+      openPicker();
+      fireEvent.keyDown(screen.getByRole("button"), { key: "ArrowDown" });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+});
+
 describe("SchoolYearPicker — trigger", () => {
   it("shows the selected year and its real count, not the page's result count", () => {
     setup();
@@ -58,6 +87,21 @@ describe("SchoolYearPicker — trigger", () => {
     const btn = screen.getByRole("button");
     expect(btn.textContent).toContain("All years");
     expect(btn.textContent).toContain("1,284");
+  });
+
+  // Whole class names: the neutral pill carries `hover:border-brand-500`.
+  const classes = () => screen.getByRole("button").className.split(/\s+/);
+
+  it("reads as applied once a year is chosen", () => {
+    setup();
+    expect(classes()).toContain("border-brand-500");
+  });
+
+  it("stays neutral, still naming its year, while the page says it isn't applied", () => {
+    setup({ active: false });
+    expect(classes()).toContain("border-neutral-300");
+    expect(classes()).not.toContain("border-brand-500");
+    expect(screen.getByRole("button").textContent).toContain("2026-2027");
   });
 
   it("is collapsed until clicked", () => {

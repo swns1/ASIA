@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import useYearFilter from "../hooks/useYearFilter";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +10,7 @@ import Tabs from "../components/ui/Tabs";
 import ChipGroup from "../components/ui/ChipGroup";
 import Pagination from "../components/Pagination";
 import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import Card, { Panel } from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
@@ -92,7 +94,7 @@ const PERIOD_LABELS = Object.fromEntries(PERIOD_OPTIONS.map((p) => [p.value, p.l
 
 
 // ── Award Modal ───────────────────────────────────────────────────────────────
-function AwardModal({ scholarshipTypes, onClose, onSaved }) {
+function AwardModal({ scholarshipTypes, schoolYear, onClose, onSaved }) {
   const [search,      setSearch]      = useState("");
   const [students,    setStudents]    = useState([]);
   const [loadingSt,   setLoadingSt]   = useState(false);
@@ -105,14 +107,14 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
   const [error,       setError]       = useState("");
   const [open,        setOpen]        = useState(false);
 
-  const { schoolYear: currentSY } = useSchoolYear();
-
+  // Searches the year the awards list is showing (the current year when it
+  // shows all years), so a new award lands where the user is looking.
   useEffect(() => {
     if (!search.trim()) { setStudents([]); return; }
     setLoadingSt(true);
     const t = setTimeout(async () => {
       try {
-        const data = await getEnrollments({ search, enrollment_status:"enrolled", school_year:currentSY, page_size:100 });
+        const data = await getEnrollments({ search, enrollment_status:"enrolled", school_year:schoolYear, page_size:100 });
         const results = Array.isArray(data) ? data : data?.results ?? [];
         setStudents(results.map((en) => ({
           student_id:  en.student,
@@ -125,15 +127,15 @@ function AwardModal({ scholarshipTypes, onClose, onSaved }) {
       finally { setLoadingSt(false); }
     }, 280);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, schoolYear]);
 
   useEffect(() => {
     if (!student) { setEnrollments([]); setEnrollment(null); return; }
     if (student._enrollment) { setEnrollments([student._enrollment]); setEnrollment(student._enrollment); return; }
-    getEnrollments({ student:student.student_id, enrollment_status:"enrolled", school_year:currentSY, page_size:20 })
+    getEnrollments({ student:student.student_id, enrollment_status:"enrolled", school_year:schoolYear, page_size:20 })
       .then((d) => setEnrollments(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => setEnrollments([]));
-  }, [student]);
+  }, [student, schoolYear]);
 
   const handleSave = async () => {
     if (!enrollment) { setError("Please select an enrollment."); return; }
@@ -405,7 +407,8 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
 // ════════════════════════════════════════════════════════════════════════════
 // TAB 1: MANUAL AWARDS
 // ════════════════════════════════════════════════════════════════════════════
-function ManualAwardsTab({ scholarshipTypes }) {
+// The year comes from the page (see ScholarshipsPage) rather than living here.
+function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yearIsDefault }) {
   const [awards,      setAwards]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [toRevoke,    setToRevoke]    = useState(null);
@@ -423,22 +426,22 @@ function ManualAwardsTab({ scholarshipTypes }) {
   // refetch is in flight, instead of blanking on every keystroke.
   const [countsLoading, setCountsLoading] = useState(true);
 
-  const { schoolYear } = useSchoolYear();
-
-  const hasFilters = search || schFilter || schoolLevel || gradeLevel || dateFrom || dateTo;
+  const hasFilters = !yearIsDefault || search || schFilter || schoolLevel || gradeLevel || dateFrom || dateTo;
 
   const clearFilters = () => {
+    onSchoolYearChange(null); // back to the current school year
     setSearch(""); setInputVal(""); setSchFilter("");
     setSchoolLevel(""); setGradeLevel("");
     setDateFrom(""); setDateTo("");
     setPage(1);
   };
 
-  // Awards are scoped to the sidebar's school year, matching every other list
-  // page. Without it the list spans every year at once, which the old 100-row
-  // cap silently truncated.
+  // Awards open on the current school year, matching every other list page.
+  // Unscoped, the list spans every year at once, which the old 100-row cap
+  // silently truncated; "All years" is still there as a deliberate choice.
   const buildParams = (p = page, overrides = {}) => {
-    const params = { page: p, page_size: PAGE_SIZE, school_year: schoolYear };
+    const params = { page: p, page_size: PAGE_SIZE };
+    if (schoolYear)    params.school_year      = schoolYear;
     if (search.trim()) params.search           = search.trim();
     if (schFilter)     params.scholarship_type = schFilter;
     if (schoolLevel)   params.school_level     = schoolLevel;
@@ -564,6 +567,15 @@ function ManualAwardsTab({ scholarshipTypes }) {
         searchInputId="scholarships-search"
         hasFilters={Boolean(hasFilters)}
         onClearFilters={clearFilters}
+        // No per-year counts: the context's count enrollments, and beside an
+        // awards list they would read as the number of awards.
+        scope={
+          <SchoolYearPicker
+            value={schoolYear}
+            onChange={applyFilter(onSchoolYearChange)}
+            counts={{}}
+          />
+        }
         advancedLabel="Award date"
         advancedIcon="ti-calendar-search"
         advancedActive={Boolean(dateFrom || dateTo)}
@@ -749,7 +761,8 @@ function ManualAwardsTab({ scholarshipTypes }) {
 function EligibilityTab({ scholarshipTypes }) {
   const [eligible,      setEligible]      = useState([]);
   const [loading,       setLoading]       = useState(false);
-  const [schoolYear,    setSchoolYear]    = useState("");
+  // A scan covers one year's enrolled learners, so there's no "All years".
+  const [schoolYear,    setSchoolYear]    = useYearFilter({ allowAll: false });
   const [gradingPeriod, setGradingPeriod] = useState("1st_quarter");
   const [scanned,       setScanned]       = useState(false);
   // Learners whose grades couldn't be read. They are not in the list, and
@@ -759,10 +772,7 @@ function EligibilityTab({ scholarshipTypes }) {
   const [applyModal,    setApplyModal]    = useState(false);
   const [, setSavedCount] = useState(0);
 
-  const { schoolYear: globalSchoolYear, options: syOptions } = useSchoolYear();
-
-  // Follow the global school year selector while this tab stays mounted.
-  useEffect(() => { setSchoolYear(globalSchoolYear); }, [globalSchoolYear]);
+  const { options: syOptions } = useSchoolYear();
 
   const handleScan = async () => {
     if (!schoolYear) return;
@@ -975,6 +985,11 @@ export default function ScholarshipsPage() {
   const [scholarshipTypes, setScholarshipTypes] = useState([]);
   const [awardModal,       setAwardModal]       = useState(false);
   const [refreshKey,       setRefreshKey]       = useState(0);
+  // The awards year lives here rather than in its tab: the tab is remounted
+  // after every award (key={refreshKey}) and on every tab switch, and the
+  // Award Scholarship form searches the same year.
+  const [awardsYear, setAwardsYear, awardsYearIsDefault] = useYearFilter();
+  const { currentYear } = useSchoolYear();
 
   useEffect(() => {
     getScholarshipTypes()
@@ -1020,7 +1035,14 @@ export default function ScholarshipsPage() {
               exit={{ opacity:0, y:-8 }}
               transition={{ duration:0.18, ease:"easeOut" }}
             >
-              <ManualAwardsTab key={refreshKey} scholarshipTypes={scholarshipTypes} onAward={() => setAwardModal(true)} />
+              <ManualAwardsTab
+                key={refreshKey}
+                scholarshipTypes={scholarshipTypes}
+                schoolYear={awardsYear}
+                onSchoolYearChange={setAwardsYear}
+                yearIsDefault={awardsYearIsDefault}
+                onAward={() => setAwardModal(true)}
+              />
             </motion.div>
           )}
           {activeTab === "eligibility" && (
@@ -1041,6 +1063,7 @@ export default function ScholarshipsPage() {
         {awardModal && (
           <AwardModal
             scholarshipTypes={scholarshipTypes}
+            schoolYear={awardsYear || currentYear}
             onClose={() => setAwardModal(false)}
             onSaved={() => setRefreshKey((k) => k + 1)}
           />
