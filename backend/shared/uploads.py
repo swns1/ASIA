@@ -52,9 +52,10 @@ _TOKEN_MAX_AGE = 300  # 5 minutes: long enough to load a page of thumbnails,
 
 def validate_upload(upload):
     """
-    Raises django.core.exceptions.ValidationError (DRF serializers turn this
-    into a 400) unless `upload` is a real file of an allowed type under the
-    size cap. Checks the extension AND the first bytes, so a .html or .svg
+    Raises django.core.exceptions.ValidationError unless `upload` is a real
+    file of an allowed type under the size cap. DRF turns that into a 400
+    only when it's raised during is_valid() (a validate_<field> method), not
+    from create()/update() -- call it from the serializer's validate_file. Checks the extension AND the first bytes, so a .html or .svg
     renamed to end in .jpg is rejected, not just filtered by suffix.
 
     Returns (extension, file_kind) on success.

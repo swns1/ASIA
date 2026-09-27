@@ -2,7 +2,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
-from shared.uploads import download_url, file_kind_for, safe_save
+from shared.uploads import download_url, file_kind_for, safe_save, validate_upload
 
 from .models import RequirementType, StudentRequirementSubmission
 
@@ -72,6 +72,13 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
 
     def get_file_kind(self, obj):
         return file_kind_for(obj.image_url)
+
+    def validate_file(self, value):
+        # Checked here, not only in create()/update(): those run after
+        # is_valid(), where DRF no longer turns Django's ValidationError into
+        # a 400, so a wrong type or a renamed file answered 500.
+        validate_upload(value)
+        return value
 
     def create(self, validated_data):
         file = validated_data.pop("file", None)

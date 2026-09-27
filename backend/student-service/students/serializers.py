@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from shared.uploads import download_url, file_kind_for, safe_save
+from shared.uploads import download_url, file_kind_for, safe_save, validate_upload
 from .validators import BlankEmailAsNullMixin, LrnFormatMixin, blank_to_none
 from .models import (
     Student,
@@ -287,6 +287,13 @@ class StudentRequirementSubmissionSerializer(serializers.ModelSerializer):
 
     def get_file_kind(self, obj):
         return file_kind_for(obj.image_url)
+
+    def validate_file(self, value):
+        # Same as enrollment-service's twin: create()/update() run after
+        # is_valid(), where a Django ValidationError is no longer a 400, so a
+        # bad file has to be refused here or it answers 500.
+        validate_upload(value)
+        return value
 
     def _save_file(self, upload):
         """Validates and stores the upload; returns the raw value to persist

@@ -6,9 +6,11 @@
 // before the move; StudentFormPage still owns DocumentsStep and the whole
 // OCR/upload modal cluster, which are not shared with the applicant flow
 // (see the plan's decision 6 — no document upload in v1).
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Field, Input, Select, Textarea } from "../../components/FormField";
 import { todayISO } from "../../utils/format";
+import { IMPOSSIBLE_DATE_MESSAGE } from "../../utils/validation";
 import useMediaQuery from "../../hooks/useMediaQuery";
 import {
   STEPS, C, cardStyle, btnGhost, btnDanger,
@@ -148,6 +150,13 @@ export function Divider({ label }) {
 export function StudentStep({ data, onChange, showStatus = true, lrnRequired = true }) {
   const h = (e) => onChange({ ...data, [e.target.name]: e.target.value });
 
+  // The date field lets each part be typed on its own, so Feb 30 (or Feb 29
+  // in a non-leap year) can be entered. The browser then reports the value as
+  // "" with validity.badInput set, and the form only ever said "required".
+  // Checked on blur too: React skips onChange when "" stays "".
+  const [birthDateImpossible, setBirthDateImpossible] = useState(false);
+  const checkBirthDate = (e) => setBirthDateImpossible(Boolean(e.target.validity?.badInput));
+
   const statusColors = {
     active:      { bg: "#e8f5e0", color: "#2e7d32", border: "#a5d6a7" },
     inactive:    { bg: "#f5f5f5", color: "#5c5752", border: "#e0e0e0" },
@@ -210,7 +219,7 @@ export function StudentStep({ data, onChange, showStatus = true, lrnRequired = t
             <option value="female">Female</option>
           </Select>
         </Field>
-        <Field label="Birth Date *">
+        <Field label="Birth Date *" error={birthDateImpossible ? IMPOSSIBLE_DATE_MESSAGE : null}>
           {/* min/max bound the picker to the same window validation.js already
               enforces (EARLIEST_BIRTH_YEAR and "not in the future"). Without
               them a future date was freely selectable in the calendar and only
@@ -220,7 +229,8 @@ export function StudentStep({ data, onChange, showStatus = true, lrnRequired = t
             type="date"
             name="birth_date"
             value={data.birth_date || ""}
-            onChange={h}
+            onChange={(e) => { checkBirthDate(e); h(e); }}
+            onBlur={checkBirthDate}
             min="1970-01-01"
             max={todayISO()}
             required

@@ -59,11 +59,40 @@ export const mobileNumber = (value) => {
  *  mistyped year (e.g. 0215) landing in a permanent record. */
 export const EARLIEST_BIRTH_YEAR = 1970;
 
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Days in a month (1-12), leap years included. */
+export const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
+
+/** A "YYYY-MM-DD" string as a local Date, or null if it isn't a real calendar
+ *  day. `new Date("2025-02-30")` is no check: Chrome rolls it over to March 2,
+ *  so Feb 29 in a non-leap year and Feb 30 used to pass. */
+export function parseISODate(value) {
+  const m = ISO_DATE_RE.exec(String(value ?? "").trim());
+  if (!m) return null;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return null;
+  const d = new Date(year, month - 1, day);
+  // Years 0-99 map to 1900-1999 in the Date constructor.
+  return d.getFullYear() === year ? d : null;
+}
+
+export const IMPOSSIBLE_DATE_MESSAGE =
+  "That date doesn't exist — check the day. February has 28 days, or 29 in a leap year.";
+
 export const birthDate = (value) => {
   const v = String(value ?? "").trim();
   if (!v) return null;
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "Please enter a valid birth date.";
+  const d = parseISODate(v);
+  if (!d) {
+    // Name the month when the only thing wrong is the day, e.g. Feb 29, 2025.
+    const [year, month, day] = (ISO_DATE_RE.exec(v) ?? []).slice(1).map(Number);
+    if (year >= EARLIEST_BIRTH_YEAR && month >= 1 && month <= 12 && day > daysInMonth(year, month)) {
+      const monthName = new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" });
+      return `Please enter a valid birth date — ${monthName} ${year} has only ${daysInMonth(year, month)} days.`;
+    }
+    return "Please enter a valid birth date.";
+  }
   if (d > new Date()) return "Birth date cannot be in the future.";
   if (d.getFullYear() < EARLIEST_BIRTH_YEAR) return "Please enter a valid birth date.";
   return null;

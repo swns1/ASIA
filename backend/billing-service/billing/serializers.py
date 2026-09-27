@@ -186,7 +186,7 @@ def enrollment_details_for(enrollment_ids):
         cur.execute(
             """
             SELECT e.enrollment_id, e.school_year, e.grade_level, e.section, e.school_level,
-                   s.first_name, s.middle_name, s.last_name, s.lrn
+                   s.first_name, s.middle_name, s.last_name, s.lrn, s.student_number
               FROM enrollments e
               LEFT JOIN students s ON s.student_id = e.student_id
              WHERE e.enrollment_id = ANY(%s)
@@ -205,6 +205,9 @@ def _enrollment_detail(row):
         "school_level":  row[4],
         "student_name":  " ".join(p for p in [row[5], row[6], row[7]] if p),
         "lrn":           row[8],
+        # The receipt and invoice prints show "Student No." from this; it was
+        # never selected, so both printed a blank.
+        "student_number": row[9],
     }
 
 
@@ -375,7 +378,7 @@ class StudentInvoiceSerializer(serializers.ModelSerializer):
             cur.execute(
                 """
                 SELECT e.enrollment_id, e.school_year, e.grade_level, e.section, e.school_level,
-                       s.first_name, s.middle_name, s.last_name, s.lrn
+                       s.first_name, s.middle_name, s.last_name, s.lrn, s.student_number
                   FROM enrollments e
                   LEFT JOIN students s ON s.student_id = e.student_id
                  WHERE e.enrollment_id = %s

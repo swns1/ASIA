@@ -257,6 +257,35 @@ class TestFileDownloadAction:
         assert response.status_code == 404
 
 
+class TestInvalidUploadIsA400:
+    """validate_upload used to run only inside create()/update(), after
+    is_valid(), where DRF doesn't convert Django's ValidationError -- so a
+    wrong or renamed file answered 500 instead of saying what was wrong."""
+
+    def _errors(self, upload):
+        # partial=True so only `file` is validated -- the other fields would
+        # need the managed=False tables this test DB doesn't have.
+        serializer = StudentRequirementSubmissionSerializer(data={"file": upload}, partial=True)
+        assert not serializer.is_valid()
+        return serializer.errors
+
+    def test_wrong_extension_is_a_field_error(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        errors = self._errors(SimpleUploadedFile("notes.docx", b"PK\x03\x04", content_type="application/msword"))
+        assert "Unsupported file type" in str(errors["file"])
+
+    def test_renamed_file_is_a_field_error(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        errors = self._errors(SimpleUploadedFile("scan.jpg", b"<html>nope</html>", content_type="image/jpeg"))
+        assert "don't match" in str(errors["file"])
+
+    def test_genuine_file_passes(self):
+        upload = _fake_jpeg()
+        assert StudentRequirementSubmissionSerializer().validate_file(upload) is upload
+
+
 def _fake_jpeg():
     from django.core.files.uploadedfile import SimpleUploadedFile
 

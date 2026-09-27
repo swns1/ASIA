@@ -213,6 +213,23 @@ class TestSerializerImageUrl:
         assert serializer.get_file_kind(_submission(image_url="requirements/x.jpg")) == "image"
 
 
+class TestSerializerRejectsBadFiles:
+    """A bad file has to fail inside is_valid(): from create()/update() the
+    same ValidationError escaped DRF and answered 500."""
+
+    def test_wrong_type_is_a_field_error_not_an_exception(self):
+        upload = SimpleUploadedFile("payload.html", b"<script>alert(1)</script>", content_type="text/html")
+        serializer = StudentRequirementSubmissionSerializer(data={"file": upload}, partial=True)
+        assert not serializer.is_valid()
+        assert "Unsupported file type" in str(serializer.errors["file"])
+
+    def test_renamed_file_is_a_field_error(self):
+        upload = SimpleUploadedFile("scan.pdf", b"\xff\xd8\xff\xe0a-jpeg", content_type="application/pdf")
+        serializer = StudentRequirementSubmissionSerializer(data={"file": upload}, partial=True)
+        assert not serializer.is_valid()
+        assert "don't match" in str(serializer.errors["file"])
+
+
 # -- the download action itself ------------------------------------------------
 
 class TestFileDownloadAction:

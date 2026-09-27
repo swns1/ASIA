@@ -153,6 +153,30 @@ describe("student-record field rules", () => {
       expect(birthDate("not-a-date")).toMatch(/valid birth date/);
     });
 
+    // `new Date("2025-02-30")` rolls over to March 2 in Chrome, so these passed.
+    it.each([
+      ["Feb 29 in a non-leap year", "2025-02-29", /February 2025 has only 28 days/],
+      ["Feb 30 in a leap year", "2024-02-30", /February 2024 has only 29 days/],
+      ["Apr 31", "2015-04-31", /April 2015 has only 30 days/],
+    ])("rejects %s", (_label, value, message) => {
+      expect(birthDate(value)).toMatch(message);
+    });
+
+    it("accepts Feb 29 in a leap year", () => {
+      expect(birthDate("2016-02-29")).toBeNull();
+      expect(birthDate("2000-02-29")).toBeNull();
+    });
+
+    it("rejects Feb 29 in a century year that isn't a leap year", () => {
+      expect(birthDate("2100-02-29")).toMatch(/valid birth date/);
+    });
+
+    it("rejects a month or day of zero", () => {
+      expect(birthDate("2015-00-10")).toMatch(/valid birth date/);
+      expect(birthDate("2015-13-10")).toMatch(/valid birth date/);
+      expect(birthDate("2015-06-00")).toMatch(/valid birth date/);
+    });
+
     it("leaves absence to `required`", () => {
       expect(birthDate("")).toBeNull();
     });
