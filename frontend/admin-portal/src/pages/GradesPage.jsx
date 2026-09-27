@@ -479,7 +479,9 @@ function subjectParamsFor(enrollment) {
   const params = { school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 };
   if (enrollment.school_level === "senior_highschool") {
     if (enrollment.strand) params.for_strand = enrollment.strand;
-    if (enrollment.semester) params.semester = enrollment.semester;
+    // That semester's subjects plus those with none recorded; the exact
+    // match left a HUMSS or ABM learner with nothing to grade.
+    if (enrollment.semester) params.for_semester = enrollment.semester;
   }
   return params;
 }

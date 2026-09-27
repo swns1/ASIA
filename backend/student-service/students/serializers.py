@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from shared.uploads import download_url, file_kind_for, safe_save
-from .validators import BlankEmailAsNullMixin, LrnFormatMixin
+from .validators import BlankEmailAsNullMixin, LrnFormatMixin, blank_to_none
 from .models import (
     Student,
     Household,
@@ -18,14 +18,30 @@ from .models import (
 )
 
 
+HOUSEHOLD_BLANK_AS_NULL = ("parent_marital_status", "living_arrangement", "four_ps_id")
+
+
+def null_blank_household_fields(attrs):
+    """
+    The households CHECK constraints accept NULL or a listed value -- never
+    "". A select left on its placeholder arrives as "", which the model's
+    blank=True choice field lets through, and the INSERT then failed the
+    constraint: a 500 for every application whose optional household step was
+    skipped, at the moment the registrar pressed Approve.
+    """
+    for field in HOUSEHOLD_BLANK_AS_NULL:
+        if field in attrs:
+            attrs[field] = blank_to_none(attrs[field])
+    return attrs
+
+
 class HouseholdSerializer(serializers.ModelSerializer):
     class Meta:
         model = Household
         fields = "__all__"
 
     def validate(self, attrs):
-        if attrs.get("four_ps_id") == "":
-            attrs["four_ps_id"] = None
+        null_blank_household_fields(attrs)
 
         is_4ps = attrs.get("is_4ps_beneficiary", getattr(self.instance, "is_4ps_beneficiary", False))
         four_ps_id = attrs.get("four_ps_id", getattr(self.instance, "four_ps_id", None))
@@ -304,10 +320,14 @@ class BulkStudentSerializer(LrnFormatMixin, BlankEmailAsNullMixin, serializers.M
 
 
 class BulkHouseholdSerializer(serializers.ModelSerializer):
-    """Used only inside bulk-create — household_id is auto-generated server-side."""
+    """Used inside bulk-create and application approval — household_id is
+    auto-generated server-side."""
     class Meta:
         model = Household
         exclude = ["household_id"]
+
+    def validate(self, attrs):
+        return null_blank_household_fields(attrs)
 
 
 # `student` is set by the view from the row it just created, so these two omit

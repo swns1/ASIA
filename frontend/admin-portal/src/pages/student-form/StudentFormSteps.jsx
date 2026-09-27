@@ -9,6 +9,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Field, Input, Select, Textarea } from "../../components/FormField";
 import { todayISO } from "../../utils/format";
+import useMediaQuery from "../../hooks/useMediaQuery";
 import {
   STEPS, C, cardStyle, btnGhost, btnDanger,
   emptyGuardian, emptySibling, emptySchool,
@@ -29,9 +30,15 @@ const STEP_BAR_SIZES = {
 // applicant form (no document upload — see the plan's decision 6) passes
 // its own shorter list of the same {id, label, icon} shape.
 export function StepBar({ current, onStepClick, size = "md", steps = STEPS }) {
-  const dims = STEP_BAR_SIZES[size] || STEP_BAR_SIZES.md;
+  // Six large circles with every label spelled out need about 520px, so on a
+  // phone the bar pushed the applicant form -- the one parents open from the
+  // QR code -- 128px past the screen and the whole page scrolled sideways.
+  // Narrow screens get the small circles and only the current step's label;
+  // the bar also scrolls within itself rather than ever widening the page.
+  const narrow = useMediaQuery("(max-width: 639px)");
+  const dims = narrow ? STEP_BAR_SIZES.md : (STEP_BAR_SIZES[size] || STEP_BAR_SIZES.md);
   return (
-    <div style={{ display: "flex", alignItems: "center", marginBottom: 32, gap: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 32, gap: 0, maxWidth: "100%", overflowX: "auto" }}>
       {steps.map((s, i) => {
         const done = i < current;
         const active = i === current;
@@ -86,7 +93,7 @@ export function StepBar({ current, onStepClick, size = "md", steps = STEPS }) {
                 color: active ? "#c92a2a" : done ? C.muted : "#8a6a6a",
                 letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap",
               }}>
-                {s.label}
+                {narrow && !active ? null : s.label}
               </span>
             </div>
             {i < steps.length - 1 && (

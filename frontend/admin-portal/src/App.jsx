@@ -162,13 +162,13 @@ export default function App() {
             Deliberately outside the shell: these are single-task flows that
             have never shown the sidebar, so the user isn't invited to navigate
             away mid-entry and lose their work. */}
-        {/* ACADEMIC_STAFF: the server refuses a student save from any other
-            role, so teachers and accounting used to fill in a whole form for
-            nothing. */}
+        {/* ACADEMIC_STAFF: the server refuses a student or enrollment save
+            from any other role, so teachers and accounting used to fill in a
+            whole form for nothing. */}
         <Route path="/students/new"           element={<P roles={ACADEMIC_STAFF}><StudentFormPage /></P>} />
         <Route path="/students/:id/edit"      element={<P roles={ACADEMIC_STAFF}><StudentFormPage /></P>} />
-        <Route path="/enrollments/new"        element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
-        <Route path="/enrollments/:id/edit"   element={<P roles={STAFF_ALL}><EnrollmentFormPage /></P>} />
+        <Route path="/enrollments/new"        element={<P roles={ACADEMIC_STAFF}><EnrollmentFormPage /></P>} />
+        <Route path="/enrollments/:id/edit"   element={<P roles={ACADEMIC_STAFF}><EnrollmentFormPage /></P>} />
 
         {/* PUBLIC — no StaffShell, no <P>. An applicant reaches this from a
             staff-issued invite link with no login of their own; access is
@@ -179,18 +179,20 @@ export default function App() {
         <Route path="/apply/:inviteId" element={<ApplicantFormPage />} />
 
         {/* Report card is backend-scoped: guardians may open only their own
-            child's (403 otherwise), so it stays reachable to any authenticated
-            user — and chrome-less, since it's a printable document. */}
-        <Route path="/report-card/:enrollmentId" element={<P><ReportCardPage /></P>} />
+            child's (403 otherwise) -- and chrome-less, since it's a printable
+            document. The roles match the server's (grade readers plus the
+            guardian); accounting, which it refuses, got an error page. */}
+        <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><ReportCardPage /></P>} />
 
         {/* ── Print / PDF documents (no shell by design) ── */}
         <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
         <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />
-        <Route path="/print/sf2"     element={<P roles={STAFF_ALL}><SF2PrintPage /></P>} />
-        <Route path="/print/sf9/:enrollmentId" element={<P roles={STAFF_ALL}><SF9PrintPage /></P>} />
-        <Route path="/print/sf10/:studentId" element={<P roles={STAFF_ALL}><SF10PrintPage /></P>} />
+        {/* Attendance and grades: the server refuses accounting both. */}
+        <Route path="/print/sf2"     element={<P roles={GRADE_ROLES}><SF2PrintPage /></P>} />
+        <Route path="/print/sf9/:enrollmentId" element={<P roles={GRADE_ROLES}><SF9PrintPage /></P>} />
+        <Route path="/print/sf10/:studentId" element={<P roles={GRADE_ROLES}><SF10PrintPage /></P>} />
 
         {/* ── Guardian (parent) portal ── */}
         <Route element={<GuardianShell />}>

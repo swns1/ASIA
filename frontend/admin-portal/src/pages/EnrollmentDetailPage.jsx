@@ -15,7 +15,7 @@ import RequirementDocumentsPanel from "../components/requirements/RequirementDoc
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 
 import { updateStudentStatus } from "../api/studentApi";
-import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, BILLING_READ_ROLES } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, BILLING_READ_ROLES, GRADE_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { todayISO, fmtDate } from "../utils/format";
@@ -108,6 +108,13 @@ export default function EnrollmentDetailPage() {
   // material; the server refuses accounting, so don't render a card that can
   // only fail.
   const canViewDocuments = getCurrentUser()?.role !== "accounting";
+  // Grades, the report card and the eligibility check are refused to
+  // accounting too. Fetching them anyway failed the whole Promise.all, so an
+  // accounting user saw "Failed to load enrollment details." on every one.
+  const canViewGrades = hasAnyRole(getCurrentUser(), GRADE_ROLES);
+  // Only these roles may change an enrollment; teachers and accounting were
+  // shown Edit, Mark Completed and Transfer Out, and refused on saving.
+  const canEditEnrollment = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
 
   // Confirmation emails that failed and haven't gone through since. They were
   // logged server-side "for follow-up" with no screen that read them, so the
@@ -146,7 +153,7 @@ export default function EnrollmentDetailPage() {
       .then((enr) => {
         setEnrollment(enr);
         return Promise.all([
-          getGrades({ enrollment: id, page_size: 200 }),
+          canViewGrades ? getGrades({ enrollment: id, page_size: 200 }) : Promise.resolve([]),
           getEnrollmentScholarships({ enrollment: id, page_size: 50 }),
           canViewBilling
             ? getInvoices({ enrollment_id: id, page_size: 5 }).catch(() => {
@@ -154,7 +161,7 @@ export default function EnrollmentDetailPage() {
                 return null;
               })
             : Promise.resolve(null),
-          getEnrollmentEligibility(enr.student_id ?? enr.student, {
+          !canViewGrades ? Promise.resolve(null) : getEnrollmentEligibility(enr.student_id ?? enr.student, {
             schoolLevel: enr.school_level,
             gradeLevel: enr.grade_level,
             // This enrollment is not part of its own history. Without the
@@ -174,7 +181,7 @@ export default function EnrollmentDetailPage() {
       })
       .catch(() => setError("Failed to load enrollment details."))
       .finally(() => setLoading(false));
-  }, [id, canViewBilling]);
+  }, [id, canViewBilling, canViewGrades]);
 
   async function handleMarkCompleted() {
     setCompleting(true);
@@ -290,7 +297,7 @@ export default function EnrollmentDetailPage() {
   const activePeriods = ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter","1st_semester","2nd_semester"]
     .filter((p) => Object.values(gradesBySubject).some((s) => s.periods[p]));
 
-  const canMarkCompleted = enrollment.enrollment_status === "enrolled";
+  const canMarkCompleted = canEditEnrollment && enrollment.enrollment_status === "enrolled";
 
   // Compact enrollment info fields for the horizontal strip
   const infoFields = [
@@ -333,19 +340,23 @@ export default function EnrollmentDetailPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
+              {canViewGrades && (
               <button onClick={() => navigate(`/report-card/${id}`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card
               </button>
+              )}
               <button
                 onClick={() => window.open(`/print/cor/${id}`, '_blank')}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-invoice" style={{ fontSize: 11, marginRight: 4 }} />Print COR
               </button>
+              {canEditEnrollment && (
               <button onClick={() => navigate(`/enrollments/${id}/edit`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-edit" style={{ fontSize: 11, marginRight: 4 }} />Edit
               </button>
+              )}
               {canMarkCompleted && (
                 <button onClick={() => setCompleteConfirm(true)}
                   style={{ background: "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -487,6 +498,7 @@ export default function EnrollmentDetailPage() {
           </div>
 
           {/* ── Grades — full width ── */}
+          {canViewGrades && (
           <Card title="Grades" icon="ti-report-analytics">
             {Object.keys(gradesBySubject).length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, color: C.muted }}>No grades recorded yet.</p>
@@ -540,6 +552,7 @@ export default function EnrollmentDetailPage() {
               </div>
             )}
           </Card>
+          )}
 
         </div>
       </div>

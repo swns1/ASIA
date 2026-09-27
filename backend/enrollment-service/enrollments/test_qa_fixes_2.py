@@ -61,6 +61,24 @@ def test_for_strand_is_core_plus_that_strand():
     assert ("strand__iexact", "ABM") in leaves
 
 
+def test_for_semester_keeps_subjects_with_no_semester():
+    """An exact ?semester= dropped senior high subjects recorded with none, so a
+    HUMSS or ABM learner's COR printed no subjects at all."""
+    qs = MagicMock()
+    SubjectFilter().filter_for_semester(qs, "for_semester", "1st")
+    (q,), _ = qs.filter.call_args
+    assert q.connector == "OR"
+    leaves = _q_leaves(q)
+    assert ("semester", "1st") in leaves
+    assert ("semester__isnull", True) in leaves
+
+
+def test_blank_for_semester_filters_nothing():
+    qs = MagicMock()
+    assert SubjectFilter().filter_for_semester(qs, "for_semester", "  ") is qs
+    qs.filter.assert_not_called()
+
+
 def test_my_sections_does_not_narrow_to_one_half_of_the_list():
     """A strand advisory gets core + strand; a whole-section one gets all."""
     import inspect

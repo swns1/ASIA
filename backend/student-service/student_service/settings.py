@@ -232,6 +232,15 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "user_id",
 }
 
+# manage.py runserver starts a new thread for every request, so a persistent
+# connection is never reused -- it just stays open in a thread that has exited
+# until CONN_MAX_AGE runs out. Four services doing that exhausted PostgreSQL's
+# 100 connections within a few hundred page views, and every request after
+# answered 500 "too many clients already". Django's docs say not to enable
+# persistent connections under the development server; waitress and gunicorn
+# run fixed thread pools, where reuse is the point, so they keep it.
+_RUNSERVER = "runserver" in sys.argv
+
 DATABASES = {
     "default": {
         "ENGINE":   "django.db.backends.postgresql",
@@ -247,7 +256,7 @@ DATABASES = {
         # before a later query on the "same" connection tries to read it.
         # CONN_MAX_AGE also matters even without a pooler — this app makes a
         # fresh Postgres connection per request otherwise, ×4 services.
-        "CONN_MAX_AGE": 600,
+        "CONN_MAX_AGE": 0 if _RUNSERVER else 600,
         "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 }

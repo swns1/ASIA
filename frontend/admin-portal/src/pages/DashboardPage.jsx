@@ -328,6 +328,9 @@ function StaffDashboard() {
   }
 
   async function fetchFinancialSummary() {
+    // Checked here, not only at the first load: the financial-year effect
+    // below also calls this, and fired it for teachers as a guaranteed 403.
+    if (!canViewFinancials) return;
     try {
       setFinancialSummary(await _getFinancialSummary(financialYear ?? schoolYear));
     } catch { /* non-critical */ }

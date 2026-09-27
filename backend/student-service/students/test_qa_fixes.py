@@ -21,7 +21,9 @@ from accounts.users import guardian_account_problem
 from intake.serializers import ApplicationInviteIssueSerializer
 from students.serializers import (
     BulkGuardianSerializer,
+    BulkHouseholdSerializer,
     BulkStudentSerializer,
+    HouseholdSerializer,
     StudentBulkCreateSerializer,
     StudentSerializer,
     require_a_guardian,
@@ -256,6 +258,32 @@ class TestLastGuardianDelete:
         destroyed.assert_called_once_with(primary)
         model.objects.filter.assert_called_once_with(pk=2)
         model.objects.filter.return_value.update.assert_called_once_with(is_primary_contact=True)
+
+
+class TestBlankHouseholdChoices:
+    """A skipped household step sent "" for its selects; the serializers let it
+    through and the households CHECK constraints (NULL or a listed value)
+    rejected it -- approving such an application answered 500."""
+
+    BLANK = {"parent_marital_status": "", "living_arrangement": "", "is_4ps_beneficiary": False, "four_ps_id": None}
+
+    @pytest.mark.parametrize("serializer_class", [BulkHouseholdSerializer, HouseholdSerializer])
+    def test_blank_choices_become_null(self, serializer_class):
+        ser = serializer_class(data=self.BLANK)
+        assert ser.is_valid(), ser.errors
+        assert ser.validated_data["parent_marital_status"] is None
+        assert ser.validated_data["living_arrangement"] is None
+
+    @pytest.mark.parametrize("serializer_class", [BulkHouseholdSerializer, HouseholdSerializer])
+    def test_real_choices_are_kept(self, serializer_class):
+        ser = serializer_class(data={**self.BLANK, "living_arrangement": "mother_only", "parent_marital_status": "widowed"})
+        assert ser.is_valid(), ser.errors
+        assert ser.validated_data["living_arrangement"] == "mother_only"
+        assert ser.validated_data["parent_marital_status"] == "widowed"
+
+    def test_the_4ps_rule_still_applies(self):
+        ser = HouseholdSerializer(data={**self.BLANK, "is_4ps_beneficiary": True, "four_ps_id": "  "})
+        assert not ser.is_valid()
 
 
 # ── 6. user_id on the registration endpoint ──────────────────────────────────

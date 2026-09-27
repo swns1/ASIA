@@ -4,9 +4,13 @@
 // header copy-pasted at the top of all 9 print/report documents.
 import { PRINT_COLORS, PRINT_FONT } from "./theme";
 
+// Wraps rather than overflowing: on a phone the single row pushed Download and
+// Print off the right edge of the report card -- the one document parents open
+// from the guardian portal -- and squeezed the title into a one-word column.
+// A desktop still fits everything on one row.
 export function PrintToolbar({ title, onBack, backLabel = "Close", middle, actions }) {
   return (
-    <div className="no-print" style={{ background: PRINT_COLORS.dark, padding: "12px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+    <div className="no-print" style={{ background: PRINT_COLORS.dark, padding: "12px 24px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, rowGap: 10 }}>
       {onBack && (
         <button onClick={onBack}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, background: "transparent", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13, fontFamily: PRINT_FONT }}>
@@ -14,7 +18,7 @@ export function PrintToolbar({ title, onBack, backLabel = "Close", middle, actio
         </button>
       )}
       {middle}
-      <div style={{ flex: 1, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{title}</div>
+      <div style={{ flex: "1 1 220px", minWidth: 0, color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{title}</div>
       {actions}
     </div>
   );

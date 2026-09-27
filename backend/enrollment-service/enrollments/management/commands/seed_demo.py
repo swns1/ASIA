@@ -173,6 +173,10 @@ class Command(BaseCommand):
                                  "so the demo shows a year in progress.")
         parser.add_argument("--wipe", action="store_true",
                             help="Delete existing enrollments for seeded learners first.")
+        parser.add_argument("--advisories", action="store_true",
+                            help="Only give the demo teacher sections of the current school "
+                                 "year, then stop. For a database seeded before this command "
+                                 "assigned any; touches nothing else.")
 
     def handle(self, *args, **opts):
         self.seed = opts["seed"]
@@ -199,6 +203,13 @@ class Command(BaseCommand):
                 "No seeded learners found. Run student-service's "
                 "`manage.py seed_demo_students` first."
             )
+
+        if opts["advisories"]:
+            with transaction.atomic():
+                self._ensure_demo_advisories(
+                    normalize_school_year(f"{sy_year}-{sy_year + 1}"), students, wipe=False,
+                )
+            return
 
         with transaction.atomic():
             if opts["wipe"]:

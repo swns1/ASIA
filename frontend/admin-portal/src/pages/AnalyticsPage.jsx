@@ -19,6 +19,7 @@ import AIInsightPanel from "../components/AIInsightPanel";
 
 import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
+import { subjectOptionLabel } from "./analytics/subjectOptions";
 import {
   CHART_OPTIONS,
   DEFAULT_CHART_VIEW,
@@ -774,7 +775,7 @@ export default function AnalyticsPage() {
                             <option value="">All subjects</option>
                             {subjects.map((s) => (
                               <option key={s.subject_id} value={s.subject_id}>
-                                {s.subject_name}
+                                {subjectOptionLabel(s, gradeLevel)}
                               </option>
                             ))}
                           </Select>

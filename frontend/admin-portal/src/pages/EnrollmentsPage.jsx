@@ -1367,17 +1367,21 @@ export default function EnrollmentsPage() {
             subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} enrollment${pageMeta.count !== 1 ? "s" : ""} found`}
             actions={
               <>
+                {/* All three write enrollments, which the server allows only
+                    these roles; teachers and accounting were refused on save. */}
                 {canManage && (
-                  <Button variant="secondary" icon="ti-arrow-up-right" onClick={() => setShowPromote(true)}>
-                    Promote Section
-                  </Button>
+                  <>
+                    <Button variant="secondary" icon="ti-arrow-up-right" onClick={() => setShowPromote(true)}>
+                      Promote Section
+                    </Button>
+                    <Button variant="secondary" icon="ti-users-plus" onClick={() => setShowMassEnroll(true)}>
+                      Mass Enroll
+                    </Button>
+                    <Button icon="ti-clipboard-plus" onClick={() => navigate("/enrollments/new")}>
+                      New Enrollment
+                    </Button>
+                  </>
                 )}
-                <Button variant="secondary" icon="ti-users-plus" onClick={() => setShowMassEnroll(true)}>
-                  Mass Enroll
-                </Button>
-                <Button icon="ti-clipboard-plus" onClick={() => navigate("/enrollments/new")}>
-                  New Enrollment
-                </Button>
               </>
             }
           />
@@ -1616,7 +1620,7 @@ export default function EnrollmentsPage() {
                     icon: "ti-clipboard-off",
                     title: "No enrollments found",
                     subtitle: "Try adjusting your filters or enroll a new student",
-                    action: (
+                    action: canManage && (
                       <Button size="sm" icon="ti-plus" onClick={() => navigate("/enrollments/new")}>
                         New Enrollment
                       </Button>

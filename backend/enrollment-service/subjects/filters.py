@@ -17,6 +17,7 @@ class SubjectFilter(filters.FilterSet):
     """
 
     for_strand = filters.CharFilter(method="filter_for_strand")
+    for_semester = filters.CharFilter(method="filter_for_semester")
 
     class Meta:
         model = Subject
@@ -26,3 +27,19 @@ class SubjectFilter(filters.FilterSet):
         value = (value or "").strip()
         core = Q(strand__isnull=True) | Q(strand="")
         return queryset.filter(core | Q(strand__iexact=value)) if value else queryset.filter(core)
+
+    def filter_for_semester(self, queryset, name, value):
+        """
+        `?semester=` is exact too, and senior high subjects recorded with no
+        semester -- core subjects among them -- fell out of it. Together with
+        for_strand that emptied the list for a strand with no subjects of its
+        own: a HUMSS or ABM learner's Certificate of Registration printed "No
+        subjects on record", and their grade entry offered nothing to grade.
+
+        `?for_semester=1st` is that semester's subjects plus those with no
+        semester set.
+        """
+        value = (value or "").strip()
+        if not value:
+            return queryset
+        return queryset.filter(Q(semester=value) | Q(semester__isnull=True) | Q(semester=""))

@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { pageVariants } from "../utils/motion";
 import { describeApiError } from "../utils/apiError";
+import { getCurrentUser, hasAnyRole, GRADE_ROLES } from "../utils/auth";
 
 const C = {
   dark: "#1a0a0a", muted: "#7a5050", border: "#f5eaea", red: "#e03131",
@@ -161,6 +162,10 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
 
 export default function SchoolFormsPage() {
   usePageTitle("School Forms");
+  // SF2 (attendance), SF9 and SF10 (grades) read records the server refuses
+  // accounting; offering them only led to "You do not have access" pages.
+  // SF1, the register, is enrollment data every staff role may read.
+  const canPrintAcademic = hasAnyRole(getCurrentUser(), GRADE_ROLES);
 
   // Shared
   const [schoolYear, setSchoolYear] = useState("");
@@ -331,7 +336,8 @@ export default function SchoolFormsPage() {
           </div>
         </motion.div>
 
-        {/* ── SF2 ── */}
+        {/* ── SF2 ── attendance, like SF9/SF10's grades, is refused to accounting */}
+        {canPrintAcademic && (
         <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(20,85,160,0.06)" }}>
           <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#f5f8fd,white)", borderRadius: "16px 16px 0 0" }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "#e3f0fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -389,8 +395,10 @@ export default function SchoolFormsPage() {
             </motion.button>
           </div>
         </motion.div>
+        )}
 
         {/* ── SF9 / SF10 ── */}
+        {canPrintAcademic && (
         <motion.div variants={pageVariants.item} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
           {OTHER_FORMS.map((form) => (
             <div key={form.code} style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "20px 22px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}>
@@ -506,6 +514,7 @@ export default function SchoolFormsPage() {
             </div>
           ))}
         </motion.div>
+        )}
       </motion.div>
     </>
   );

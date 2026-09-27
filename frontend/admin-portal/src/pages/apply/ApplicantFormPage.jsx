@@ -115,7 +115,9 @@ function ApplyingForStep({ data, onChange }) {
         The school will confirm the section after reviewing this form.
       </p>
 
-      <Field label="Grade level applying for">
+      {/* Required at submit, so marked like every other required field --
+          unmarked, a parent learned it only on the last step. */}
+      <Field label="Grade level applying for" required>
         <Select value={data.grade_level} onChange={(e) => setGrade(e.target.value)}>
           <option value="">Select a grade level…</option>
           {Object.entries(GRADE_LEVELS_BY_LEVEL).map(([level, grades]) => (

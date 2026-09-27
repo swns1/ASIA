@@ -41,7 +41,10 @@ export default function CORPrintPage() {
             grade_level: enr.grade_level,
             page_size: 100,
             ...(enr.strand   ? { for_strand: enr.strand } : {}),
-            ...(enr.semester ? { semester: enr.semester } : {}),
+            // for_semester, not semester: the exact match dropped subjects
+            // with no semester recorded, and a HUMSS or ABM certificate
+            // printed "No subjects on record".
+            ...(enr.semester ? { for_semester: enr.semester } : {}),
           }),
           getSchoolSettings().catch(() => null),
         ]);

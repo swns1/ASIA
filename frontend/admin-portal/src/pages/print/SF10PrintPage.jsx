@@ -91,7 +91,8 @@ export default function SF10PrintPage() {
                   page_size: 100,
                   // Core subjects plus this strand's, not the strand's alone.
                   ...(enr.strand   ? { for_strand: enr.strand } : {}),
-                  ...(enr.semester ? { semester: enr.semester } : {}),
+                  // That semester's subjects plus those with none recorded.
+                  ...(enr.semester ? { for_semester: enr.semester } : {}),
                 }).then(d => Array.isArray(d) ? d : d.results ?? []),
                 `subjects (${year})`, [],
               ),
