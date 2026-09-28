@@ -253,3 +253,81 @@ class EmailDeliveryFailure(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"Failed email to {self.to_email} · {self.created_at:%Y-%m-%d %H:%M}"
+
+
+# ─── School year registry ─────────────────────────────────────────────────────
+class SchoolYear(models.Model):
+    """
+    The school years the school has set up: each one's dates, which one is
+    current, and whether it has been archived.
+
+    `school_year` on enrollments, section_advisories, academic_calendar_events
+    and risk_assessment_runs stays a plain CharField, so nothing that reads
+    those columns changes. What changes is that the database now holds each
+    of them to a row here by foreign key on `label` (migration 0006): a year
+    exists because an admin created it, not because some record typed it.
+
+    Only `is_current` and `archived_at` are stored. The state people see --
+    upcoming, current, open, archived -- is derived from those and the label
+    (see `state()`), so there is no status column to drift out of step.
+
+    Django-managed, like SectionAdvisory. Some databases already have this
+    table from an abandoned branch's migrations; 0005 adopts it.
+    """
+
+    STATE_UPCOMING = "upcoming"
+    STATE_CURRENT = "current"
+    STATE_OPEN = "open"
+    STATE_ARCHIVED = "archived"
+
+    school_year_id = models.BigAutoField(primary_key=True)
+
+    label      = models.CharField(max_length=20, unique=True)  # "2025-2026"
+    start_date = models.DateField()
+    end_date   = models.DateField()
+    is_current = models.BooleanField(default=False)
+
+    # Set by archiving (a later phase); null means the year is still open.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.BigIntegerField(null=True, blank=True)  # user_id from identity-service JWT
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "school_years"
+        ordering = ["-label"]
+        constraints = [
+            # Exactly one current year is enforced by the database, not by
+            # whoever remembers to unset the old one.
+            models.UniqueConstraint(
+                fields=["is_current"],
+                condition=models.Q(is_current=True),
+                name="uniq_current_school_year",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_date__lt=models.F("end_date")),
+                name="school_years_start_before_end",
+            ),
+        ]
+
+    def state(self, current_label=None):
+        """
+        What this year is to the people using it, given the current year's
+        label. Labels sort chronologically ("2026-2027" > "2025-2026"), so a
+        year after the current one is being prepared and a year before it is
+        finished but not yet archived -- still open for final grades and late
+        payments. With no current year at all, nothing is "upcoming" relative
+        to anything, so every unarchived year reads as open.
+        """
+        if self.archived_at:
+            return self.STATE_ARCHIVED
+        if self.is_current:
+            return self.STATE_CURRENT
+        if current_label and self.label > current_label:
+            return self.STATE_UPCOMING
+        return self.STATE_OPEN
+
+    def __str__(self):  # pragma: no cover
+        return self.label

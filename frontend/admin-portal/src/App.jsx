@@ -57,6 +57,7 @@ const AcademicCalendarPage  = lazyRoute(() => import("./pages/AcademicCalendarPa
 const ReportCardPage        = lazyRoute(() => import("./pages/ReportCardPage"));
 const SchoolFormsPage       = lazyRoute(() => import("./pages/SchoolFormsPage"));
 const TeacherAdvisoriesPage = lazyRoute(() => import("./pages/TeacherAdvisoriesPage"));
+const SchoolYearsPage       = lazyRoute(() => import("./pages/SchoolYearsPage"));
 const TeacherSectionsPage   = lazyRoute(() => import("./pages/TeacherSectionsPage"));
 const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
 const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
@@ -154,6 +155,7 @@ export default function App() {
           <Route path="/academic-calendar"      element={<P roles={STAFF_ALL}><AcademicCalendarPage /></P>} />
           <Route path="/school-forms"           element={<P roles={STAFF_ALL}><SchoolFormsPage /></P>} />
           <Route path="/teacher-advisories"     element={<P roles={ACADEMIC_STAFF}><TeacherAdvisoriesPage /></P>} />
+          <Route path="/school-years"           element={<P roles={STAFF_ADMIN}><SchoolYearsPage /></P>} />
           <Route path="/my-sections"            element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
           <Route path="/student-applications"   element={<P roles={ACADEMIC_STAFF}><StudentApplicationsPage /></P>} />
         </Route>

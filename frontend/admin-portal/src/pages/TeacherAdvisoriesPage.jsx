@@ -25,6 +25,7 @@ import {
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { yearOptionsForEntry } from "../utils/schoolYear";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
 // `tone` names the shared ChipGroup/Badge palette entry, so a school level
@@ -65,7 +66,7 @@ const TABLE_COLUMNS = [
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
 function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
-  const { currentYear } = useSchoolYear();
+  const { currentYear, entryYears } = useSchoolYear();
 
   const [form, setForm] = useState({
     teacher_user_id: advisory?.teacher_user_id ?? "",
@@ -163,12 +164,15 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
         )}
       </Field>
 
+      {/* A registered year, not free text: the database only accepts years an
+          admin has set up, and a typo here used to cut the adviser off from
+          their own students. */}
       <Field label="School Year" required>
-        <Input
-          value={form.school_year}
-          onChange={(e) => setF("school_year", e.target.value)}
-          placeholder="e.g. 2025-2026"
-        />
+        <Select value={form.school_year} onChange={(e) => setF("school_year", e.target.value)}>
+          {yearOptionsForEntry(entryYears, form.school_year).map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </Select>
       </Field>
 
       <FilterRow label="School Level *">

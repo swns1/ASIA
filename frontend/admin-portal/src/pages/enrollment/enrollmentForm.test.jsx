@@ -43,6 +43,15 @@ vi.mock("../../api/billingApi", () => ({ generateInvoice: pass("generateInvoice"
 vi.mock("../../api/previousSchoolApi", () => ({ createPreviousSchool: pass("createPreviousSchool") }));
 vi.mock("../../components/requirements/RequirementDocumentsPanel", () => ({ default: () => null }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
+// Years come from the school year registry via the context: 2026-2027 is
+// current, 2025-2026 is still open.
+vi.mock("../../context/SchoolYearContext", () => ({
+  useSchoolYear: () => ({
+    currentYear: "2026-2027",
+    entryYears: ["2026-2027", "2025-2026"],
+    options: ["2026-2027", "2025-2026"],
+  }),
+}));
 
 const { default: EnrollmentFormPage } = await import("../EnrollmentFormPage");
 

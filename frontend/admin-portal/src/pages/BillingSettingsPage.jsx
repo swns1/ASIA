@@ -4,10 +4,10 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import PageHeader from "../components/ui/PageHeader";
 import Tabs from "../components/ui/Tabs";
 import toast from "react-hot-toast";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
-import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
+import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
 
 import {
   getSchoolSettings as _getSettings,
@@ -203,9 +203,11 @@ function GeneralSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // The school year and its dates are not edited here any more: they belong
+  // to the School Years page, and the settings API treats them as read-only.
+  // This card shows what that page last made current.
   const [form, setForm] = useState({
-    school_name: "", current_school_year: "",
-    sy_start_date: "", sy_end_date: "",
+    school_name: "",
     early_bird_days: 7,
     school_address: "", contact_email: "", contact_phone: "",
   });
@@ -216,9 +218,6 @@ function GeneralSettingsTab() {
         setSettings(d);
         setForm({
           school_name:         d.school_name         ?? "",
-          current_school_year: d.current_school_year ?? "",
-          sy_start_date:       d.sy_start_date       ?? "",
-          sy_end_date:         d.sy_end_date         ?? "",
           early_bird_days:     d.early_bird_days     ?? 7,
           school_address:      d.school_address      ?? "",
           contact_email:       d.contact_email       ?? "",
@@ -235,9 +234,6 @@ function GeneralSettingsTab() {
     if (!settings) return false;
     return (
       form.school_name         !== (settings.school_name         ?? "") ||
-      form.current_school_year !== (settings.current_school_year ?? "") ||
-      form.sy_start_date       !== (settings.sy_start_date       ?? "") ||
-      form.sy_end_date         !== (settings.sy_end_date         ?? "") ||
       String(form.early_bird_days) !== String(settings.early_bird_days ?? 7) ||
       form.school_address      !== (settings.school_address      ?? "") ||
       form.contact_email       !== (settings.contact_email       ?? "") ||
@@ -247,19 +243,12 @@ function GeneralSettingsTab() {
 
   async function handleSave() {
     if (!form.school_name.trim())         { setError("School name is required."); return; }
-    if (!form.current_school_year.trim()) { setError("School year is required. Format: YYYY-YYYY"); return; }
-    if (!form.sy_start_date)              { setError("S.Y. start date is required."); return; }
-    if (!form.sy_end_date)                { setError("S.Y. end date is required."); return; }
-    if (form.sy_start_date >= form.sy_end_date) { setError("Start date must be before end date."); return; }
     if (!form.early_bird_days || parseInt(form.early_bird_days) < 1) { setError("Early bird days must be at least 1."); return; }
 
     setSaving(true); setError("");
     try {
       const updated = await _updateSettings(settings.setting_id, {
         school_name:         form.school_name.trim(),
-        current_school_year: form.current_school_year.trim(),
-        sy_start_date:       form.sy_start_date,
-        sy_end_date:         form.sy_end_date,
         early_bird_days:     parseInt(form.early_bird_days),
         school_address:      form.school_address.trim() || null,
         contact_email:       form.contact_email.trim()  || null,
@@ -374,21 +363,21 @@ function GeneralSettingsTab() {
               </div>
             ) : (
               <>
-                <Field label="Current School Year" required>
-                  <select className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                    {buildSchoolYearOptions(form.current_school_year || computeDefaultSchoolYear()).map(sy => (
-                      <option key={sy} value={sy}>{sy}</option>
-                    ))}
-                  </select>
+                <Field label="Current School Year">
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: "-0.01em" }}>
+                    {settings?.current_school_year ? `S.Y. ${settings.current_school_year}` : "Not set"}
+                  </div>
                 </Field>
-                <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
-                <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                  <Field label="S.Y. Start Date" required hint="Early bird counts from here">
-                    <input className="settings-input" type="date" value={form.sy_start_date} onChange={e => setF("sy_start_date", e.target.value)} style={inputStyle} />
-                  </Field>
-                  <Field label="S.Y. End Date" required>
-                    <input className="settings-input" type="date" value={form.sy_end_date} onChange={e => setF("sy_end_date", e.target.value)} style={inputStyle} />
-                  </Field>
+                <SYProgress startDate={settings?.sy_start_date} endDate={settings?.sy_end_date} />
+                <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
+                  Each invoice's installments and Early Bird window count from its own school year's start date.{" "}
+                  {STAFF_ADMIN.includes(getCurrentUser()?.role) ? (
+                    <Link to="/school-years" style={{ color: C.red, fontWeight: 700 }}>
+                      Manage school years <i className="ti ti-arrow-right" style={{ fontSize: 12 }} aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <>School years are managed by admins on the School Years page.</>
+                  )}
                 </div>
               </>
             )}

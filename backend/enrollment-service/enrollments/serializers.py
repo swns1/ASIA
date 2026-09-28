@@ -1,29 +1,110 @@
 from rest_framework import serializers
 
-from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
-from .models import Enrollment, EnrollmentTransfer, SectionAdvisory, Student
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year, start_year
+from .models import Enrollment, EnrollmentTransfer, SchoolYear, SectionAdvisory, Student
 
 
 class SchoolYearField(serializers.CharField):
     """A school year, validated and normalized to canonical "YYYY-YYYY" form.
 
     school_year is the partition key every screen filters by and that billing
-    joins on in raw SQL, but the column is a plain varchar(20) with no CHECK
-    behind it. Validating on the way in is what keeps "2025-26" and a
+    joins on in raw SQL. Validating on the way in is what keeps "2025-26" and a
     trailing space from splitting one school year into several that no query
     ever brings back together.
+
+    `registered=True` also requires the year to exist in the registry. The
+    database enforces that by foreign key anyway (migration 0006); checking
+    here turns what would be a 500 into a message saying what to do.
     """
+
+    def __init__(self, *args, registered=False, **kwargs):
+        self.registered = registered
+        super().__init__(*args, **kwargs)
 
     def to_internal_value(self, data):
         text = super().to_internal_value(data)
         try:
-            return normalize_school_year(text)
+            label = normalize_school_year(text)
         except InvalidSchoolYear as exc:
             raise serializers.ValidationError(str(exc)) from exc
+        if self.registered and not SchoolYear.objects.filter(label=label).exists():
+            raise serializers.ValidationError(
+                f"S.Y. {label} hasn't been set up yet. An admin can add it under School Years."
+            )
+        return label
+
+
+class SchoolYearSerializer(serializers.ModelSerializer):
+    """
+    A registered school year. `state` is derived (see SchoolYear.state), so
+    the view passes the current year's label in the context once rather than
+    each row looking it up.
+
+    The label is fixed once created: every record in that year is filed under
+    it. `is_current` changes only through make-current, which moves it in one
+    transaction, and `archived_at` only through archiving.
+    """
+
+    label = SchoolYearField()
+    state = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SchoolYear
+        fields = (
+            "school_year_id", "label", "start_date", "end_date",
+            "is_current", "state", "archived_at", "created_at", "updated_at",
+        )
+        read_only_fields = (
+            "school_year_id", "is_current", "archived_at", "created_at", "updated_at",
+        )
+
+    def get_state(self, obj):
+        return obj.state(self.context.get("current_label"))
+
+    def validate_label(self, value):
+        if self.instance is not None and value != self.instance.label:
+            raise serializers.ValidationError(
+                "A school year's label can't be changed; every record in that year is filed under it."
+            )
+        if self.instance is None and SchoolYear.objects.filter(label=value).exists():
+            raise serializers.ValidationError(f"S.Y. {value} already exists.")
+        return value
+
+    def validate(self, attrs):
+        label = attrs.get("label", getattr(self.instance, "label", None))
+        start = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end = attrs.get("end_date", getattr(self.instance, "end_date", None))
+
+        if start and end and start >= end:
+            raise serializers.ValidationError({"end_date": "The end date has to be after the start date."})
+
+        first = start_year(label)
+        if first is not None and start and start.year != first:
+            raise serializers.ValidationError(
+                {"start_date": f"S.Y. {label} has to start in {first}."}
+            )
+        if first is not None and end and end.year != first + 1:
+            raise serializers.ValidationError(
+                {"end_date": f"S.Y. {label} has to end in {first + 1}."}
+            )
+
+        if start and end:
+            overlap = SchoolYear.objects.filter(start_date__lte=end, end_date__gte=start)
+            if self.instance is not None:
+                overlap = overlap.exclude(pk=self.instance.pk)
+            clash = overlap.first()
+            if clash is not None:
+                raise serializers.ValidationError({
+                    "start_date": (
+                        f"These dates overlap S.Y. {clash.label} "
+                        f"({clash.start_date:%b %-d, %Y} – {clash.end_date:%b %-d, %Y})."
+                    ),
+                })
+        return attrs
 
 
 class SectionAdvisorySerializer(serializers.ModelSerializer):
-    school_year = SchoolYearField()
+    school_year = SchoolYearField(registered=True)
 
     class Meta:
         model = SectionAdvisory
@@ -100,7 +181,7 @@ class StudentSummarySerializer(serializers.ModelSerializer):
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
-    school_year = SchoolYearField()
+    school_year = SchoolYearField(registered=True)
 
     student_detail = StudentSummarySerializer(source="student", read_only=True)
     student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())

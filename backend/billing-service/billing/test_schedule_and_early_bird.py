@@ -23,6 +23,7 @@ from billing.services import (
     early_bird_cutoff,
     generate_installment_schedule,
     generate_installment_schedule_prorated,
+    sy_start_for,
 )
 
 
@@ -169,6 +170,39 @@ def test_default_sy_start_cuts_at_july_like_the_rest_of_the_app():
     """
     assert default_sy_start(date(2026, 6, 30)) == date(2025, 7, 1)
     assert default_sy_start(date(2026, 7, 1)) == date(2026, 7, 1)
+
+
+# -- The enrollment's own school year ------------------------------------------
+
+@patch("billing.services.configured_dates", return_value=(date(2026, 8, 3), date(2027, 5, 28)))
+def test_installments_count_from_the_enrollments_own_year(_d):
+    """
+    The defect: every invoice built its installments from School Settings'
+    sy_start_date -- the CURRENT year's -- so a family enrolled early for
+    2026-2027 got 2025-2026's due dates (Aug 2025 to May 2026, all before
+    their year began).
+    """
+    assert sy_start_for("2026-2027") == date(2026, 8, 3)
+
+
+@patch("billing.services.configured_dates", return_value=None)
+def test_an_unregistered_year_starts_july_first_of_its_own_year(_d):
+    """Not today's year: an unset-up 2027-2028 still counts from 2027."""
+    assert sy_start_for("2027-2028") == date(2027, 7, 1)
+
+
+@patch("billing.services.configured_dates", return_value=None)
+def test_no_usable_year_falls_back_to_today(_d):
+    assert sy_start_for("", today=date(2026, 9, 1)) == date(2026, 7, 1)
+
+
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2025, 6, 1)))
+def test_early_bird_counts_from_the_enrollments_year_when_given(_s):
+    """The window length is the school's setting; the start is the
+    enrollment's year, not the current year's start from settings."""
+    assert early_bird_cutoff(sy_start=date(2026, 8, 3)) == date(2026, 8, 9)
+    assert _is_early_bird(date(2026, 8, 9), date(2026, 8, 3)) is True
+    assert _is_early_bird(date(2026, 8, 10), date(2026, 8, 3)) is False
 
 
 # -- Voucher vs scholarship ---------------------------------------------------

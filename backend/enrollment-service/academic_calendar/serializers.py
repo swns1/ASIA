@@ -1,8 +1,14 @@
 from rest_framework import serializers
+
+from enrollments.serializers import SchoolYearField
 from .models import CalendarEvent
 
 
 class CalendarEventSerializer(serializers.ModelSerializer):
+    # A calendar belongs to a year someone set up; the foreign key enforces
+    # it, this says so in words.
+    school_year = SchoolYearField(registered=True)
+
     class Meta:
         model = CalendarEvent
         fields = (

@@ -7,25 +7,29 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Count
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
 from grading.deped import general_average, summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
+    STAFF_FULL_WRITE_ROLES,
+    HasRole,
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
     IsStaffOrOwnerGuardianReadOnly,
     guardian_student_ids,
     teacher_student_ids,
 )
-from .models import Enrollment, EnrollmentOverride, EnrollmentTransfer, SectionAdvisory
+from .models import Enrollment, EnrollmentOverride, EnrollmentTransfer, SchoolYear, SectionAdvisory
 from .serializers import (
     EnrollmentSerializer,
     EnrollmentTransferSerializer,
     GRADE_ORDER,
     get_next_grade_level,
+    SchoolYearSerializer,
     SectionAdvisorySerializer,
     StudentSummarySerializer,
 )
@@ -799,6 +803,129 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         })
 
 
+def _sync_school_settings(year):
+    """
+    Copy the current year and its dates onto School Settings.
+
+    Transitional. The registry is the source now, but school_settings still
+    carries current_school_year / sy_start_date / sy_end_date and some readers
+    haven't moved yet (the settings API, SchoolFormsPage's default). Keeping
+    the row in step means none of them can disagree with the registry while
+    they move; once they have, those columns go. It's billing-service's table
+    -- a cross-service write on the shared database, in the same transaction
+    as the change it mirrors.
+    """
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE school_settings
+               SET current_school_year = %s, sy_start_date = %s, sy_end_date = %s,
+                   updated_at = now()
+             WHERE setting_id = (SELECT min(setting_id) FROM school_settings)
+            """,
+            [year.label, year.start_date, year.end_date],
+        )
+
+
+class SchoolYearViewSet(viewsets.ModelViewSet):
+    """
+    /api/school-years/                         GET list · POST create
+    /api/school-years/{label}/                 GET · PATCH (dates) · DELETE
+    /api/school-years/{label}/make-current/    POST
+
+    The registry of school years: which exist, each one's dates, and which is
+    current. Every year picker reads it, so reads are open to all staff.
+    Writes are super_admin/admin only -- which year the whole school works in
+    is not a registrar decision.
+
+    Unpaginated: a school gains one year per year.
+    """
+
+    queryset = SchoolYear.objects.all()
+    serializer_class = SchoolYearSerializer
+    permission_classes = [HasRole]
+    required_roles = STAFF_FULL_WRITE_ROLES
+    read_roles = {"super_admin", "admin", "registrar", "teacher", "accounting"}
+    lookup_field = "label"
+    lookup_value_regex = r"\d{4}-\d{4}"
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    pagination_class = None
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["current_label"] = (
+            SchoolYear.objects.filter(is_current=True).values_list("label", flat=True).first()
+        )
+        return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        # The page shows how much each year holds, and whether it can still be
+        # deleted, without a second request per year.
+        counts = {
+            r["school_year"]: r["count"]
+            for r in Enrollment.objects.order_by().values("school_year").annotate(count=Count("pk"))
+        }
+        for row in response.data:
+            row["enrollment_count"] = counts.get(row["label"], 0)
+        return response
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            year = serializer.save()
+            if year.is_current:
+                _sync_school_settings(year)
+
+    def destroy(self, request, *args, **kwargs):
+        year = self.get_object()
+        if year.is_current:
+            return Response(
+                {"detail": f"S.Y. {year.label} is the current year. Make another year current first."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            with transaction.atomic():
+                year.delete()
+        except IntegrityError:
+            # The foreign keys from 0006 refuse it while anything is filed
+            # under this year.
+            return Response(
+                {"detail": (
+                    f"S.Y. {year.label} still has records (enrollments, advisers, "
+                    "calendar events or risk runs), so it can't be deleted."
+                )},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], url_path="make-current")
+    def make_current(self, request, label=None):
+        """
+        Make this the year every page opens on. One transaction: the old
+        current year is unset, this one set, School Settings synced. The old
+        year is NOT archived -- final grades and late payments still land in
+        it after the switch.
+        """
+        year = self.get_object()
+        if year.archived_at:
+            return Response(
+                {"detail": f"S.Y. {year.label} is archived, so it can't be made current."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        with transaction.atomic():
+            # Unset first: the partial unique index allows one current row at
+            # a time, checked per statement.
+            SchoolYear.objects.filter(is_current=True).exclude(pk=year.pk).update(
+                is_current=False, updated_at=timezone.now(),
+            )
+            if not year.is_current:
+                year.is_current = True
+                year.save(update_fields=["is_current", "updated_at"])
+            _sync_school_settings(year)
+        serializer = self.get_serializer(year, context={**self.get_serializer_context(), "current_label": year.label})
+        return Response(serializer.data)
+
+
 class EnrollmentViewSet(viewsets.ModelViewSet):
     """
     /api/enrollments/
@@ -824,18 +951,23 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         GET /api/enrollments/school-years/
 
-        Every school year that actually has enrollments, newest first, with a
-        count each. The sidebar picker used to *compute* this list as a fixed
-        window (3 past + current + 1 future) around the settings' current year,
-        which had two failure modes: it offered years with no data at all, and
-        it silently capped at 5 entries — so once a school had six years of
-        history, the oldest became unreachable through the UI.
+        Every registered school year, newest first, with its enrollment count
+        and state, plus which one is current.
 
-        The current school year is always included even with a zero count:
-        at the start of a term nothing is enrolled yet, and that is precisely
-        the year a registrar needs to select in order to start enrolling.
+        The list and the current year both come from the school_years
+        registry. They used to come from whatever labels enrollments happened
+        to use, plus a year guessed from today's date on a July cutoff -- one
+        of four places that each decided "the current year" on their own.
+        The shape is unchanged ({"current", "results": [{"school_year",
+        "count"}]}) apart from the added `state`, because the external mobile
+        client reads it too.
+
+        A label on an enrollment that isn't registered can only exist before
+        migration 0006's foreign keys; it's still listed (state null) so no
+        record becomes unreachable. The date guess survives only for a school
+        that hasn't registered a current year at all.
         """
-        from django.db.models import Count
+        from shared.school_year import current as guess_current_year
 
         # The viewset's permission class lets guardians read, but these are
         # school-wide counts and the guardian portal has no picker to feed.
@@ -854,14 +986,17 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
         counts = {r["school_year"]: r["count"] for r in rows}
 
-        today = timezone.localdate()
-        year = today.year if today.month >= 7 else today.year - 1
-        current = f"{year}-{year + 1}"
-        counts.setdefault(current, 0)
+        years = list(SchoolYear.objects.all())
+        current = next((y.label for y in years if y.is_current), None)
+        states = {y.label: y.state(current) for y in years}
 
+        if current is None:
+            current = guess_current_year(timezone.localdate())
+
+        labels = set(states) | set(counts) | {current}
         results = [
-            {"school_year": y, "count": counts[y]}
-            for y in sorted(counts, reverse=True)
+            {"school_year": y, "count": counts.get(y, 0), "state": states.get(y)}
+            for y in sorted(labels, reverse=True)
         ]
         return Response({"current": current, "results": results})
 
@@ -1216,6 +1351,19 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         if missing:
             return Response(
                 {"detail": f"Missing required fields: {', '.join(missing)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Promotion writes enrollments directly, past the serializer's
+        # registered-year check, so the target year is checked here: an
+        # unregistered year would otherwise fail every learner on the
+        # foreign key with a raw database error in the "failed" list.
+        if not SchoolYear.objects.filter(label=to_school_year).exists():
+            return Response(
+                {"detail": (
+                    f"S.Y. {to_school_year} hasn't been set up yet. "
+                    "An admin can add it under School Years first."
+                )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

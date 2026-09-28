@@ -34,6 +34,8 @@ import { generateInvoice as _generateInvoice } from "../api/billingApi";
 import { createPreviousSchool as _createPreviousSchool } from "../api/previousSchoolApi";
 import { GRADE_LEVELS_BY_LEVEL, SHS_STRANDS, schoolLevelForGrade } from "../constants/schoolLevels";
 import { todayISO } from "../utils/format";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { yearOptionsForEntry } from "../utils/schoolYear";
 
 const getStudents                 = (p = {}) => _getStudents(p);
 const getStudent                  = (id)     => _getStudent(id);
@@ -88,16 +90,6 @@ const nullify = (obj, fields) => {
   return out;
 };
 
-function defaultSchoolYear() {
-  const d = new Date(), y = d.getFullYear();
-  return d.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
-}
-
-function buildSchoolYearOptions() {
-  const d = new Date();
-  const base = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-  return Array.from({ length: 4 }, (_, i) => { const y = base + 1 - i; return `${y}-${y + 1}`; });
-}
 
 
 const PALETTES = [
@@ -773,8 +765,15 @@ export default function EnrollmentFormPage() {
   // Original grade fields when editing — used to detect if they actually changed
   const [originalGradeFields, setOriginalGradeFields] = useState(null);
 
+  // Years come from the registry: a new enrollment defaults to the current
+  // year and can go into any year an admin has set up and not archived. This
+  // page used to compute its own year with an August cutoff and a 4-year
+  // window -- a different answer from every other page.
+  const { currentYear, entryYears } = useSchoolYear();
+  const defaultYearRef = useRef(currentYear);
+
   const [form, setForm] = useState({
-    school_year:       defaultSchoolYear(),
+    school_year:       currentYear,
     school_level:      "elementary",
     grade_level:       "Grade 1",
     section:           "",
@@ -782,6 +781,16 @@ export default function EnrollmentFormPage() {
     semester:          "",
     enrollment_status: "enrolled",
   });
+
+  // The registry's current year can arrive after first paint (the cached one
+  // is used until then). Follow it on a new enrollment, unless someone has
+  // already picked a different year.
+  useEffect(() => {
+    const previous = defaultYearRef.current;
+    defaultYearRef.current = currentYear;
+    if (isEdit || !currentYear || currentYear === previous) return;
+    setForm((f) => (f.school_year === previous ? { ...f, school_year: currentYear } : f));
+  }, [currentYear, isEdit]);
 
   const [scholarshipTypes,     setScholarshipTypes] = useState([]);
   const [selectedScholarships, setSelectedSchols]   = useState([]);
@@ -799,7 +808,7 @@ export default function EnrollmentFormPage() {
     getEnrollment(id)
       .then(async (e) => {
         setForm({
-          school_year:       e.school_year ?? defaultSchoolYear(),
+          school_year:       e.school_year,
           school_level:      e.school_level,
           grade_level:       e.grade_level,
           section:           e.section,
@@ -808,7 +817,7 @@ export default function EnrollmentFormPage() {
           enrollment_status: e.enrollment_status,
         });
         setOriginalGradeFields({
-          school_year:  e.school_year ?? defaultSchoolYear(),
+          school_year:  e.school_year,
           school_level: e.school_level,
           grade_level:  e.grade_level,
           strand:       e.strand ?? "",
@@ -1334,7 +1343,7 @@ export default function EnrollmentFormPage() {
                         <LockedValue>{form.school_year}</LockedValue>
                       ) : (
                         <Select value={form.school_year} onChange={(e) => setField("school_year", e.target.value)}>
-                          {buildSchoolYearOptions().map((sy) => <option key={sy} value={sy}>{sy}</option>)}
+                          {yearOptionsForEntry(entryYears, form.school_year).map((sy) => <option key={sy} value={sy}>{sy}</option>)}
                         </Select>
                       )}
                     </Field>

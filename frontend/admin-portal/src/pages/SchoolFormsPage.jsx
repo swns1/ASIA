@@ -1,13 +1,13 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useRef } from "react";
-import { getSchoolSettings } from "../api/billingApi";
 import { getEnrollments } from "../api/enrollmentApi";
 import { getStudents } from "../api/studentApi";
 import { motion } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { pageVariants } from "../utils/motion";
 import { describeApiError } from "../utils/apiError";
+import { useSchoolYear } from "../context/SchoolYearContext";
 
 const C = {
   dark: "#1a0a0a", muted: "#7a5050", border: "#f5eaea", red: "#e03131",
@@ -162,8 +162,9 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
 export default function SchoolFormsPage() {
   usePageTitle("School Forms");
 
-  // Shared
-  const [schoolYear, setSchoolYear] = useState("");
+  // Shared. Forms print for any registered year, archived ones included.
+  const { currentYear, options: registeredYears } = useSchoolYear();
+  const [schoolYear, setSchoolYear] = useState(currentYear || "");
 
   // SF1
   const [gradeLevel, setGradeLevel] = useState("");
@@ -191,11 +192,10 @@ export default function SchoolFormsPage() {
   // SF10
   const [sf10Student, setSf10Student] = useState(null);
 
+  // Default to the registry's current year, like every other page.
   useEffect(() => {
-    getSchoolSettings()
-      .then((s) => { if (s?.current_school_year) setSchoolYear(s.current_school_year); })
-      .catch(() => {});
-  }, []);
+    if (currentYear) setSchoolYear(currentYear); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [currentYear]);
 
   useEffect(() => {
     if (!sf9Student) { setSf9Enrollments([]); setSf9EnrollmentId(""); return; }
@@ -257,13 +257,14 @@ export default function SchoolFormsPage() {
         actions={
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <label htmlFor="sf-school-year" style={{ ...labelStyle, marginBottom: 0, whiteSpace: "nowrap" }}>School Year (all forms)</label>
-          <input
+          <select
             id="sf-school-year"
             value={schoolYear}
             onChange={(e) => setSchoolYear(e.target.value)}
-            placeholder="e.g. 2025-2026"
-            style={{ ...inputStyle, width: 140, height: 34 }}
-          />
+            style={{ ...inputStyle, width: 140, height: 34, cursor: "pointer" }}
+          >
+            {registeredYears.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
         }
       />

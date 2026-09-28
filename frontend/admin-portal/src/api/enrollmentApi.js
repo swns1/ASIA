@@ -28,10 +28,29 @@ export const getDashboardSummary = (params = {}) =>
 export const getTeachersToday = (params = {}) =>
   enrollmentClient.get("/dashboard/teachers-today/", { params }).then((r) => r.data);
 
+// ── School years (the registry) ─────────────────────────────────────────────
+// Which years exist, each one's dates and state, and which is current. Reads
+// are open to staff; writes are super_admin/admin. `label` ("2026-2027") is
+// the key in every URL.
+export const listRegisteredSchoolYears = () =>
+  enrollmentClient.get("/school-years/").then((r) => r.data);
+
+export const createSchoolYear = (data) =>
+  enrollmentClient.post("/school-years/", data).then((r) => r.data);
+
+export const updateSchoolYear = (label, data) =>
+  enrollmentClient.patch(`/school-years/${label}/`, data).then((r) => r.data);
+
+export const deleteSchoolYear = (label) =>
+  enrollmentClient.delete(`/school-years/${label}/`).then((r) => r.data);
+
+export const makeSchoolYearCurrent = (label) =>
+  enrollmentClient.post(`/school-years/${label}/make-current/`).then((r) => r.data);
+
 // ── Enrollments ───────────────────────────────────────────────────────────────
-// Every school year that has enrollments, newest first, with a count each —
-// plus the current year even when it's still empty. Replaces the old computed
-// window, which both invented years with no data and silently capped at five.
+// Every registered school year, newest first, with its enrollment count and
+// state (upcoming / current / open / archived), plus which one is current —
+// the list behind every year picker. Both come from the registry above.
 export const getSchoolYears = () =>
   enrollmentClient.get("/enrollments/school-years/").then((r) => r.data);
 

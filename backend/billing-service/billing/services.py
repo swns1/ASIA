@@ -18,6 +18,8 @@ from calendar import monthrange
 from django.db import connection, transaction
 from django.utils import timezone
 
+from shared.school_year import configured_current, configured_dates, start_year
+
 from .models import (
     FeeSchedule, FeeScheduleItem,
     StudentInvoice, StudentInvoiceItem, StudentInvoiceDiscount,
@@ -37,21 +39,45 @@ def _generate_invoice_number(invoice_id: int) -> str:
     return f"INV-{yr}-{invoice_id:06d}"
 
 
-# The academic year runs July 1 - June 30. This has to agree with
-# enrollments.views.school_years() and the frontend's
-# utils/schoolYear.computeDefaultSchoolYear(), which both cut at July: while
-# this module cut at June instead, a student enrolled in June was filed under
-# one school year by the registrar and a different one by billing, and the two
-# services disagreed about which invoices belonged to the open year.
+# The calendar guess, for a year nobody has set dates for: the academic year
+# runs July 1 - June 30, the same cutoff as shared.school_year. While this
+# module cut at June instead, a student enrolled in June was filed under one
+# school year by the registrar and a different one by billing.
 SY_START_MONTH = 7
 
 
 def default_sy_start(today: date = None) -> date:
-    """The opening date of the school year `today` falls in -- the fallback
-    used only when the singleton settings row has no calendar configured."""
+    """The opening date of the school year `today` falls in -- the last
+    fallback, for when there is no school year to go on at all."""
     today = today or timezone.localdate()
     year = today.year if today.month >= SY_START_MONTH else today.year - 1
     return date(year, SY_START_MONTH, 1)
+
+
+def configured_sy_start(school_year):
+    """The opening date the school set for `school_year` in the registry, or
+    None when that year hasn't been set up."""
+    dates = configured_dates(school_year)
+    return dates[0] if dates else None
+
+
+def sy_start_for(school_year, today: date = None) -> date:
+    """
+    The date `school_year`'s installment calendar counts from.
+
+    The year's own configured start. Every invoice used to take School
+    Settings' sy_start_date -- the CURRENT year's -- whatever year the
+    enrollment was in, so a family enrolled early for next year got this
+    year's due dates. For a year with no dates set, July 1 of its opening
+    year; with no usable year at all, the year `today` falls in.
+    """
+    configured = configured_sy_start(school_year)
+    if configured:
+        return configured
+    first = start_year(school_year)
+    if first is not None:
+        return date(first, SY_START_MONTH, 1)
+    return default_sy_start(today)
 
 
 def _get_school_settings():
@@ -292,17 +318,22 @@ def _read_fee_schedule(school_level: str, grade_level: str):
     }
 
 
-def early_bird_cutoff(settings=None):
+def early_bird_cutoff(settings=None, sy_start: date = None):
     """The last date an invoice can be issued and still earn the Early Bird
-    discount, or None when the school hasn't configured its calendar yet."""
+    discount, or None when there is no start date to count from.
+
+    `sy_start` is the opening date of the enrollment's own school year; without
+    it, School Settings' date (the current year's) is used. The window length
+    always comes from settings."""
     settings = settings or _get_school_settings()
-    if not settings or not settings.sy_start_date:
+    start = sy_start or (settings.sy_start_date if settings else None)
+    if not start:
         return None
-    days = settings.early_bird_days if settings.early_bird_days is not None else 7
-    return settings.sy_start_date + timedelta(days=days - 1)
+    days = settings.early_bird_days if settings and settings.early_bird_days is not None else 7
+    return start + timedelta(days=days - 1)
 
 
-def _is_early_bird(invoice_date: date) -> bool:
+def _is_early_bird(invoice_date: date, sy_start: date = None) -> bool:
     """
     Early Bird = invoiced on or before the cutoff. There is deliberately NO
     lower bound.
@@ -316,7 +347,7 @@ def _is_early_bird(invoice_date: date) -> bool:
     intake, not the earliest. Dropping the lower bound is what makes the name
     true.
     """
-    cutoff = early_bird_cutoff()
+    cutoff = early_bird_cutoff(sy_start=sy_start)
     if cutoff is None:
         return False
     return invoice_date <= cutoff
@@ -491,7 +522,13 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     # the singleton three times only invites the three to disagree.
     settings_row = _get_school_settings()
     today = timezone.localdate()
-    eb = _is_early_bird(today)
+    # Dates come from the enrollment's own school year. Using the current
+    # year's put a family enrolled early for next year on this year's
+    # installment months and measured their Early Bird window from a date
+    # that had already passed. A year with no dates set earns no Early Bird
+    # (there is no window to be early for), same as an unconfigured calendar.
+    year_start = configured_sy_start(enrollment["school_year"])
+    eb = year_start is not None and _is_early_bird(today, year_start)
 
     # 3) Run discount waterfall
     waterfall = compute_discount_waterfall(
@@ -568,7 +605,7 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
         # The window is read from settings, never hardcoded: a school that
         # sets early_bird_days to 30 was being told "first 7 days" on the
         # invoice it actually earned over a month.
-        cutoff = early_bird_cutoff(settings_row)
+        cutoff = early_bird_cutoff(settings_row, year_start)
         StudentInvoiceDiscount.objects.create(
             invoice=invoice,
             discount_type=eb_dt,
@@ -579,7 +616,7 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
         )
 
     # 7) Generate installments
-    sy_start = settings_row.sy_start_date if settings_row else default_sy_start(today)
+    sy_start = year_start or sy_start_for(enrollment["school_year"], today)
     if effective_date:
         schedule = generate_installment_schedule_prorated(
             Decimal(waterfall["grand_total"]), payment_plan, sy_start, effective_date
@@ -631,10 +668,11 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
     # which is how views.scope_invoices_to_school_year resolves it for the
     # list and summary endpoints.
     #
-    # Fail closed when the singleton settings row is missing: with no year
-    # there is no safe set of invoices to rewrite.
+    # The current year comes from the school_years registry, with School
+    # Settings (kept in step with it) as the fallback. Fail closed when
+    # neither has one: with no year there is no safe set of invoices to rewrite.
     settings = _get_school_settings()
-    current_sy = (getattr(settings, "current_school_year", "") or "").strip()
+    current_sy = (configured_current() or getattr(settings, "current_school_year", "") or "").strip()
     if not current_sy:
         return {"updated": 0, "skipped_no_school_year": True}
 
@@ -764,7 +802,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
                 for idx, due in enumerate(existing_due_dates, start=1)
             ]
         else:
-            sy_start = settings.sy_start_date if settings else default_sy_start()
+            sy_start = sy_start_for(current_sy)
             schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
 
         inv.installments.all().delete()

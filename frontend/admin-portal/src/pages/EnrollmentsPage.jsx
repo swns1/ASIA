@@ -113,15 +113,11 @@ const sel = { ...inp, cursor:"pointer" };
 const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#855c5c", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
 
 function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
-  // Years that exist in the data, plus next year — you enrol into September
-  // from March, before that year has a single record. This used to be a
-  // 4-year window generated from new Date(), which ignored the real list and
-  // went stale the same way the old sidebar window did.
-  const { options: yearOptions, currentYear } = useSchoolYear();
-  const yearOpts = useMemo(
-    () => yearOptionsForEntry(yearOptions, currentYear),
-    [yearOptions, currentYear],
-  );
+  // The years an admin has set up and not archived — next year included once
+  // it's registered as upcoming, which is how you enrol into September from
+  // March. This used to be a 4-year window generated from new Date().
+  const { entryYears } = useSchoolYear();
+  const yearOpts = useMemo(() => yearOptionsForEntry(entryYears), [entryYears]);
 
   const [schoolYear,  setSchoolYear]  = useState(initSchoolYear  || "");
   const [schoolLevel, setSchoolLevel] = useState(initSchoolLevel || "elementary");
@@ -673,14 +669,12 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
   useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
 
   // Same list as the enrolment form: a promotion's target year is next year,
-  // which by definition has no records yet. This was a *5*-year new Date()
-  // window while the form above used 4 — two different answers to the same
-  // question, on the same page.
-  const { options: promoteYearOptions, currentYear: promoteCurrentYear } = useSchoolYear();
-  const schoolYearOpts = useMemo(
-    () => yearOptionsForEntry(promoteYearOptions, promoteCurrentYear),
-    [promoteYearOptions, promoteCurrentYear],
-  );
+  // which has no records yet but is registered as upcoming. This was a
+  // *5*-year new Date() window while the form above used 4.
+  // The source year only has to exist -- promoting reads it, never writes
+  // it -- so it can be any registered year, archived ones included.
+  const { entryYears: promoteEntryYears, options: registeredYears } = useSchoolYear();
+  const schoolYearOpts = useMemo(() => yearOptionsForEntry(promoteEntryYears), [promoteEntryYears]);
 
   const allGrades = [
     "Nursery","Kindergarten",
@@ -835,7 +829,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                         <label style={lbl}>School Year <span style={{ color:"#c92a2a" }}>*</span></label>
                         <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
                           <option value="">— Select —</option>
-                          {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                          {registeredYears.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                       </div>
                       <div>
