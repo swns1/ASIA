@@ -9,8 +9,9 @@
  *   Enrolled did, so most learners got neither.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { ENROLLMENT_STATUS_MAP } from "../../constants/statusMaps";
 
 const api = {
   getEnrollment: vi.fn(),
@@ -73,9 +74,20 @@ function renderEdit() {
   );
 }
 
-async function statusSelect(current) {
-  const select = await screen.findByDisplayValue(current, {}, { timeout: 5000 });
-  return select;
+// The status is a set of radio cards. Waits for them, checks which one is
+// selected, and returns the labels on offer.
+const statusLabel = (radio) => ENROLLMENT_STATUS_MAP[radio.value].label;
+const statusRadios = () => screen.getAllByRole("radio").filter((r) => r.name === "enrollment_status");
+
+async function statusChoices(current) {
+  await screen.findAllByRole("radio", {}, { timeout: 5000 });
+  const radios = statusRadios();
+  expect(statusLabel(radios.find((r) => r.checked))).toBe(current);
+  return radios.map(statusLabel);
+}
+
+function chooseStatus(label) {
+  fireEvent.click(statusRadios().find((r) => statusLabel(r) === label));
 }
 
 beforeEach(() => {
@@ -97,9 +109,7 @@ describe("Status choices on an existing enrollment", { timeout: 20_000 }, () => 
     api.getEnrollment.mockResolvedValue({ ...ROW, enrollment_status: "cancelled" });
     renderEdit();
 
-    const select = await statusSelect("Cancelled");
-    const options = within(select).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Pending", "Cancelled"]);
+    expect(await statusChoices("Cancelled")).toEqual(["Pending", "Cancelled"]);
   });
 
   it("offers a transferred-out enrollment no change at all", async () => {
@@ -107,8 +117,7 @@ describe("Status choices on an existing enrollment", { timeout: 20_000 }, () => 
     api.getEnrollment.mockResolvedValue({ ...ROW, enrollment_status: "transferred_out" });
     renderEdit();
 
-    const select = await statusSelect("Transferred Out");
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Transferred Out"]);
+    expect(await statusChoices("Transferred Out")).toEqual(["Transferred Out"]);
   });
 });
 
@@ -116,10 +125,8 @@ describe("Activating a pending enrollment", { timeout: 20_000 }, () => {
   async function activate() {
     api.getEnrollment.mockResolvedValue({ ...ROW, enrollment_status: "pending" });
     renderEdit();
-    const select = await statusSelect("Pending");
-    expect(within(select).getAllByRole("option").map((o) => o.textContent))
-      .toEqual(["Enrolled", "Pending", "Cancelled"]);
-    fireEvent.change(select, { target: { value: "enrolled" } });
+    expect(await statusChoices("Pending")).toEqual(["Enrolled", "Pending", "Cancelled"]);
+    chooseStatus("Enrolled");
     fireEvent.click(screen.getByRole("button", { name: /Update Enrollment/ }));
     await waitFor(() => expect(api.updateEnrollment).toHaveBeenCalled());
   }
@@ -156,7 +163,7 @@ describe("Saving without activating", { timeout: 20_000 }, () => {
     signIn("registrar");
     api.getEnrollment.mockResolvedValue({ ...ROW, enrollment_status: "pending" });
     renderEdit();
-    await statusSelect("Pending");
+    await statusChoices("Pending");
     fireEvent.click(screen.getByRole("button", { name: /Update Enrollment/ }));
 
     expect(await screen.findByText("enrollments list", {}, { timeout: 5000 })).toBeTruthy();

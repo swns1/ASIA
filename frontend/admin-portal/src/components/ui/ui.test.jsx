@@ -8,6 +8,7 @@ import ErrorState from "./ErrorState";
 import Table, { TableRow, TableCell } from "./Table";
 import Modal from "./Modal";
 import { StatusBadge } from "./Badge";
+import ChipGroup from "./ChipGroup";
 import { Field, Input, Textarea } from "../FormField";
 import { STUDENT_STATUS_MAP } from "../../constants/statusMaps";
 
@@ -236,5 +237,33 @@ describe("Modal", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ChipGroup", () => {
+  const OPTIONS = [
+    { value: "a", label: "Alpha" },
+    { value: "b", label: "Beta" },
+  ];
+
+  it("changes the value on click by default", () => {
+    const onChange = vi.fn();
+    render(<ChipGroup label="Letters" options={OPTIONS} value="a" onChange={onChange} />);
+    const beta = screen.getByRole("button", { name: "Beta" });
+    expect(beta.disabled).toBe(false);
+    fireEvent.click(beta);
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("locks every chip when disabled, keeping the selection visible", () => {
+    const onChange = vi.fn();
+    render(<ChipGroup label="Letters" options={OPTIONS} value="a" onChange={onChange} disabled />);
+    const alpha = screen.getByRole("button", { name: "Alpha" });
+    const beta = screen.getByRole("button", { name: "Beta" });
+    expect(alpha.disabled).toBe(true);
+    expect(beta.disabled).toBe(true);
+    expect(alpha.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(beta);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

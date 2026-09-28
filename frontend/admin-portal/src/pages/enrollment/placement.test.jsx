@@ -283,8 +283,8 @@ describe("Enrollment form — repeating a grade", () => {
   it("opens on Repeat from Promote's link", async () => {
     renderForm("student=7&retain=1&school_year=2026-2027");
 
-    const repeat = await screen.findByRole("radio", { name: /Repeat Grade 4/ });
-    expect(repeat.getAttribute("aria-checked")).toBe("true");
+    const repeat = await screen.findByRole("button", { name: /Repeat Grade 4/ });
+    expect(repeat.getAttribute("aria-pressed")).toBe("true");
     expect(await screen.findByText(/Locked to Grade 4/)).toBeTruthy();
     expect(screen.getByDisplayValue("2026-2027")).toBeTruthy();
   });
@@ -292,11 +292,11 @@ describe("Enrollment form — repeating a grade", () => {
   it("defaults to the next grade and can switch to Repeat", async () => {
     renderForm("student=7");
 
-    const promote = await screen.findByRole("radio", { name: /Promote to Grade 5/ });
-    expect(promote.getAttribute("aria-checked")).toBe("true");
+    const promote = await screen.findByRole("button", { name: /Promote to Grade 5/ });
+    expect(promote.getAttribute("aria-pressed")).toBe("true");
     expect(await screen.findByText(/Locked to Grade 5/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Repeat Grade 4/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Repeat Grade 4/ }));
 
     expect(await screen.findByText(/Locked to Grade 4/)).toBeTruthy();
     await waitFor(() => expect(api.getEnrollmentEligibility).toHaveBeenLastCalledWith(

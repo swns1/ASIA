@@ -183,21 +183,35 @@ export default function FilterBar({
           </button>
         )}
 
-        <AnimatePresence>
+        {/* The wrapper grows from zero width rather than the button just
+            mounting, so the search field narrows and the controls beside it
+            slide over instead of jumping. The -10 margin cancels the row's
+            gap-2.5 while collapsed. Overflow is clipped only mid-animation —
+            left on, it would cut off the button's focus ring. */}
+        <AnimatePresence initial={false}>
           {hasFilters && onClearFilters && (
-            <motion.button
-              type="button"
-              initial={{ opacity: 0, scale: 0.88 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.88 }}
-              transition={{ duration: 0.14 }}
-              whileTap={{ scale: 0.93 }}
-              onClick={onClearFilters}
-              className="focus-ring flex h-[42px] shrink-0 items-center gap-[5px] rounded-lg border-[1.5px] border-brand-300 bg-white px-3.5 text-[12px] font-semibold text-error-600"
+            <motion.div
+              key="clear"
+              initial={{ width: 0, marginLeft: -10, opacity: 0, overflow: "hidden" }}
+              animate={{ width: "auto", marginLeft: 0, opacity: 1, transitionEnd: { overflow: "visible" } }}
+              exit={{ width: 0, marginLeft: -10, opacity: 0, overflow: "hidden" }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              className="h-[42px] shrink-0"
             >
-              <i className="ti ti-filter-off text-[13px]" aria-hidden="true" />
-              Clear
-            </motion.button>
+              <motion.button
+                type="button"
+                initial={{ scale: 0.88 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.88 }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                whileTap={{ scale: 0.93 }}
+                onClick={onClearFilters}
+                className="focus-ring flex h-[42px] w-max items-center gap-[5px] whitespace-nowrap rounded-lg border-[1.5px] border-brand-300 bg-white px-3.5 text-[12px] font-semibold text-error-600"
+              >
+                <i className="ti ti-filter-off text-[13px]" aria-hidden="true" />
+                Clear
+              </motion.button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
