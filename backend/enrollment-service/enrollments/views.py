@@ -1081,6 +1081,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
           already      -- they already advise it this year
           has_adviser  -- someone else already does; not overwritten
           not_a_teacher -- the account is gone or no longer a teacher
+          inactive     -- the teacher's account is deactivated (they left)
         A section's co-advisers carry over together.
         """
         from accounts.models import User
@@ -1103,25 +1104,29 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             SectionAdvisory.objects.filter(school_year=source.label)
             .order_by("grade_level", "section", "teacher_user_id")
         )
-        teachers = dict(
-            User.objects.filter(
+        teachers = {
+            user_id: (name, is_active)
+            for user_id, name, is_active in User.objects.filter(
                 user_id__in={a.teacher_user_id for a in source_rows}, role="teacher",
-            ).values_list("user_id", "name")
-        )
+            ).values_list("user_id", "name", "is_active")
+        }
 
         copied, skipped = [], []
         for adv in source_rows:
             key = (adv.grade_level, adv.section.lower())
             section = sections.get(key)
+            teacher = teachers.get(adv.teacher_user_id)
             row = {
                 "teacher_user_id": adv.teacher_user_id,
-                "teacher_name":    teachers.get(adv.teacher_user_id),
+                "teacher_name":    teacher[0] if teacher else None,
                 "grade_level":     adv.grade_level,
                 "section":         section["name"] if section else adv.section,
                 "strand":          section["strand"] if section else adv.strand,
             }
-            if adv.teacher_user_id not in teachers:
+            if teacher is None:
                 skipped.append({**row, "reason": "not_a_teacher"})
+            elif not teacher[1]:
+                skipped.append({**row, "reason": "inactive"})
             elif section is None:
                 skipped.append({**row, "reason": "no_section"})
             elif adv.teacher_user_id in advised.get(key, ()):

@@ -93,6 +93,9 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
     (id) => teachers.find((t) => t.user_id === id)?.name ?? `User #${id}`,
     [teachers],
   );
+  // Deactivated teachers keep their name on past advisories (teacherName
+  // above) but can't be assigned -- identity-service refuses it anyway.
+  const activeTeachers = useMemo(() => teachers.filter((t) => t.is_active), [teachers]);
 
   const advisersBySection = useMemo(() => {
     const map = new Map();
@@ -234,7 +237,7 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
             key="assign-adviser"
             schoolYear={schoolYear}
             section={assigning}
-            teachers={teachers}
+            teachers={activeTeachers}
             teachersUnavailable={teachersUnavailable}
             advisories={advisories}
             onClose={() => setAssigning(null)}

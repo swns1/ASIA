@@ -71,7 +71,7 @@ def test_cross_site_setting_sends_samesite_none_and_secure():
 def test_logout_deletes_the_cookie_with_matching_attributes():
     session_id = uuid.uuid4()
     user = SimpleNamespace(user_id=1, name="R", email="r@example.com", role="registrar",
-                           profile_picture=None, current_session_id=session_id)
+                           profile_picture=None, current_session_id=session_id, is_active=True)
     refresh = RefreshToken()
     refresh["user_id"] = 1
     refresh["sid"] = str(session_id)

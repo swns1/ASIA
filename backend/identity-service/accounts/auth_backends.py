@@ -42,6 +42,11 @@ class IdentityUserBackend(BaseBackend):
         if not check_password(password, user.password):
             return None
 
+        # A deactivated account fails exactly like a wrong password: the
+        # login form must not reveal that the account exists.
+        if not user.is_active:
+            return None
+
         return user
 
     def get_user(self, user_id):

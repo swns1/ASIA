@@ -158,6 +158,24 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("advisory_id", "created_at")
 
+    def validate_teacher_user_id(self, value):
+        """
+        Only an active teacher account can be made an adviser -- the id is
+        client-supplied, and the pickers hiding inactive staff is no guard.
+        Leaving an existing advisory's teacher as-is stays allowed, so a
+        deactivated teacher's past advisories can still be edited.
+        """
+        from accounts.models import User
+
+        if self.instance is not None and value == self.instance.teacher_user_id:
+            return value
+        user = User.objects.filter(user_id=value).values("role", "is_active").first()
+        if user is None or user["role"] != "teacher":
+            raise serializers.ValidationError("Choose a teacher account.")
+        if not user["is_active"]:
+            raise serializers.ValidationError("This teacher's account is inactive.")
+        return value
+
     def to_internal_value(self, data):
         return resolve_placement_section(super().to_internal_value(data), self.instance)
 

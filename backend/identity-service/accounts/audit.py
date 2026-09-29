@@ -56,7 +56,7 @@ def resolve_user_from_request(request):
     except DatabaseError:
         return None
 
-    if not user:
+    if not user or not user.is_active:
         return None
 
     # Single-active-session enforcement: a token whose sid claim doesn't

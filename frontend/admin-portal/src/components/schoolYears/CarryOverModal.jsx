@@ -45,6 +45,7 @@ const ADVISER_SKIPS = {
   has_adviser:   () => "their section here already has an adviser",
   already:       () => "already assigned to the same section here",
   not_a_teacher: () => "no longer a teacher account",
+  inactive:      () => "their account is inactive",
 };
 
 // The servers sort grade_level as text (Grade 1, Grade 10, Grade 11, Grade 2);

@@ -71,9 +71,10 @@ beforeEach(() => {
   api.getSections.mockResolvedValue([]);
   api.getSectionAdvisories.mockResolvedValue({ results: [] });
   getUsers.mockResolvedValue([
-    { user_id: 7, name: "Ana Cruz", role: "teacher" },
-    { user_id: 8, name: "Ben Reyes", role: "teacher" },
-    { user_id: 1, name: "Admin", role: "admin" },
+    { user_id: 7, name: "Ana Cruz", role: "teacher", is_active: true },
+    { user_id: 8, name: "Ben Reyes", role: "teacher", is_active: true },
+    { user_id: 9, name: "Carla Diaz", role: "teacher", is_active: false },
+    { user_id: 1, name: "Admin", role: "admin", is_active: true },
   ]);
 });
 
@@ -200,7 +201,7 @@ describe("SchoolYearDetailPage — advisers", () => {
     await screen.findByText("1 of 2 sections have an adviser");
     fireEvent.click(screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" }));
     const picker = await screen.findByRole("combobox", { name: "Teacher" });
-    // Only teachers, each with what they already advise this year.
+    // Only active teachers, each with what they already advise this year.
     const options = within(picker).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Select a teacher…", "Ben Reyes", "Ana Cruz — advises Grade 7 Rizal"]);
 

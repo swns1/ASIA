@@ -27,6 +27,10 @@ class User(models.Model):
     password = models.CharField(max_length=255)
     profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist
     current_session_id = models.UUIDField(null=True, blank=True)
+    # False once someone leaves: they can't sign in and drop out of every
+    # staff picker, but their past records keep their name. Column added by
+    # migration 0003; the other services mirror it.
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = "users"
@@ -34,10 +38,6 @@ class User(models.Model):
 
     @property
     def is_authenticated(self):
-        return True
-
-    @property
-    def is_active(self):
         return True
 
     def __str__(self):

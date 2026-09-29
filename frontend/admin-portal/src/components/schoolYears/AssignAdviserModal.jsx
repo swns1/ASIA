@@ -83,7 +83,7 @@ export default function AssignAdviserModal({ schoolYear, section, teachers, teac
         <Alert variant="warning">Teacher list unavailable — listing users requires admin access.</Alert>
       ) : options.length === 0 ? (
         <Alert variant="info">
-          {teachers.length ? "Every teacher account already advises this section." : "There are no teacher accounts yet. Add one under Users."}
+          {teachers.length ? "Every teacher account already advises this section." : "There are no active teacher accounts. Add one under Users."}
         </Alert>
       ) : (
         <Field

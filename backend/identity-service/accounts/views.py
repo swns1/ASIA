@@ -173,7 +173,7 @@ class RefreshView(APIView):
 
         sid = refresh.get("sid")
         user = User.objects.filter(user_id=refresh.get("user_id")).first()
-        if not sid or not user or str(user.current_session_id) != str(sid):
+        if not sid or not user or not user.is_active or str(user.current_session_id) != str(sid):
             return Response({"detail": "Session no longer active."}, status=401)
 
         access_token = str(refresh.access_token)
@@ -429,6 +429,32 @@ class UserDetailView(APIView):
             changes.append("password updated")
             invalidate_session = True
 
+        # ── Active status (admin only) ────────────────────────────────────────
+        # Deactivating is how someone who has left is retired: they can't
+        # sign in and drop out of the staff pickers, but keep their name on
+        # past records -- unlike DELETE. The super_admin hierarchy check above
+        # already covers who may deactivate a super_admin.
+        status_change = None
+        if "is_active" in data:
+            if not is_admin:
+                return Response({"detail": "Only admins can change account status."}, status=403)
+            new_active = data["is_active"]
+            if not isinstance(new_active, bool):
+                return Response({"detail": "is_active must be true or false."}, status=400)
+            if new_active != target.is_active:
+                # Same reasoning as the role check: a self-deactivation locks
+                # the requester out mid-session, and may be the last admin.
+                if is_own_profile:
+                    return Response(
+                        {"detail": "You cannot deactivate your own account. Ask another admin."},
+                        status=403,
+                    )
+                status_change = "reactivated" if new_active else "deactivated"
+                changes.append(f"account {status_change}")
+                target.is_active = new_active
+                if not new_active:
+                    invalidate_session = True
+
         # ── Profile picture ───────────────────────────────────────────────────
         if "profile_picture" in data:
             pic = data.get("profile_picture")
@@ -460,7 +486,8 @@ class UserDetailView(APIView):
         record_audit_event(
             request,
             user=requester,
-            action="Updated user profile",
+            # A status change is the part worth finding in the audit trail.
+            action=f"{status_change.capitalize()} user account" if status_change else "Updated user profile",
             module="Users",
             status="success",
             details=f"Profile of '{target.name}' ({target.email}) updated: {detail_msg}",

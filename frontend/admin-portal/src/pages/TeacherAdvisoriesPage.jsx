@@ -81,6 +81,14 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
+  // Only active teachers can be assigned. Editing a deactivated teacher's
+  // existing advisory still shows them, so the form doesn't silently
+  // switch the teacher.
+  const teacherOptions = useMemo(
+    () => teachers.filter((t) => t.is_active || t.user_id === advisory?.teacher_user_id),
+    [teachers, advisory],
+  );
+
   // A section belongs to one grade of one year: changing either clears it.
   const setF = (k, v) => setForm((f) => ({
     ...f,
@@ -154,7 +162,7 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
       <Field label="Teacher" required>
         <Select value={form.teacher_user_id} onChange={(e) => setF("teacher_user_id", e.target.value)}>
           <option value="">Select a teacher…</option>
-          {teachers.map((t) => (
+          {teacherOptions.map((t) => (
             <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
           ))}
         </Select>

@@ -10,6 +10,8 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
@@ -65,9 +67,10 @@ def _sec(name, grade="Grade 7", strand=None):
 
 
 def _carry(body, *, source_advisers=(), target_advisers=(), target_sections=(),
-           source_sections=(), teachers=None):
+           source_sections=(), teachers=None, inactive=()):
     """Run carry_over with the ORM mocked. `teachers` maps user_id → name for
-    accounts that are still teachers; by default every source adviser is."""
+    accounts that are still teachers; by default every source adviser is.
+    Ids in `inactive` are teacher accounts that have been deactivated."""
     if teachers is None:
         teachers = {a.teacher_user_id: f"Teacher {a.teacher_user_id}" for a in source_advisers}
 
@@ -107,7 +110,9 @@ def _carry(body, *, source_advisers=(), target_advisers=(), target_sections=(),
         years.filter.return_value.first.return_value = LAST
         sections.filter.side_effect = section_filter
         advisories.filter.side_effect = advisory_filter
-        users.filter.return_value.values_list.return_value = list(teachers.items())
+        users.filter.return_value.values_list.return_value = [
+            (user_id, name, user_id not in inactive) for user_id, name in teachers.items()
+        ]
         response = view.carry_over(request, label=THIS.label)
     return response, advisories, sections, users
 
@@ -175,6 +180,20 @@ def test_a_teacher_who_has_left_is_not_carried_over():
     advisories.bulk_create.assert_not_called()
 
 
+def test_a_deactivated_teacher_is_not_carried_over():
+    response, advisories, _, _ = _carry(
+        {"from": "2025-2026", "parts": ["advisers"]},
+        source_advisers=[_advisory("Rizal", teacher=7), _advisory("Mabini", teacher=8)],
+        target_sections=[_sec("Rizal"), _sec("Mabini")],
+        inactive={7},
+    )
+    skipped = response.data["advisers"]["skipped"]
+    assert [(r["teacher_user_id"], r["reason"], r["teacher_name"]) for r in skipped] == [
+        (7, "inactive", "Teacher 7"),
+    ]
+    assert [a.teacher_user_id for a in advisories.bulk_create.call_args.args[0]] == [8]
+
+
 def test_a_dry_run_of_both_counts_advisers_for_sections_it_would_add():
     response, advisories, sections, _ = _carry(
         {"from": "2025-2026", "parts": ["sections", "advisers"], "dry_run": True},
@@ -194,3 +213,47 @@ def test_advisers_alone_need_the_sections_to_exist_already():
     )
     assert response.data["advisers"]["skipped"][0]["reason"] == "no_section"
     assert "sections" not in response.data
+
+
+# -- who can be made an adviser -----------------------------------------------
+
+def _validate_teacher(value, account, instance=None):
+    """SectionAdvisorySerializer.validate_teacher_user_id with the `users`
+    lookup mocked to find `account` (None: no such user)."""
+    from enrollments.serializers import SectionAdvisorySerializer
+
+    serializer = SectionAdvisorySerializer(instance=instance)
+    with patch("accounts.models.User.objects") as users:
+        users.filter.return_value.values.return_value.first.return_value = account
+        return serializer.validate_teacher_user_id(value), users
+
+
+def test_an_active_teacher_can_be_made_an_adviser():
+    value, users = _validate_teacher(7, {"role": "teacher", "is_active": True})
+    assert value == 7
+    users.filter.assert_called_once_with(user_id=7)
+
+
+@pytest.mark.parametrize("account, message", [
+    (None, "Choose a teacher account."),
+    ({"role": "guardian", "is_active": True}, "Choose a teacher account."),
+    ({"role": "registrar", "is_active": True}, "Choose a teacher account."),
+    ({"role": "teacher", "is_active": False}, "This teacher's account is inactive."),
+])
+def test_only_an_active_teacher_can_be_made_an_adviser(account, message):
+    with pytest.raises(ValidationError) as exc:
+        _validate_teacher(7, account)
+    assert exc.value.detail == [message]
+
+
+def test_keeping_a_deactivated_teachers_existing_advisory_is_allowed():
+    value, users = _validate_teacher(
+        7, {"role": "teacher", "is_active": False}, instance=_advisory(teacher=7),
+    )
+    assert value == 7
+    users.filter.assert_not_called()
+
+
+def test_moving_an_advisory_to_a_deactivated_teacher_is_refused():
+    with pytest.raises(ValidationError):
+        _validate_teacher(9, {"role": "teacher", "is_active": False}, instance=_advisory(teacher=7))
