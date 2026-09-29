@@ -17,8 +17,10 @@ import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import Alert from "../components/ui/Alert";
 import Tabs, { TabPanel } from "../components/ui/Tabs";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import useTabs from "../hooks/useTabs";
-import { Field, Input, Textarea } from "../components/FormField";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { Field, Input, Select, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
@@ -43,9 +45,10 @@ const TABS = [
 const COLUMNS = [
   { key: "reference", label: "Reference", width: "16%" },
   { key: "applicant",  label: "Applicant" },
+  { key: "year",       label: "For S.Y.",  width: "12%" },
   { key: "lrn",        label: "LRN",       width: "14%" },
   { key: "submitted",  label: "Submitted", width: "16%" },
-  { key: "flags",      label: "Flags",     width: "12%" },
+  { key: "flags",      label: "Flags",     width: "10%" },
 ];
 
 function fmtDate(value) {
@@ -57,11 +60,21 @@ function fmtDate(value) {
 
 // ── Issue invite ─────────────────────────────────────────────────────────
 
+// Admissions are mostly for the year about to start, so a new link defaults
+// to the next upcoming year once an admin has set one up; before that, the
+// current year. Any year still taking enrolments can be picked.
+function defaultIntakeYear(entryYears, yearStates, currentYear) {
+  const upcoming = entryYears.filter((y) => yearStates[y] === "upcoming").sort();
+  return upcoming[0] ?? currentYear;
+}
+
 function IssueInviteModal({ onClose, onIssued }) {
-  const [form, setForm] = useState({
+  const { currentYear, entryYears, yearStates } = useSchoolYear();
+  const [form, setForm] = useState(() => ({
     applicant_first_name: "", applicant_last_name: "",
     contact_email: "", contact_mobile: "",
-  });
+    school_year: defaultIntakeYear(entryYears, yearStates, currentYear),
+  }));
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState("");
@@ -121,6 +134,16 @@ function IssueInviteModal({ onClose, onIssued }) {
             <Input value={form.applicant_last_name} onChange={(e) => set("applicant_last_name", e.target.value)} />
           </Field>
         </div>
+
+        <Field label="Applying for" hint="The school year they'll be enrolled into. The family can't change it.">
+          <Select value={form.school_year} onChange={(e) => set("school_year", e.target.value)} aria-label="Applying for">
+            {entryYears.map((y) => (
+              <option key={y} value={y}>
+                {`S.Y. ${y}${yearStates[y] === "upcoming" ? " (upcoming)" : yearStates[y] === "current" ? " (current)" : ""}`}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
         <Field label="Contact Email" hint="For following up on this application — no email is sent from here.">
           <Input type="email" value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} placeholder="Optional" />
@@ -182,6 +205,7 @@ function printSlip({ issued, qrSvg }) {
   <h1>South Lakes Integrated School</h1>
   <div class="sub">Student Information Form</div>
   <div class="name">${escapeHtml(issued.applicant_full_name)}</div>
+  ${issued.school_year ? `<div class="muted">Applying for S.Y. ${escapeHtml(issued.school_year)}</div>` : ""}
   <div class="qr">${qrSvg}</div>
   <div class="muted">Access code</div>
   <div class="code">${escapeHtml(issued.access_code)}</div>
@@ -233,6 +257,9 @@ function IssuedInvite({ issued, copied, onCopy, onClose }) {
 
       <div className="mb-4 flex flex-col items-center gap-2 text-center">
         <div className="text-sm font-semibold text-neutral-900">{issued.applicant_full_name}</div>
+        {issued.school_year && (
+          <div className="text-[12.5px] text-neutral-500">Applying for S.Y. {issued.school_year}</div>
+        )}
         <div ref={qrRef} className="rounded-xl border border-neutral-200 bg-white p-3">
           <QRCodeSVG value={applyUrl} size={208} marginSize={1} title="Application form link" />
         </div>
@@ -348,6 +375,8 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
         student: String(result.created_student_id),
         continuing: "1",
       });
+      // The year the invite was issued for; the form still lets them change it.
+      if (application.school_year) params.set("school_year", application.school_year);
       if (applyingFor.grade_level) params.set("grade_level", applyingFor.grade_level);
       if (applyingFor.school_level) params.set("school_level", applyingFor.school_level);
       if (applyingFor.strand) params.set("strand", applyingFor.strand);
@@ -433,6 +462,7 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
               <strong className="text-neutral-700">
                 {applyingFor.grade_level || "not stated"}
                 {applyingFor.strand ? ` — ${applyingFor.strand}` : ""}
+                {application.school_year ? ` · S.Y. ${application.school_year}` : ""}
               </strong>
             </span>
             <StatusBadge status={application.status} map={STUDENT_APPLICATION_STATUS_MAP} />
@@ -476,6 +506,10 @@ export default function StudentApplicationsPage() {
   usePageTitle("Student Applications");
 
   const { active, direction, setActive } = useTabs(TABS, "submitted");
+  // All years by default: this is a to-do queue, and most applications are
+  // for a year that hasn't started, so opening on the current year would hide
+  // them.
+  const [schoolYear, setSchoolYear] = useState("");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -491,13 +525,13 @@ export default function StudentApplicationsPage() {
     const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
-    fetchAllPages(getStudentApplications, { status: active }, { pageSize: 100 })
+    fetchAllPages(getStudentApplications, { status: active, school_year: schoolYear }, { pageSize: 100 })
       .then((list) => { if (seq === loadSeq.current) setRows(list); })
       .catch((err) => { if (seq === loadSeq.current) setError(err); })
       .finally(() => { if (seq === loadSeq.current) setLoading(false); });
   };
 
-  useEffect(load, [active]);
+  useEffect(load, [active, schoolYear]);
 
   return (
     <>
@@ -505,7 +539,13 @@ export default function StudentApplicationsPage() {
         title="Student Applications"
         subtitle="Self-service submissions awaiting review"
         icon="ti-user-plus"
-        actions={<Button icon="ti-link" onClick={() => setShowIssue(true)}>Issue form link</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            {/* Enrolment counts would mislead here, so none are shown. */}
+            <SchoolYearPicker value={schoolYear} onChange={(y) => setSchoolYear(y ?? "")} counts={{}} align="end" />
+            <Button icon="ti-link" onClick={() => setShowIssue(true)}>Issue form link</Button>
+          </div>
+        }
       />
 
       <div className="p-6">
@@ -533,6 +573,7 @@ export default function StudentApplicationsPage() {
                 <TableRow key={row.student_application_id} onClick={() => setOpenApplicationId(row.student_application_id)}>
                   <TableCell><span className="font-semibold text-neutral-900">{row.reference}</span></TableCell>
                   <TableCell>{`${row.first_name} ${row.last_name}`.trim() || "—"}</TableCell>
+                  <TableCell>{row.school_year || <span className="text-neutral-400">—</span>}</TableCell>
                   <TableCell>{row.lrn || <span className="text-neutral-400">Not yet assigned</span>}</TableCell>
                   <TableCell>{fmtDate(row.submitted_at)}</TableCell>
                   <TableCell>

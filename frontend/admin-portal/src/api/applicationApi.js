@@ -14,8 +14,9 @@ const applicationClient = createApiClient({
 
 // ── Invites ──────────────────────────────────────────────────────────────
 
-// { applicant_first_name, applicant_last_name, contact_email?, contact_mobile? }
-// -> { invite_id, ..., access_code, apply_url }
+// { applicant_first_name, applicant_last_name, contact_email?, contact_mobile?,
+//   school_year? } -> { invite_id, ..., school_year, access_code, apply_url }
+// school_year is the year they're applying for; left out, the current year.
 // access_code is shown exactly once in this response — the backend never
 // stores or re-derives the plaintext, so there is no "look it up later".
 export async function createApplicationInvite(payload) {
@@ -44,12 +45,13 @@ export async function reissueApplicationInvite(id) {
 
 // ── Applications ─────────────────────────────────────────────────────────
 
-export async function getStudentApplications({ page = 1, page_size, status = "", search = "" } = {}) {
+export async function getStudentApplications({ page = 1, page_size, status = "", school_year = "", search = "" } = {}) {
   const res = await applicationClient.get("/student-applications/", {
     params: {
       page,
       ...(page_size && { page_size }),
       ...(status && { status }),
+      ...(school_year && { school_year }),
       ...(search && { search }),
     },
   });

@@ -772,9 +772,12 @@ export default function EnrollmentFormPage() {
   // window -- a different answer from every other page.
   const { currentYear, entryYears } = useSchoolYear();
   const defaultYearRef = useRef(currentYear);
+  // An approved application links here with the year it was issued for
+  // (StudentApplicationsPage), which then takes precedence over the current one.
+  const linkedYear = isEdit ? null : searchParams.get("school_year");
 
   const [form, setForm] = useState({
-    school_year:       currentYear,
+    school_year:       linkedYear || currentYear,
     school_level:      "elementary",
     grade_level:       "Grade 1",
     section:           "",
@@ -789,9 +792,9 @@ export default function EnrollmentFormPage() {
   useEffect(() => {
     const previous = defaultYearRef.current;
     defaultYearRef.current = currentYear;
-    if (isEdit || !currentYear || currentYear === previous) return;
+    if (isEdit || linkedYear || !currentYear || currentYear === previous) return;
     setForm((f) => (f.school_year === previous ? { ...f, school_year: currentYear } : f));
-  }, [currentYear, isEdit]);
+  }, [currentYear, isEdit, linkedYear]);
 
   // A section belongs to one grade of one year, so changing either leaves the
   // chosen section behind. The ref holds the placement last seen, set by the

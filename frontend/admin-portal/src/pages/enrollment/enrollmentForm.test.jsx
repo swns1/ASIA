@@ -160,6 +160,15 @@ describe("New enrollment", () => {
     expect(await screen.findByText("Enrollments list")).toBeTruthy();
   });
 
+  it("opens on the year an approved application was for", async () => {
+    renderAt("/enrollments/new?student=9&continuing=1&school_year=2025-2026");
+    await screen.findByText("Missing required documents (1)");
+    // The section list, like the save, follows the form's year.
+    await waitFor(() => expect(api.getSections).toHaveBeenLastCalledWith({
+      school_year: "2025-2026", grade_level: "Grade 4",
+    }));
+  });
+
   it("checks eligibility against the placement being made", async () => {
     renderAt("/enrollments/new?student=9");
     await screen.findByText("Missing required documents (1)");

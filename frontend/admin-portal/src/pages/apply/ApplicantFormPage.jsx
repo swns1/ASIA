@@ -235,6 +235,7 @@ export default function ApplicantFormPage() {
   const [gateError, setGateError] = useState("");
   const [gateBusy, setGateBusy] = useState(false);
   const [applicantName, setApplicantName] = useState("");
+  const [schoolYear, setSchoolYear] = useState("");
   const [token, setToken] = useState(null);
 
   const [step, setStep] = useState(0);
@@ -289,6 +290,7 @@ export default function ApplicantFormPage() {
       const res = await verifyApplicantCode(inviteId, code.trim());
       setToken(res.token);
       setApplicantName(res.applicant_full_name || "");
+      setSchoolYear(res.school_year || "");
       hydrateFrom(res.payload, res.revision);
       setStep(0);
       setConfirmed(false);
@@ -374,6 +376,7 @@ export default function ApplicantFormPage() {
     setCode("");
     setGateError("");
     setApplicantName("");
+    setSchoolYear("");
     setStudent(emptyStudent);
     setHousehold(emptyHousehold);
     setGuardians([]);
@@ -597,6 +600,7 @@ export default function ApplicantFormPage() {
           <div className="mb-6 text-center" onClick={handleHeaderTap}>
             <h1 className="text-lg font-bold text-[#1a0a0a]">Student Information Form</h1>
             {applicantName && <p className="text-sm text-[#7a5050]">{applicantName}</p>}
+            {schoolYear && <p className="text-xs text-[#7a5050]">Applying for S.Y. {schoolYear}</p>}
           </div>
 
           <StepBar current={step} onStepClick={setStep} size="lg" steps={APPLICANT_STEPS} />

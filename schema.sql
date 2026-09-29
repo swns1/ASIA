@@ -151,6 +151,7 @@ CREATE TABLE public.application_invites (
     revoked_at timestamp with time zone,
     consumed_at timestamp with time zone,
     consumed_by_application_id bigint,
+    school_year character varying(20),
     CONSTRAINT application_invites_code_attempts_check CHECK ((code_attempts >= 0))
 );
 
@@ -1566,6 +1567,7 @@ CREATE TABLE public.student_applications (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     invite_id uuid NOT NULL,
+    school_year character varying(20),
     CONSTRAINT student_application_approved_has_student CHECK (((NOT ((status)::text = 'approved'::text)) OR (created_student_id IS NOT NULL))),
     CONSTRAINT student_application_rejected_has_note CHECK (((NOT ((status)::text = 'rejected'::text)) OR ((NOT ((decision_note = ''::text) AND (decision_note IS NOT NULL))) AND (decision_note IS NOT NULL)))),
     CONSTRAINT student_applications_revision_check CHECK ((revision >= 0))
@@ -3054,6 +3056,20 @@ CREATE INDEX application_invites_issued_by_user_id_f9ec869e ON public.applicatio
 
 
 --
+-- Name: application_invites_school_year_19816a34; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX application_invites_school_year_19816a34 ON public.application_invites USING btree (school_year);
+
+
+--
+-- Name: application_invites_school_year_19816a34_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX application_invites_school_year_19816a34_like ON public.application_invites USING btree (school_year varchar_pattern_ops);
+
+
+--
 -- Name: attendance_records_enrollment_id_3c51c395; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3565,6 +3581,20 @@ CREATE INDEX student_applications_lrn_735bdaa1_like ON public.student_applicatio
 
 
 --
+-- Name: student_applications_school_year_853334a5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX student_applications_school_year_853334a5 ON public.student_applications USING btree (school_year);
+
+
+--
+-- Name: student_applications_school_year_853334a5_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX student_applications_school_year_853334a5_like ON public.student_applications USING btree (school_year varchar_pattern_ops);
+
+
+--
 -- Name: student_applications_status_ee98b91a; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3731,6 +3761,14 @@ CREATE TRIGGER validate_grading_period_on_scores BEFORE INSERT OR UPDATE ON publ
 
 ALTER TABLE ONLY public.academic_calendar_events
     ADD CONSTRAINT academic_calendar_events_school_year_fk FOREIGN KEY (school_year) REFERENCES public.school_years(label) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: application_invites application_invites_school_year_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.application_invites
+    ADD CONSTRAINT application_invites_school_year_fk FOREIGN KEY (school_year) REFERENCES public.school_years(label) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --
@@ -4043,6 +4081,14 @@ ALTER TABLE ONLY public.siblings
 
 ALTER TABLE ONLY public.student_applications
     ADD CONSTRAINT student_applications_invite_id_ceae6fb9_fk_applicati FOREIGN KEY (invite_id) REFERENCES public.application_invites(invite_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: student_applications student_applications_school_year_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_applications
+    ADD CONSTRAINT student_applications_school_year_fk FOREIGN KEY (school_year) REFERENCES public.school_years(label) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

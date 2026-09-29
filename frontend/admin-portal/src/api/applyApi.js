@@ -31,7 +31,7 @@ function tokenHeaders(token) {
   return token ? { "X-Applicant-Token": token } : {};
 }
 
-// POST /apply/{inviteId}/verify/  { access_code } -> { token, applicant_full_name, payload, revision }
+// POST /apply/{inviteId}/verify/  { access_code } -> { token, applicant_full_name, school_year, payload, revision }
 export async function verifyApplicantCode(inviteId, accessCode) {
   const res = await applyClient.post(`/apply/${inviteId}/verify/`, { access_code: accessCode });
   return res.data;
