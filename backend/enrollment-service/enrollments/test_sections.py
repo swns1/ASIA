@@ -268,6 +268,7 @@ def test_a_section_with_learners_cannot_be_deleted():
     section = MagicMock(spec=Section, grade_level="Grade 7", name="Rizal")
     section.delete.side_effect = IntegrityError("violates foreign key constraint")
     with patch.object(view, "get_object", return_value=section), \
+         patch("enrollments.archive.archived_among", return_value=set()), \
          patch("enrollments.views.transaction.atomic", return_value=nullcontext()):
         response = view.destroy(request, pk=4)
     assert response.status_code == 409
@@ -285,6 +286,7 @@ def test_changing_a_sections_strand_moves_its_learners_with_it():
     serializer.save.side_effect = save
 
     with patch("enrollments.views.transaction.atomic", return_value=nullcontext()), \
+         patch("enrollments.archive.archived_among", return_value=set()), \
          patch("enrollments.views.Enrollment.objects") as enrollments, \
          patch("enrollments.views.SectionAdvisory.objects") as advisories:
         view.perform_update(serializer)

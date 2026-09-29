@@ -3,6 +3,7 @@ from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from accounts.permissions import IsAdminRegistrarOrReadOnly
+from enrollments.archive import ArchivedYearGuard
 from .models import CalendarEvent
 from .serializers import CalendarEventSerializer
 
@@ -13,7 +14,7 @@ class CalendarPagination(PageNumberPagination):
     max_page_size = 500
 
 
-class CalendarEventViewSet(ModelViewSet):
+class CalendarEventViewSet(ArchivedYearGuard, ModelViewSet):
     queryset = CalendarEvent.objects.all()
     serializer_class = CalendarEventSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]

@@ -50,6 +50,14 @@ export const deleteSchoolYear = (label) =>
 export const makeSchoolYearCurrent = (label) =>
   enrollmentClient.post(`/school-years/${label}/make-current/`).then((r) => r.data);
 
+// Archiving makes a finished year's records read-only (payments excepted);
+// unarchiving reopens it for corrections.
+export const archiveSchoolYear = (label) =>
+  enrollmentClient.post(`/school-years/${label}/archive/`).then((r) => r.data);
+
+export const unarchiveSchoolYear = (label) =>
+  enrollmentClient.post(`/school-years/${label}/unarchive/`).then((r) => r.data);
+
 // The numbers behind a year's setup checklist: sections, advisers, calendar.
 export const getSchoolYearSetup = (label) =>
   enrollmentClient.get(`/school-years/${label}/setup/`).then((r) => r.data);

@@ -9,6 +9,7 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from enrollments.archive import ArchivedYearGuard
 from .models import Grade, NarrativeCategory, NarrativeReport
 from .serializers import GradeSerializer, NarrativeCategorySerializer, NarrativeReportSerializer
 
@@ -25,7 +26,7 @@ def _scope_to_student_records(qs, user, path="enrollment__student_id"):
     return qs
 
 
-class GradeViewSet(viewsets.ModelViewSet):
+class GradeViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset = Grade.objects.select_related("enrollment", "subject").all()
     serializer_class = GradeSerializer
     permission_classes = [IsAdvisoryTeacherOrStaff]
@@ -47,7 +48,7 @@ class GradeViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save()
+        super().perform_create(serializer)
 
 
 class NarrativeCategoryViewSet(viewsets.ModelViewSet):
@@ -60,7 +61,7 @@ class NarrativeCategoryViewSet(viewsets.ModelViewSet):
     ordering           = ("sort_order", "name")
 
 
-class NarrativeReportViewSet(viewsets.ModelViewSet):
+class NarrativeReportViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset           = NarrativeReport.objects.select_related("enrollment", "category").all()
     serializer_class   = NarrativeReportSerializer
     permission_classes = [IsAdvisoryTeacherOrStaff]
@@ -77,4 +78,4 @@ class NarrativeReportViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save()
+        super().perform_create(serializer)

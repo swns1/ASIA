@@ -10,12 +10,13 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from enrollments.archive import ArchivedYearGuard, ensure_open
 from enrollments.models import Enrollment
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer, BulkAttendanceSerializer
 
 
-class AttendanceViewSet(viewsets.ModelViewSet):
+class AttendanceViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset = AttendanceRecord.objects.select_related(
         "enrollment__student"
     ).all()
@@ -51,10 +52,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
+        super().perform_create(serializer, recorded_by=getattr(self.request.user, "user_id", None))
 
     def perform_update(self, serializer):
-        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
+        super().perform_update(serializer, recorded_by=getattr(self.request.user, "user_id", None))
 
     # POST /api/attendance/bulk/
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -83,6 +84,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                         {"detail": "You can only record attendance for your own advisory section."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
+
+        # A day's register can span learners of more than one year only by
+        # mistake, but every year it touches has to be open.
+        ensure_open(*Enrollment.objects.filter(
+            enrollment_id__in=[item["enrollment_id"] for item in records],
+        ).values_list("school_year", flat=True).distinct())
 
         for item in records:
             obj, _ = AttendanceRecord.objects.update_or_create(

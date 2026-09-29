@@ -1,8 +1,8 @@
 /**
  * SchoolYearDetailPage — one year's setup: the checklist, its sections laid
  * out on the grade ladder, adding and renaming a section, who advises each
- * section, and copying an earlier year's sections and advisers (previewed by
- * the server's own dry run).
+ * section, copying an earlier year's sections and advisers (previewed by the
+ * server's own dry run), and archiving a finished year.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
@@ -23,6 +23,8 @@ const api = {
   getSectionAdvisories: vi.fn(),
   createSectionAdvisory: vi.fn(),
   deleteSectionAdvisory: vi.fn(),
+  archiveSchoolYear: vi.fn(),
+  unarchiveSchoolYear: vi.fn(),
 };
 const getUsers = vi.fn();
 const pass = (name) => (...a) => api[name](...a);
@@ -254,5 +256,56 @@ describe("SchoolYearDetailPage — advisers", () => {
     expect(await screen.findByText("Set up this year's sections first")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go to Sections" }));
     expect(await screen.findByText("No sections yet")).toBeTruthy();
+  });
+});
+
+describe("SchoolYearDetailPage — archiving", () => {
+  const FINISHED = { label: "2025-2026", state: "open", start_date: "2025-06-02", end_date: "2026-03-31" };
+  const ARCHIVED = { ...FINISHED, state: "archived", archived_at: "2026-07-01T00:00:00Z" };
+
+  it("only a finished year offers Archive", async () => {
+    renderAt();   // 2027-2028 is upcoming
+    await screen.findByText("Setup checklist");
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+  });
+
+  it("archives a finished year, naming the learners left unfinished", async () => {
+    api.getSchoolYear.mockResolvedValue(FINISHED);
+    api.getSchoolYearSetup.mockResolvedValue({
+      enrollments: { total: 40, unfinished: 3 },
+      sections: { count: 2, grades: 1 },
+      advisers: { sections: 2, with_adviser: 2 },
+      calendar: { quarters_set: 4, holidays: 12 },
+    });
+    api.archiveSchoolYear.mockResolvedValue({ ...ARCHIVED });
+    renderAt("/school-years/2025-2026");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+    expect(await screen.findByText("3 learners are still enrolled or pending")).toBeTruthy();
+    expect(screen.getByText(/Even a grade correction will need it unarchived first/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Archive" }).at(-1));
+    await waitFor(() => expect(api.archiveSchoolYear).toHaveBeenCalledWith("2025-2026"));
+    // Every year picker drops it from what can be filed under.
+    await waitFor(() => expect(refreshYears).toHaveBeenCalled());
+  });
+
+  it("an archived year is read-only until it's unarchived", async () => {
+    api.getSchoolYear.mockResolvedValue(ARCHIVED);
+    api.getSections.mockResolvedValue([section(1, "Grade 7", "Rizal", { school_year: "2025-2026" })]);
+    api.unarchiveSchoolYear.mockResolvedValue({ ...FINISHED });
+    renderAt("/school-years/2025-2026");
+
+    expect(await screen.findByText(/Its records are read-only, grade corrections included/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make current" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Sections/ }));
+    expect(await screen.findByText("1 section across 1 grade")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add section" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
+    expect(await screen.findByText(/Its records become editable again/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unarchive" }).at(-1));
+    await waitFor(() => expect(api.unarchiveSchoolYear).toHaveBeenCalledWith("2025-2026"));
   });
 });

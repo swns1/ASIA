@@ -13,6 +13,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from grading.deped import general_average, summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
@@ -24,6 +25,7 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from .archive import ArchivedYearGuard, YearArchived, ensure_open
 from .models import (
     Enrollment,
     EnrollmentOverride,
@@ -86,7 +88,7 @@ def _parse_date(value):
         return None
 
 
-class SectionAdvisoryViewSet(viewsets.ModelViewSet):
+class SectionAdvisoryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/section-advisories/
 
@@ -284,6 +286,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("grades", [])
             if not isinstance(entries, list) or not entries:
                 return Response(
@@ -400,6 +403,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("ratings", [])
             if not isinstance(entries, list) or not entries:
                 return Response(
@@ -507,6 +511,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("records", [])
             valid_statuses = {"P", "A", "L", "E"}
             if not isinstance(entries, list) or not entries:
@@ -795,6 +800,8 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
     /api/school-years/                         GET list · POST create
     /api/school-years/{label}/                 GET · PATCH (dates) · DELETE
     /api/school-years/{label}/make-current/    POST
+    /api/school-years/{label}/archive/         POST
+    /api/school-years/{label}/unarchive/       POST
 
     The registry of school years: which exist, each one's dates, and which is
     current. Every year picker reads it, so reads are open to all staff.
@@ -834,6 +841,10 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         return response
 
     def perform_update(self, serializer):
+        if serializer.instance.archived_at:
+            raise YearArchived(
+                f"S.Y. {serializer.instance.label} is archived. Unarchive it to change its dates."
+            )
         with transaction.atomic():
             year = serializer.save()
             if year.is_current:
@@ -887,6 +898,46 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             _sync_school_settings(year)
         serializer = self.get_serializer(year, context={**self.get_serializer_context(), "current_label": year.label})
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, label=None):
+        """
+        Close a finished year: everything filed under it becomes read-only
+        (enrollments/archive.py). Only a year that has ended can be archived
+        -- not the current one, which every page opens on, and not one still
+        to come. Payments against it still go through.
+
+        Doesn't wait for the year to be tidy: learners left "enrolled" or
+        "pending" stay that way, and the year page warns about them first.
+        """
+        year = self.get_object()
+        if year.archived_at:
+            return Response(self.get_serializer(year).data)
+        current_label = self.get_serializer_context()["current_label"]
+        if year.is_current:
+            return Response(
+                {"detail": f"S.Y. {year.label} is the current year. Make the next year current first."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if year.state(current_label) == "upcoming":
+            return Response(
+                {"detail": f"S.Y. {year.label} hasn't started yet, so there's nothing to archive."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        year.archived_at = timezone.now()
+        year.archived_by = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
+        year.save(update_fields=["archived_at", "archived_by", "updated_at"])
+        return Response(self.get_serializer(year).data)
+
+    @action(detail=True, methods=["post"])
+    def unarchive(self, request, label=None):
+        """Reopen an archived year for corrections. Archive it again after."""
+        year = self.get_object()
+        if year.archived_at:
+            year.archived_at = None
+            year.archived_by = None
+            year.save(update_fields=["archived_at", "archived_by", "updated_at"])
+        return Response(self.get_serializer(year).data)
 
     # In the order they're applied: advisers land in sections, so sections
     # copied in the same run have to exist first.
@@ -1068,7 +1119,17 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             .distinct()
         )
         events = CalendarEvent.objects.filter(school_year=year.label)
+        statuses = dict(
+            Enrollment.objects.filter(school_year=year.label).order_by()
+            .values_list("enrollment_status").annotate(n=Count("pk"))
+        )
         return Response({
+            # Learners not yet finished for the year. Archiving leaves them
+            # as they are, so the archive confirm names them.
+            "enrollments": {
+                "total": sum(statuses.values()),
+                "unfinished": statuses.get("enrolled", 0) + statuses.get("pending", 0),
+            },
             "sections": {
                 "count": len(section_keys),
                 "grades": len({grade for grade, _ in section_keys}),
@@ -1088,7 +1149,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         })
 
 
-class SectionViewSet(viewsets.ModelViewSet):
+class SectionViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/sections/?school_year=2026-2027[&grade_level=Grade 7][&school_level=...]
 
@@ -1141,7 +1202,7 @@ class SectionViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         before = serializer.instance.strand
         with transaction.atomic():
-            section = serializer.save()
+            section = super().perform_update(serializer)
             # The name cascades through the foreign key; the strand isn't part
             # of it, so the learners and advisers in this section follow it here.
             if section.strand != before:
@@ -1157,7 +1218,7 @@ class SectionViewSet(viewsets.ModelViewSet):
         section = self.get_object()
         try:
             with transaction.atomic():
-                section.delete()
+                self.perform_destroy(section)
         except IntegrityError:
             return Response(
                 {"detail": (
@@ -1169,7 +1230,7 @@ class SectionViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/enrollments/
 
@@ -1318,7 +1379,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        enrollment = serializer.save()
+        enrollment = super().perform_create(serializer)
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
         # Give this student's guardians portal access once they're actually
@@ -1328,7 +1389,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         before = {f: getattr(serializer.instance, f, None) for f in self._MOVE_TRACKED_FIELDS}
-        enrollment = serializer.save()
+        enrollment = super().perform_update(serializer)
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
         self._log_internal_move_if_changed(serializer, before, enrollment)
@@ -1358,6 +1419,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
           }
         """
         enrollment = self.get_object()
+        ensure_open(enrollment.school_year)
 
         if enrollment.enrollment_status != "enrolled":
             return Response(
@@ -1428,6 +1490,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
           }
         """
         enrollment = self.get_object()
+        ensure_open(enrollment.school_year)
 
         effective_date = _parse_date(request.data.get("effective_date"))
         if effective_date is None:
@@ -1499,6 +1562,13 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "semester":          request.data.get("semester"),
             "enrollment_status": request.data.get("enrollment_status", "pending"),
         }
+
+        # Refused as a whole rather than learner by learner: every row would
+        # fail for the same reason.
+        try:
+            ensure_open(normalize_school_year(shared_fields["school_year"] or ""))
+        except InvalidSchoolYear:
+            pass  # the serializer reports a malformed year on each row
 
         created_records = []
         failed_records  = []
@@ -1609,6 +1679,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Reading an archived year is fine -- last year's finished classes are
+        # exactly what gets promoted. Writing into one isn't.
+        ensure_open(to_school_year)
 
         to_grade_level = get_next_grade_level(from_grade_level)
         if to_grade_level is None:

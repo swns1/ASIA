@@ -22,11 +22,13 @@ import { firstMessageFrom } from "../utils/apiError";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { invalidateSections } from "../hooks/useSections";
 import {
+  archiveSchoolYear,
   getSchoolYear,
   getSchoolYearSetup,
   getSections,
   listRegisteredSchoolYears,
   makeSchoolYearCurrent,
+  unarchiveSchoolYear,
 } from "../api/enrollmentApi";
 
 // One school year: its dates and setup checklist (Overview), its sections, and
@@ -53,7 +55,7 @@ function ChecklistItem({ done, title, detail, children }) {
   );
 }
 
-function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSections, onOpenAdvisers, onCopy }) {
+function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, onOpenSections, onOpenAdvisers, onCopy }) {
   const isCurrent = year.state === "current";
   const pct = isCurrent ? progressThrough(year.start_date, year.end_date) : null;
   const s = setup?.sections;
@@ -66,7 +68,7 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
       <Card padding="md">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-neutral-900">Dates</h2>
-          <Button variant="ghost" size="sm" icon="ti-pencil" onClick={onEditDates}>Edit</Button>
+          {!readOnly && <Button variant="ghost" size="sm" icon="ti-pencil" onClick={onEditDates}>Edit</Button>}
         </div>
         <div className="text-[13.5px] text-neutral-800">{fmtDate(year.start_date)} – {fmtDate(year.end_date)}</div>
         {pct !== null && (
@@ -84,7 +86,11 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
 
       <Card padding="md">
         <h2 className="text-[15px] font-bold text-neutral-900">Setup checklist</h2>
-        <p className="text-[12.5px] text-neutral-500">What this year needs before classes start. Everything stays editable until it's archived.</p>
+        <p className="text-[12.5px] text-neutral-500">
+          {readOnly
+            ? "Where this year was left when it was archived."
+            : "What this year needs before classes start. Everything stays editable until it's archived."}
+        </p>
         <ul className="mt-1 divide-y divide-neutral-100">
           <ChecklistItem done title="Dates" detail={`${fmtDate(year.start_date)} – ${fmtDate(year.end_date)}`} />
 
@@ -95,14 +101,16 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
               ? `${sectionsCount} ${sectionsCount === 1 ? "section" : "sections"} across ${s?.grades ?? "…"} ${s?.grades === 1 ? "grade" : "grades"}`
               : "None yet — enrollment and advisers pick from these"}
           >
-            {sectionsCount === 0 && canCopy && (
+            {!readOnly && sectionsCount === 0 && canCopy && (
               <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers"])}>
                 Copy from an earlier year
               </Button>
             )}
-            <Button variant={sectionsCount ? "ghost" : "primary"} size="sm" onClick={onOpenSections}>
-              {sectionsCount ? "Manage" : "Set up"}
-            </Button>
+            {!readOnly && (
+              <Button variant={sectionsCount ? "ghost" : "primary"} size="sm" onClick={onOpenSections}>
+                {sectionsCount ? "Manage" : "Set up"}
+              </Button>
+            )}
           </ChecklistItem>
 
           <ChecklistItem
@@ -112,12 +120,12 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
               ? `${a.with_adviser} of ${a.sections} sections have an adviser`
               : "Set up sections first"}
           >
-            {a && a.sections > 0 && a.with_adviser === 0 && canCopy && (
+            {!readOnly && a && a.sections > 0 && a.with_adviser === 0 && canCopy && (
               <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["advisers"])}>
                 Copy from an earlier year
               </Button>
             )}
-            {a && a.sections > 0 && (
+            {!readOnly && a && a.sections > 0 && (
               <Button
                 variant={a.with_adviser === a.sections ? "ghost" : "primary"}
                 size="sm"
@@ -168,6 +176,7 @@ export default function SchoolYearDetailPage() {
   const [editing, setEditing] = useState(false);
   const [copying, setCopying] = useState(null);   // the parts to start with
   const [confirmCurrent, setConfirmCurrent] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(null);   // "archive" | "unarchive"
   const [busy, setBusy] = useState(false);
   const [confirmError, setConfirmError] = useState("");
 
@@ -240,6 +249,21 @@ export default function SchoolYearDetailPage() {
     }
   };
 
+  const handleArchive = async () => {
+    const archiving = confirmArchive === "archive";
+    setBusy(true); setConfirmError("");
+    try {
+      await (archiving ? archiveSchoolYear : unarchiveSchoolYear)(label);
+      toast.success(archiving ? `S.Y. ${label} is archived.` : `S.Y. ${label} is open for changes again.`);
+      setConfirmArchive(null);
+      afterYearChange();
+    } catch (e) {
+      setConfirmError(firstMessageFrom(e) || `Failed to ${confirmArchive} the year.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const breadcrumbs = [{ label: "School Years", to: "/school-years" }, { label: `S.Y. ${label}` }];
 
   if (!loading && loadError) {
@@ -255,6 +279,10 @@ export default function SchoolYearDetailPage() {
 
   const current = years.find((y) => y.state === "current");
   const canMakeCurrent = year && year.state !== "current" && year.state !== "archived";
+  // Only a year that has ended: not the current one, not one still to come.
+  const canArchive = year?.state === "open";
+  const isArchived = year?.state === "archived";
+  const unfinished = setup?.enrollments?.unfinished ?? 0;
 
   return (
     <>
@@ -268,14 +296,27 @@ export default function SchoolYearDetailPage() {
             {fmtDate(year.start_date)} – {fmtDate(year.end_date)}
           </span>
         ) : "Loading…"}
-        actions={canMakeCurrent && (
-          <Button icon="ti-player-play" onClick={() => setConfirmCurrent(true)}>Make current</Button>
+        actions={(canMakeCurrent || canArchive || isArchived) && (
+          <div className="flex items-center gap-2">
+            {canArchive && (
+              <Button variant="secondary" icon="ti-archive" onClick={() => setConfirmArchive("archive")}>Archive</Button>
+            )}
+            {isArchived && (
+              <Button variant="secondary" icon="ti-archive-off" onClick={() => setConfirmArchive("unarchive")}>Unarchive</Button>
+            )}
+            {canMakeCurrent && (
+              <Button icon="ti-player-play" onClick={() => setConfirmCurrent(true)}>Make current</Button>
+            )}
+          </div>
         )}
       />
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
-        {year?.state === "archived" && (
-          <Alert variant="info" title="Archived">This year is read-only.</Alert>
+        {isArchived && (
+          <Alert variant="info" title={`Archived ${fmtDate(year.archived_at)}`}>
+            Its records are read-only, grade corrections included. Payments still go through.
+            Unarchive it to make changes.
+          </Alert>
         )}
 
         <Tabs
@@ -296,6 +337,7 @@ export default function SchoolYearDetailPage() {
                 setup={setup}
                 sectionsCount={sections.length}
                 canCopy={years.some((y) => y.label !== label)}
+                readOnly={isArchived}
                 onEditDates={() => setEditing(true)}
                 onOpenSections={() => setTab("sections")}
                 onOpenAdvisers={() => setTab("advisers")}
@@ -307,7 +349,7 @@ export default function SchoolYearDetailPage() {
                 years={years}
                 sections={sections}
                 loading={sectionsLoading}
-                readOnly={year.state === "archived"}
+                readOnly={isArchived}
                 onChanged={afterSectionsChange}
               />
             ) : (
@@ -316,7 +358,7 @@ export default function SchoolYearDetailPage() {
                 years={years}
                 sections={sections}
                 sectionsLoading={sectionsLoading}
-                readOnly={year.state === "archived"}
+                readOnly={isArchived}
                 onChanged={afterSectionsChange}
                 onOpenSections={() => setTab("sections")}
               />
@@ -346,6 +388,38 @@ export default function SchoolYearDetailPage() {
             initialParts={copying}
             onClose={() => setCopying(null)}
             onDone={afterSectionsChange}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmArchive && (
+          <ConfirmDialog
+            key="archive"
+            icon={confirmArchive === "archive" ? "ti-archive" : "ti-archive-off"}
+            danger={false}
+            title={confirmArchive === "archive" ? `Archive S.Y. ${label}?` : `Unarchive S.Y. ${label}?`}
+            message={confirmArchive === "archive" ? (
+              <>
+                Its enrollments, grades, attendance, advisers, sections and calendar become read-only.
+                Even a grade correction will need it unarchived first. Payments still go through.
+                {unfinished > 0 && (
+                  <>
+                    {" "}<strong>
+                      {unfinished} {unfinished === 1 ? "learner is" : "learners are"} still enrolled or pending
+                    </strong>{" "}
+                    in this year and will stay that way. Promotion only moves learners marked completed.
+                  </>
+                )}
+              </>
+            ) : (
+              <>Its records become editable again. Archive it again once the corrections are done.</>
+            )}
+            error={confirmError}
+            confirmLabel={confirmArchive === "archive" ? "Archive" : "Unarchive"}
+            loading={busy}
+            onConfirm={handleArchive}
+            onCancel={() => { setConfirmArchive(null); setConfirmError(""); }}
           />
         )}
       </AnimatePresence>
