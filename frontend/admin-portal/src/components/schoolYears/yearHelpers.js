@@ -36,3 +36,12 @@ export function progressThrough(start, end) {
   if (now >= e) return 100;
   return Math.round(((now - s) / (e - s)) * 100);
 }
+
+// The years Compare opens on: the current year and the two before it -- this
+// year against last, and one more so a change can be seen as a trend. With no
+// current year, the latest three. `labels` needn't be sorted.
+export function defaultCompareYears(labels, current, count = 3) {
+  const sorted = [...labels].sort();
+  const upTo = current && sorted.includes(current) ? sorted.slice(0, sorted.indexOf(current) + 1) : sorted;
+  return upTo.slice(-count);
+}

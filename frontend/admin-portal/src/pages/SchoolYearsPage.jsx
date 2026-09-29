@@ -202,9 +202,14 @@ export default function SchoolYearsPage() {
             : `${years.length} ${years.length === 1 ? "year" : "years"} · none current`
         }
         actions={
-          <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
-            New School Year
-          </Button>
+          <>
+            <Button variant="secondary" icon="ti-arrows-left-right" to="/school-years/compare" disabled={years.length === 0}>
+              Compare years
+            </Button>
+            <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+              New School Year
+            </Button>
+          </>
         }
       />
 

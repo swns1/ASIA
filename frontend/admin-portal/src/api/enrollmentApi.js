@@ -67,6 +67,11 @@ export const getSchoolYearSetup = (label) =>
 export const carryOverSchoolYear = (label, data) =>
   enrollmentClient.post(`/school-years/${label}/carry-over/`, data).then((r) => r.data);
 
+// Up to five years side by side (learners, sections, grades, attendance,
+// scholarships). Admin-only. Money comes from billing's financial summary.
+export const compareSchoolYears = (years) =>
+  enrollmentClient.get("/school-years/compare/", { params: { years: years.join(",") } }).then((r) => r.data);
+
 // ── Sections (per school year) ───────────────────────────────────────────────
 // Unpaginated. Filter with { school_year, grade_level?, school_level? }.
 // Writes: admin/registrar. A rename carries onto every enrollment and adviser

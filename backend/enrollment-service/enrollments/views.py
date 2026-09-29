@@ -25,6 +25,7 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
+from . import year_compare
 from .archive import ArchivedYearGuard, YearArchived, ensure_open
 from .models import (
     Enrollment,
@@ -802,6 +803,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
     /api/school-years/{label}/make-current/    POST
     /api/school-years/{label}/archive/         POST
     /api/school-years/{label}/unarchive/       POST
+    /api/school-years/compare/?years=a,b       GET  (admin-only)
 
     The registry of school years: which exist, each one's dates, and which is
     current. Every year picker reads it, so reads are open to all staff.
@@ -938,6 +940,45 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             year.archived_by = None
             year.save(update_fields=["archived_at", "archived_by", "updated_at"])
         return Response(self.get_serializer(year).data)
+
+    @action(detail=False, methods=["get"])
+    def compare(self, request):
+        """
+        GET /api/school-years/compare/?years=2024-2025,2025-2026,2026-2027
+
+        Up to five registered years side by side, oldest first: learners,
+        sections, grades, attendance and scholarships (enrollments/
+        year_compare.py says what each number counts). Money is billing's;
+        the page reads it from /api/invoices/financial-summary/ per year.
+
+        Admin-only like the School Years pages: these are school-wide
+        figures, and the viewset's wider read_roles are for the year pickers.
+        """
+        if getattr(request.user, "role", None) not in STAFF_FULL_WRITE_ROLES:
+            return Response(
+                {"detail": "Your role does not have access to this action."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        raw = [part for part in (request.query_params.get("years") or "").split(",") if part.strip()]
+        if not raw:
+            return Response({"detail": "Pick at least one school year."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            labels = sorted({normalize_school_year(part) for part in raw})
+        except InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if len(labels) > year_compare.MAX_YEARS:
+            return Response(
+                {"detail": f"Compare up to {year_compare.MAX_YEARS} years at a time."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        registered = set(SchoolYear.objects.values_list("label", flat=True))
+        unknown = [label for label in labels if label not in registered]
+        if unknown:
+            return Response(
+                {"detail": f"S.Y. {', '.join(unknown)} isn't a registered year."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(year_compare.gather(labels, registered))
 
     # In the order they're applied: advisers land in sections, so sections
     # copied in the same run have to exist first.
