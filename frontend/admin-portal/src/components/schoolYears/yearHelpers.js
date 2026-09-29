@@ -16,6 +16,11 @@ export function nextLabel(label) {
   return Number.isNaN(first) ? "" : `${first + 1}-${first + 2}`;
 }
 
+export function previousLabel(label) {
+  const first = parseInt(String(label).slice(0, 4), 10);
+  return Number.isNaN(first) ? "" : `${first - 1}-${first}`;
+}
+
 // A new year starts as a copy of the latest one, a year later: most schools
 // keep the same calendar shape, so the dates only need a nudge, not typing.
 export function suggestNewYear(years) {

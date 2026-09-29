@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
+
 import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
-import { barPath } from "../../components/charts/geometry";
-import { GAP, RADIUS, SURFACE, chartInk } from "../../components/charts/tokens";
+import { columnPath, niceMax } from "../../components/charts/geometry";
+import { SURFACE, chartInk } from "../../components/charts/tokens";
+import useElementSize from "../../components/charts/useElementSize";
 import {
   GOOD_ATTENDANCE,
   PASSING_GRADE,
@@ -18,18 +21,21 @@ import {
 // one filter row and lets the reader switch the view underneath it, rather than
 // picking a single scatter plot and hoping it covers everyone.
 //
-// Charts are hand-rolled SVG because this app has no charting library and the
-// existing scatter plot already set that pattern; adding one for six modest
-// charts would be a new dependency and a stylistic break.
+// Four of the six are "how many, out of how many" -- the level mix, the
+// reasons, and the two groupings -- and are drawn as labelled rows of HTML:
+// the name, a bar, and the figure in words ("3 need follow-up · of 25"). Real
+// text at its real size, whatever the card's width, and nothing to decode.
+// The two with genuine axes, the grade spread and the grades-vs-attendance
+// map, stay SVG, drawn at the card's measured width so their text doesn't
+// scale with it either.
 //
 // Conventions held across all six (dataviz mark specs):
-//   · risk bands always use the reserved status palette, and always with an
+//   · risk levels always use the reserved status palette, and always with an
 //     icon + text label — the serious/warning steps are under 3:1 on a light
 //     surface by design, so hue never carries the meaning alone
-//   · single-series charts use one brand hue, never a value-ramp
+//   · single-series bars use one brand hue, never a value-ramp
 //   · 2px surface gaps between adjacent fills; 4px rounded data-ends
 //   · hairline solid grid; the only dashed line is an actual threshold
-//   · labels are direct and selective — never a number on every mark
 //   · the Students tab is the table-view twin for every chart here
 
 // The primitives below used to live in this file. They now live in
@@ -69,254 +75,191 @@ export function RiskLegend({ counts, className = "" }) {
   );
 }
 
-// ── 1 · Risk mix ─────────────────────────────────────────────────────────────
-// Part-to-whole across four bands. The stat tiles above already carry the
-// headline counts, so what this adds is the proportion.
+// ── Shared: one labelled row ─────────────────────────────────────────────────
+// Label on the left, bar in the middle, the figure in words on the right. On a
+// phone the bar drops under the label and figure rather than squeezing to
+// nothing between them.
+
+const ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 " +
+  "sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_8.5rem]";
+const BAR_CELL = "order-last col-span-2 sm:order-none sm:col-span-1";
+
+// A bar's share of its track, grown in from the left.
+function Fill({ share, color }) {
+  return (
+    <motion.span
+      className="block h-full rounded-full"
+      style={{ background: color }}
+      initial={{ width: 0 }}
+      animate={{ width: `${Math.min(100, share * 100)}%` }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+    />
+  );
+}
+
+function Track({ label, children }) {
+  return (
+    <span className={`${BAR_CELL} block h-2.5 overflow-hidden rounded-full bg-neutral-200`} role="img" aria-label={label}>
+      {children}
+    </span>
+  );
+}
+
+const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
+const students = (n) => `${n} student${n === 1 ? "" : "s"}`;
+
+// ── 1 · How many need help ───────────────────────────────────────────────────
+// One row per level, most urgent first like the tiles above it. Each bar is
+// that level's share of everyone assessed, so the four read as parts of one
+// group without a single stacked bar's slivers.
 
 function RiskMixChart({ summary, total }) {
-  const [tip, setTip] = useState(null);
   const counts = summary?.by_level ?? {};
   if (!total) return <NoData />;
-
-  const W = 760;
-  const H = 120;
-  const BAR_Y = 18;
-  const BAR_H = 46;
-
-  const segments = RISK_LEVELS.filter((level) => (counts[level] ?? 0) > 0).reduce((acc, level) => {
-    const count = counts[level];
-    const width = (count / total) * W;
-    const x = acc.length ? acc[acc.length - 1].x + acc[acc.length - 1].width : 0;
-    acc.push({ level, count, x, width, share: count / total });
-    return acc;
-  }, []);
+  const flagged = (counts.high ?? 0) + (counts.critical ?? 0);
 
   return (
-    <ChartFrame
-      viewBox={[W, H]}
-      tip={tip}
-      caption={`${total} student${total === 1 ? "" : "s"} assessed. Segment width is the share of the group.`}
-    >
-      {segments.map((seg, i) => {
-        const meta = riskLevelMeta(seg.level);
-        const isLast = i === segments.length - 1;
-        // Trim a surface gap off every segment but the last, so adjacent
-        // fills are separated by the background rather than by a border.
-        const drawWidth = Math.max(1, seg.width - (isLast ? 0 : GAP));
-        return (
-          <g key={seg.level}>
-            <path
-              d={barPath(seg.x, BAR_Y, drawWidth, BAR_H, i === 0 || isLast ? RADIUS : 0)}
-              fill={meta.color}
-              onMouseEnter={() =>
-                setTip({
-                  x: seg.x + drawWidth / 2,
-                  y: BAR_Y,
-                  title: meta.label,
-                  lines: [
-                    `${seg.count} of ${total} students (${Math.round(seg.share * 100)}%)`,
-                    meta.blurb,
-                  ],
-                })
-              }
-              onMouseLeave={() => setTip(null)}
-              style={{ cursor: "pointer" }}
-            />
-            {/* Direct-label only where the segment is genuinely wide enough
-                to hold the text — otherwise the legend and tooltip carry it. */}
-            {drawWidth > 34 && (
-              <text
-                x={seg.x + drawWidth / 2}
-                y={BAR_Y + BAR_H / 2 + 6}
-                textAnchor="middle"
-                fontSize="17"
-                fontWeight="700"
-                fill={ink().ink}
-              >
-                {seg.count}
-              </text>
-            )}
-            {drawWidth > 96 && (
-              <text
-                x={seg.x + drawWidth / 2}
-                y={BAR_Y + BAR_H + 20}
-                textAnchor="middle"
-                fontSize="11"
-                fontWeight="600"
-                fill={ink().muted}
-              >
-                {meta.label}
-              </text>
-            )}
-            {drawWidth > 96 && (
-              <text
-                x={seg.x + drawWidth / 2}
-                y={BAR_Y + BAR_H + 34}
-                textAnchor="middle"
-                fontSize="10"
-                fill={ink().axis}
-              >
-                {Math.round(seg.share * 100)}% of the group
-              </text>
-            )}
-          </g>
-        );
-      })}
-      <text x={0} y={16} fontSize="11" fontWeight="600" fill={ink().axis}>
-        Most urgent
-      </text>
-      <text x={W} y={16} textAnchor="end" fontSize="11" fontWeight="600" fill={ink().axis}>
-        Doing fine
-      </text>
-    </ChartFrame>
+    <div>
+      <ul className="flex flex-col gap-3.5">
+        {RISK_LEVELS.map((level) => {
+          const meta = riskLevelMeta(level);
+          const count = counts[level] ?? 0;
+          return (
+            <li key={level} className={ROW_GRID}>
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
+                  style={{ background: meta.color, color: meta.chipInk }}
+                >
+                  <i className={`ti ${meta.icon} text-[15px]`} aria-hidden="true" />
+                </span>
+                <span className="truncate text-sm font-semibold text-neutral-800">{meta.label}</span>
+              </span>
+              <Track label={`${meta.label}: ${students(count)} of ${total}, ${pct(count, total)}%`}>
+                <Fill share={count / total} color={meta.color} />
+              </Track>
+              <span className="text-right text-sm tabular-nums text-neutral-600">
+                <strong className="font-bold text-neutral-900">{count}</strong> · {pct(count, total)}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-4 text-xs text-neutral-500">
+        {students(total)} assessed. {flagged} need{flagged === 1 ? "s" : ""} following up ({pct(flagged, total)}%).
+      </p>
+    </div>
   );
 }
 
 // ── 2 & 3 · By grade level / by section ──────────────────────────────────────
-// Same shape, different grouping: stacked horizontal bars, ordered by how many
-// students need following up, so the row that needs attention is at the top.
+// One row per group, ordered by how many need following up. Each bar is that
+// group's own students split by level, so a small section's picture is as
+// readable as a big one's; how many students that is sits in words beside it.
+
+const MAX_GROUPS = 12;
 
 function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
-  const [tip, setTip] = useState(null);
   if (!rows?.length) return <NoData message={emptyMessage} />;
-
-  const visible = rows.slice(0, 12);
-  const W = 760;
-  const LABEL_W = 150;
-  const ROW_H = 24;
-  const BAR_H = 14;
-  const H = visible.length * ROW_H + 30;
-  const plotW = W - LABEL_W - 40;
-  const maxTotal = Math.max(...visible.map((r) => r.total), 1);
+  const visible = rows.slice(0, MAX_GROUPS);
 
   return (
-    <ChartFrame
-      viewBox={[W, H]}
-      tip={tip}
-      caption={`Bar length is the number of students. Ordered by how many need following up.${
-        rows.length > visible.length ? ` Showing the top ${visible.length} of ${rows.length}.` : ""
-      }`}
-    >
-      {visible.map((row, rowIndex) => {
-        const y = rowIndex * ROW_H + 8;
-        // Offsets are precomputed rather than accumulated inside the render
-        // callback — see the reduce in RiskMixChart for why.
-        const segments = RISK_LEVELS.reduce((acc, level) => {
-          const count = row.by_level?.[level] ?? 0;
-          if (!count) return acc;
-          const width = (count / maxTotal) * plotW;
-          const x = acc.length ? acc[acc.length - 1].x + acc[acc.length - 1].width : LABEL_W;
-          acc.push({ level, count, x, width });
-          return acc;
-        }, []);
-        const rowEnd = segments.length ? segments[segments.length - 1].x + segments[segments.length - 1].width : LABEL_W;
-        return (
-          <g key={row.name}>
-            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill={ink().muted}>
-              {row.name.length > 20 ? `${row.name.slice(0, 19)}…` : row.name}
-            </text>
-            {segments.map(({ level, count, x, width }) => {
-              const meta = riskLevelMeta(level);
-              const drawWidth = Math.max(1, width - GAP);
-              return (
-                <path
-                  key={level}
-                  d={barPath(x, y, drawWidth, BAR_H, RADIUS)}
-                  fill={meta.color}
-                  style={{ cursor: "pointer" }}
-                  onMouseEnter={() =>
-                    setTip({
-                      x: x + drawWidth / 2,
-                      y,
-                      title: `${row.name} · ${meta.label}`,
-                      lines: [
-                        `${count} of ${row.total} ${unitLabel}`,
-                        `${row.flagged} need following up in total`,
-                      ],
-                    })
-                  }
-                  onMouseLeave={() => setTip(null)}
-                />
-              );
-            })}
-            <text x={rowEnd + 8} y={y + BAR_H / 2 + 4} fontSize="11" fill={ink().axis} className="tabular-nums">
-              {row.total}
-            </text>
-          </g>
-        );
-      })}
-    </ChartFrame>
+    <div>
+      <ul className="flex flex-col gap-3">
+        {visible.map((row) => (
+          <li key={row.name} className={ROW_GRID}>
+            <span className="truncate text-sm font-semibold text-neutral-800" title={row.name}>
+              {row.name}
+            </span>
+            <span
+              className={`${BAR_CELL} flex h-3 gap-[2px] overflow-hidden rounded-full`}
+              role="img"
+              aria-label={`${row.name}: ${row.flagged} of ${students(row.total)} need following up`}
+            >
+              {RISK_LEVELS.filter((level) => row.by_level?.[level]).map((level) => {
+                const meta = riskLevelMeta(level);
+                const count = row.by_level[level];
+                return (
+                  <span
+                    key={level}
+                    className="h-full"
+                    style={{ flexGrow: count, flexBasis: 0, background: meta.color }}
+                    title={`${meta.label}: ${count} of ${row.total}`}
+                  />
+                );
+              })}
+            </span>
+            <span className="text-right text-xs leading-tight tabular-nums text-neutral-500">
+              {row.flagged ? (
+                <span className="block text-sm font-semibold text-neutral-900">
+                  {row.flagged} need{row.flagged === 1 ? "s" : ""} follow-up
+                </span>
+              ) : (
+                <span className="block text-sm text-neutral-600">None to follow up</span>
+              )}
+              of {students(row.total)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs text-neutral-500">
+        Each bar is one {unitLabel}&apos;s students, split by level. Ordered by how many need following up.
+        {rows.length > visible.length && ` Showing the top ${visible.length} of ${rows.length}.`}
+      </p>
+    </div>
   );
 }
 
 // ── 4 · Why students are flagged ─────────────────────────────────────────────
-// The most directly actionable view: it names the intervention. Single series,
-// so one hue and no legend — the title says what the bars are.
+// The most directly actionable view: it names the intervention. Each bar is
+// the share of everyone assessed who has that reason. Single series, so one
+// hue and no legend — the title says what the bars are.
 
-function ReasonChart({ summary }) {
-  const [tip, setTip] = useState(null);
-  const rows = (summary?.by_reason ?? []).filter((r) => r.code !== "limited_data");
+function ReasonChart({ summary, total }) {
+  const rows = (summary?.by_reason ?? [])
+    .filter((r) => r.code !== "limited_data")
+    .sort((a, b) => b.count - a.count);
   if (!rows.length) return <NoData message="No concerns were raised for this selection." />;
-
-  const W = 760;
-  const LABEL_W = 230;
-  const ROW_H = 26;
-  const BAR_H = 15;
-  const H = rows.length * ROW_H + 24;
-  const plotW = W - LABEL_W - 50;
-  const max = Math.max(...rows.map((r) => r.count), 1);
+  const whole = Math.max(total, ...rows.map((r) => r.count));
 
   return (
-    <ChartFrame
-      viewBox={[W, H]}
-      tip={tip}
-      caption="Each student is counted once per reason, so one student can appear in several bars."
-    >
-      {rows.map((row, i) => {
-        const y = i * ROW_H + 8;
-        const width = Math.max(2, (row.count / max) * plotW);
-        return (
-          <g key={row.code}>
-            <text x={LABEL_W - 10} y={y + BAR_H / 2 + 4} textAnchor="end" fontSize="12" fill={ink().muted}>
+    <div>
+      <ul className="flex flex-col gap-3">
+        {rows.map((row) => (
+          <li key={row.code} className={ROW_GRID}>
+            <span className="truncate text-sm font-semibold text-neutral-800" title={reasonLabel(row.code)}>
               {reasonLabel(row.code)}
-            </text>
-            <path
-              d={barPath(LABEL_W, y, width, BAR_H)}
-              fill={ink().bar}
-              style={{ cursor: "pointer" }}
-              onMouseEnter={() =>
-                setTip({
-                  x: LABEL_W + width / 2,
-                  y,
-                  title: reasonLabel(row.code),
-                  lines: [`${row.count} student${row.count === 1 ? "" : "s"} affected`],
-                })
-              }
-              onMouseLeave={() => setTip(null)}
-            />
-            <text
-              x={LABEL_W + width + 8}
-              y={y + BAR_H / 2 + 4}
-              fontSize="12"
-              fontWeight="700"
-              fill={ink().ink}
-              className="tabular-nums"
-            >
-              {row.count}
-            </text>
-          </g>
-        );
-      })}
-    </ChartFrame>
+            </span>
+            <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those assessed`}>
+              <Fill share={row.count / whole} color={chartInk().bar} />
+            </Track>
+            <span className="text-right text-sm tabular-nums text-neutral-600">
+              <strong className="font-bold text-neutral-900">{students(row.count)}</strong> · {pct(row.count, whole)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs text-neutral-500">
+        Share of the {students(whole)} assessed. One student can have several reasons, so these can add up to more
+        than everyone.
+      </p>
+    </div>
   );
 }
 
-// ── 5 · Grade distribution ───────────────────────────────────────────────────
+// ── 5 · How everyone is doing ────────────────────────────────────────────────
 // The most intuitive view for anyone who has never read a chart before: where
-// the class sits, and how much of it falls left of the passing mark.
+// the class sits, and how much of it falls left of the passing mark. Passing
+// ranges are the on-track green and failing ones the urgent red, with a key,
+// so the split reads before a single number does.
+
+const GRADE_H = 280;
 
 function GradeDistributionChart({ scores }) {
   const [tip, setTip] = useState(null);
+  const [plotEl, setPlotEl] = useState(null);
+  const size = useElementSize(plotEl);
   const graded = scores.filter((s) => s.average_grade != null);
   if (!graded.length) return <NoData message="No grades recorded for this selection yet." />;
 
@@ -340,113 +283,126 @@ function GradeDistributionChart({ scores }) {
     bins[Math.floor((clamped - MIN) / BIN_SIZE)].count += 1;
   });
 
-  const W = 760;
-  const H = 256;
-  const PAD_L = 46;
-  const PAD_R = 16;
-  const PAD_T = 18;
-  const PAD_B = 52;
+  const W = size?.width ?? 760;
+  const H = GRADE_H;
+  const PAD_L = 36;
+  const PAD_R = 12;
+  const PAD_T = 30;   // room for the passing-mark label
+  const PAD_B = 44;   // grade ticks, then the axis title
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
-  const max = Math.max(...bins.map((b) => b.count), 1);
+  const baseY = PAD_T + plotH;
+
+  // Whole-number steps: these are counts of students.
+  const most = Math.max(...bins.map((b) => b.count), 1);
+  const step = Math.max(1, niceMax(most / 4));
+  const top = Math.ceil(most / step) * step;
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
+  const yOf = (n) => baseY - (n / top) * plotH;
+  const xOf = (grade) => PAD_L + ((grade - MIN) / (MAX - MIN)) * plotW;
+
   const colW = plotW / binCount;
-  const passX = PAD_L + ((PASSING_GRADE - MIN) / (MAX - MIN)) * plotW;
+  // Separate columns read as "how many in this range" more easily than a
+  // solid wall; the gap stays modest so the shape of the spread still shows.
+  const gap = Math.min(14, colW * 0.18);
+  const passX = xOf(PASSING_GRADE);
+  const passing = riskLevelMeta("low").color;
+  const failing = riskLevelMeta("critical").color;
   const belowPassing = graded.filter((s) => Number(s.average_grade) < PASSING_GRADE).length;
+
+  const key = (
+    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      {[
+        { color: passing, text: `Passing (${PASSING_GRADE} and up)` },
+        { color: failing, text: `Below the passing mark` },
+      ].map((k) => (
+        <span key={k.text} className="inline-flex items-center gap-1.5 text-xs text-neutral-600">
+          <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: k.color }} aria-hidden="true" />
+          {k.text}
+        </span>
+      ))}
+    </div>
+  );
 
   return (
     <ChartFrame
       viewBox={[W, H]}
       tip={tip}
-      caption={`${belowPassing} of ${graded.length} students sit below the ${PASSING_GRADE} passing mark.`}
+      legend={key}
+      plotRef={setPlotEl}
+      title={`Students by average grade, ${belowPassing} of ${graded.length} below the passing mark`}
+      caption={`${belowPassing} of ${students(graded.length)} sit below the ${PASSING_GRADE} passing mark. Each column counts the students whose average falls in that range.`}
     >
       {/* Hairline grid — solid, one shade off the surface */}
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <line
-            x1={PAD_L}
-            x2={W - PAD_R}
-            y1={PAD_T + plotH - f * plotH}
-            y2={PAD_T + plotH - f * plotH}
-            stroke={ink().grid}
-          />
-          <text x={PAD_L - 8} y={PAD_T + plotH - f * plotH + 4} textAnchor="end" fontSize="10" fill={ink().axis}>
-            {Math.round(f * max)}
+      {ticks.map((t) => (
+        <g key={t}>
+          <line x1={PAD_L} x2={W - PAD_R} y1={yOf(t)} y2={yOf(t)} stroke={ink().grid} />
+          <text x={PAD_L - 8} y={yOf(t) + 3.5} textAnchor="end" fontSize="10" fill={ink().axis}>
+            {t}
           </text>
         </g>
       ))}
 
       {bins.map((bin) => {
-        const h = (bin.count / max) * plotH;
-        const x = PAD_L + ((bin.from - MIN) / (MAX - MIN)) * plotW;
-        const failing = bin.to <= PASSING_GRADE;
+        const x = xOf(bin.from) + gap / 2;
+        const w = colW - gap;
+        const y = yOf(bin.count);
+        // Bins are 5 wide and the mark is a multiple of 5, so a bin is wholly
+        // one side of it.
+        const below = bin.to <= PASSING_GRADE;
         return (
-          <g key={bin.from}>
+          <g
+            key={bin.from}
+            onMouseEnter={() =>
+              setTip({
+                x: x + w / 2,
+                y,
+                title: `Averages ${bin.from} to under ${bin.to}`,
+                lines: [students(bin.count), below ? "Below the passing mark" : "Passing"],
+              })
+            }
+            onMouseLeave={() => setTip(null)}
+            style={{ cursor: "pointer" }}
+          >
+            <rect x={xOf(bin.from)} y={PAD_T} width={colW} height={plotH} fill="transparent" />
             {bin.count > 0 && (
-              <path
-                d={barPath(x + GAP / 2, PAD_T + plotH - h, colW - GAP, h)}
-                // The one place a second hue appears: bins entirely below the
-                // passing mark are the exception the chart exists to show.
-                fill={failing ? riskLevelMeta("critical").color : ink().bar}
-                opacity={failing ? 1 : 0.85}
-                style={{ cursor: "pointer" }}
-                onMouseEnter={() =>
-                  setTip({
-                    x: x + colW / 2,
-                    y: PAD_T + plotH - h,
-                    title: `${bin.from}–${bin.to}`,
-                    lines: [
-                      `${bin.count} student${bin.count === 1 ? "" : "s"}`,
-                      failing ? "Below the passing mark" : "Passing",
-                    ],
-                  })
-                }
-                onMouseLeave={() => setTip(null)}
-              />
+              <>
+                <path d={columnPath(x, y, w, baseY - y)} fill={below ? failing : passing} />
+                <text
+                  x={x + w / 2} y={y - 6}
+                  textAnchor="middle" fontSize="12" fontWeight="700" fill={ink().ink}
+                  className="tabular-nums"
+                >
+                  {bin.count}
+                </text>
+              </>
             )}
-            {bin.count > 0 && (
-              <text
-                x={x + colW / 2}
-                y={PAD_T + plotH - h - 6}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill={ink().ink}
-                className="tabular-nums"
-              >
-                {bin.count}
-              </text>
-            )}
-            <text
-              x={x + colW / 2}
-              y={H - PAD_B + 18}
-              textAnchor="middle"
-              fontSize="10"
-              fill={ink().axis}
-              className="tabular-nums"
-            >
-              {bin.from}
-            </text>
           </g>
         );
       })}
 
+      {/* Grades sit on the edges between ranges, where they belong. */}
+      {bins.concat({ from: MAX }).map((bin) => (
+        <text
+          key={`tick-${bin.from}`}
+          x={xOf(bin.from)} y={baseY + 16}
+          textAnchor="middle" fontSize="10" fill={ink().axis}
+          className="tabular-nums"
+        >
+          {bin.from}
+        </text>
+      ))}
+
       {/* The only dashed line on the page — an actual threshold, not a grid */}
-      <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5} />
-      <text x={passX + 6} y={PAD_T + 11} fontSize="11" fontWeight="700" fill={ink().ink}>
+      <line
+        x1={passX} x2={passX} y1={PAD_T - 8} y2={baseY}
+        stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5}
+      />
+      <text x={passX} y={PAD_T - 14} textAnchor="middle" fontSize="11" fontWeight="700" fill={ink().ink}>
         Passing mark ({PASSING_GRADE})
       </text>
-      <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill={ink().axis}>
+      <text x={PAD_L + plotW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={ink().axis}>
         Average grade
-      </text>
-      <text
-        x={14}
-        y={PAD_T + plotH / 2}
-        textAnchor="middle"
-        fontSize="11"
-        fill={ink().axis}
-        transform={`rotate(-90 14 ${PAD_T + plotH / 2})`}
-      >
-        Students
       </text>
     </ChartFrame>
   );
@@ -460,6 +416,8 @@ function GradeDistributionChart({ scores }) {
 
 function AttendanceGradeChart({ scores, onSelectStudent }) {
   const [tip, setTip] = useState(null);
+  const [plotEl, setPlotEl] = useState(null);
+  const size = useElementSize(plotEl);
   const plotted = scores.filter((s) => s.average_grade != null && s.attendance_rate != null);
   if (!plotted.length) {
     return (
@@ -467,7 +425,8 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
     );
   }
 
-  const W = 760;
+  // The card's own width, so the axis text stays its real size.
+  const W = size?.width ?? 760;
   const H = 300;
   const PAD_L = 44;
   const PAD_R = 20;
@@ -514,6 +473,7 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
     <ChartFrame
       viewBox={[W, H]}
       tip={tip}
+      plotRef={setPlotEl}
       caption="Each dot is one student. Click a dot to open their follow-up details."
     >
       {/* Quadrant guides — solid hairlines at the two lines the school acts on */}
@@ -616,7 +576,7 @@ export default function RiskChart({ view, run, onSelectStudent }) {
         />
       );
     case "reasons":
-      return <ReasonChart summary={summary} />;
+      return <ReasonChart summary={summary} total={total} />;
     case "grades":
       return <GradeDistributionChart scores={scores} />;
     case "map":

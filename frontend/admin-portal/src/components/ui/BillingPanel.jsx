@@ -124,16 +124,20 @@ export default function BillingPanel({
               onClick={() => onFilterYearChange?.(null)}
             />
           )}
-          <Button
-            variant={showAmounts ? "secondary" : "ghost"}
-            size="sm"
-            iconOnly
-            icon={showAmounts ? "ti-eye" : "ti-eye-off"}
-            title={showAmounts ? "Hide amounts" : "Show amounts"}
-            aria-label={showAmounts ? "Hide financial amounts" : "Show financial amounts"}
-            aria-pressed={!showAmounts}
-            onClick={onToggleAmounts}
-          />
+          {/* Only where the panel owns the toggle. On the admin home the
+              comparison panel above it holds the one eye button for both. */}
+          {onToggleAmounts && (
+            <Button
+              variant={showAmounts ? "secondary" : "ghost"}
+              size="sm"
+              iconOnly
+              icon={showAmounts ? "ti-eye" : "ti-eye-off"}
+              title={showAmounts ? "Hide amounts" : "Show amounts"}
+              aria-label={showAmounts ? "Hide financial amounts" : "Show financial amounts"}
+              aria-pressed={!showAmounts}
+              onClick={onToggleAmounts}
+            />
+          )}
           {/* Only where the page wants the panel to pick its own year. The
               admin home's year picker already scopes it, and a second year
               control there could disagree with the first. */}

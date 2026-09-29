@@ -106,9 +106,11 @@ describe("riskVocabulary", () => {
     expect(confidenceFor(0).key).toBe("limited");
   });
 
-  it("only offers a band legend on the charts that draw bands", () => {
-    expect(viewUsesBands("mix")).toBe(true);
+  it("only offers a band legend on the charts that draw bands unlabelled", () => {
+    expect(viewUsesBands("section")).toBe(true);
     expect(viewUsesBands("map")).toBe(true);
+    // Every row of the mix names its own level, so a legend would repeat it.
+    expect(viewUsesBands("mix")).toBe(false);
     expect(viewUsesBands("reasons")).toBe(false);
     expect(viewUsesBands("grades")).toBe(false);
   });
@@ -242,13 +244,42 @@ describe("RiskTable", () => {
 describe("RiskChart", () => {
   const run = runWith([row(), row({ student_id: 2, student_name: "Reyes, Bea", risk_level: "low", average_grade: 91 })]);
 
-  it.each(["mix", "grade_level", "section", "reasons", "grades", "map"])(
-    "renders the %s view without crashing",
-    (view) => {
-      const { container } = render(<RiskChart view={view} run={run} />);
-      expect(container.querySelector("svg")).toBeTruthy();
-    }
-  );
+  it.each(["grades", "map"])("draws the %s view on axes", (view) => {
+    const { container } = render(<RiskChart view={view} run={run} />);
+    expect(container.querySelector("svg")).toBeTruthy();
+  });
+
+  it("gives each level a row with its count and share of everyone", () => {
+    render(<RiskChart view="mix" run={run} />);
+    // One critical and one on-track student out of two.
+    expect(screen.getByRole("img", { name: "Needs urgent help: 1 student of 2, 50%" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Needs attention: 0 students of 2, 0%" })).toBeTruthy();
+    expect(screen.getByText("On track")).toBeTruthy();
+    expect(screen.getByText(/1 needs following up \(50%\)/)).toBeTruthy();
+  });
+
+  it.each([
+    ["grade_level", "Grade 4"],
+    ["section", "Sampaguita"],
+  ])("says in words how many in each %s need following up", (view, name) => {
+    render(<RiskChart view={view} run={run} />);
+    expect(screen.getByRole("img", { name: `${name}: 1 of 2 students need following up` })).toBeTruthy();
+    expect(screen.getByText("1 needs follow-up")).toBeTruthy();
+  });
+
+  it("shows each reason as a share of everyone assessed", () => {
+    render(<RiskChart view="reasons" run={run} />);
+    expect(screen.getByRole("img", { name: "Failing one or more subjects: 2 students, 100% of those assessed" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chronically absent: 1 student, 50% of those assessed" })).toBeTruthy();
+  });
+
+  it("colours passing grades green and failing ones red", () => {
+    // 72.5 is below the passing mark, 91 is above it.
+    const { container } = render(<RiskChart view="grades" run={run} />);
+    const fills = [...container.querySelectorAll("path")].map((p) => p.getAttribute("fill"));
+    expect(fills).toEqual(expect.arrayContaining([riskLevelMeta("critical").color, riskLevelMeta("low").color]));
+    expect(screen.getByText("Passing (75 and up)")).toBeTruthy();
+  });
 
   it("says what is missing rather than drawing an empty chart", () => {
     const empty = runWith([row({ average_grade: null, attendance_rate: null })]);

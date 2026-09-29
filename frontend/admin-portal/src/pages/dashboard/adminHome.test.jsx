@@ -16,6 +16,8 @@ const getDashboardSummary = vi.fn();
 const getInvoices = vi.fn();
 const getFinancialSummary = vi.fn();
 const getStudentApplications = vi.fn();
+const compareSchoolYears = vi.fn();
+let yearStates;
 
 vi.mock("../../utils/auth", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -29,6 +31,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getEnrollmentScholarships: () => Promise.resolve({ count: 0, results: [] }),
   getDashboardSummary: (...a) => getDashboardSummary(...a),
   getTeachersToday: (...a) => getTeachersToday(...a),
+  compareSchoolYears: (...a) => compareSchoolYears(...a),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: (...a) => getInvoices(...a),
@@ -40,11 +43,27 @@ vi.mock("../../api/applicationApi", () => ({
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
     schoolYear: "2026-2027", options: ["2027-2028", "2026-2027"], yearCounts: {}, currentYear: "2026-2027",
+    yearStates,
   }),
 }));
 
 const { default: DashboardPage } = await import("../DashboardPage");
-const { dueLine, attentionRows, withYear } = await import("./adminHomeData");
+const { dueLine, attentionRows, withYear, yearChange, levelRows } = await import("./adminHomeData");
+
+// What /school-years/compare/ and /invoices/financial-summary/ answer, per
+// year. 2026-2027 is the seed data's: 24 learners against 23 the year before.
+const LEVELS = (nursery, kindergarten, elementary, junior_highschool, senior_highschool) =>
+  ({ nursery, kindergarten, elementary, junior_highschool, senior_highschool });
+const ENROLLMENT = {
+  "2025-2026": { learners: 23, by_level: LEVELS(1, 1, 10, 5, 6), returning: null, new: null, transferred_out: 1, pending: 0, came_back: null },
+  "2026-2027": { learners: 24, by_level: LEVELS(1, 2, 8, 7, 6), returning: 19, new: 5, transferred_out: 1, pending: 1, came_back: null },
+  "2027-2028": { learners: 0, by_level: LEVELS(0, 0, 0, 0, 0), returning: 0, new: 0, transferred_out: 0, pending: 12, came_back: null },
+};
+const MONEY = {
+  "2025-2026": { net_billed: "600000.00", total_collected: "590000.00", outstanding: "10000.00", invoice_count: 24 },
+  "2026-2027": { net_billed: "540666.40", total_collected: "225522.70", outstanding: "315143.70", invoice_count: 23 },
+  "2027-2028": { net_billed: "94300.00", total_collected: "10000.00", outstanding: "84300.00", invoice_count: 4 },
+};
 
 const SECTIONS = [
   {
@@ -111,7 +130,11 @@ beforeEach(() => {
     attendance_series: [],
   });
   getTeachersToday.mockResolvedValue(teachersToday());
-  getFinancialSummary.mockResolvedValue({ net_billed: "29470000", total_collected: "20040000", outstanding: "9430000" });
+  yearStates = { "2025-2026": "open", "2026-2027": "current", "2027-2028": "upcoming" };
+  compareSchoolYears.mockImplementation((years) =>
+    Promise.resolve({ years: years.map((label) => ({ label, enrollment: ENROLLMENT[label] })) }));
+  // A year with no figures here gets this year's rather than undefined.
+  getFinancialSummary.mockImplementation((sy) => Promise.resolve(MONEY[sy] ?? MONEY["2026-2027"]));
   getStudentApplications.mockResolvedValue({ count: 5, results: [] });
   getEnrollments.mockResolvedValue({ count: 12, results: [] });
   getInvoices.mockImplementation((params) =>
@@ -241,41 +264,124 @@ describe("AdminHome — start a task", () => {
 });
 
 describe("AdminHome — school at a glance", () => {
-  it("shows three tiles, with money in the Billing panel instead of a tile", async () => {
+  it("keeps two tiles and compares enrollees with last year", async () => {
     renderAs("admin");
-    expect(await screen.findByText("Billing · S.Y. 2026-2027")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "24 learners" })).toBeTruthy();
     expect(screen.getByText("Present today")).toBeTruthy();
     expect(screen.getByText("Need follow-up")).toBeTruthy();
-    // "Collected" only as the panel's column, not also as a tile repeating it.
-    expect(screen.getAllByText("Collected")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "₱20,040,000.00" })).toBeTruthy();
+    expect(compareSchoolYears).toHaveBeenCalledWith(["2025-2026", "2026-2027"]);
+    expect(screen.getByText("Enrollees")).toBeTruthy();
+    expect(screen.getByText("S.Y. 2026-2027 vs 2025-2026")).toBeTruthy();
+    expect(screen.getByText("+1 (4%) from S.Y. 2025-2026")).toBeTruthy();
+    expect(screen.getByText("19 returning · 5 new · 1 transferred out")).toBeTruthy();
   });
 
-  it("gives the Billing panel no year filter of its own", async () => {
+  it("compares net billed with last year, with this year's Billing panel under it", async () => {
     renderAs("admin");
-    await screen.findByText("Billing · S.Y. 2026-2027");
+    expect(await screen.findByRole("button", { name: "₱540,666.40" })).toBeTruthy();
+    expect(screen.getByText("Billing · S.Y. 2026-2027 vs 2025-2026")).toBeTruthy();
+    expect(screen.getByText((_, el) =>
+      el?.tagName === "P" && el.textContent === "Net billed is down ₱59,334 (10%) from S.Y. 2025-2026.")).toBeTruthy();
+    // The year's own figures, as the Billing panel always showed them.
+    expect(screen.getByText("Billing · S.Y. 2026-2027")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "₱225,522.70" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "₱315,143.70" })).toBeTruthy();
+    expect(screen.getByText("42% collected")).toBeTruthy();
+    expect(getFinancialSummary).toHaveBeenCalledWith("2025-2026");
+    expect(getFinancialSummary).toHaveBeenCalledWith("2026-2027");
+  });
+
+  it("gives the panels no year filter of their own", async () => {
+    renderAs("admin");
+    await screen.findByRole("button", { name: "₱540,666.40" });
     expect(screen.queryByRole("button", { name: "Filter by school year" })).toBeNull();
   });
 
-  it("keeps the panel's year filter on the staff dashboard", async () => {
+  it("keeps the Billing panel's year filter on the staff dashboard", async () => {
     renderAs("accounting");
     expect(await screen.findByRole("button", { name: "Filter by school year" })).toBeTruthy();
   });
 
-  it("hides amounts with the panel's own eye button", async () => {
+  it("hides amounts in both money panels with one eye button", async () => {
     renderAs("admin");
-    const eye = await screen.findByRole("button", { name: "Hide financial amounts" });
-    fireEvent.click(eye);
+    await screen.findByRole("button", { name: "₱540,666.40" });
+    expect(screen.getAllByRole("button", { name: /financial amounts/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Hide financial amounts" }));
     expect(screen.getByRole("button", { name: "Show financial amounts" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("opens invoices on the page's year from the panel", async () => {
+  it("opens unpaid invoices on the page's year", async () => {
     renderAs("admin");
-    await screen.findByText("Billing · S.Y. 2026-2027");
+    await screen.findByRole("button", { name: "₱540,666.40" });
     await pickYearFrom("2027-2028");
-    await screen.findByText("Billing · S.Y. 2027-2028");
-    fireEvent.click(screen.getByRole("button", { name: "₱9,430,000.00" }));
+    await screen.findByText("Billing · S.Y. 2027-2028 vs 2026-2027");
+    fireEvent.click(await screen.findByRole("button", { name: "₱84,300.00" }));
     expect(screen.getByTestId("location").textContent).toBe("/invoices?status=unpaid&school_year=2027-2028");
+  });
+
+  it("opens Compare School Years on the same two years", async () => {
+    renderAs("admin");
+    await screen.findByRole("button", { name: "24 learners" });
+    fireEvent.click(screen.getByRole("button", { name: "Compare years" }));
+    expect(screen.getByTestId("location").textContent).toBe("/school-years/compare?years=2025-2026,2026-2027");
+  });
+
+  it("shows this year alone when last year isn't registered", async () => {
+    yearStates = { "2026-2027": "current", "2027-2028": "upcoming" };
+    renderAs("admin");
+    await screen.findByRole("button", { name: "24 learners" });
+    await screen.findByRole("button", { name: "₱540,666.40" });
+    expect(compareSchoolYears).toHaveBeenCalledWith(["2026-2027"]);
+    expect(getFinancialSummary).not.toHaveBeenCalledWith("2025-2026");
+    expect(screen.getAllByText("No S.Y. 2025-2026 to compare with.")).toHaveLength(2);
+    expect(screen.queryByText(/from S\.Y\. 2025-2026/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compare years" })).toBeNull();
+  });
+
+  it("keeps the learner counts when billing fails to load", async () => {
+    getFinancialSummary.mockRejectedValue(new Error("billing is down"));
+    renderAs("admin");
+    expect(await screen.findByRole("button", { name: "24 learners" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    // Said once, with its retry -- not also as a Billing panel of ₱0.00.
+    expect(screen.queryByText("Billing · S.Y. 2026-2027")).toBeNull();
+    expect(screen.queryByRole("button", { name: "₱0.00" })).toBeNull();
+  });
+});
+
+describe("yearChange", () => {
+  it("gives the difference and its whole percentage of last year", () => {
+    expect(yearChange(24, 23)).toEqual({ diff: 1, pct: 4 });
+    expect(yearChange("540666.40", "600000.00")).toEqual({ diff: -59333.6, pct: 10 });
+  });
+
+  it("reads equal money strings as no change, not a float remainder", () => {
+    expect(yearChange("0.30", "0.10").diff).toBe(0.2);
+    expect(yearChange("100.10", "100.10").diff).toBe(0);
+  });
+
+  it("has nothing to say when either year has no figure", () => {
+    expect(yearChange(24, null)).toBeNull();
+    expect(yearChange(undefined, 23)).toBeNull();
+  });
+
+  it("gives no percentage of a zero year", () => {
+    expect(yearChange(5, 0)).toEqual({ diff: 5, pct: null });
+  });
+});
+
+describe("levelRows", () => {
+  it("keeps the school's level order and drops levels empty in both years", () => {
+    const rows = levelRows(ENROLLMENT["2026-2027"].by_level, LEVELS(0, 1, 0, 0, 0));
+    expect(rows.map((r) => r.key)).toEqual(["nursery", "kindergarten", "elementary", "junior_highschool", "senior_highschool"]);
+    expect(levelRows(LEVELS(0, 0, 3, 0, 0), LEVELS(0, 0, 0, 2, 0)).map((r) => [r.key, r.current, r.previous]))
+      .toEqual([["elementary", 3, 0], ["junior_highschool", 0, 2]]);
+  });
+
+  it("leaves previous null without a last year", () => {
+    expect(levelRows(LEVELS(1, 0, 0, 0, 0), null)).toEqual([
+      { key: "nursery", label: "Nursery", current: 1, previous: null },
+    ]);
   });
 });
 

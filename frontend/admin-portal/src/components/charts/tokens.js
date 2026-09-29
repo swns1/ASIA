@@ -29,6 +29,7 @@ const FALLBACKS = {
   "--color-neutral-900": "#1a0a0a",
   "--color-brand-100":   "#fff0f0",
   "--color-brand-300":   "#fca5a5",
+  "--color-brand-400":   "#e87474",
   "--color-brand-500":   "#e03131",
   "--color-brand-600":   "#c92a2a",
   "--color-success-500": "#2e6b0d",

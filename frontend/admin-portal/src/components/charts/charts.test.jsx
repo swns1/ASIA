@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 
 import BarChart from "./BarChart";
 import LineChart from "./LineChart";
 import Meter from "./Meter";
+import PairedColumnChart from "./PairedColumnChart";
 import Sparkline from "./Sparkline";
 import StackedBar from "./StackedBar";
 import { barPath, columnPath, linePath, niceMax } from "./geometry";
@@ -215,6 +216,90 @@ describe("BarChart", () => {
     ]} title="t" />);
     const fills = [...container.querySelectorAll("path")].map((p) => p.getAttribute("fill"));
     expect(new Set(fills).size).toBe(1);
+  });
+});
+
+describe("PairedColumnChart", () => {
+  const rows = [
+    { key: "elem", label: "Elementary", current: 10, previous: 5 },
+    { key: "jhs", label: "Junior High", current: 0, previous: 20 },
+  ];
+  const chart = (props) => (
+    <PairedColumnChart rows={rows} title="Learners" currentLabel="S.Y. 2026-2027" previousLabel="S.Y. 2025-2026" {...props} />
+  );
+  // A column's drawn height, read back from its path: columnPath rounds the
+  // top, then draws `v (h - r)` down to the baseline, so that plus the radius.
+  const heights = (container) =>
+    [...container.querySelectorAll("path")].map((p) => Number(p.getAttribute("d").match(/v ([\d.]+)/)[1]) + 4);
+
+  it("draws both years on one scale", () => {
+    const { container } = render(chart());
+    // A zero is a label with no column, so three columns for four values.
+    const h = heights(container);
+    expect(h).toHaveLength(3);
+    const tallest = Math.max(...h);
+    expect(h.map((x) => x / tallest)).toEqual([0.25, 0.5, 1]);
+    // The zero still gets its figure, beside the grid's own 0.
+    expect(screen.getAllByText("0")).toHaveLength(2);
+  });
+
+  it("tops the grid at a round step above the tallest column, not the next power of ten", () => {
+    render(chart({ rows: [{ key: "net", label: "Net billed", current: 540666, previous: 581341 }] }));
+    expect(screen.getByText("600000")).toBeTruthy();
+    expect(screen.queryByText("1000000")).toBeNull();
+  });
+
+  it("keeps a count's grid on whole numbers", () => {
+    const small = [{ key: "a", label: "A", current: 2, previous: 1 }];
+    const { unmount } = render(chart({ rows: small }));
+    expect(screen.getByText("0.5")).toBeTruthy();
+    unmount();
+    render(chart({ rows: small, integer: true }));
+    expect(screen.queryByText("0.5")).toBeNull();
+  });
+
+  it("names both years in a legend when comparing", () => {
+    render(chart());
+    expect(screen.getByText("S.Y. 2026-2027")).toBeTruthy();
+    expect(screen.getByText("S.Y. 2025-2026")).toBeTruthy();
+  });
+
+  it("draws this year alone, with no legend, when there is no last year", () => {
+    const { container } = render(chart({ rows: rows.map((r) => ({ ...r, previous: null })) }));
+    expect(heights(container)).toHaveLength(1);
+    expect(screen.queryByText("S.Y. 2025-2026")).toBeNull();
+    expect(screen.queryByText("S.Y. 2026-2027")).toBeNull();
+  });
+
+  it("says so when there is nothing to draw", () => {
+    render(chart({ rows: [{ key: "a", label: "A", current: 0, previous: 0 }], emptyMessage: "Nothing yet." }));
+    expect(screen.getByText("Nothing yet.")).toBeTruthy();
+  });
+
+  describe("filling its card", () => {
+    // jsdom has no layout and no ResizeObserver: stand one in that reports
+    // the plot as 400 x 300 pixels, as a stretched card would.
+    const original = globalThis.ResizeObserver;
+    beforeEach(() => {
+      globalThis.ResizeObserver = class {
+        constructor(callback) { this.callback = callback; }
+        observe() { this.callback([{ contentRect: { width: 400, height: 300 } }]); }
+        disconnect() {}
+      };
+    });
+    afterEach(() => { globalThis.ResizeObserver = original; });
+
+    it("draws at the size it's given, not a fixed aspect ratio", async () => {
+      const { container } = render(chart({ fill: true, height: 240 }));
+      await waitFor(() => expect(container.querySelector("svg").getAttribute("viewBox")).toBe("0 0 400 300"));
+      // Never shorter than `height`, however little room the card leaves.
+      expect(container.querySelector("svg").parentElement.style.minHeight).toBe("240px");
+    });
+
+    it("keeps its fixed size when not asked to fill", () => {
+      const { container } = render(chart({ height: 240 }));
+      expect(container.querySelector("svg").getAttribute("viewBox")).toBe("0 0 760 240");
+    });
   });
 });
 

@@ -2,6 +2,8 @@
 // Kept out of the component file so it only exports components (fast refresh)
 // and so these can be tested on their own.
 
+import { LEVEL_LABELS } from "../../constants/schoolLevels";
+
 export const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 export function greeting(now) {
@@ -37,8 +39,7 @@ export function sectionName(s) {
   return [s.grade_level, s.strand, s.section].filter(Boolean).join(" · ");
 }
 
-// Adds the page's year to a list-page link that doesn't carry one (the
-// Billing panel's links are shared with the staff dashboard and have none).
+// Adds the page's year to a list-page link that doesn't carry one.
 export function withYear(link, year) {
   if (!year || /[?&]school_year=/.test(link)) return link;
   return `${link}${link.includes("?") ? "&" : "?"}school_year=${encodeURIComponent(year)}`;
@@ -70,4 +71,34 @@ export function attentionRows(data, schoolYear) {
       to: `/invoices?overdue=1&school_year=${sy}`,
     },
   ].filter((r) => r.count > 0);
+}
+
+// ── This year vs last year ──────────────────────────────────────────────────
+
+// How far `now` moved from `before`: the difference and its size as a whole
+// percentage of `before`. Null when either year has no figure -- nothing to
+// compare isn't the same as no change. `pct` is null when `before` is zero.
+export function yearChange(now, before) {
+  if (now == null || before == null) return null;
+  const a = Number(now);
+  const b = Number(before);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  // Whole centavos: money arrives as strings like "540666.40", and float
+  // subtraction would otherwise leave a stray 0.0000001 reading as a change.
+  const diff = Math.round((a - b) * 100) / 100;
+  return { diff, pct: b ? Math.round((Math.abs(diff) * 100) / b) : null };
+}
+
+// Chart rows for learners by school level, in the school's own order. A level
+// with nobody in either year is left out, as on Compare School Years. Without
+// a previous year every row's `previous` is null, which draws this year alone.
+export function levelRows(current = {}, previous = null) {
+  return Object.keys(LEVEL_LABELS)
+    .map((level) => ({
+      key: level,
+      label: LEVEL_LABELS[level],
+      current: current?.[level] ?? 0,
+      previous: previous ? previous[level] ?? 0 : null,
+    }))
+    .filter((row) => row.current || row.previous);
 }

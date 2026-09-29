@@ -16,12 +16,18 @@ export const RISK_LEVELS = ["critical", "high", "moderate", "low"];
 // status color never carries meaning alone, so every use below pairs the hex
 // with both an icon and a text label, and the hex itself only ever fills a
 // small swatch (dot, icon, chart mark) beside dark ink — never the text.
+//
+// `chipInk` is the icon's colour on a solid `color` chip (the Analytics
+// tiles): white wherever it clears the 3:1 an icon needs -- the red (4.8:1)
+// and green (3.4:1) -- and near-black where it wouldn't: the orange (7.3:1;
+// white 2.6:1) and amber (10.5:1; white 1.8:1).
 export const RISK_LEVEL_META = {
   low: {
     label: "On track",
     blurb: "Nothing standing out right now",
     order: 0,
     color: "#0ca30c",
+    chipInk: "#ffffff",
     icon: "ti-shield-check",
     tint: "rgba(12, 163, 12, 0.12)",
   },
@@ -30,6 +36,7 @@ export const RISK_LEVEL_META = {
     blurb: "Worth keeping an eye on",
     order: 1,
     color: "#fab219",
+    chipInk: "#1a0a0a",
     icon: "ti-alert-triangle",
     tint: "rgba(250, 178, 25, 0.16)",
   },
@@ -38,6 +45,7 @@ export const RISK_LEVEL_META = {
     blurb: "Should be followed up this quarter",
     order: 2,
     color: "#ec835a",
+    chipInk: "#1a0a0a",
     icon: "ti-alert-octagon",
     tint: "rgba(236, 131, 90, 0.16)",
   },
@@ -46,6 +54,7 @@ export const RISK_LEVEL_META = {
     blurb: "Follow up now — several things are going wrong at once",
     order: 3,
     color: "#d03b3b",
+    chipInk: "#ffffff",
     icon: "ti-alert-hexagon",
     tint: "rgba(208, 59, 59, 0.14)",
   },
@@ -62,6 +71,7 @@ export function riskLevelMeta(level) {
       blurb: "",
       order: -1,
       color: "#8a6a6a",
+      chipInk: "#ffffff",
       icon: "ti-help-circle",
       tint: "rgba(138, 106, 106, 0.12)",
     }
@@ -269,10 +279,11 @@ export function chartBlurb(view) {
 }
 
 /**
- * Whether a view draws risk bands, and therefore needs the legend. The
- * single-series charts deliberately don't get one — their title names the
- * series, and a one-entry legend is noise.
+ * Whether a view draws risk bands without naming them, and therefore needs
+ * the legend. The single-series charts deliberately don't get one — their
+ * title names the series, and a one-entry legend is noise — and neither does
+ * the level mix, whose every row carries its own icon and label.
  */
 export function viewUsesBands(view) {
-  return ["mix", "grade_level", "section", "map"].includes(view);
+  return ["grade_level", "section", "map"].includes(view);
 }

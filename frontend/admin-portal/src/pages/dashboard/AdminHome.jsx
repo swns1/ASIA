@@ -9,7 +9,9 @@
 //      only queues that have something in them.
 //   3. Teachers today: a short preview (attendance taken, grades in, sections
 //      with no adviser). Clicking it opens every section with filters.
-//   4. School at a glance: three headline numbers, then the Billing panel.
+//   4. School at a glance: two headline numbers (present today, need
+//      follow-up), then this year against last for enrollees and for money
+//      (YearOverYear.jsx), with the year's Billing panel under the money one.
 //      No filter drawers; those stay on the list pages.
 //   5. Trends: the same three charts the staff dashboard uses.
 //
@@ -38,9 +40,11 @@ import { chartInk, token } from "../../components/charts/tokens";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import { Input } from "../../components/FormField";
 import { AttendanceBand, PipelineBand, RiskBand } from "./DashboardBands";
+import { BillingComparePanel, EnrolleesPanel } from "./YearOverYear";
+import useYearComparison from "./useYearComparison";
 
 import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api/enrollmentApi";
-import { getFinancialSummary, getInvoices } from "../../api/billingApi";
+import { getInvoices } from "../../api/billingApi";
 import { getStudentApplications } from "../../api/applicationApi";
 import { useSchoolYear } from "../../context/SchoolYearContext";
 import useYearFilter from "../../hooks/useYearFilter";
@@ -65,6 +69,7 @@ export default function AdminHome() {
   const [showAmounts, setShowAmounts] = useState(true);
   const [showTeachers, setShowTeachers] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const comparison = useYearComparison(year);
 
   const load = useCallback(async () => {
     if (!year || !currentYear) return;
@@ -74,7 +79,6 @@ export default function AdminHome() {
     const parts = {
       summary:      getDashboardSummary({ school_year: sy }),
       teachers:     getTeachersToday({ school_year: currentYear }),
-      financial:    getFinancialSummary(sy),
       pending:      count(getEnrollments({ enrollment_status: "pending", school_year: sy, page_size: 1 })),
       applications: count(getStudentApplications({ status: "submitted", page_size: 1 })),
       unpaid:       count(getInvoices({ status: "unpaid", school_year: sy, page_size: 1 })),
@@ -170,18 +174,35 @@ export default function AdminHome() {
 
         <motion.section variants={pageVariants.item} aria-labelledby="glance-heading" className="flex flex-col gap-3">
           <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
-          <Glance data={data} loading={loading} schoolYear={year} todayYear={todayYear} onGo={navigate} />
-          {/* The panel follows the page's year picker, so it gets no year
-              filter of its own; two year controls could disagree. Its links
+          <Glance data={data} loading={loading} todayYear={todayYear} onGo={navigate} />
+          {/* Both follow the page's year picker, so neither gets a year
+              filter of its own; two year controls could disagree. Their links
               carry the year for the same reason every other link here does. */}
-          <BillingPanel
-            summary={data.financial}
-            loading={loading}
-            schoolYear={year}
-            showAmounts={showAmounts}
-            onToggleAmounts={() => setShowAmounts((v) => !v)}
-            onOpenInvoices={(link) => navigate(withYear(link, year))}
-          />
+          {/* Stretched, not items-start: both columns take the taller one's
+              height and their charts fill it, so the two end level. */}
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <EnrolleesPanel cmp={comparison} onGo={navigate} />
+            <div className="flex flex-col gap-3">
+              <BillingComparePanel
+                cmp={comparison}
+                showAmounts={showAmounts}
+                onToggleAmounts={() => setShowAmounts((v) => !v)}
+              />
+              {/* The year's own figures under the comparison. It reads the
+                  same summary, so a failed load shows once, above, with its
+                  retry -- not also here as a row of ₱0.00. No eye button of
+                  its own: the one above governs both. */}
+              {!comparison.money.error && (
+                <BillingPanel
+                  summary={comparison.money.current}
+                  loading={comparison.money.loading}
+                  schoolYear={year}
+                  showAmounts={showAmounts}
+                  onOpenInvoices={(link) => navigate(withYear(link, year))}
+                />
+              )}
+            </div>
+          </div>
         </motion.section>
 
         <motion.section variants={pageVariants.item} aria-labelledby="trends-heading">
@@ -215,7 +236,7 @@ export default function AdminHome() {
         <RecordPaymentModal
           preloadedInvoiceId={null}
           onClose={() => setShowPayment(false)}
-          onSaved={() => { setShowPayment(false); load(); }}
+          onSaved={() => { setShowPayment(false); load(); comparison.reload(); }}
         />
       )}
     </>
@@ -580,8 +601,9 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
 
 // ── School at a glance ───────────────────────────────────────────────────────
 
-function Glance({ data, loading, schoolYear, todayYear, onGo }) {
-  const pipeline = data.summary?.pipeline;
+// No enrollees tile: the Enrollees panel (YearOverYear.jsx) leads with that
+// number, counted the same way for both years it compares.
+function Glance({ data, loading, todayYear, onGo }) {
   const risk = data.summary?.risk;
   const att = data.teachers?.attendance;
   const noClasses = data.teachers?.no_classes;
@@ -589,19 +611,9 @@ function Glance({ data, loading, schoolYear, todayYear, onGo }) {
   const riskDate = risk?.computed_at
     ? new Date(risk.computed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
     : null;
-  const sy = encodeURIComponent(schoolYear ?? "");
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <StatCard
-        label="Enrolled"
-        icon="ti-school"
-        iconTone="success"
-        loading={loading}
-        value={pipeline ? pipeline.enrolled.toLocaleString() : "—"}
-        hint={`S.Y. ${schoolYear}`}
-        onClick={() => onGo(`/enrollments?enrollment_status=enrolled&school_year=${sy}`)}
-      />
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <StatCard
         label="Present today"
         icon="ti-calendar-check"

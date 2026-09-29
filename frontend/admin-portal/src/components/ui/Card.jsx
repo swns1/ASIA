@@ -118,12 +118,18 @@ const HOVER_GLOW_REST = "0 8px 24px rgba(0,0,0,0.08)";
  *                    tile with controls must take this path, not `onClick`.
  * Pass `trailing` for controls pinned to the card's right edge; it renders
  * outside the text column so long labels can't push it out of alignment.
+ *
+ * `iconStyle` colours the icon chip directly ({ background, color }) for a
+ * tile whose colour isn't one of the tones -- the risk levels, which carry
+ * their own reserved status palette. It replaces the tone's chip colours
+ * except while the tile is active.
  */
 export function StatCard({
   label,
   value,
   icon,
   iconTone = "brand",
+  iconStyle,
   hint,
   loading = false,
   active = false,
@@ -152,11 +158,13 @@ export function StatCard({
     .filter(Boolean)
     .join(" ");
 
+  const customChip = Boolean(iconStyle) && !active;
   const iconChip = icon && (
     <div
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors duration-150 ${
-        active ? "bg-white " + activeTextClass : toneClass
+        active ? "bg-white " + activeTextClass : customChip ? "" : toneClass
       }`}
+      style={customChip ? iconStyle : undefined}
     >
       <i className={`ti ${icon} text-[17px]`} aria-hidden="true" />
     </div>

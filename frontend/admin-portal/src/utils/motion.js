@@ -61,6 +61,13 @@ export const chartVariants = {
     visible: { scaleX: 1, opacity: 1, transition: { duration: 0.42, ease: [0.16, 1, 0.3, 1] } },
   },
 
+  // The same for a vertical column: it rises from the baseline. Pair with
+  // `style={{ transformBox: "fill-box", originY: 1 }}`.
+  column: {
+    hidden:  { scaleY: 0, opacity: 0.4 },
+    visible: { scaleY: 1, opacity: 1, transition: { duration: 0.42, ease: [0.16, 1, 0.3, 1] } },
+  },
+
   // `pathLength` is a framer-motion special: it normalises the path's own
   // length to 0-1, so a line draws itself end to end regardless of geometry.
   line: {

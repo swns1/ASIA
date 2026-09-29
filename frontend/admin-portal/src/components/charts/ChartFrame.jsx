@@ -53,6 +53,12 @@ export function NoData({ message = "Nothing to chart for this selection yet." })
  * `caption` is the sentence under the chart that says what the reader should
  * take from it. Charts here are captioned rather than left to speak for
  * themselves, which is also what makes them legible when printed.
+ *
+ * `fill` makes the plot take whatever height its flex parent leaves it (never
+ * less than `minPlotHeight`), instead of a height fixed by the viewBox's
+ * aspect ratio -- so a chart can stretch to line its card up with the one
+ * beside it. The chart then measures the plot through `plotRef` and draws in
+ * pixels; see PairedColumnChart.
  */
 export default function ChartFrame({
   viewBox,
@@ -62,15 +68,25 @@ export default function ChartFrame({
   caption,
   height = "auto",
   legend = null,
+  fill = false,
+  minPlotHeight,
+  plotRef,
 }) {
   return (
-    <div>
+    <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
       {legend}
-      <div className="relative w-full">
+      <div
+        ref={plotRef}
+        className={fill ? "relative w-full flex-1" : "relative w-full"}
+        style={fill ? { minHeight: minPlotHeight } : undefined}
+      >
         <svg
           viewBox={`0 0 ${viewBox[0]} ${viewBox[1]}`}
-          className="w-full"
-          style={{ background: SURFACE, borderRadius: 10, height }}
+          // Out of the flow when filling, so the plot's height comes from the
+          // layout alone and redrawing at the measured size can't feed back
+          // into the size.
+          className={fill ? "absolute inset-0 h-full w-full" : "w-full"}
+          style={{ background: SURFACE, borderRadius: 10, ...(fill ? {} : { height }) }}
           role="img"
         >
           {title && <title>{title}</title>}

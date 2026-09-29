@@ -631,20 +631,15 @@ export default function AnalyticsPage() {
                     {["critical", "high", "moderate", "low"].map((level) => {
                       const meta = riskLevelMeta(level);
                       return (
+                        // Each level's icon in its own status colour, the same
+                        // one its chart marks and legend use, as a solid chip.
+                        // The card and its text stay as every other tile.
                         <StatCard
                           key={level}
                           label={meta.label}
                           value={counts[level] ?? 0}
                           icon={meta.icon}
-                          iconTone={
-                            level === "critical"
-                              ? "error"
-                              : level === "high"
-                                ? "warning"
-                                : level === "moderate"
-                                  ? "info"
-                                  : "success"
-                          }
+                          iconStyle={{ background: meta.color, color: meta.chipInk }}
                           layout="horizontal"
                           hint={meta.blurb}
                         />

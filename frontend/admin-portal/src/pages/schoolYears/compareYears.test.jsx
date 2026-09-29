@@ -29,7 +29,7 @@ vi.mock("../../api/billingApi", () => ({
 }));
 
 const { default: SchoolYearComparePage } = await import("../SchoolYearComparePage");
-const { defaultCompareYears } = await import("../../components/schoolYears/yearHelpers");
+const { defaultCompareYears, previousLabel } = await import("../../components/schoolYears/yearHelpers");
 
 const YEARS = [
   { label: "2027-2028", state: "upcoming" },
@@ -100,6 +100,17 @@ describe("defaultCompareYears", () => {
 
   it("takes the latest three when no year is current", () => {
     expect(defaultCompareYears(["2025-2026", "2026-2027"], undefined)).toEqual(["2025-2026", "2026-2027"]);
+  });
+});
+
+describe("previousLabel", () => {
+  it("steps a label back one year", () => {
+    expect(previousLabel("2026-2027")).toBe("2025-2026");
+  });
+
+  it("has no answer for something that isn't a label", () => {
+    expect(previousLabel("")).toBe("");
+    expect(previousLabel(null)).toBe("");
   });
 });
 
