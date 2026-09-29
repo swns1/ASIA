@@ -42,7 +42,7 @@ def teacher_student_ids(user):
     (never raises) when the teacher has no advisory assignment yet — fail
     closed.
     """
-    from enrollments.models import Enrollment, SectionAdvisory
+    from enrollments.models import SectionAdvisory, advisory_roster
 
     teacher_user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
     if not teacher_user_id:
@@ -50,16 +50,7 @@ def teacher_student_ids(user):
 
     student_ids = set()
     for advisory in SectionAdvisory.objects.filter(teacher_user_id=teacher_user_id):
-        qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        )
-        if advisory.strand:
-            qs = qs.filter(strand=advisory.strand)
-        student_ids.update(qs.values_list("student_id", flat=True))
+        student_ids.update(advisory_roster(advisory).values_list("student_id", flat=True))
     return student_ids
 
 

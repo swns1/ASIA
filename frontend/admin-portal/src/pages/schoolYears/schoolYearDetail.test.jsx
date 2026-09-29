@@ -1,7 +1,8 @@
 /**
  * SchoolYearDetailPage — one year's setup: the checklist, its sections laid
- * out on the grade ladder, adding and renaming a section, and copying the
- * sections of an earlier year (previewed by the server's own dry run).
+ * out on the grade ladder, adding and renaming a section, who advises each
+ * section, and copying an earlier year's sections and advisers (previewed by
+ * the server's own dry run).
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
@@ -19,11 +20,16 @@ const api = {
   carryOverSchoolYear: vi.fn(),
   createSchoolYear: vi.fn(),
   updateSchoolYear: vi.fn(),
+  getSectionAdvisories: vi.fn(),
+  createSectionAdvisory: vi.fn(),
+  deleteSectionAdvisory: vi.fn(),
 };
+const getUsers = vi.fn();
 const pass = (name) => (...a) => api[name](...a);
 const refreshYears = vi.fn();
 
 vi.mock("../../api/enrollmentApi", () => Object.fromEntries(Object.keys(api).map((k) => [k, pass(k)])));
+vi.mock("../../api/identityApi", () => ({ getUsers: (...a) => getUsers(...a) }));
 vi.mock("../../context/SchoolYearContext", () => ({ useSchoolYear: () => ({ refreshYears }) }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
 
@@ -59,6 +65,12 @@ beforeEach(() => {
     calendar: { quarters_set: 2, holidays: 0 },
   });
   api.getSections.mockResolvedValue([]);
+  api.getSectionAdvisories.mockResolvedValue({ results: [] });
+  getUsers.mockResolvedValue([
+    { user_id: 7, name: "Ana Cruz", role: "teacher" },
+    { user_id: 8, name: "Ben Reyes", role: "teacher" },
+    { user_id: 1, name: "Admin", role: "admin" },
+  ]);
 });
 
 describe("SchoolYearDetailPage — overview", () => {
@@ -146,5 +158,101 @@ describe("SchoolYearDetailPage — sections", () => {
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["sections"] },
     ));
+  });
+});
+
+describe("SchoolYearDetailPage — advisers", () => {
+  const SECTIONS = [
+    section(1, "Grade 7", "Rizal", { adviser_count: 1 }),
+    section(2, "Grade 7", "Mabini"),
+  ];
+  const RIZAL_ADVISER = {
+    advisory_id: 40, teacher_user_id: 7, school_year: "2027-2028",
+    school_level: "junior_highschool", grade_level: "Grade 7", section: "Rizal", strand: null,
+  };
+
+  beforeEach(() => {
+    api.getSections.mockResolvedValue(SECTIONS);
+    api.getSectionAdvisories.mockResolvedValue({ results: [RIZAL_ADVISER] });
+  });
+
+  it("lists every section with its adviser, or the gap", async () => {
+    renderAt("/school-years/2027-2028?tab=advisers");
+    expect(await screen.findByText("1 of 2 sections have an adviser")).toBeTruthy();
+    expect(api.getSectionAdvisories).toHaveBeenCalledWith({ school_year: "2027-2028", page_size: 500 });
+    expect(screen.getByText("Ana Cruz")).toBeTruthy();
+    const mabini = screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" }).closest("li");
+    expect(within(mabini).getByText("No adviser")).toBeTruthy();
+  });
+
+  it("assigns a teacher to a section, which fixes the rest of the placement", async () => {
+    api.createSectionAdvisory.mockResolvedValue({});
+    renderAt("/school-years/2027-2028?tab=advisers");
+    await screen.findByText("1 of 2 sections have an adviser");
+    fireEvent.click(screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" }));
+    const picker = await screen.findByRole("combobox", { name: "Teacher" });
+    // Only teachers, each with what they already advise this year.
+    const options = within(picker).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Select a teacher…", "Ben Reyes", "Ana Cruz — advises Grade 7 Rizal"]);
+
+    fireEvent.change(picker, { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    await waitFor(() => expect(api.createSectionAdvisory).toHaveBeenCalledWith({
+      teacher_user_id: 8, school_year: "2027-2028", school_level: "junior_highschool",
+      grade_level: "Grade 7", section: "Mabini", strand: null,
+    }));
+    await waitFor(() => expect(api.getSectionAdvisories).toHaveBeenCalledTimes(2));
+  });
+
+  it("removes an adviser through a confirm", async () => {
+    api.deleteSectionAdvisory.mockResolvedValue({});
+    renderAt("/school-years/2027-2028?tab=advisers");
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Ana Cruz as adviser" }));
+    expect(await screen.findByText(/lose access to its grades, attendance and narrative reports/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove adviser" }));
+    await waitFor(() => expect(api.deleteSectionAdvisory).toHaveBeenCalledWith(40));
+  });
+
+  it("previews an earlier year's advisers, with why any were skipped", async () => {
+    api.carryOverSchoolYear.mockImplementation((label, body) => Promise.resolve({
+      from: "2026-2027", to: label, dry_run: Boolean(body.dry_run),
+      ...(body.parts.includes("sections") && { sections: { copied: [], skipped: [] } }),
+      advisers: {
+        copied: [{ teacher_user_id: 8, teacher_name: "Ben Reyes", grade_level: "Grade 7", section: "Mabini", strand: null }],
+        skipped: [
+          { teacher_user_id: 9, teacher_name: "Cy Luna", grade_level: "Grade 8", section: "Luna", strand: null, reason: "no_section" },
+          { teacher_user_id: 7, teacher_name: "Ana Cruz", grade_level: "Grade 7", section: "Rizal", strand: null, reason: "already" },
+        ],
+      },
+    }));
+    renderAt("/school-years/2027-2028?tab=advisers");
+    fireEvent.click(await screen.findByRole("button", { name: /Copy from an earlier year/ }));
+
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["advisers"], dry_run: true },
+    ));
+    expect(await screen.findByText("Will assign 1 adviser:")).toBeTruthy();
+    expect(screen.getByText(/no section of the same name in S\.Y\. 2027-2028 \(Grade 8 Luna\)/)).toBeTruthy();
+    expect(screen.getByText(/already assigned to the same section here/)).toBeTruthy();
+
+    // Ticking Sections too asks for both, in the order the server applies them.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Sections/ }));
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"], dry_run: true },
+    ));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy 1 adviser" }));
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"] },
+    ));
+  });
+
+  it("sends a year without sections to set them up first", async () => {
+    api.getSections.mockResolvedValue([]);
+    api.getSectionAdvisories.mockResolvedValue({ results: [] });
+    renderAt("/school-years/2027-2028?tab=advisers");
+    expect(await screen.findByText("Set up this year's sections first")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Go to Sections" }));
+    expect(await screen.findByText("No sections yet")).toBeTruthy();
   });
 });

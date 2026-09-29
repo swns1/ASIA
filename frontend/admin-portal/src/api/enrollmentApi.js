@@ -55,7 +55,7 @@ export const getSchoolYearSetup = (label) =>
   enrollmentClient.get(`/school-years/${label}/setup/`).then((r) => r.data);
 
 // Copy parts of an earlier year into this one. Never overwrites; `dry_run`
-// is the preview. Body: { from, parts: ["sections"], dry_run }.
+// is the preview. Body: { from, parts: ["sections", "advisers"], dry_run }.
 export const carryOverSchoolYear = (label, data) =>
   enrollmentClient.post(`/school-years/${label}/carry-over/`, data).then((r) => r.data);
 

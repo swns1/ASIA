@@ -13,6 +13,7 @@ import { ConfirmDialog } from "../components/ui/Modal";
 import ErrorState from "../components/ui/ErrorState";
 import YearModal from "../components/schoolYears/YearModal";
 import SectionsPanel from "../components/schoolYears/SectionsPanel";
+import AdvisersPanel from "../components/schoolYears/AdvisersPanel";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
 import { progressThrough } from "../components/schoolYears/yearHelpers";
 import { SCHOOL_YEAR_STATE_MAP } from "../constants/statusMaps";
@@ -28,10 +29,10 @@ import {
   makeSchoolYearCurrent,
 } from "../api/enrollmentApi";
 
-// One school year: its dates and setup checklist (Overview), and its sections.
-// Advisers join as a third tab in the next phase.
+// One school year: its dates and setup checklist (Overview), its sections, and
+// who advises each of them.
 
-const TABS = ["overview", "sections"];
+const TABS = ["overview", "sections", "advisers"];
 
 function ChecklistItem({ done, title, detail, children }) {
   return (
@@ -52,7 +53,7 @@ function ChecklistItem({ done, title, detail, children }) {
   );
 }
 
-function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSections, onCopy }) {
+function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSections, onOpenAdvisers, onCopy }) {
   const isCurrent = year.state === "current";
   const pct = isCurrent ? progressThrough(year.start_date, year.end_date) : null;
   const s = setup?.sections;
@@ -95,7 +96,9 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
               : "None yet — enrollment and advisers pick from these"}
           >
             {sectionsCount === 0 && canCopy && (
-              <Button variant="secondary" size="sm" icon="ti-copy" onClick={onCopy}>Copy from an earlier year</Button>
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers"])}>
+                Copy from an earlier year
+              </Button>
             )}
             <Button variant={sectionsCount ? "ghost" : "primary"} size="sm" onClick={onOpenSections}>
               {sectionsCount ? "Manage" : "Set up"}
@@ -109,8 +112,19 @@ function Overview({ year, setup, sectionsCount, canCopy, onEditDates, onOpenSect
               ? `${a.with_adviser} of ${a.sections} sections have an adviser`
               : "Set up sections first"}
           >
+            {a && a.sections > 0 && a.with_adviser === 0 && canCopy && (
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["advisers"])}>
+                Copy from an earlier year
+              </Button>
+            )}
             {a && a.sections > 0 && (
-              <Button variant="ghost" size="sm" to={`/teacher-advisories${yearLink}`}>Assign</Button>
+              <Button
+                variant={a.with_adviser === a.sections ? "ghost" : "primary"}
+                size="sm"
+                onClick={onOpenAdvisers}
+              >
+                {a.with_adviser === a.sections ? "Manage" : "Assign"}
+              </Button>
             )}
           </ChecklistItem>
 
@@ -152,7 +166,7 @@ export default function SchoolYearDetailPage() {
   const [loadError, setLoadError] = useState(null);
 
   const [editing, setEditing] = useState(false);
-  const [copying, setCopying] = useState(false);
+  const [copying, setCopying] = useState(null);   // the parts to start with
   const [confirmCurrent, setConfirmCurrent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmError, setConfirmError] = useState("");
@@ -268,6 +282,7 @@ export default function SchoolYearDetailPage() {
           tabs={[
             { id: "overview", label: "Overview", icon: "ti-list-check" },
             { id: "sections", label: "Sections", icon: "ti-layout-grid", count: sectionsLoading ? null : sections.length },
+            { id: "advisers", label: "Advisers", icon: "ti-user-check" },
           ]}
           value={tab}
           onChange={setTab}
@@ -283,9 +298,10 @@ export default function SchoolYearDetailPage() {
                 canCopy={years.some((y) => y.label !== label)}
                 onEditDates={() => setEditing(true)}
                 onOpenSections={() => setTab("sections")}
-                onCopy={() => setCopying(true)}
+                onOpenAdvisers={() => setTab("advisers")}
+                onCopy={setCopying}
               />
-            ) : (
+            ) : tab === "sections" ? (
               <SectionsPanel
                 schoolYear={label}
                 years={years}
@@ -293,6 +309,16 @@ export default function SchoolYearDetailPage() {
                 loading={sectionsLoading}
                 readOnly={year.state === "archived"}
                 onChanged={afterSectionsChange}
+              />
+            ) : (
+              <AdvisersPanel
+                schoolYear={label}
+                years={years}
+                sections={sections}
+                sectionsLoading={sectionsLoading}
+                readOnly={year.state === "archived"}
+                onChanged={afterSectionsChange}
+                onOpenSections={() => setTab("sections")}
               />
             )}
           </TabPanel>
@@ -317,7 +343,8 @@ export default function SchoolYearDetailPage() {
             key="carry-over"
             schoolYear={label}
             years={years}
-            onClose={() => setCopying(false)}
+            initialParts={copying}
+            onClose={() => setCopying(null)}
             onDone={afterSectionsChange}
           />
         )}

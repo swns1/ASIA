@@ -24,7 +24,15 @@ from accounts.permissions import (
     guardian_student_ids,
     teacher_student_ids,
 )
-from .models import Enrollment, EnrollmentOverride, EnrollmentTransfer, SchoolYear, Section, SectionAdvisory
+from .models import (
+    Enrollment,
+    EnrollmentOverride,
+    EnrollmentTransfer,
+    SchoolYear,
+    Section,
+    SectionAdvisory,
+    advisory_roster,
+)
 from .serializers import (
     EnrollmentSerializer,
     EnrollmentTransferSerializer,
@@ -158,15 +166,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
 
         results = []
         for advisory in advisories:
-            enrollment_qs = Enrollment.objects.filter(
-                school_year=advisory.school_year,
-                school_level=advisory.school_level,
-                grade_level=advisory.grade_level,
-                section=advisory.section,
-                enrollment_status="enrolled",
-            ).select_related("student")
-            if advisory.strand:
-                enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+            enrollment_qs = advisory_roster(advisory).select_related("student")
 
             students = []
             for e in enrollment_qs.order_by("student__last_name", "student__first_name"):
@@ -280,15 +280,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
@@ -404,15 +396,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
@@ -519,15 +503,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
@@ -640,15 +616,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         records_qs = AttendanceRecord.objects.filter(
@@ -769,15 +737,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        )
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory)
 
         grades_qs = Grade.objects.filter(enrollment__in=enrollment_qs)
 
@@ -928,25 +888,28 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(year, context={**self.get_serializer_context(), "current_label": year.label})
         return Response(serializer.data)
 
-    CARRY_OVER_PARTS = ("sections",)
+    # In the order they're applied: advisers land in sections, so sections
+    # copied in the same run have to exist first.
+    CARRY_OVER_PARTS = ("sections", "advisers")
 
     @action(detail=True, methods=["post"], url_path="carry-over")
     def carry_over(self, request, label=None):
         """
         POST /api/school-years/{label}/carry-over/
-        Body: {"from": "2025-2026", "parts": ["sections"], "dry_run": true}
+        Body: {"from": "2025-2026", "parts": ["sections", "advisers"], "dry_run": true}
 
         Start this year from an earlier one: copy the chosen parts across so
         that what didn't change needs no retyping. Any earlier year works,
         not only the last.
 
         Never overwrites. A section this year already has (same grade, same
-        name, any capitalisation) is skipped and reported, so running it
-        twice, or after adding a few sections by hand, is safe. dry_run
-        answers the same question without writing -- the preview.
+        name, any capitalisation) is skipped and reported; so is an adviser
+        whose section already has one here. Running it twice, or after
+        setting a few things up by hand, is safe. dry_run answers the same
+        question without writing -- the preview.
 
-        Only "sections" exists so far; advisers, the calendar and fees join
-        as their phases land.
+        Parts: "sections", "advisers". The calendar and fees join as their
+        phases land.
         """
         target = self.get_object()
         source_label = (request.data.get("from") or "").strip()
@@ -977,8 +940,15 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             )
 
         result = {"from": source.label, "to": target.label, "dry_run": dry_run}
-        if "sections" in parts:
-            result["sections"] = self._carry_over_sections(source, target, dry_run)
+        # All or nothing: advisers placed into sections this same run created.
+        with transaction.atomic():
+            if "sections" in parts:
+                result["sections"] = self._carry_over_sections(source, target, dry_run)
+            if "advisers" in parts:
+                # On a dry run the copied sections don't exist yet, but the
+                # preview still has to count advisers going into them.
+                planned = result["sections"]["copied"] if dry_run and "sections" in parts else []
+                result["advisers"] = self._carry_over_advisers(source, target, dry_run, planned)
         return Response(result)
 
     def _carry_over_sections(self, source, target, dry_run):
@@ -994,17 +964,88 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             else:
                 copied.append(row)
         if copied and not dry_run:
-            with transaction.atomic():
-                Section.objects.bulk_create([
-                    Section(
-                        school_year=target,
-                        school_level=school_level_for_grade(r["grade_level"]) or "elementary",
-                        grade_level=r["grade_level"],
-                        name=r["name"],
-                        strand=r["strand"],
-                    )
-                    for r in copied
-                ])
+            Section.objects.bulk_create([
+                Section(
+                    school_year=target,
+                    school_level=school_level_for_grade(r["grade_level"]) or "elementary",
+                    grade_level=r["grade_level"],
+                    name=r["name"],
+                    strand=r["strand"],
+                )
+                for r in copied
+            ])
+        return {"copied": copied, "skipped": skipped}
+
+    def _carry_over_advisers(self, source, target, dry_run, planned_sections=()):
+        """
+        Each of the source year's advisers goes to the section of the same
+        name and grade here. Skipped, with a reason:
+          no_section   -- this year has no such section
+          already      -- they already advise it this year
+          has_adviser  -- someone else already does; not overwritten
+          not_a_teacher -- the account is gone or no longer a teacher
+        A section's co-advisers carry over together.
+        """
+        from accounts.models import User
+
+        sections = {
+            (s["grade_level"], s["name"].lower()): s
+            for s in Section.objects.filter(school_year=target).values("grade_level", "name", "strand")
+        }
+        for r in planned_sections:
+            sections.setdefault((r["grade_level"], r["name"].lower()), r)
+
+        advised = {}
+        for grade, name, teacher in (
+            SectionAdvisory.objects.filter(school_year=target.label)
+            .values_list("grade_level", "section", "teacher_user_id")
+        ):
+            advised.setdefault((grade, name.lower()), set()).add(teacher)
+
+        source_rows = list(
+            SectionAdvisory.objects.filter(school_year=source.label)
+            .order_by("grade_level", "section", "teacher_user_id")
+        )
+        teachers = dict(
+            User.objects.filter(
+                user_id__in={a.teacher_user_id for a in source_rows}, role="teacher",
+            ).values_list("user_id", "name")
+        )
+
+        copied, skipped = [], []
+        for adv in source_rows:
+            key = (adv.grade_level, adv.section.lower())
+            section = sections.get(key)
+            row = {
+                "teacher_user_id": adv.teacher_user_id,
+                "teacher_name":    teachers.get(adv.teacher_user_id),
+                "grade_level":     adv.grade_level,
+                "section":         section["name"] if section else adv.section,
+                "strand":          section["strand"] if section else adv.strand,
+            }
+            if adv.teacher_user_id not in teachers:
+                skipped.append({**row, "reason": "not_a_teacher"})
+            elif section is None:
+                skipped.append({**row, "reason": "no_section"})
+            elif adv.teacher_user_id in advised.get(key, ()):
+                skipped.append({**row, "reason": "already"})
+            elif advised.get(key):
+                skipped.append({**row, "reason": "has_adviser"})
+            else:
+                copied.append(row)
+
+        if copied and not dry_run:
+            SectionAdvisory.objects.bulk_create([
+                SectionAdvisory(
+                    teacher_user_id=r["teacher_user_id"],
+                    school_year=target.label,
+                    school_level=school_level_for_grade(r["grade_level"]) or "elementary",
+                    grade_level=r["grade_level"],
+                    section=r["section"],
+                    strand=r["strand"],
+                )
+                for r in copied
+            ])
         return {"copied": copied, "skipped": skipped}
 
     @action(detail=True, methods=["get"], url_path="setup")

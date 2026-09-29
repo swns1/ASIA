@@ -161,6 +161,29 @@ class SectionAdvisory(models.Model):
         return f"Teacher #{self.teacher_user_id} → {self.school_year} {self.grade_level}-{self.section}"
 
 
+def advisory_roster(advisory):
+    """
+    The enrollments an advisory covers: the learners currently `enrolled` in
+    its section. Everything a teacher may see or write -- My Sections, the
+    section grade/attendance/narrative grids, teacher_student_ids() -- is
+    scoped by this one query, so the rule can't drift between them.
+
+    Takes anything with the advisory's fields, not only a SectionAdvisory.
+    student-service keeps its own copy (accounts/permissions.py) because it
+    reads these tables through mirrors and can't import this app.
+    """
+    qs = Enrollment.objects.filter(
+        school_year=advisory.school_year,
+        school_level=advisory.school_level,
+        grade_level=advisory.grade_level,
+        section=advisory.section,
+        enrollment_status="enrolled",
+    )
+    if advisory.strand:
+        qs = qs.filter(strand=advisory.strand)
+    return qs
+
+
 # ─── Transfer audit log ───────────────────────────────────────────────────────
 class EnrollmentTransfer(models.Model):
     """
