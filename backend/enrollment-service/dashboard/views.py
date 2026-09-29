@@ -221,7 +221,7 @@ class TeachersTodayView(APIView):
                 sections=sections,
                 advisers=self._advisers(school_year),
                 attendance_rows=self._attendance_today(school_year, today),
-                subjects=list(Subject.objects.values(
+                subjects=list(Subject.objects.filter(school_year=school_year).values(
                     "subject_id", "school_level", "grade_level", "strand", "semester",
                 )),
                 graded=self._graded_pairs(school_year, [period["key"], period["semester"]]),

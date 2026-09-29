@@ -1942,6 +1942,8 @@ CREATE TABLE public.subjects (
     strand character varying(50),
     semester character varying(20),
     grading_template_id bigint,
+    school_year character varying(20) NOT NULL,
+    CONSTRAINT ck_subjects_school_year_format CHECK (((school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text)),
     CONSTRAINT subjects_check CHECK (((((school_level)::text = 'senior_highschool'::text) AND ((semester)::text = ANY ((ARRAY['1st'::character varying, '2nd'::character varying])::text[]))) OR (((school_level)::text <> 'senior_highschool'::text) AND (semester IS NULL)))),
     CONSTRAINT subjects_school_level_check CHECK (((school_level)::text = ANY ((ARRAY['nursery'::character varying, 'kindergarten'::character varying, 'elementary'::character varying, 'junior_highschool'::character varying, 'senior_highschool'::character varying])::text[])))
 );
@@ -2983,11 +2985,11 @@ ALTER TABLE ONLY public.subjects
 
 
 --
--- Name: subjects subjects_subject_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: subjects subjects_school_year_subject_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.subjects
-    ADD CONSTRAINT subjects_subject_code_key UNIQUE (subject_code);
+    ADD CONSTRAINT subjects_school_year_subject_code_key UNIQUE (school_year, subject_code);
 
 
 --
@@ -3487,10 +3489,10 @@ CREATE INDEX idx_students_household ON public.students USING btree (household_id
 
 
 --
--- Name: idx_subjects_placement; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_subjects_year_placement; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_subjects_placement ON public.subjects USING btree (school_level, grade_level);
+CREATE INDEX idx_subjects_year_placement ON public.subjects USING btree (school_year, school_level, grade_level);
 
 
 --
@@ -4197,6 +4199,14 @@ ALTER TABLE ONLY public.students
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT subjects_grading_template_id_fkey FOREIGN KEY (grading_template_id) REFERENCES public.grading_templates(grading_template_id) ON DELETE SET NULL;
+
+
+--
+-- Name: subjects subjects_school_year_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subjects
+    ADD CONSTRAINT subjects_school_year_fk FOREIGN KEY (school_year) REFERENCES public.school_years(label) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

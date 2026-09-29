@@ -15,7 +15,12 @@ import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/Fil
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import CarryOverModal from "../components/schoolYears/CarryOverModal";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
+import useYearFilter from "../hooks/useYearFilter";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -71,7 +76,7 @@ const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 // ── Form Modal ────────────────────────────────────────────────────────────────
-function SubjectModal({ subject, templates, onSave, onClose }) {
+function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
   const isEdit = Boolean(subject?.subject_id);
   const [form, setForm] = useState({
     subject_code:     subject?.subject_code     ?? "",
@@ -105,6 +110,8 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
     setSaving(true); setError("");
     try {
       const payload = {
+        // Set once: a subject stays in the year it was made for.
+        ...(!isEdit && { school_year: schoolYear }),
         subject_code:     form.subject_code.trim(),
         subject_name:     form.subject_name.trim(),
         school_level:     form.school_level,
@@ -132,7 +139,7 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
       loading={saving}
       icon="ti-book"
       title={isEdit ? "Edit Subject" : "New Subject"}
-      description={isEdit ? "Update subject details" : "Add a new subject to the curriculum"}
+      description={isEdit ? `Update this S.Y. ${subject.school_year} subject` : `Add a subject to S.Y. ${schoolYear}'s curriculum`}
       // A part-filled form shouldn't be lost to a stray backdrop click.
       closeOnBackdrop={false}
       footer={
@@ -251,6 +258,17 @@ function SubjectModal({ subject, templates, onSave, onClose }) {
 export default function SubjectsPage() {
   usePageTitle("Subjects");
   const canManage   = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  // Copying a year's setup across is the School Years API's, admin-only.
+  const canCopy     = hasAnyRole(getCurrentUser(), STAFF_ADMIN);
+
+  // Each school year has its own curriculum, copied forward from an earlier
+  // year and adjusted. Opens on the current year (or the one in the link, e.g.
+  // from a year's setup checklist); never "All years" -- the same code can
+  // mean a different subject in another year.
+  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
+  const { options: yearLabels, yearStates } = useSchoolYear();
+  const archived = yearStates[schoolYear] === "archived";
+  const [copying, setCopying] = useState(false);
 
   const [subjects,     setSubjects]    = useState([]);
   const [templates,    setTemplates]   = useState([]);
@@ -270,7 +288,7 @@ export default function SubjectsPage() {
   const fetchSubjects = useCallback(async (p = 1, term = search, level = levelFilter, grade = gradeFilter) => {
     setLoading(true);
     try {
-      const params = { page: p };
+      const params = { page: p, school_year: schoolYear };
       if (term)              params.search       = term;
       if (level !== "all")   params.school_level = level;
       if (grade)             params.grade_level  = grade;
@@ -280,12 +298,16 @@ export default function SubjectsPage() {
       setPage(p);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [search, levelFilter, gradeFilter]);
+  }, [search, levelFilter, gradeFilter, schoolYear]);
 
   useEffect(() => {
-    fetchSubjects(1, "", "all");
     getTemplates().then((d) => setTemplates(Array.isArray(d) ? d : d?.results ?? [])).catch(() => {});
   }, []);
+
+  // Another year's subjects are another list: back to its first page.
+  useEffect(() => {
+    fetchSubjects(1, search, levelFilter, gradeFilter); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [schoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (id, payload) => {
     if (id) await updateSubject(id, payload);
@@ -325,11 +347,23 @@ export default function SubjectsPage() {
       <PageHeader
         title="Subjects"
         icon="ti-book"
-        subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in curriculum`}
+        subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in S.Y. ${schoolYear}'s curriculum`}
         actions={
-          <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
-            New Subject
-          </Button>
+          <>
+            {canCopy && !archived && (
+              <Button variant="secondary" icon="ti-copy" onClick={() => setCopying(true)}>
+                Copy from an earlier year
+              </Button>
+            )}
+            <Button
+              icon={archived ? "ti-lock" : "ti-plus"}
+              disabled={archived}
+              title={archived ? `S.Y. ${schoolYear} is archived, so its subjects are read-only` : undefined}
+              onClick={() => setModal({ mode: "create" })}
+            >
+              New Subject
+            </Button>
+          </>
         }
       />
 
@@ -347,6 +381,7 @@ export default function SubjectsPage() {
           searchPlaceholder="Search by code or name…"
           searchLabel="Search subjects"
           searchInputId="subjects-search"
+          scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} includeAllYears={false} counts={{}} />}
           hasFilters={Boolean(search || levelFilter !== "all" || gradeFilter)}
           onClearFilters={() => {
             setInputVal(""); setSearch("");
@@ -385,6 +420,8 @@ export default function SubjectsPage() {
           </CollapsibleFilterRow>
         </FilterBar>
 
+        <ArchivedYearNotice schoolYear={schoolYear} records="subjects" />
+
         {/* Table */}
         <motion.div
           initial={isFirstRender ? { opacity: 0, y: 10 } : false}
@@ -399,8 +436,12 @@ export default function SubjectsPage() {
               skeletonRows={8}
               empty={{
                 icon: "ti-book-off",
-                title: "No subjects found",
-                subtitle: "Try a different search or add a new subject",
+                title: search || levelFilter !== "all" ? "No subjects found" : `No subjects for S.Y. ${schoolYear} yet`,
+                subtitle: search || levelFilter !== "all"
+                  ? "Try a different search or add a new subject"
+                  : canCopy
+                    ? "Copy them from an earlier year, or add them one by one"
+                    : "Add them one by one, or ask an admin to copy them from an earlier year",
               }}
             >
               {subjects.map((sub) => {
@@ -409,7 +450,7 @@ export default function SubjectsPage() {
                 return (
                   <TableRow
                     key={sub.subject_id}
-                    onClick={() => setModal({ mode: "edit", subject: sub })}
+                    onClick={archived ? undefined : () => setModal({ mode: "edit", subject: sub })}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
@@ -469,6 +510,9 @@ export default function SubjectsPage() {
                     </TableCell>
 
                     <TableCell onClick={(e) => e.stopPropagation()}>
+                      {archived ? (
+                        <span className="text-xs text-neutral-500">Archived</span>
+                      ) : (
                       <div className="flex gap-1">
                         <Button
                           variant="ghost" size="sm" icon="ti-pencil"
@@ -483,6 +527,7 @@ export default function SubjectsPage() {
                           />
                         )}
                       </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -510,6 +555,7 @@ export default function SubjectsPage() {
           <SubjectModal
             key="subject-modal"
             subject={modal.mode === "edit" ? modal.subject : null}
+            schoolYear={schoolYear}
             templates={templates}
             onSave={handleSave}
             onClose={() => setModal(null)}
@@ -527,6 +573,19 @@ export default function SubjectsPage() {
             error={deleteError}
             onConfirm={handleDelete}
             onCancel={() => { setToDelete(null); setDeleteError(""); }}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {copying && (
+          <CarryOverModal
+            key="copy-subjects"
+            schoolYear={schoolYear}
+            years={yearLabels.map((label) => ({ label }))}
+            availableParts={["subjects"]}
+            initialParts={["subjects"]}
+            onClose={() => setCopying(false)}
+            onDone={() => fetchSubjects(1, search, levelFilter, gradeFilter)}
           />
         )}
       </AnimatePresence>

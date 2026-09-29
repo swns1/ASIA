@@ -63,6 +63,12 @@ const createNarrativeReport  = (p)      => _createNarrativeReport(p);
 const updateNarrativeReport  = (id, p)  => _updateNarrativeReport(id, p);
 const deleteNarrativeReport  = (id)     => _deleteNarrativeReport(id);
 
+// Grades can be viewed whatever the enrollment's status -- a finished year is
+// all `completed` -- so every page here lists the learners who attended.
+// Pending and cancelled rows never have grades and are left out. Changing
+// grades is locked only by an archived year (useArchivedYears), never by status.
+const ATTENDED_STATUSES = "enrolled,completed,transferred_out";
+
 // `tone` names the shared ChipGroup palette entry rather than carrying its own
 // bg/color pair — these were already the same values, just spelled out locally.
 const OVERVIEW_SCHOOL_LEVELS = [
@@ -168,7 +174,7 @@ function OverviewTab({ onNavigate }) {
       const params = {
         page: nextPage,
         page_size: OVERVIEW_PAGE_SIZE,
-        enrollment_status: "enrolled",
+        enrollment_status__in: ATTENDED_STATUSES,
       };
       if (sy)   params.school_year  = sy;
       if (sl)   params.school_level = sl;
@@ -1133,7 +1139,7 @@ export default function GradesPage() {
   }, [enrollments]);
 
   // ── Load enrollments when student changes ──────────────────────────────────
-  // Summary loads all enrollments (historical); Entry only loads active ones.
+  // Both tabs list every attended enrollment; an archived year's opens read-only.
   useEffect(() => {
     if (!student) {
       setEnrollments([]); setEnrollment(null);
@@ -1142,14 +1148,11 @@ export default function GradesPage() {
       return;
     }
     setLoadingEnr(true);
-    const params = tab === "entry"
-      ? { student: student.student_id, enrollment_status: "enrolled", page_size: 20 }
-      : { student: student.student_id, page_size: 20 };
-    getEnrollments(params)
+    getEnrollments({ student: student.student_id, enrollment_status__in: ATTENDED_STATUSES, page_size: 20 })
       .then((d) => setEnrollments(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => setEnrollments([]))
       .finally(() => setLoadingEnr(false));
-  }, [student, tab]);
+  }, [student]);
 
   // ── Summary: load grades + subjects when enrollment changes ───────────────
   useEffect(() => {
@@ -1158,7 +1161,7 @@ export default function GradesPage() {
     Promise.all([
       getGrades({ enrollment: enrollment.enrollment_id, page_size: 200 })
         .then((d) => Array.isArray(d) ? d : d?.results ?? []),
-      getSubjects({ school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
+      getSubjects({ school_year: enrollment.school_year, school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
         .then((d) => Array.isArray(d) ? d : d?.results ?? []),
     ])
       .then(([g, s]) => { setSumGrades(g); setSumSubjects(s); })
@@ -1169,7 +1172,8 @@ export default function GradesPage() {
   // ── Entry: load subjects when enrollment changes ──────────────────────────
   useEffect(() => {
     if (!enrollment) { setEntSubjects([]); setSubject(null); return; }
-    getSubjects({ school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
+    // The enrollment's own year's subjects: each year has its own curriculum.
+    getSubjects({ school_year: enrollment.school_year, school_level: enrollment.school_level, grade_level: enrollment.grade_level, page_size: 100 })
       .then((d) => setEntSubjects(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => setEntSubjects([]));
     const periods = GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? [];
@@ -1403,7 +1407,7 @@ export default function GradesPage() {
                   ))
                 : enrollments.length === 0
                   ? <div style={{ fontSize:13, color:"#8a6a6a", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>
-                      {tab === "entry" ? "No active enrollments found." : "No enrollments found."}
+                      No enrollments found.
                     </div>
                   : enrollments.map((en) => (
                       <EnrollmentChip

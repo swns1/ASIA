@@ -61,6 +61,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
   const s = setup?.sections;
   const a = setup?.advisers;
   const f = setup?.fees;
+  const sub = setup?.subjects;
   const c = setup?.calendar;
   const yearLink = `?school_year=${year.label}`;
 
@@ -103,7 +104,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
               : "None yet — enrollment and advisers pick from these"}
           >
             {!readOnly && sectionsCount === 0 && canCopy && (
-              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers", "calendar", "fees"])}>
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers", "calendar", "subjects", "fees"])}>
                 Copy from an earlier year
               </Button>
             )}
@@ -135,6 +136,24 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
                 {a.with_adviser === a.sections ? "Manage" : "Assign"}
               </Button>
             )}
+          </ChecklistItem>
+
+          <ChecklistItem
+            // Done once there are subjects and every one has a grading
+            // template -- without one, its grades can't be computed.
+            done={(sub?.count ?? 0) > 0 && sub.without_template === 0}
+            title="Subjects"
+            detail={sub?.count
+              ? `${sub.count} ${sub.count === 1 ? "subject" : "subjects"} across ${sub.grades} of ${sub.of} grades`
+                + (sub.without_template ? ` · ${sub.without_template} without a grading template` : "")
+              : "None yet — this year's grades are entered against these"}
+          >
+            {!readOnly && sub && sub.count === 0 && canCopy && (
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["subjects"])}>
+                Copy from an earlier year
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" to={`/subjects${yearLink}`}>Subjects</Button>
           </ChecklistItem>
 
           <ChecklistItem

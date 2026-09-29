@@ -320,11 +320,12 @@ describe("SchoolYearDetailPage — archiving", () => {
 });
 
 describe("SchoolYearDetailPage — fees", () => {
-  it("starts an empty year from an earlier one: sections, advisers, calendar and fees", async () => {
+  it("starts an empty year from an earlier one: sections, advisers, calendar, subjects and fees", async () => {
     api.getSchoolYearSetup.mockResolvedValue({
       enrollments: { total: 0, unfinished: 0 },
       sections: { count: 0, grades: 0 },
       advisers: { sections: 0, with_adviser: 0 },
+      subjects: { count: 0, grades: 0, of: 14, without_template: 0 },
       fees: { grades: 0, of: 14 },
       calendar: { quarters_set: 0, holidays: 0 },
     });
@@ -332,6 +333,13 @@ describe("SchoolYearDetailPage — fees", () => {
       from: body.from, to: label, dry_run: Boolean(body.dry_run),
       sections: { copied: [{ grade_level: "Grade 7", name: "Rizal", strand: null }], skipped: [] },
       advisers: { copied: [], skipped: [] },
+      subjects: {
+        copied: [
+          { subject_code: "MATH-7", subject_name: "Mathematics 7", school_level: "junior_highschool", grade_level: "Grade 7", strand: null, semester: null },
+          { subject_code: "SCI-7", subject_name: "Science 7", school_level: "junior_highschool", grade_level: "Grade 7", strand: null, semester: null },
+        ],
+        skipped: [],
+      },
     }));
     carryOverFees.mockImplementation((body) => Promise.resolve({
       from: body.from, to: body.to, dry_run: Boolean(body.dry_run),
@@ -340,22 +348,39 @@ describe("SchoolYearDetailPage — fees", () => {
     renderAt();
 
     expect(await screen.findByText("None yet — invoices for this year are built from these")).toBeTruthy();
+    expect(screen.getByText("None yet — this year's grades are entered against these")).toBeTruthy();
     // The Sections row's copy (the Fees row has its own, for fees alone).
     fireEvent.click(screen.getAllByRole("button", { name: /Copy from an earlier year/ })[0]);
 
     // Each server previews its own parts.
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenCalledWith(
-      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar"], dry_run: true },
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar", "subjects"], dry_run: true },
     ));
     expect(carryOverFees).toHaveBeenCalledWith({ from: "2026-2027", to: "2027-2028", dry_run: true });
     expect(await screen.findByText("Will add fees for 1 grade:")).toBeTruthy();
+    expect(screen.getByText("Will add 2 subjects:")).toBeTruthy();
+    expect(screen.getByText("Mathematics 7, Science 7")).toBeTruthy();
 
-    expect(screen.getByText("1 section · fees for 1 grade")).toBeTruthy();
+    expect(screen.getByText("1 section · 2 subjects · fees for 1 grade")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(carryOverFees).toHaveBeenLastCalledWith({ from: "2026-2027", to: "2027-2028" }));
     expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
-      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar"] },
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar", "subjects"] },
     );
+  });
+
+  it("links to the year's subjects, and says which still need a grading template", async () => {
+    api.getSchoolYearSetup.mockResolvedValue({
+      enrollments: { total: 0, unfinished: 0 },
+      sections: { count: 0, grades: 0 },
+      advisers: { sections: 0, with_adviser: 0 },
+      subjects: { count: 12, grades: 2, of: 14, without_template: 3 },
+      fees: { grades: 0, of: 14 },
+      calendar: { quarters_set: 0, holidays: 0 },
+    });
+    renderAt();
+    expect(await screen.findByText("12 subjects across 2 of 14 grades · 3 without a grading template")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Subjects" }).getAttribute("href")).toBe("/subjects?school_year=2027-2028");
   });
 
   it("links to the year's fees in Billing Settings", async () => {

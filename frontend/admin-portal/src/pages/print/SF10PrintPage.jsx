@@ -86,6 +86,7 @@ export default function SF10PrintPage() {
                 // truncation, the 20 that did arrive were an arbitrary slice
                 // that need not include the ones the learner actually took.
                 getSubjects({
+                  school_year: enr.school_year,
                   school_level: enr.school_level,
                   grade_level: enr.grade_level,
                   page_size: 100,

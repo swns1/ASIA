@@ -32,8 +32,13 @@ export default function CORPrintPage() {
         const studentId = enr.student_detail?.student_id ?? enr.student;
         const [stu, subs, settings] = await Promise.all([
           getStudent(studentId),
+          // The learner's own year and grade: without grade_level a Grade 3
+          // COR listed every elementary grade's subjects.
           getSubjects({
+            school_year: enr.school_year,
             school_level: enr.school_level,
+            grade_level: enr.grade_level,
+            page_size: 100,
             ...(enr.strand   ? { strand:   enr.strand   } : {}),
             ...(enr.semester ? { semester: enr.semester } : {}),
           }),

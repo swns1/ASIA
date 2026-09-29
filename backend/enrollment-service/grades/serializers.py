@@ -85,6 +85,11 @@ class GradeSerializer(serializers.ModelSerializer):
             if period not in NON_SHS_PERIODS:
                 raise serializers.ValidationError({"grading_period": f"{enrollment.school_level} enrollments only accept '1st_quarter' through '4th_quarter'."})
 
+        # Each year has its own subjects: a 2025-2026 grade can't be filed
+        # against 2026-2027's curriculum, or last year's report card would
+        # change with this year's.
+        if subject and subject.school_year != enrollment.school_year:
+            raise serializers.ValidationError({"subject": f"'{subject.subject_name}' is a S.Y. {subject.school_year} subject, but this enrollment is in S.Y. {enrollment.school_year}."})
         if subject and subject.school_level != enrollment.school_level:
             raise serializers.ValidationError({"subject": f"Subject is for {subject.school_level} but enrollment is for {enrollment.school_level}."})
         if subject and subject.grade_level != enrollment.grade_level:

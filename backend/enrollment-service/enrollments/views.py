@@ -178,6 +178,7 @@ class SectionAdvisoryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
                 students.append(student_data)
 
             subject_qs = Subject.objects.filter(
+                school_year=advisory.school_year,
                 school_level=advisory.school_level,
                 grade_level=advisory.grade_level,
             )
@@ -982,7 +983,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
 
     # In the order they're applied: advisers land in sections, so sections
     # copied in the same run have to exist first.
-    CARRY_OVER_PARTS = ("sections", "advisers", "calendar")
+    CARRY_OVER_PARTS = ("sections", "advisers", "calendar", "subjects")
 
     @action(detail=True, methods=["post"], url_path="carry-over")
     def carry_over(self, request, label=None):
@@ -1000,7 +1001,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         setting a few things up by hand, is safe. dry_run answers the same
         question without writing -- the preview.
 
-        Parts: "sections", "advisers", "calendar". Fees are billing's to copy
+        Parts: "sections", "advisers", "calendar", "subjects". Fees are billing's to copy
         (POST /api/fee-schedules/carry-over/ on billing-service).
         """
         target = self.get_object()
@@ -1043,6 +1044,8 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 result["advisers"] = self._carry_over_advisers(source, target, dry_run, planned)
             if "calendar" in parts:
                 result["calendar"] = self._carry_over_calendar(source, target, dry_run)
+            if "subjects" in parts:
+                result["subjects"] = self._carry_over_subjects(source, target, dry_run)
         return Response(result)
 
     def _carry_over_sections(self, source, target, dry_run):
@@ -1196,19 +1199,53 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
 
         return {"shift_years": shift, "copied": listed(copied), "skipped": listed(skipped)}
 
+    def _carry_over_subjects(self, source, target, dry_run):
+        """
+        The source year's curriculum as it stood: codes, names, grades,
+        strands, semesters and grading templates, ready to adjust for what
+        changed. Skipped: a subject this year already has (same code, any
+        capitalisation).
+        """
+        from subjects.models import Subject
+
+        existing = {
+            code.lower()
+            for code in Subject.objects.filter(school_year=target.label).values_list("subject_code", flat=True)
+        }
+        copied, skipped = [], []
+        for sub in Subject.objects.filter(school_year=source.label).order_by("grade_level", "subject_name"):
+            row = {
+                "subject_code":        sub.subject_code,
+                "subject_name":        sub.subject_name,
+                "school_level":        sub.school_level,
+                "grade_level":         sub.grade_level,
+                "strand":              sub.strand,
+                "semester":            sub.semester,
+                "grading_template_id": sub.grading_template_id,
+            }
+            (skipped if sub.subject_code.lower() in existing else copied).append(row)
+        if copied and not dry_run:
+            Subject.objects.bulk_create([Subject(school_year=target.label, **row) for row in copied])
+
+        def listed(rows):
+            return [{k: v for k, v in r.items() if k != "grading_template_id"} for r in rows]
+
+        return {"copied": listed(copied), "skipped": listed(skipped)}
+
     @action(detail=True, methods=["get"], url_path="setup")
     def setup(self, request, label=None):
         """
         GET /api/school-years/{label}/setup/
 
         The numbers behind the year page's setup checklist: sections set up,
-        how many have an adviser, which grades have fees, and whether the
-        calendar has its quarter dates and holidays.
+        how many have an adviser, which grades have subjects and fees, and
+        whether the calendar has its quarter dates and holidays.
 
         Fees are billing-service's table, read here the way billing reads
         enrollments: raw SQL on the shared database, never written.
         """
         from academic_calendar.models import CalendarEvent
+        from subjects.models import Subject
 
         year = self.get_object()
         sections = Section.objects.filter(school_year=year)
@@ -1219,6 +1256,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             .distinct()
         )
         events = CalendarEvent.objects.filter(school_year=year.label)
+        subjects = Subject.objects.filter(school_year=year.label)
         with connection.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(DISTINCT grade_level) FROM fee_schedules WHERE school_year = %s AND is_active",
@@ -1243,6 +1281,13 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             "advisers": {
                 "sections": len(section_keys),
                 "with_adviser": len(section_keys & advised),
+            },
+            "subjects": {
+                "count": subjects.count(),
+                "grades": subjects.values("grade_level").distinct().count(),
+                "of": len(GRADE_ORDER),
+                # Grades can't be computed for these until one is picked.
+                "without_template": subjects.filter(grading_template__isnull=True).count(),
             },
             "fees": {"grades": fee_grades, "of": len(GRADE_ORDER)},
             "calendar": {

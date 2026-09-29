@@ -82,6 +82,7 @@ export default function SF9PrintPage() {
         const [stu, subs, allGrades, recs, settings, valueCats, valueReports] = await Promise.all([
           getStudent(studentId),
           getSubjects({
+            school_year: enr.school_year,
             school_level: enr.school_level,
             grade_level: enr.grade_level,
             page_size: 100,

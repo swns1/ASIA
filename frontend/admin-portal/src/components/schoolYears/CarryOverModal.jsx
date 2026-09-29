@@ -13,16 +13,17 @@ import { fmtDate } from "../../utils/format";
 import { GRADE_ORDER } from "../../utils/grading";
 
 // Start a year from an earlier one: copy its sections, the advisers of those
-// sections, its calendar and its fees across so that what didn't change needs
-// no retyping.
+// sections, its calendar, its subjects and its fees across so that what
+// didn't change needs no retyping.
 //
 // The preview is the servers' own dry run, so what it lists is exactly what
 // Copy will do. Nothing this year already has is touched -- a section with
 // the same name in the same grade is skipped, so is an adviser whose section
-// already has one, and so is a grade that already has fees -- so it's safe
+// already has one, a subject whose code is already used here, and a grade
+// that already has fees -- so it's safe
 // after setting a few things up by hand, or run twice.
 //
-// Sections, advisers and the calendar are enrollment-service's to copy, fees
+// Sections, advisers, the calendar and subjects are enrollment-service's to copy, fees
 // billing's; the modal asks each for its own parts and shows them as one.
 
 // In the order they're applied: advisers land in sections.
@@ -30,6 +31,7 @@ const PARTS = [
   { id: "sections", label: "Sections", hint: "Each grade's section names and strands" },
   { id: "advisers", label: "Advisers", hint: "Each section's adviser, into the section of the same name here" },
   { id: "calendar", label: "Calendar", hint: "Holidays, quarters and events, on the same day and month" },
+  { id: "subjects", label: "Subjects", hint: "Each grade's subjects and grading templates, ready to adjust" },
   { id: "fees",     label: "Fees",     hint: "Each grade's fee schedule and its items, ready to adjust" },
 ];
 const ALL_PARTS = PARTS.map((p) => p.id);
@@ -187,6 +189,42 @@ function FeesPreview({ result, from, to }) {
   );
 }
 
+function SubjectsPreview({ result, from, to }) {
+  const toCopy = result?.copied ?? [];
+  const skipped = result?.skipped ?? [];
+  if (toCopy.length === 0) {
+    return (
+      <p className="text-[13px] text-neutral-600">
+        {skipped.length
+          ? `S.Y. ${to} already has all ${skipped.length} of S.Y. ${from}'s subjects.`
+          : `S.Y. ${from} has no subjects to copy.`}
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="text-[13px] font-semibold text-neutral-800">
+        Will add {plural(toCopy.length, "subject", "subjects")}:
+      </p>
+      <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
+        {groupByGrade(toCopy).map(([grade, rows]) => (
+          <li key={grade} className="flex items-baseline gap-2 text-[12.5px]">
+            <span className="w-24 shrink-0 font-semibold text-neutral-700">{grade}</span>
+            <span className="min-w-0 text-neutral-800">
+              {rows.map((r) => r.subject_name).join(", ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {skipped.length > 0 && (
+        <p className="text-[12.5px] text-neutral-500">
+          {plural(skipped.length, "subject", "subjects")} with a code already used here {skipped.length === 1 ? "is" : "are"} left as {skipped.length === 1 ? "it is" : "they are"}.
+        </p>
+      )}
+    </>
+  );
+}
+
 function CalendarPreview({ result, from, to }) {
   const toCopy = result?.copied ?? [];
   const skipped = result?.skipped ?? [];
@@ -228,7 +266,8 @@ function CalendarPreview({ result, from, to }) {
 }
 
 // Each server's share of the parts, run one after the other: sections,
-// advisers and the calendar first (enrollment-service), then fees (billing).
+// advisers, the calendar and subjects first (enrollment-service), then fees
+// (billing).
 async function carryOver(schoolYear, from, parts, dryRun) {
   const schoolParts = parts.filter((p) => p !== "fees");
   const result = {};
@@ -249,6 +288,7 @@ function describe(result) {
     result.sections && plural(result.sections.copied?.length ?? 0, "section", "sections"),
     result.advisers && plural(result.advisers.copied?.length ?? 0, "adviser", "advisers"),
     result.calendar && plural(result.calendar.copied?.length ?? 0, "calendar event", "calendar events"),
+    result.subjects && plural(result.subjects.copied?.length ?? 0, "subject", "subjects"),
     result.fees && `fees for ${plural(result.fees.copied?.length ?? 0, "grade", "grades")}`,
   ].filter(Boolean).join(" and ");
 }
@@ -257,7 +297,8 @@ export default function CarryOverModal({
   schoolYear,
   years,
   initialParts = ["sections"],
-  // Which parts this place offers. Billing Settings copies fees only.
+  // Which parts this place offers: Billing Settings copies fees only, the
+  // Subjects page subjects only.
   availableParts = ALL_PARTS,
   onClose,
   onDone,
@@ -303,6 +344,7 @@ export default function CarryOverModal({
     count("sections") && plural(count("sections"), "section", "sections"),
     count("advisers") && plural(count("advisers"), "adviser", "advisers"),
     count("calendar") && plural(count("calendar"), "calendar event", "calendar events"),
+    count("subjects") && plural(count("subjects"), "subject", "subjects"),
     count("fees") && `fees for ${plural(count("fees"), "grade", "grades")}`,
   ].filter(Boolean).join(" · ");
 
@@ -425,6 +467,11 @@ export default function CarryOverModal({
               {picked.has("calendar") && preview.calendar && (
                 <div className="flex flex-col gap-2">
                   <CalendarPreview result={preview.calendar} from={from} to={schoolYear} />
+                </div>
+              )}
+              {picked.has("subjects") && preview.subjects && (
+                <div className="flex flex-col gap-2">
+                  <SubjectsPreview result={preview.subjects} from={from} to={schoolYear} />
                 </div>
               )}
               {picked.has("fees") && preview.fees && (

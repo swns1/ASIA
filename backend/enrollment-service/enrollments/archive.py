@@ -2,8 +2,8 @@
 An archived school year is read-only.
 
 Archiving says a year is finished: its enrollments, grades, score entries,
-attendance, narrative reports, advisers, sections, calendar, scholarships and
-risk runs stay as they are. Correcting any of them -- a grade included -- means
+attendance, narrative reports, advisers, sections, subjects, calendar,
+scholarships and risk runs stay as they are. Correcting any of them -- a grade included -- means
 unarchiving the year first (School Years page), which is a deliberate, logged
 step rather than something a stray edit can do.
 
