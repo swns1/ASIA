@@ -2,8 +2,8 @@
 
 The complete reference for ASIA's mock (seed) data: what exists today, how it is built, every rule the data has to satisfy, how to check it, and how to ask for more.
 
-- **Last verified:** 2026-09-29, against commit `43c50821` (after the school-year rework, per-year subjects, and staff active status).
-- **Current tier:** Tier 1. 10 learners with complete profiles, all in S.Y. 2025-2026. S.Y. 2026-2027 is deliberately left empty.
+- **Last verified:** 2026-09-30, loaded against the post-merge `matres` branch (school-year rework, per-year subjects, staff active status).
+- **Current tier:** Tier 2. 25 learners in S.Y. 2025-2026 (finished) + 25 learners in S.Y. 2026-2027 (current, filled up to 2026-09-30), 31 distinct learners (19 carry over both years). Supersedes Tier 1; the narrative in §9 below is Tier 1 and now historical — see §9.5 for what Tier 2 adds and how to get the full per-learner detail.
 - **Database:** `SLIS THESIS FINAL` (local PostgreSQL, user `postgres`).
 
 ---
@@ -35,15 +35,15 @@ The complete reference for ASIA's mock (seed) data: what exists today, how it is
 
 | | |
 |---|---|
-| Seeded year | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; every enrollment is `completed`. Not archived. |
-| Empty year | **S.Y. 2026-2027** (current). No subjects, sections, advisers or calendar events. Has its original 11 fee schedules. Left empty to test carry-over. |
-| Learners | 10 learners, 12 enrollments (two Senior High learners have one enrollment per semester) |
-| Sections | 16 in 2025-2026: one per grade, plus STEM-A and ABM-A in Grades 11 and 12. Every section has an adviser. |
-| Subjects | 121 for 2025-2026, covering all 14 grades. Senior High is split by semester, with core, STEM and ABM subjects. |
-| Accounts | 28 seeded accounts (26 staff, 2 guardians). Password **`SlisDemo2026!`** for all. |
-| Volumes | 1,942 score entries · 251 grades · 140 observed-value marks · 1,759 attendance records · 50 documents · 10 invoices · 57 payments · 39 calendar events |
-| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001`..`2025-0010` · enrollment IDs 200-211 · invoice IDs 300-309 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
-| Generator | `generate_seed.py`, **currently in a Claude session scratchpad, not the repo** (see §3) |
+| Seeded year 1 | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; 25 learners. Not archived. |
+| Seeded year 2 | **S.Y. 2026-2027** (current). 25 learners, filled up to **2026-09-30** (`TODAY` in the generator). MATATAG subject changes applied (no Mother Tongue G1-3, EsP replaced by GMRC/Values Ed). |
+| Learners | 31 distinct (25 + 25, 19 carried over both years), 57 enrollments total (Senior High learners have one enrollment per semester) |
+| Sections | 2025-2026: one per grade plus G7 Pearl, STEM-A/ABM-A in G11-12. 2026-2027: renamed/reshuffled sections (see §9.5), G9 Sapphire has no adviser. |
+| Subjects | 121 for 2025-2026; 118 for 2026-2027 (MATATAG-adjusted). |
+| Accounts | 72 users total (2 inactive/resigned teachers), plus 4 usable guardian logins. Password **`SlisDemo2026!`** for all active staff. |
+| Volumes | 6,206 score entries · 689 grades · 372 narratives · 5,835 attendance records · 145 documents (143 files) · 50 invoices · 200 payments · 349 installments · 11 invites · 7 applications |
+| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001..0024`, `2026-0001..0007` · enrollment IDs 200-230, 400-425 · invoice IDs 300-325, 500-523 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
+| Generator | `scripts/generate_seed_data.py` + `scripts/seed_spec.py`, **now in the repo** (moved 2026-09-30; see §3) |
 
 ---
 
@@ -66,15 +66,15 @@ These are standing instructions for anyone (human or Claude) working on the seed
 
 | File | Location | Tracked? | Purpose |
 |---|---|---|---|
-| `generate_seed.py` | `/private/tmp/claude-501/-Users-jannolematres-Documents-GitHub-ASIA/19c32026-85e0-4a59-a780-d563fee5c61b/scratchpad/seed_gen/` | **No: session scratchpad, can disappear** | The generator. Deterministic Python that writes `seed_data.sql` plus placeholder PDFs. **Should be moved into the repo** (proposed: `scripts/generate_seed_data.py`). |
-| `seed_data.sql` | repo root | Yes | Generated output. One transaction (`BEGIN`…`COMMIT`), about 3,400 lines. Includes `scripts/reference_data.sql` with `\ir`. |
+| `generate_seed_data.py` | `scripts/` | **Yes (moved into the repo 2026-09-30)** | The generator entry point. Deterministic Python that writes `seed_data.sql` plus placeholder PDFs. Imports `seed_spec` as a sibling module — keep both files in `scripts/`. |
+| `seed_spec.py` | `scripts/` | Yes | All the Tier 2 data: constants, calendars, subject catalogues, fee items, staff, sections, households, profiles, enrollments, invites, applications. Edit this for data changes; edit `generate_seed_data.py` for logic changes. |
+| `seed_data.sql` | repo root | Yes | Generated output. One transaction (`BEGIN`…`COMMIT`), ~10,080 lines (Tier 2). Includes `scripts/reference_data.sql` with `\ir`. |
 | `scripts/reference_data.sql` | repo | Yes | Requirement types (13), grading templates 1-4 and their components, observed-value categories 900-903, and a default `school_settings` row (only if none exists). |
-| `scripts/resync-sequences.sql` | repo | Yes | Moves every sequence to its table's max. The seed already resyncs the tables it writes with explicit IDs. |
-| `scripts/setup-db.ps1 -Demo` | repo | Yes | Windows fresh install: creates the database, loads `schema.sql`, fakes the migrations, loads reference data, then `seed_data.sql`. |
+| `scripts/resync-sequences.sql` | repo | Yes | Moves every sequence to its table's max. The seed already resyncs the tables it writes with explicit IDs (including `student_applications`). |
+| `scripts/setup-db.ps1 -Demo` | repo | Yes | Windows fresh install: creates the database, loads `schema.sql`, fakes the migrations, loads reference data, then `seed_data.sql`. **Not re-tested against Tier 2** — see §11 note. |
 | `scripts/seed-demo.ps1` + Django `seed_demo*.py` | repo | Yes | **Legacy and broken since the school-year rework. Don't use.** See below. |
-| Placeholder PDFs | `backend/enrollment-service/media/requirements/` and `backend/student-service/media/requirements/` | No (`media/` is gitignored) | 50 files named `seed_<lrn>_<code>.pdf`, each stamped "SAMPLE DOCUMENT - DEMO DATA ONLY". Without them the rows still load, but the preview links return 404. |
-| `clear_tier1_seed.sql` | same scratchpad folder | No | Removes all Tier 1 data and checks the database is back to the pre-seed baseline. **Outdated:** it deletes *all* subjects and templates, which was right before the per-year subjects rework. Rewrite it before reusing it. |
-| Backups | `~/Documents/ASIA-db-backups/` | No | `pg_dump -Fc` files: `SLIS_THESIS_FINAL_2026-09-29_before-tier1-seed.dump`, `…_tier1-seeded.dump`, `…_before-lookup-clear.dump`, `…_before-subjects-0002.dump`, `…_before-tier1-reseed.dump`, and `…_2026-09-28_pre-wipe.dump`. |
+| Placeholder PDFs | `backend/enrollment-service/media/requirements/` and `backend/student-service/media/requirements/` | No (`media/` is gitignored) | 143 files named `seed_<lrn>_<code>.pdf`, each stamped "SAMPLE DOCUMENT - DEMO DATA ONLY" (WinAnsiEncoding so `ñ` renders). Without them the rows still load, but the preview links return 404. Regenerate with the `--media` flags shown in §4. |
+| Backups | `~/Documents/ASIA-db-backups/` | No | `pg_dump -Fc` files, including `SLIS_THESIS_FINAL_2026-09-30_before-tier2-seed.dump` (taken immediately before the Tier 2 load) and the earlier Tier 1 dumps from 2026-09-29. |
 
 ### The legacy seeders (don't use)
 
@@ -105,13 +105,19 @@ All commands run from the repo root on macOS (zsh). The venv is the repo's `venv
 ### Regenerate `seed_data.sql`
 
 ```bash
-GEN=/private/tmp/claude-501/-Users-jannolematres-Documents-GitHub-ASIA/19c32026-85e0-4a59-a780-d563fee5c61b/scratchpad/seed_gen/generate_seed.py
-venv/bin/python "$GEN" --out seed_data.sql \
+venv/bin/python scripts/generate_seed_data.py --out seed_data.sql \
   --media backend/enrollment-service/media \
   --media backend/student-service/media
-# prints: {'enrollments': 12, 'scores': 1942, 'grades': 251, 'narratives': 140,
-#          'exceptions': 88, 'invoices': 10, 'payments': 57, 'docs': 50, 'subjects': 121}
+# prints: {'enrollments': 57, 'events_2025-2026': 39, 'events_2026-2027': 40,
+#          'guardian_accounts': 40, 'docs': 145, 'doc_files': 143, 'transfers': 6,
+#          'scholarships': 21, 'invoices': 50, 'payments': 200, 'installments': 349,
+#          'invites': 11, 'applications': 7, 'scores': 6206, 'grades': 689,
+#          'narratives': 372, 'attendance': 5835, 'exceptions': 311, 'learners': 31,
+#          'subjects': {'2025-2026': 121, '2026-2027': 118},
+#          'learners_per_year': {'2025-2026': 25, '2026-2027': 25}}
 ```
+
+Add `--report path/to/report.json` for a machine-readable dump of every learner, invoice and enrollment the run produced (useful for regenerating this guide's tables, or for scripted verification).
 
 Django must be importable, because the generator hashes passwords with Django's `make_password`. The output is byte-for-byte reproducible as long as the generator is unchanged.
 
@@ -745,24 +751,38 @@ Invoice numbers are `INV-2025-000300` to `INV-2025-000309`. The invoice date is 
 | check | `CHK-###### (BPI)` |
 | card | `CARD-XXXX4821-######` |
 
-### 9.5 S.Y. 2026-2027 (current, deliberately empty)
+### 9.5 Tier 2 (loaded 2026-09-30): what's new and where to find the detail
 
-- No subjects, sections, advisers or calendar events. No learners.
-- Its 11 pre-existing fee schedules are untouched (no G3/G5/G9 schedules; G1 has no items).
-- Use it to test carry-over. A dry run would copy 121 subjects, 16 sections and 16 advisers (all advisers are active).
+Tier 2 **replaced** the "2026-2027 deliberately empty" setup that §9.1-9.4 describe. That narrative (§9.1-9.4) is kept as-is for historical reference — it accurately describes what Tier 1 alone looked like — but it is no longer what's in `seed_data.sql` or the real database. Rather than hand-transcribing 31 learners' worth of detail into markdown (high risk of drifting out of sync with the generator), use `--report` (§4) to get the exact current data as JSON: every learner's student number, every invoice's installment statuses, every enrollment's scenario fields.
+
+**S.Y. 2026-2027 is no longer empty.** It's the current year, seeded up to **2026-09-30**, with:
+
+- 25 learners (19 carried over from 2025-2026, 6 new: 5 transferees/new enrollees numbered `2026-0001..0005`, plus 2 more from intake).
+- MATATAG subject changes: no Mother Tongue in G1-3; EsP replaced by GMRC (G1-6) and Values Education (G7-10); G10 MAPEH renamed. 118 subjects total.
+- Reshuffled sections: G3 renamed to Del Pilar, G4 Luna's adviser (Arnel Pascual) resigned mid-year with Carla Bernardo taking over 2026-09-21, G9 Sapphire has no adviser, a new G7 Pearl section, new adviser assignments across G11-12 strands.
+- Two resigned/inactive teachers (Arnel Pascual, Maricar Santiago) — `is_active = false`, login refused, still shown on past-year records.
+- One new teacher (Rhea Dimalanta).
+- Grade 9 has no fee schedule at all (no invoice possible); Grade 1's schedule has zero items (produces a ₱0 invoice).
+- A cancel-then-re-enroll case, a September transfer-out, a pending enrollment blocked on missing documents, and today's attendance intentionally left unmarked for one section.
+- 11 invites and 7 online applications spanning every intake status (draft, submitted, in_review, approved, rejected), including one that matches an existing student via `find_matches`.
+- 4 guardian accounts with usable passwords (`maribel.reyes.seed@gmail.com`, `maria.dizon.seed@gmail.com`, `perla.ibarra.seed@gmail.com`, `danilo.jimenez.seed@gmail.com`), all password `SlisDemo2026!`.
+
+**S.Y. 2025-2026** grew from 10 to 25 learners, adding (among others) a mid-year transfer-in whose first installment absorbs the whole year's fees, a section move, a voided-and-reissued invoice, a pre-enrollment withdrawal (voided invoice, never attended), a January dropout with overdue fees, a failed-then-retained year, and an incomplete-grade promotion override.
+
+The generator uses a per-learner RNG (`random.Random("slis-seed-tier2|<key>|<sy>|<purpose>")`), so adding another learner later does not reshuffle any existing learner's scores, attendance or payment dates — unlike Tier 1's single shared stream (§10's determinism caveat no longer applies to Tier 2 or later).
 
 ### 9.6 Reserved identifiers (don't reuse for other data)
 
 | What | Reserved |
 |---|---|
 | LRN | `136700000xxx` (seed learners use the last three digits = student_id) |
-| student_id | 100, 110, 111, 114, 115, 125, 128, 140, 147, 152 |
-| household_id | 100, 110, 111, 114, 115, 125, 128, 140, 147 |
-| enrollment_id | 200-211 |
-| invoice_id | 300-309 |
-| student_number | 2025-0001..2025-0010 |
+| enrollment_id | 200-230 (2025-2026), 400-425 (2026-2027) |
+| invoice_id | 300-325 (2025-2026), 500-523 (2026-2027) |
+| student_number | `2025-0001..2025-0025`, `2026-0001..2026-0007` |
 | Emails | `*@slis.test`, `*.seed@gmail.com` |
 | Legacy block (old seeders) | LRN `9900…` |
+
+Tier 1's original ID ranges (student_id 100/110/111/114/115/125/128/140/147/152; household_id same minus 152; enrollment_id 200-211; invoice_id 300-309) are a subset still in use — those ten learners are the core of Tier 2's history, unchanged.
 
 ---
 
@@ -823,7 +843,7 @@ Invoice numbers are `INV-2025-000300` to `INV-2025-000309`. The invoice date is 
 
   In every style, the first installment is paid on enrollment day as a downpayment.
 
-**Determinism caveat:** one RNG stream is consumed in build order: scores for every enrollment, then attendance, then payments, then documents. **Any change** (adding a learner, a subject, an item) shifts every random value generated after that point. Existing learners' scores, absence dates and payment dates would change too. If stable history matters across tiers, switch to a per-learner RNG (e.g. `random.Random(f"{seed}-{student_id}")`) before Tier 2.
+**Determinism caveat (Tier 1 only, fixed in Tier 2):** Tier 1 consumed one shared RNG stream in build order, so any change shifted every random value generated after it. **Tier 2 switched to a per-learner RNG** (`random.Random("slis-seed-tier2|<key>|<sy>|<purpose>")`, seeded in `seed_spec.py`), so adding or editing one learner no longer changes another learner's scores, attendance or payments. This is now how the generator works; keep using this scheme for any further tier.
 
 **Output sections** (in `seed_data.sql`):
 
@@ -853,6 +873,8 @@ The embedded `DO $$ … RAISE EXCEPTION` checks make the whole file roll back if
 ## 11. Verification checklist
 
 Run these on a throwaway database first, then read-only on the real one. Tier 1 passed all of them on 2026-09-29, including after the staff-active change.
+
+**Tier 2 status (2026-09-30):** most of this list was run on a throwaway copy before loading — deterministic output, idempotent load, the zero-row SQL checks, 689/689 grades matching the calculator, 50/50 invoices matching billing's own builder, 29/31 logins (the 2 inactive teachers correctly refused), the document gate, and EnrollmentSerializer re-validation on 55/57 enrollments (the 2 failures have overrides, as expected). **Skipped on the user's go-ahead** ("skip the testing, just create the required data"): the fresh-`schema.sql`-load test, and the remaining service-level smoke/regression suites (`makemigrations --check`, full billing/enrollment test suites). Re-run those before relying on this tier for anything beyond manual UI checks.
 
 **Load-level:**
 
@@ -909,6 +931,16 @@ SELECT a.* FROM section_advisories a LEFT JOIN users u ON u.user_id=a.teacher_us
 | 6 | 2026-09-29 | `schema.sql` starts with `SET transaction_timeout` (from a newer `pg_dump`), so it doesn't load on the local server as-is. | Environment mismatch; the workaround is in §4. |
 | 7 | 2026-09-29 | Re-running the seed doesn't reset `users.is_active`, so a deactivated seeded account stays deactivated. | Seed behaviour; decide whether the seed should force `is_active`. |
 | 8 | 2026-09-29 | The README's Demo accounts section describes the old seed. | **Open.** |
+| 9 | Tier 2, 2026-09-30 | Carry-over into a new year copies obsolete subjects from the prior year verbatim (2025-26's Mother Tongue for G1-3 and EsP for G1-10, 13 subjects), even though the target year's own catalogue (2026-2027, MATATAG) has already dropped them. | **Open** (reported, not fixed). |
+| 10 | Tier 2, 2026-09-30 | Carry-over also recreates a section under its *old* name/adviser (G3 "Mabini" with Aileen Manalo) even though that section was renamed ("Del Pilar") and re-staffed in the new year. | **Open.** |
+| 11 | Tier 2, 2026-09-30 | Calendar carry-over shifts every moveable holiday by exactly +1 year, which is wrong for lunar/moveable dates (Eid'l Adha, Chinese New Year, Eid'l Fitr, All Saints' Eve landed on the wrong dates for 2026-27). | **Open.** |
+| 12 | Tier 2, 2026-09-30 | The carry-over preview shows a blank `teacher_name` for an adviser who is a non-teacher role (e.g. a registrar still assigned as adviser). | **Open.** |
+| 13 | Tier 2, 2026-09-30 | "Teachers Today" marks a section's attendance as fully taken when only *some* of its learners have an attendance record for the day, not all. | **Open.** |
+| 14 | Tier 2, 2026-09-30 | The promotion-block message renders an incomplete subject's grade as if it were final (e.g. "Science 3 (92.00)") instead of flagging it as incomplete. | **Open.** |
+| 15 | Tier 2, 2026-09-30 | Year-over-year compare excludes a learner who was cancelled mid-year from that year's learner count, and separately counts graduates in the "came back next year" denominator, understating the retention rate. | **Open.** |
+| 16 | Tier 2, 2026-09-30 | The year setup checklist counts a grade's fee schedule as "configured" even when that schedule has zero fee items (Grade 1, 2026-2027). | **Open.** |
+| 17 | Tier 2, 2026-09-30 | A ₱0 invoice (from a fee schedule with no items) still gets flagged and listed as overdue once its due date passes, even though there's nothing owed. | **Open.** |
+| 18 | Tier 2, 2026-09-30 | The dashboard for a finished school year shows an empty/zero level-distribution chart and an empty attendance series, even though the year has full data — looks like a live-year-only filter leaking into the historical view. | **Open.** |
 
 ---
 
@@ -973,24 +1005,13 @@ For each: the tables touched and the rules that bite.
 
 These are proposals, not decisions; confirm them at each go-ahead.
 
-- **Tier 1.5 (small, optional):**
-  - one resigned teacher;
-  - the seed forces `is_active` on seeded accounts;
-  - `lock-demo` gap reported (fix only on request);
-  - generator moved into the repo;
-  - README demo section refreshed.
-- **Tier 2 (connected history + a live year), about 30-60 learners:**
-  - **Years:**
-    - 2023-2024 archived;
-    - 2024-2025 and 2025-2026 open (history, with promotion and retention between them);
-    - 2026-2027 current, seeded up to today;
-    - 2027-2028 upcoming (partial setup, pending enrollments, applications).
-  - **Edge cases:** failed year + override, transfer-out with close-out, cancelled and pending rows, missing documents, co-advisers, a section without an adviser, void/reissue, overpayment attempts.
-  - **Structure:** switch the generator to a per-learner RNG first.
+- ~~**Tier 1.5 (small, optional)**~~ — folded into Tier 2 below (resigned teachers, generator moved into the repo). `lock-demo` gap and README refresh are still open, tracked in §12.
+- **✅ Tier 2 — done, loaded 2026-09-30.** 25 learners in S.Y. 2025-2026 (finished), 25 in S.Y. 2026-2027 (current, up to 2026-09-30), 31 distinct. Per-learner RNG shipped. Edge cases delivered: failed year + override, transfer-out with close-out, cancel-then-re-enroll, missing documents, a section with no adviser, void/reissue, a ₱0 fee schedule, a grade with no fee schedule at all, MATATAG subject changes, full intake spread (11 invites, 7 applications across every status). See §9.5 for the summary and `--report` for full detail. **Not done from the original proposal:** 2023-2024 archived year and 2027-2028 upcoming year were not added — only two years were requested and built.
 - **Tier 3 (volume), 200-500+ learners:**
   - 2-3 sections per grade; a realistic spread of abilities, attendance and payment behaviour;
   - enough learners for clustering and risk to be meaningful;
-  - stress on list pages, pagination, exports and dashboards.
+  - stress on list pages, pagination, exports and dashboards;
+  - optionally add the 2023-2024 archived year and a 2027-2028 upcoming year, carried over from Tier 2's roadmap.
 
 ---
 
