@@ -188,17 +188,33 @@ describe("SchoolYearDetailPage — advisers", () => {
 
   it("lists every section with its adviser, or the gap", async () => {
     renderAt("/school-years/2027-2028?tab=advisers");
-    expect(await screen.findByText("1 of 2 sections have an adviser")).toBeTruthy();
+    expect(await screen.findByText("1 of 2 sections have an active adviser")).toBeTruthy();
     expect(api.getSectionAdvisories).toHaveBeenCalledWith({ school_year: "2027-2028", page_size: 500 });
     expect(screen.getByText("Ana Cruz")).toBeTruthy();
     const mabini = screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" }).closest("li");
     expect(within(mabini).getByText("No adviser")).toBeTruthy();
   });
 
+  it("flags a section whose only adviser has been deactivated", async () => {
+    api.getSectionAdvisories.mockResolvedValue({
+      results: [RIZAL_ADVISER, { ...RIZAL_ADVISER, advisory_id: 41, teacher_user_id: 9, section: "Mabini" }],
+    });
+    renderAt("/school-years/2027-2028?tab=advisers");
+    // Carla (inactive) still advises Mabini, but it counts as a gap.
+    expect(await screen.findByText("1 of 2 sections have an active adviser")).toBeTruthy();
+    const assign = screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" });
+    expect(assign.textContent).toContain("Assign");
+    const mabini = assign.closest("li");
+    expect(within(mabini).getByText("Carla Diaz")).toBeTruthy();
+    expect(within(mabini).getByText("Inactive")).toBeTruthy();
+    expect(within(mabini).getByText(/assign a replacement/)).toBeTruthy();
+    expect(within(mabini).queryByText("No adviser")).toBeNull();
+  });
+
   it("assigns a teacher to a section, which fixes the rest of the placement", async () => {
     api.createSectionAdvisory.mockResolvedValue({});
     renderAt("/school-years/2027-2028?tab=advisers");
-    await screen.findByText("1 of 2 sections have an adviser");
+    await screen.findByText("1 of 2 sections have an active adviser");
     fireEvent.click(screen.getByRole("button", { name: "Assign an adviser to Grade 7 Mabini" }));
     const picker = await screen.findByRole("combobox", { name: "Teacher" });
     // Only active teachers, each with what they already advise this year.

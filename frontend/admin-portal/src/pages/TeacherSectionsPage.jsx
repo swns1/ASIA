@@ -1368,6 +1368,22 @@ function SectionRail({ sections, selectedKey, onSelect }) {
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
+// The admin picker only views a teacher's sections, so teachers who have left
+// stay in it -- their past sections and grades are still worth opening --
+// grouped at the bottom. Assigning pickers leave them out entirely.
+function TeacherOptions({ teachers }) {
+  const option = (t) => (
+    <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
+  );
+  const inactive = teachers.filter((t) => !t.is_active);
+  return (
+    <>
+      {teachers.filter((t) => t.is_active).map(option)}
+      {inactive.length > 0 && <optgroup label="Inactive">{inactive.map(option)}</optgroup>}
+    </>
+  );
+}
+
 export default function TeacherSectionsPage() {
   usePageTitle("My Sections");
   const navigate = useNavigate();
@@ -1453,9 +1469,7 @@ export default function TeacherSectionsPage() {
                   className="h-10 min-w-[240px] py-0 text-sm"
                 >
                   <option value="">Select a teacher…</option>
-                  {teachers.map((t) => (
-                    <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
-                  ))}
+                  <TeacherOptions teachers={teachers} />
                 </Select>
               </>
             }
@@ -1497,9 +1511,7 @@ export default function TeacherSectionsPage() {
                 className="h-10 min-w-[240px] py-0 text-sm"
               >
                 <option value="">Select a teacher…</option>
-                {teachers.map((t) => (
-                  <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
-                ))}
+                <TeacherOptions teachers={teachers} />
               </Select>
             </>
           ) : undefined

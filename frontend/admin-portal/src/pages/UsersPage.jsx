@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,8 @@ import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { fieldErrorsFrom, firstMessageFrom } from "../utils/apiError";
 import { collect, required, email as emailCheck, minLength, hasErrors, focusFirstError } from "../utils/validation";
 import { getCurrentUser, isAdminRole } from "../utils/auth";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { getSectionAdvisories } from "../api/enrollmentApi";
 
 import {
   getUsers as _getUsers,
@@ -39,14 +41,18 @@ const TABLE_COLUMNS = [
 
 const MAX_PIC_BYTES = 2 * 1024 * 1024;
 
-function Avatar({ user, size = 36 }) {
-  const palette = getAvatarPalette(user.name);
+// A deactivated account's avatar goes grey, so the row reads as retired at a
+// glance even with the Inactive badge out of view.
+const INACTIVE_PALETTE = { bg: "var(--color-muted-50)", color: "var(--color-muted-500)" };
+
+function Avatar({ user, size = 36, dimmed = false }) {
+  const palette = dimmed ? INACTIVE_PALETTE : getAvatarPalette(user.name);
   if (user.profile_picture) {
     return (
       <img
         src={user.profile_picture}
         alt=""
-        className="shrink-0 rounded-full object-cover"
+        className={`shrink-0 rounded-full object-cover ${dimmed ? "opacity-60 grayscale" : ""}`}
         style={{ width: size, height: size }}
       />
     );
@@ -560,6 +566,87 @@ function DeleteUserModal({ user, currentUser, onClose, onDeleted }) {
   );
 }
 
+// ── Deactivate ────────────────────────────────────────────────────────────────
+
+// Someone who has left is deactivated rather than deleted: they can't sign in
+// and drop out of the staff pickers, but their past advisories, grades and
+// audit entries keep a name. A teacher's advisories from this year on are
+// listed, because they stay assigned until someone picks a replacement.
+function DeactivateUserModal({ user, onClose, onDeactivated }) {
+  const { currentYear } = useSchoolYear();
+  const [advisories, setAdvisories] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user.role !== "teacher") return undefined;
+    let live = true;
+    getSectionAdvisories({ teacher_user_id: user.user_id, page_size: 100 })
+      .then((data) => {
+        if (!live) return;
+        const rows = Array.isArray(data) ? data : data?.results ?? [];
+        // School year labels are "YYYY-YYYY", so they compare as text.
+        setAdvisories(rows.filter((a) => !currentYear || a.school_year >= currentYear));
+      })
+      // Only a heads-up: deactivating doesn't depend on it.
+      .catch(() => {});
+    return () => { live = false; };
+  }, [user.role, user.user_id, currentYear]);
+
+  async function handleConfirm() {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await _updateUser(user.user_id, { is_active: false });
+      toast.success(`${user.name} was deactivated and signed out.`);
+      onDeactivated(updated);
+    } catch (err) {
+      setError(firstMessageFrom(err) || "We couldn't deactivate this account. Please try again.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="sm"
+      icon="ti-user-off"
+      iconTone="danger"
+      title={`Deactivate ${user.name}?`}
+      description="Signed out right away, and can't sign in until reactivated. Past advisories, grades and audit entries keep the name. You can reactivate the account anytime."
+      loading={saving}
+      footer={
+        <div className="flex gap-2.5">
+          <Button variant="secondary" fullWidth disabled={saving} onClick={onClose} data-autofocus>
+            Cancel
+          </Button>
+          <Button variant="destructive" fullWidth loading={saving} onClick={handleConfirm}>
+            {saving ? "Working…" : "Deactivate account"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {advisories.length > 0 && (
+          <Alert variant="warning" title="Still advises">
+            <ul className="mt-1 space-y-0.5">
+              {advisories.map((a) => (
+                <li key={a.advisory_id}>
+                  S.Y. {a.school_year} · {a.grade_level} {a.section}{a.strand ? ` (${a.strand})` : ""}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5">
+              These stay assigned until you pick a new adviser on the School Years page.
+            </p>
+          </Alert>
+        )}
+        {error && <Alert variant="error">{error}</Alert>}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function UsersPage() {
@@ -573,9 +660,14 @@ export default function UsersPage() {
   const [loadError, setLoadError] = useState(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  // Opens on active accounts: staff who have left stay out of the way, one
+  // click from view.
+  const [statusFilter, setStatusFilter] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [deactivating, setDeactivating] = useState(null);
+  const [reactivatingId, setReactivatingId] = useState(null);
 
   async function fetchUsers() {
     setLoading(true);
@@ -597,9 +689,15 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const matchesStatus = useCallback(
+    (u) => statusFilter === "all" || (statusFilter === "active") === Boolean(u.is_active),
+    [statusFilter]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
+      if (!matchesStatus(u)) return false;
       const matchSearch =
         !q ||
         u.name?.toLowerCase().includes(q) ||
@@ -611,23 +709,36 @@ export default function UsersPage() {
         u.role === roleFilter;
       return matchSearch && matchRole;
     });
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, matchesStatus]);
 
+  // Headline numbers are people who can use the portal, so inactive
+  // accounts don't count.
+  const activeUsers = useMemo(() => users.filter((u) => u.is_active), [users]);
+  const inactiveCount = users.length - activeUsers.length;
   const stats = useMemo(
     () => ({
-      total: users.length,
-      admins: users.filter((u) => isAdminRole(u.role)).length,
-      staff: users.filter((u) => !isAdminRole(u.role) && u.role !== "guardian").length,
-      guardians: users.filter((u) => u.role === "guardian").length,
+      total: activeUsers.length,
+      admins: activeUsers.filter((u) => isAdminRole(u.role)).length,
+      staff: activeUsers.filter((u) => !isAdminRole(u.role) && u.role !== "guardian").length,
+      guardians: activeUsers.filter((u) => u.role === "guardian").length,
     }),
-    [users]
+    [activeUsers]
   );
 
-  const hasActiveFilters = roleFilter !== "all" || Boolean(search);
-  const clearFilters = () => { setRoleFilter("all"); setSearch(""); };
+  const hasActiveFilters = roleFilter !== "all" || Boolean(search) || statusFilter !== "active";
+  const clearFilters = () => { setRoleFilter("all"); setSearch(""); setStatusFilter("active"); };
+  const onlyInactiveFilter = statusFilter === "inactive" && roleFilter === "all" && !search;
 
+  const statusFilterOptions = [
+    { value: "active",   label: "Active",   tone: "success", dot: "#4caf50", count: activeUsers.length },
+    { value: "inactive", label: "Inactive", tone: "muted",   dot: "#9e9e9e", count: inactiveCount },
+    { value: "all",      label: "All",      tone: "brand",   count: users.length },
+  ];
+
+  // Role counts follow the status filter, so "All" matches the rows shown.
+  const inStatus = users.filter(matchesStatus);
   const roleFilterOptions = [
-    { value: "all", label: "All", tone: "brand", count: users.length },
+    { value: "all", label: "All", tone: "brand", count: inStatus.length },
     // Tone and icon come from the shared role map, so a chip lights up in the
     // same colour as that role's badge in the table below.
     ...ROLES.map((r) => ({
@@ -635,9 +746,22 @@ export default function UsersPage() {
       label: ROLE_MAP[r]?.label ?? r,
       tone: ROLE_MAP[r]?.variant ?? "brand",
       icon: ROLE_MAP[r]?.icon,
-      count: users.filter((u) => u.role === r).length,
+      count: inStatus.filter((u) => u.role === r).length,
     })),
   ];
+
+  async function handleReactivate(u) {
+    setReactivatingId(u.user_id);
+    try {
+      const updated = await _updateUser(u.user_id, { is_active: true });
+      setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
+      toast.success(`${u.name} can sign in again.`);
+    } catch (err) {
+      toast.error(firstMessageFrom(err) || "We couldn't reactivate this account. Please try again.");
+    } finally {
+      setReactivatingId(null);
+    }
+  }
 
   return (
     <>
@@ -647,7 +771,8 @@ export default function UsersPage() {
         subtitle={
           loading
             ? "Loading…"
-            : `${users.length} account${users.length === 1 ? "" : "s"} with portal access`
+            : `${activeUsers.length} active account${activeUsers.length === 1 ? "" : "s"}` +
+              (inactiveCount ? ` · ${inactiveCount} inactive` : "")
         }
         actions={
           isAdmin && (
@@ -722,6 +847,14 @@ export default function UsersPage() {
               onChange={setRoleFilter}
             />
           </FilterRow>
+          <FilterRow label="Status">
+            <ChipGroup
+              label="Filter by status"
+              options={statusFilterOptions}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          </FilterRow>
         </FilterBar>
 
         <Card padding="none" className="overflow-hidden">
@@ -735,11 +868,15 @@ export default function UsersPage() {
             skeletonRows={5}
             empty={{
               icon: "ti-users",
-              title: hasActiveFilters ? "No users match your filters" : "No users yet",
-              subtitle: hasActiveFilters
-                ? "Try a different role or search term."
-                : "Create the first account to get started.",
-              action: hasActiveFilters ? (
+              title: onlyInactiveFilter
+                ? "No inactive accounts"
+                : hasActiveFilters ? "No users match your filters" : "No users yet",
+              subtitle: onlyInactiveFilter
+                ? "Someone who leaves shows up here once deactivated."
+                : hasActiveFilters
+                  ? "Try a different role, status or search term."
+                  : "Create the first account to get started.",
+              action: onlyInactiveFilter ? null : hasActiveFilters ? (
                 <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
                   Clear filters
                 </Button>
@@ -753,18 +890,22 @@ export default function UsersPage() {
             {filtered.map((u) => {
               const isSelf = currentUser?.id === u.user_id;
               const meta = ROLE_MAP[u.role];
+              const inactive = !u.is_active;
               return (
                 <TableRow key={u.user_id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar user={u} />
+                      <Avatar user={u} dimmed={inactive} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-bold text-neutral-900">
+                          <span className={`truncate text-sm font-bold ${inactive ? "text-neutral-500" : "text-neutral-900"}`}>
                             {u.name}
                           </span>
                           {isSelf && (
                             <Badge variant="success" size="sm">You</Badge>
+                          )}
+                          {inactive && (
+                            <Badge variant="muted" size="sm" dot>Inactive</Badge>
                           )}
                         </div>
                         <div className="truncate text-xs text-neutral-500">{u.email}</div>
@@ -773,7 +914,11 @@ export default function UsersPage() {
                   </TableCell>
 
                   <TableCell>
-                    <Badge variant={meta?.variant ?? "muted"} icon={meta?.icon}>
+                    <Badge
+                      variant={meta?.variant ?? "muted"}
+                      icon={meta?.icon}
+                      className={inactive ? "opacity-60" : ""}
+                    >
                       {meta?.label ?? u.role}
                     </Badge>
                   </TableCell>
@@ -790,6 +935,25 @@ export default function UsersPage() {
                           title="Edit profile"
                           aria-label={`Edit ${u.name}`}
                           onClick={() => setEditing(u)}
+                        />
+                      )}
+                      {isAdmin && !isSelf && !inactive && (
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-user-off"
+                          title="Deactivate account"
+                          aria-label={`Deactivate ${u.name}`}
+                          onClick={() => setDeactivating(u)}
+                        />
+                      )}
+                      {isAdmin && inactive && (
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-user-check"
+                          title="Reactivate account"
+                          aria-label={`Reactivate ${u.name}`}
+                          className="text-success-500"
+                          loading={reactivatingId === u.user_id}
+                          disabled={reactivatingId === u.user_id}
+                          onClick={() => handleReactivate(u)}
                         />
                       )}
                       {isAdmin && !isSelf && (
@@ -830,6 +994,21 @@ export default function UsersPage() {
                 prev.map((x) => (x.user_id === updated.user_id ? updated : x))
               );
               setEditing(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deactivating && (
+          <DeactivateUserModal
+            user={deactivating}
+            onClose={() => setDeactivating(null)}
+            onDeactivated={(updated) => {
+              setUsers((prev) =>
+                prev.map((x) => (x.user_id === updated.user_id ? updated : x))
+              );
+              setDeactivating(null);
             }}
           />
         )}

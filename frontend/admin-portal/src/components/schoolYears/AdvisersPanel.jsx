@@ -32,11 +32,23 @@ const LEVEL_CHIP = {
 
 const placeKey = (grade, section) => `${grade}|${section}`;
 
-function AdviserChip({ name, readOnly, onRemove }) {
+function AdviserChip({ name, inactive = false, readOnly, onRemove }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white py-1 pl-2.5 pr-1 text-[12.5px] font-semibold text-neutral-800">
-      <i className="ti ti-user-check text-[13px] text-success-500" aria-hidden="true" />
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1 text-[12.5px] font-semibold ${
+        inactive
+          ? "border-dashed border-neutral-400 bg-muted-50 text-muted-500"
+          : "border-neutral-200 bg-white text-neutral-800"
+      }`}
+    >
+      <i
+        className={`ti ${inactive ? "ti-user-off" : "ti-user-check text-success-500"} text-[13px]`}
+        aria-hidden="true"
+      />
       {name}
+      {inactive && (
+        <span className="rounded-full bg-white px-1.5 text-[11px] font-bold">Inactive</span>
+      )}
       {!readOnly && (
         <button
           type="button"
@@ -96,6 +108,12 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
   // Deactivated teachers keep their name on past advisories (teacherName
   // above) but can't be assigned -- identity-service refuses it anyway.
   const activeTeachers = useMemo(() => teachers.filter((t) => t.is_active), [teachers]);
+  // An account missing from the list (names unavailable, or no longer a
+  // teacher) isn't flagged: there's nothing to go on.
+  const isInactive = useCallback(
+    (id) => teachers.find((t) => t.user_id === id)?.is_active === false,
+    [teachers],
+  );
 
   const advisersBySection = useMemo(() => {
     const map = new Map();
@@ -120,7 +138,14 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
       .filter(([, grades]) => grades.length > 0);
   }, [sections]);
 
-  const withAdviser = sections.filter((s) => advisersBySection.has(placeKey(s.grade_level, s.name))).length;
+  // In a year still being run, a section whose advisers have all left needs a
+  // new one, so they don't count. An archived year is history: they did.
+  const hasActiveAdviser = (advisers) =>
+    advisers.some((a) => readOnly || !isInactive(a.teacher_user_id));
+  const withAdviser = sections.filter((s) =>
+    hasActiveAdviser(advisersBySection.get(placeKey(s.grade_level, s.name)) ?? []),
+  ).length;
+  const adviserWord = readOnly ? "an adviser" : "an active adviser";
   const hasOtherYears = years.some((y) => y.label !== schoolYear);
   const busy = loading || sectionsLoading;
 
@@ -150,7 +175,7 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
           <div>
             <div className="text-[15px] font-bold text-neutral-900">
               {busy ? "Loading advisers…" : sections.length
-                ? `${withAdviser} of ${sections.length} ${sections.length === 1 ? "section has" : "sections have"} an adviser`
+                ? `${withAdviser} of ${sections.length} ${sections.length === 1 ? "section has" : "sections have"} ${adviserWord}`
                 : "No sections yet"}
             </div>
             <div className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -190,8 +215,13 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
               {grades.flatMap(([grade, list]) => list.map((s) => {
                 const advisers = advisersBySection.get(placeKey(grade, s.name)) ?? [];
                 const where = `${grade} ${s.name}`;
+                const covered = hasActiveAdviser(advisers);
+                const needsReplacement = advisers.length > 0 && !covered;
                 return (
-                  <li key={s.section_id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+                  <li
+                    key={s.section_id}
+                    className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 ${needsReplacement ? "bg-warning-50/40" : ""}`}
+                  >
                     <div className="flex w-44 shrink-0 items-center gap-2">
                       <span className="text-[13px] font-bold text-neutral-800">{grade}</span>
                       <Badge variant="info" size="sm">{s.strand ? `${s.name} · ${s.strand}` : s.name}</Badge>
@@ -201,6 +231,7 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
                         <AdviserChip
                           key={a.advisory_id}
                           name={teacherName(a.teacher_user_id)}
+                          inactive={isInactive(a.teacher_user_id)}
                           readOnly={readOnly}
                           onRemove={() => setRemoving({ advisory: a, name: teacherName(a.teacher_user_id), section: where })}
                         />
@@ -210,17 +241,23 @@ export default function AdvisersPanel({ schoolYear, years, sections, sectionsLoa
                           <i className="ti ti-alert-circle text-[14px]" aria-hidden="true" />No adviser
                         </span>
                       )}
+                      {needsReplacement && (
+                        <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-warning-500">
+                          <i className="ti ti-alert-circle text-[14px]" aria-hidden="true" />
+                          {advisers.length === 1 ? "Adviser's account is inactive" : "Advisers' accounts are inactive"} — assign a replacement
+                        </span>
+                      )}
                     </div>
                     {!readOnly && (
                       <Button
-                        variant={advisers.length ? "ghost" : "secondary"}
+                        variant={covered ? "ghost" : "secondary"}
                         size="sm"
                         icon="ti-plus"
                         aria-label={`Assign an adviser to ${where}`}
                         disabled={busy}
                         onClick={() => setAssigning(s)}
                       >
-                        {advisers.length ? "Add" : "Assign"}
+                        {covered ? "Add" : "Assign"}
                       </Button>
                     )}
                   </li>
