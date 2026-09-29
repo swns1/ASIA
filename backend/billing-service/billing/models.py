@@ -2,7 +2,7 @@ from django.db import models
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# FEE SCHEDULES — admin-defined fees per (school_level, grade_level)
+# FEE SCHEDULES — admin-defined fees per (school_year, school_level, grade_level)
 # ════════════════════════════════════════════════════════════════════════════
 
 class FeeSchedule(models.Model):
@@ -15,6 +15,10 @@ class FeeSchedule(models.Model):
     ]
 
     fee_schedule_id = models.BigAutoField(primary_key=True)
+    # Fees are set per school year, so a new year's rates never rewrite an
+    # earlier year's invoices. A registered label (foreign key to
+    # school_years.label, added in SQL by migration 0003).
+    school_year     = models.CharField(max_length=20)
     school_level    = models.CharField(max_length=20, choices=SCHOOL_LEVEL_CHOICES)
     grade_level     = models.CharField(max_length=20)
     is_active       = models.BooleanField(default=True)
@@ -24,10 +28,10 @@ class FeeSchedule(models.Model):
     class Meta:
         managed = False
         db_table = "fee_schedules"
-        unique_together = (("school_level", "grade_level"),)
+        unique_together = (("school_year", "school_level", "grade_level"),)
 
     def __str__(self):
-        return f"{self.get_school_level_display()} — {self.grade_level}"
+        return f"S.Y. {self.school_year} {self.get_school_level_display()} — {self.grade_level}"
 
 
 class FeeScheduleItem(models.Model):

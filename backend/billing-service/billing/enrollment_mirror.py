@@ -54,3 +54,16 @@ class EnrollmentScholarshipMirror(models.Model):
     class Meta:
         managed  = False
         db_table = "enrollment_scholarships"
+
+
+class SchoolYearMirror(models.Model):
+    """The school year registry (enrollment-service's SchoolYear): which years
+    exist and which are archived. Fee schedules belong to one."""
+    school_year_id = models.BigAutoField(primary_key=True)
+    label          = models.CharField(max_length=20, unique=True)
+    is_current     = models.BooleanField(default=False)
+    archived_at    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed  = False
+        db_table = "school_years"

@@ -156,7 +156,6 @@ class ApplicantSubmissionSerializer(serializers.Serializer):
 # the hand-picked allowlists above -- there is no untrusted-input concern
 # here the way there is for the applicant-facing serializers.
 
-from accounts.enrollment_mirror import SchoolYearMirror  # noqa: E402
 from .models import ApplicationInvite, StudentApplication  # noqa: E402 — grouped by audience, not import position
 
 
@@ -175,6 +174,11 @@ class ApplicationInviteIssueSerializer(serializers.Serializer):
     school_year = serializers.CharField(max_length=20, required=False, allow_blank=True)
 
     def validate(self, attrs):
+        # Imported here, as accounts/permissions.py does: importing the
+        # mirrors at module load registers them as models of `accounts`, and
+        # makemigrations would then want migrations for tables it doesn't own.
+        from accounts.enrollment_mirror import SchoolYearMirror
+
         label = (attrs.get("school_year") or "").strip()
         if not label:
             label = (

@@ -899,6 +899,7 @@ CREATE TABLE public.fee_schedules (
     is_active boolean DEFAULT true NOT NULL,
     notes text,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    school_year character varying(20) NOT NULL,
     CONSTRAINT fee_schedules_school_level_check CHECK (((school_level)::text = ANY ((ARRAY['nursery'::character varying, 'kindergarten'::character varying, 'elementary'::character varying, 'junior_highschool'::character varying, 'senior_highschool'::character varying])::text[])))
 );
 
@@ -2603,11 +2604,11 @@ ALTER TABLE ONLY public.fee_schedules
 
 
 --
--- Name: fee_schedules fee_schedules_school_level_grade_level_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fee_schedules fee_schedules_school_year_school_level_grade_level_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.fee_schedules
-    ADD CONSTRAINT fee_schedules_school_level_grade_level_key UNIQUE (school_level, grade_level);
+    ADD CONSTRAINT fee_schedules_school_year_school_level_grade_level_key UNIQUE (school_year, school_level, grade_level);
 
 
 --
@@ -3937,6 +3938,14 @@ ALTER TABLE ONLY public.enrollments
 
 ALTER TABLE ONLY public.fee_schedule_items
     ADD CONSTRAINT fee_schedule_items_fee_schedule_id_fkey FOREIGN KEY (fee_schedule_id) REFERENCES public.fee_schedules(fee_schedule_id) ON DELETE CASCADE;
+
+
+--
+-- Name: fee_schedules fee_schedules_school_year_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fee_schedules
+    ADD CONSTRAINT fee_schedules_school_year_fk FOREIGN KEY (school_year) REFERENCES public.school_years(label) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

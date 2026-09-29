@@ -27,11 +27,13 @@ const api = {
   unarchiveSchoolYear: vi.fn(),
 };
 const getUsers = vi.fn();
+const carryOverFees = vi.fn();
 const pass = (name) => (...a) => api[name](...a);
 const refreshYears = vi.fn();
 
 vi.mock("../../api/enrollmentApi", () => Object.fromEntries(Object.keys(api).map((k) => [k, pass(k)])));
 vi.mock("../../api/identityApi", () => ({ getUsers: (...a) => getUsers(...a) }));
+vi.mock("../../api/billingApi", () => ({ carryOverFees: (...a) => carryOverFees(...a) }));
 vi.mock("../../context/SchoolYearContext", () => ({ useSchoolYear: () => ({ refreshYears }) }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
 
@@ -307,5 +309,50 @@ describe("SchoolYearDetailPage — archiving", () => {
     expect(await screen.findByText(/Its records become editable again/)).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: "Unarchive" }).at(-1));
     await waitFor(() => expect(api.unarchiveSchoolYear).toHaveBeenCalledWith("2025-2026"));
+  });
+});
+
+describe("SchoolYearDetailPage — fees", () => {
+  it("starts an empty year from an earlier one: sections, advisers and fees", async () => {
+    api.getSchoolYearSetup.mockResolvedValue({
+      enrollments: { total: 0, unfinished: 0 },
+      sections: { count: 0, grades: 0 },
+      advisers: { sections: 0, with_adviser: 0 },
+      fees: { grades: 0, of: 14 },
+      calendar: { quarters_set: 0, holidays: 0 },
+    });
+    api.carryOverSchoolYear.mockImplementation((label, body) => Promise.resolve({
+      from: body.from, to: label, dry_run: Boolean(body.dry_run),
+      sections: { copied: [{ grade_level: "Grade 7", name: "Rizal", strand: null }], skipped: [] },
+      advisers: { copied: [], skipped: [] },
+    }));
+    carryOverFees.mockImplementation((body) => Promise.resolve({
+      from: body.from, to: body.to, dry_run: Boolean(body.dry_run),
+      fees: { copied: [{ school_level: "junior_highschool", grade_level: "Grade 7", items: 4, total: "25500.00" }], skipped: [] },
+    }));
+    renderAt();
+
+    expect(await screen.findByText("None yet — invoices for this year are built from these")).toBeTruthy();
+    // The Sections row's copy (the Fees row has its own, for fees alone).
+    fireEvent.click(screen.getAllByRole("button", { name: /Copy from an earlier year/ })[0]);
+
+    // Each server previews its own parts.
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"], dry_run: true },
+    ));
+    expect(carryOverFees).toHaveBeenCalledWith({ from: "2026-2027", to: "2027-2028", dry_run: true });
+    expect(await screen.findByText("Will add fees for 1 grade:")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy 1 section and fees for 1 grade" }));
+    await waitFor(() => expect(carryOverFees).toHaveBeenLastCalledWith({ from: "2026-2027", to: "2027-2028" }));
+    expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"] },
+    );
+  });
+
+  it("links to the year's fees in Billing Settings", async () => {
+    renderAt();
+    const link = await screen.findByRole("link", { name: "Billing Settings" });
+    expect(link.getAttribute("href")).toBe("/settings?tab=fees&school_year=2027-2028");
   });
 });

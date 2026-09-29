@@ -1105,8 +1105,11 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         GET /api/school-years/{label}/setup/
 
         The numbers behind the year page's setup checklist: sections set up,
-        how many have an adviser, and whether the calendar has its quarter
-        dates and holidays.
+        how many have an adviser, which grades have fees, and whether the
+        calendar has its quarter dates and holidays.
+
+        Fees are billing-service's table, read here the way billing reads
+        enrollments: raw SQL on the shared database, never written.
         """
         from academic_calendar.models import CalendarEvent
 
@@ -1119,6 +1122,12 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             .distinct()
         )
         events = CalendarEvent.objects.filter(school_year=year.label)
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(DISTINCT grade_level) FROM fee_schedules WHERE school_year = %s AND is_active",
+                [year.label],
+            )
+            fee_grades = cur.fetchone()[0]
         statuses = dict(
             Enrollment.objects.filter(school_year=year.label).order_by()
             .values_list("enrollment_status").annotate(n=Count("pk"))
@@ -1138,6 +1147,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 "sections": len(section_keys),
                 "with_adviser": len(section_keys & advised),
             },
+            "fees": {"grades": fee_grades, "of": len(GRADE_ORDER)},
             "calendar": {
                 "quarters_set": (
                     events.filter(event_type="grading_period")

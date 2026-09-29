@@ -18,7 +18,7 @@ from calendar import monthrange
 from django.db import connection, transaction
 from django.utils import timezone
 
-from shared.school_year import configured_current, configured_dates, start_year
+from shared.school_year import configured_dates, start_year
 
 from .models import (
     FeeSchedule, FeeScheduleItem,
@@ -294,9 +294,13 @@ def generate_installment_schedule_prorated(grand_total: Decimal, payment_plan: s
 
 # ── Invoice generation ───────────────────────────────────────────────────────
 
-def _read_fee_schedule(school_level: str, grade_level: str):
-    """Returns dict {tuition_total, misc_items[], other_items[], items[]} or None."""
+def _read_fee_schedule(school_year: str, school_level: str, grade_level: str):
+    """The fees for one grade in one school year, as a dict {schedule, items,
+    tuition_total, misc_total, other_total}, or None if that year has no
+    active schedule for the grade. Each year has its own schedules, so a
+    learner is always billed at their own year's rates."""
     schedule = FeeSchedule.objects.filter(
+        school_year=school_year,
         school_level=school_level,
         grade_level=grade_level,
         is_active=True,
@@ -501,10 +505,13 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     if not enrollment:
         raise ValueError(f"Enrollment #{enrollment_id} not found.")
 
-    fee_data = _read_fee_schedule(enrollment["school_level"], enrollment["grade_level"])
+    fee_data = _read_fee_schedule(
+        enrollment["school_year"], enrollment["school_level"], enrollment["grade_level"],
+    )
     if not fee_data:
         raise ValueError(
-            f"No active fee schedule for {enrollment['school_level']} / {enrollment['grade_level']}."
+            f"S.Y. {enrollment['school_year']} has no active fee schedule for {enrollment['grade_level']}. "
+            "Set it up under Billing Settings, or copy an earlier year's fees."
         )
 
     scholarships = _fetch_enrollment_scholarships(enrollment_id)
@@ -654,27 +661,21 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
     if not schedule:
         return {"updated": 0}
 
-    fee_data = _read_fee_schedule(schedule.school_level, schedule.grade_level)
+    fee_data = _read_fee_schedule(schedule.school_year, schedule.school_level, schedule.grade_level)
     if not fee_data:
         return {"updated": 0}
 
-    # Find enrollments at this level/grade IN THE CURRENT SCHOOL YEAR.
+    # Find enrollments at this level/grade IN THIS SCHEDULE'S SCHOOL YEAR.
     #
     # Without the year this rewrote every past year's invoices at this grade
-    # as well -- charging a closed year at today's rates, and, because the
-    # schedule below is built from the CURRENT sy_start_date, moving those
-    # families' due dates into the present year. An invoice carries no school
-    # year of its own, only enrollment_id; the year lives on enrollments,
-    # which is how views.scope_invoices_to_school_year resolves it for the
-    # list and summary endpoints.
-    #
-    # The current year comes from the school_years registry, with School
-    # Settings (kept in step with it) as the fallback. Fail closed when
-    # neither has one: with no year there is no safe set of invoices to rewrite.
-    settings = _get_school_settings()
-    current_sy = (configured_current() or getattr(settings, "current_school_year", "") or "").strip()
-    if not current_sy:
-        return {"updated": 0, "skipped_no_school_year": True}
+    # as well -- charging a closed year at today's rates. It used to be the
+    # current year; now that each year has its own schedules, it's the year
+    # these fees belong to, so setting up next year's fees can't touch this
+    # year's invoices. An invoice carries no school year of its own, only
+    # enrollment_id; the year lives on enrollments, which is how
+    # views.scope_invoices_to_school_year resolves it for the list and
+    # summary endpoints.
+    schedule_sy = schedule.school_year
 
     from django.db import connection
     with connection.cursor() as cur:
@@ -684,7 +685,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
               FROM enrollments
              WHERE school_level = %s AND grade_level = %s AND school_year = %s
             """,
-            [schedule.school_level, schedule.grade_level, current_sy],
+            [schedule.school_level, schedule.grade_level, schedule_sy],
         )
         enrollment_ids = [r[0] for r in cur.fetchall()]
 
@@ -802,7 +803,7 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
                 for idx, due in enumerate(existing_due_dates, start=1)
             ]
         else:
-            sy_start = sy_start_for(current_sy)
+            sy_start = sy_start_for(schedule_sy)
             schedule_data = generate_installment_schedule(new_total, inv.payment_plan, sy_start)
 
         inv.installments.all().delete()

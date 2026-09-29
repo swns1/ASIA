@@ -60,6 +60,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
   const pct = isCurrent ? progressThrough(year.start_date, year.end_date) : null;
   const s = setup?.sections;
   const a = setup?.advisers;
+  const f = setup?.fees;
   const c = setup?.calendar;
   const yearLink = `?school_year=${year.label}`;
 
@@ -102,7 +103,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
               : "None yet — enrollment and advisers pick from these"}
           >
             {!readOnly && sectionsCount === 0 && canCopy && (
-              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers"])}>
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers", "fees"])}>
                 Copy from an earlier year
               </Button>
             )}
@@ -134,6 +135,21 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
                 {a.with_adviser === a.sections ? "Manage" : "Assign"}
               </Button>
             )}
+          </ChecklistItem>
+
+          <ChecklistItem
+            done={(f?.grades ?? 0) > 0}
+            title="Fees"
+            detail={f?.grades
+              ? `${f.grades} of ${f.of} grades have a fee schedule`
+              : "None yet — invoices for this year are built from these"}
+          >
+            {!readOnly && f && f.grades === 0 && canCopy && (
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["fees"])}>
+                Copy from an earlier year
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" to={`/settings?tab=fees&school_year=${year.label}`}>Billing Settings</Button>
           </ChecklistItem>
 
           <ChecklistItem

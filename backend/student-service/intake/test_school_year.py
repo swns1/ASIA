@@ -45,7 +45,7 @@ def _years(current="2026-2027", registered=None):
         return qs
 
     objects.filter.side_effect = filter_
-    return patch("intake.serializers.SchoolYearMirror.objects", objects)
+    return patch("accounts.enrollment_mirror.SchoolYearMirror.objects", objects)
 
 
 def _validate(data, **registry):

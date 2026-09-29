@@ -6,8 +6,14 @@ const billingClient = createApiClient({
 });
 
 // ── Fee schedules ─────────────────────────────────────────────────────────────
+// One per grade per school year: filter with { school_year }.
 export const getFeeSchedules = (params = {}) =>
   billingClient.get("/fee-schedules/", { params }).then((r) => r.data);
+
+// Copy an earlier year's fees into another year. Never overwrites; `dry_run`
+// is the preview. Body: { from, to, dry_run } -> { fees: { copied, skipped } }.
+export const carryOverFees = (data) =>
+  billingClient.post("/fee-schedules/carry-over/", data).then((r) => r.data);
 
 export const getFeeSchedule = (id) =>
   billingClient.get(`/fee-schedules/${id}/`).then((r) => r.data);

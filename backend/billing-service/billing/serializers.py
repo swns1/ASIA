@@ -25,6 +25,13 @@ class FeeScheduleItemSerializer(serializers.ModelSerializer):
 
 
 class FeeScheduleSerializer(serializers.ModelSerializer):
+    """
+    One grade's fees for one school year. The year, level and grade are fixed
+    once created: invoices already issued from this schedule were built for
+    that year and grade, and moving it would leave them pointing at fees that
+    no longer describe them. Another year's fees are another schedule
+    (usually copied: FeeScheduleViewSet.carry_over).
+    """
     items         = FeeScheduleItemSerializer(many=True, read_only=True)
     total_tuition = serializers.SerializerMethodField()
     total_misc    = serializers.SerializerMethodField()
@@ -35,6 +42,7 @@ class FeeScheduleSerializer(serializers.ModelSerializer):
         model = FeeSchedule
         fields = (
             "fee_schedule_id",
+            "school_year",
             "school_level",
             "grade_level",
             "is_active",
@@ -47,6 +55,41 @@ class FeeScheduleSerializer(serializers.ModelSerializer):
             "grand_total",
         )
         read_only_fields = ("fee_schedule_id", "updated_at")
+        # The one-schedule-per-grade-per-year rule is checked in validate(),
+        # with a message that names the year and grade, rather than by DRF's
+        # generic unique-together validator.
+        validators = []
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            for field in ("school_year", "school_level", "grade_level"):
+                if field in attrs and attrs[field] != getattr(self.instance, field):
+                    raise serializers.ValidationError(
+                        {field: "A fee schedule stays in its year and grade. Add a new one for another."}
+                    )
+            return attrs
+
+        from .enrollment_mirror import SchoolYearMirror
+
+        year = (attrs.get("school_year") or "").strip()
+        if not year:
+            raise serializers.ValidationError({"school_year": "Pick the school year these fees are for."})
+        registered = SchoolYearMirror.objects.filter(label=year).values("archived_at").first()
+        if registered is None:
+            raise serializers.ValidationError(
+                {"school_year": f"S.Y. {year} hasn't been set up yet. An admin can add it under School Years."}
+            )
+        if registered["archived_at"] is not None:
+            raise serializers.ValidationError({"school_year": f"S.Y. {year} is archived."})
+        attrs["school_year"] = year
+
+        if FeeSchedule.objects.filter(
+            school_year=year, school_level=attrs.get("school_level"), grade_level=attrs.get("grade_level"),
+        ).exists():
+            raise serializers.ValidationError(
+                {"grade_level": f"S.Y. {year} already has a {attrs.get('grade_level')} fee schedule."}
+            )
+        return attrs
 
     def _sum_category(self, obj, cat):
         return sum((Decimal(i.amount) for i in obj.items.all() if i.item_category == cat), Decimal("0"))

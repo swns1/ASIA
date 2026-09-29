@@ -8,6 +8,10 @@ import { Link, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
 import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
+import useYearFilter from "../hooks/useYearFilter";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import CarryOverModal from "../components/schoolYears/CarryOverModal";
 
 import {
   getSchoolSettings as _getSettings,
@@ -489,7 +493,7 @@ function AnimatedAmount({ value, style }) {
   return <span style={style}>{shown}</span>;
 }
 
-function NewScheduleModal({ onClose, onSaved }) {
+function NewScheduleModal({ schoolYear, onClose, onSaved }) {
   const [schoolLevel, setSchoolLevel] = useState("elementary");
   const [gradeLevel,  setGradeLevel]  = useState("Grade 1");
   const [saving,      setSaving]      = useState(false);
@@ -500,7 +504,9 @@ function NewScheduleModal({ onClose, onSaved }) {
   const handleCreate = async () => {
     setSaving(true); setError("");
     try {
-      const created = await createFeeSchedule({ school_level: schoolLevel, grade_level: gradeLevel, is_active: true });
+      const created = await createFeeSchedule({
+        school_year: schoolYear, school_level: schoolLevel, grade_level: gradeLevel, is_active: true,
+      });
       toast.success("Fee schedule created.");
       onSaved(created);
       onClose();
@@ -531,7 +537,7 @@ function NewScheduleModal({ onClose, onSaved }) {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>Select a level and grade to create a fee structure</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>For S.Y. {schoolYear}: select a level and grade</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
@@ -605,7 +611,7 @@ function NewScheduleModal({ onClose, onSaved }) {
   );
 }
 
-function FeeItemRow({ item, onUpdated, onDeleted }) {
+function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
   const [editing, setEditing] = useState(false);
   const [name,    setName]    = useState(item.item_name);
   const [amount,  setAmount]  = useState(String(item.amount));
@@ -684,6 +690,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
         <>
           <span style={{ flex: 1, fontSize: 13, color: "#1a0a0a", fontWeight: 500 }}>{item.item_name}</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{fmt(item.amount)}</span>
+          {!readOnly && <>
           <motion.button onClick={() => setEditing(true)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
@@ -696,6 +703,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
             style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 11 }} />
           </motion.button>
+          </>}
         </>
       )}
       <AnimatePresence>
@@ -771,7 +779,7 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
   );
 }
 
-function ScheduleDetail({ schedule, onUpdated }) {
+function ScheduleDetail({ schedule, readOnly, onUpdated }) {
   const lvl = SCHOOL_LEVELS.find((l) => l.value === schedule.school_level) ?? SCHOOL_LEVELS[2];
   const [recalcing, setRecalcing] = useState(false);
   const [recalcMsg, setRecalcMsg] = useState("");
@@ -829,7 +837,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
               </motion.span>
             )}
           </AnimatePresence>
-          <motion.button onClick={handleRecalculate} disabled={recalcing}
+          {!readOnly && <motion.button onClick={handleRecalculate} disabled={recalcing}
             whileHover={!recalcing ? { scale: 1.02 } : {}} whileTap={!recalcing ? { scale: 0.97 } : {}}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             {recalcing
@@ -837,7 +845,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
               : <i className="ti ti-refresh" style={{ fontSize: 13 }} />
             }
             {recalcing ? "Updating…" : "Apply to Invoices"}
-          </motion.button>
+          </motion.button>}
         </div>
       </motion.div>
 
@@ -895,11 +903,11 @@ function ScheduleDetail({ schedule, onUpdated }) {
                 style={{ display: "flex", flexDirection: "column", gap: 6 }}
               >
                 {catItems.map((item) => (
-                  <FeeItemRow key={item.fee_schedule_item_id} item={item}
+                  <FeeItemRow key={item.fee_schedule_item_id} item={item} readOnly={readOnly}
                     onUpdated={onUpdated} onDeleted={onUpdated} />
                 ))}
               </motion.div>
-              <AddFeeItemForm scheduleId={schedule.fee_schedule_id} category={cat} onAdded={onUpdated} />
+              {!readOnly && <AddFeeItemForm scheduleId={schedule.fee_schedule_id} category={cat} onAdded={onUpdated} />}
             </div>
           </motion.div>
         );
@@ -914,11 +922,18 @@ function FeeSchedulesTab() {
   const [loading,      setLoading]      = useState(true);
   const [levelFilter,  setLevelFilter]  = useState("all");
   const [showNewModal, setShowNewModal] = useState(false);
+  const [copying,      setCopying]      = useState(false);
+  // Fees are set per school year. Opens on the current year (or the one in
+  // the link, e.g. from a year's setup checklist); never "All years" -- a
+  // grade's fees only mean something within one year.
+  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
+  const { options: yearLabels, yearStates } = useSchoolYear();
+  const archived = yearStates[schoolYear] === "archived";
 
   const fetchSchedules = useCallback(async (lvl = levelFilter) => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { school_year: schoolYear };
       if (lvl !== "all") params.school_level = lvl;
       const data = await getFeeSchedules(params);
       const results = Array.isArray(data) ? data : data?.results ?? [];
@@ -929,11 +944,13 @@ function FeeSchedulesTab() {
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [levelFilter, selected]);
+  }, [levelFilter, selected, schoolYear]);
 
+  // Another year's schedules are other rows entirely: drop the open one.
   useEffect(() => {
-    fetchSchedules("all"); // eslint-disable-line react-hooks/set-state-in-effect
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setSelected(null); // eslint-disable-line react-hooks/set-state-in-effect
+    fetchSchedules(levelFilter);
+  }, [schoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectSchedule = (sch) => setSelected(sch);
   const handleUpdated = () => fetchSchedules(levelFilter);
@@ -944,9 +961,26 @@ function FeeSchedulesTab() {
 
       {/* Mini header */}
       <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ fontSize: 12, color: C.pale }}>
-          {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} configured`}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <SchoolYearPicker value={schoolYear} onChange={setSchoolYear} includeAllYears={false} counts={{}} />
+          <div style={{ fontSize: 12, color: C.pale }}>
+            {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} for S.Y. ${schoolYear}`}
+          </div>
+          {archived && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "#855c5c", background: "#f5f0f0", borderRadius: 99, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <i className="ti ti-archive" style={{ fontSize: 12 }} />Archived — read-only
+            </span>
+          )}
         </div>
+        {!archived && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <motion.button
+          whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => setCopying(true)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "white", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+          <i className="ti ti-copy" style={{ fontSize: 15 }} />Copy from an earlier year
+        </motion.button>
         <motion.button
           whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
           whileTap={{ scale: 0.96 }}
@@ -954,6 +988,8 @@ function FeeSchedulesTab() {
           style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
           <i className="ti ti-plus" style={{ fontSize: 15 }} />New Schedule
         </motion.button>
+        </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflow: "hidden", display: "grid", gridTemplateColumns: "300px 1fr" }}>
@@ -1077,7 +1113,7 @@ function FeeSchedulesTab() {
                 initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
               >
-                <ScheduleDetail schedule={selected} onUpdated={handleUpdated} />
+                <ScheduleDetail schedule={selected} readOnly={archived} onUpdated={handleUpdated} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1088,8 +1124,23 @@ function FeeSchedulesTab() {
         {showNewModal && (
           <NewScheduleModal
             key="new-modal"
+            schoolYear={schoolYear}
             onClose={() => setShowNewModal(false)}
             onSaved={(s) => { fetchSchedules(levelFilter); setSelected(s); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {copying && (
+          <CarryOverModal
+            key="copy-fees"
+            schoolYear={schoolYear}
+            years={yearLabels.map((label) => ({ label }))}
+            availableParts={["fees"]}
+            initialParts={["fees"]}
+            onClose={() => setCopying(false)}
+            onDone={() => fetchSchedules(levelFilter)}
           />
         )}
       </AnimatePresence>

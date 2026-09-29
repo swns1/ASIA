@@ -7,24 +7,31 @@ import Alert from "../ui/Alert";
 import Badge from "../ui/Badge";
 import { Field, Select } from "../FormField";
 import { carryOverSchoolYear } from "../../api/enrollmentApi";
+import { carryOverFees } from "../../api/billingApi";
 import { firstMessageFrom } from "../../utils/apiError";
 
-// Start a year from an earlier one: copy its sections, and the advisers of
-// those sections, across so that what didn't change needs no retyping.
+// Start a year from an earlier one: copy its sections, the advisers of those
+// sections, and its fees across so that what didn't change needs no retyping.
 //
-// The preview is the server's own dry run, so what it lists is exactly what
+// The preview is the servers' own dry run, so what it lists is exactly what
 // Copy will do. Nothing this year already has is touched -- a section with
-// the same name in the same grade is skipped, and so is an adviser whose
-// section already has one -- so it's safe after setting a few things up by
-// hand, or run twice.
+// the same name in the same grade is skipped, so is an adviser whose section
+// already has one, and so is a grade that already has fees -- so it's safe
+// after setting a few things up by hand, or run twice.
+//
+// Sections and advisers are enrollment-service's to copy, fees billing's; the
+// modal asks each for its own parts and shows them as one.
 
-// In the order the server applies them: advisers land in sections.
+// In the order they're applied: advisers land in sections.
 const PARTS = [
   { id: "sections", label: "Sections", hint: "Each grade's section names and strands" },
   { id: "advisers", label: "Advisers", hint: "Each section's adviser, into the section of the same name here" },
+  { id: "fees",     label: "Fees",     hint: "Each grade's fee schedule and its items, ready to adjust" },
 ];
+const ALL_PARTS = PARTS.map((p) => p.id);
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const peso = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Why an adviser wasn't carried over, worded for the preview.
 const ADVISER_SKIPS = {
@@ -135,30 +142,98 @@ function AdvisersPreview({ result, from, to, withSections }) {
   );
 }
 
-export default function CarryOverModal({ schoolYear, years, initialParts = ["sections"], onClose, onDone }) {
+function FeesPreview({ result, from, to }) {
+  const toCopy = result?.copied ?? [];
+  const skipped = result?.skipped ?? [];
+  if (toCopy.length === 0) {
+    return (
+      <p className="text-[13px] text-neutral-600">
+        {skipped.length
+          ? `S.Y. ${to} already has fees for all ${skipped.length} of S.Y. ${from}'s grades.`
+          : `S.Y. ${from} has no fees to copy.`}
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="text-[13px] font-semibold text-neutral-800">
+        Will add fees for {plural(toCopy.length, "grade", "grades")}:
+      </p>
+      <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
+        {toCopy.map((r) => (
+          <li key={`${r.school_level}-${r.grade_level}`} className="flex items-center gap-2 text-[12.5px]">
+            <span className="w-24 shrink-0 font-semibold text-neutral-700">{r.grade_level}</span>
+            <span className="font-semibold text-neutral-800">{peso(r.total)}</span>
+            <span className="text-neutral-500">· {plural(r.items, "item", "items")}</span>
+          </li>
+        ))}
+      </ul>
+      {skipped.length > 0 && (
+        <p className="text-[12.5px] text-neutral-500">
+          {plural(skipped.length, "grade", "grades")} already {skipped.length === 1 ? "has" : "have"} fees here, left as {skipped.length === 1 ? "it is" : "they are"}.
+        </p>
+      )}
+    </>
+  );
+}
+
+// Each server's share of the parts, run one after the other: sections and
+// advisers first (enrollment-service), then fees (billing-service).
+async function carryOver(schoolYear, from, parts, dryRun) {
+  const schoolParts = parts.filter((p) => p !== "fees");
+  const result = {};
+  if (schoolParts.length) {
+    Object.assign(result, await carryOverSchoolYear(schoolYear, {
+      from, parts: schoolParts, ...(dryRun && { dry_run: true }),
+    }));
+  }
+  if (parts.includes("fees")) {
+    const data = await carryOverFees({ from, to: schoolYear, ...(dryRun && { dry_run: true }) });
+    result.fees = data.fees;
+  }
+  return result;
+}
+
+function describe(result) {
+  return [
+    result.sections && plural(result.sections.copied?.length ?? 0, "section", "sections"),
+    result.advisers && plural(result.advisers.copied?.length ?? 0, "adviser", "advisers"),
+    result.fees && `fees for ${plural(result.fees.copied?.length ?? 0, "grade", "grades")}`,
+  ].filter(Boolean).join(" and ");
+}
+
+export default function CarryOverModal({
+  schoolYear,
+  years,
+  initialParts = ["sections"],
+  // Which parts this place offers. Billing Settings copies fees only.
+  availableParts = ALL_PARTS,
+  onClose,
+  onDone,
+}) {
   // Any other registered year can be the source; the nearest earlier one is
   // the usual pick.
   const sources = useMemo(
     () => years.map((y) => y.label).filter((l) => l !== schoolYear).sort().reverse(),
     [years, schoolYear],
   );
+  const offered = PARTS.filter((p) => availableParts.includes(p.id));
   const [from, setFrom] = useState(() => sources.find((l) => l < schoolYear) ?? sources[0] ?? "");
-  const [picked, setPicked] = useState(() => new Set(initialParts));
+  const [picked, setPicked] = useState(() => new Set(initialParts.filter((p) => availableParts.includes(p))));
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
 
-  // Always in the server's order, so the request reads the same however the
-  // boxes were ticked.
-  const parts = PARTS.map((p) => p.id).filter((id) => picked.has(id));
+  // Always in the order they're applied, however the boxes were ticked.
+  const parts = ALL_PARTS.filter((id) => picked.has(id));
   const partsKey = parts.join(",");
 
   useEffect(() => {
     if (!from || !partsKey) return undefined;
     let live = true;
     setLoading(true); setError(""); // eslint-disable-line react-hooks/set-state-in-effect
-    carryOverSchoolYear(schoolYear, { from, parts: partsKey.split(","), dry_run: true })
+    carryOver(schoolYear, from, partsKey.split(","), true)
       .then((data) => live && setPreview(data))
       .catch((e) => live && setError(firstMessageFrom(e) || "Couldn't preview the copy."))
       .finally(() => live && setLoading(false));
@@ -171,28 +246,36 @@ export default function CarryOverModal({ schoolYear, years, initialParts = ["sec
     return next;
   });
 
-  const counts = {
-    sections: picked.has("sections") ? preview?.sections?.copied?.length ?? 0 : 0,
-    advisers: picked.has("advisers") ? preview?.advisers?.copied?.length ?? 0 : 0,
-  };
+  const count = (id) => (picked.has(id) ? preview?.[id]?.copied?.length ?? 0 : 0);
   const summary = [
-    counts.sections && plural(counts.sections, "section", "sections"),
-    counts.advisers && plural(counts.advisers, "adviser", "advisers"),
+    count("sections") && plural(count("sections"), "section", "sections"),
+    count("advisers") && plural(count("advisers"), "adviser", "advisers"),
+    count("fees") && `fees for ${plural(count("fees"), "grade", "grades")}`,
   ].filter(Boolean).join(" and ");
 
   const handleApply = async () => {
     setApplying(true); setError("");
+    const schoolParts = parts.filter((p) => p !== "fees");
+    let copiedFirst = null;
     try {
-      const data = await carryOverSchoolYear(schoolYear, { from, parts });
-      const done = [
-        data.sections && plural(data.sections.copied?.length ?? 0, "section", "sections"),
-        data.advisers && plural(data.advisers.copied?.length ?? 0, "adviser", "advisers"),
-      ].filter(Boolean).join(" and ");
-      toast.success(`Copied ${done} from S.Y. ${from}.`);
+      if (schoolParts.length && parts.includes("fees")) {
+        // Two servers, so two steps: say which one landed if the second fails.
+        copiedFirst = await carryOverSchoolYear(schoolYear, { from, parts: schoolParts });
+        const fees = await carryOverFees({ from, to: schoolYear });
+        toast.success(`Copied ${describe({ ...copiedFirst, fees: fees.fees })} from S.Y. ${from}.`);
+      } else {
+        toast.success(`Copied ${describe(await carryOver(schoolYear, from, parts, false))} from S.Y. ${from}.`);
+      }
       onDone();
       onClose();
     } catch (e) {
-      setError(firstMessageFrom(e) || "Couldn't copy from that year.");
+      const reason = firstMessageFrom(e) || "Couldn't copy from that year.";
+      if (copiedFirst) {
+        onDone();
+        setError(`Copied ${describe(copiedFirst)}, but not the fees: ${reason}`);
+      } else {
+        setError(reason);
+      }
     } finally {
       setApplying(false);
     }
@@ -230,25 +313,27 @@ export default function CarryOverModal({ schoolYear, years, initialParts = ["sec
             </Select>
           </Field>
 
-          <fieldset className="mb-4">
-            <legend className="mb-1.5 text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">What to copy</legend>
-            <div className="flex flex-col gap-1.5">
-              {PARTS.map((p) => (
-                <label key={p.id} className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-200 px-3 py-2.5 hover:border-brand-300">
-                  <input
-                    type="checkbox"
-                    className="focus-ring mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
-                    checked={picked.has(p.id)}
-                    onChange={() => toggle(p.id)}
-                  />
-                  <span>
-                    <span className="block text-[13px] font-semibold text-neutral-900">{p.label}</span>
-                    <span className="block text-[12px] text-neutral-500">{p.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {offered.length > 1 && (
+            <fieldset className="mb-4">
+              <legend className="mb-1.5 text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">What to copy</legend>
+              <div className="flex flex-col gap-1.5">
+                {offered.map((p) => (
+                  <label key={p.id} className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-200 px-3 py-2.5 hover:border-brand-300">
+                    <input
+                      type="checkbox"
+                      className="focus-ring mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-500"
+                      checked={picked.has(p.id)}
+                      onChange={() => toggle(p.id)}
+                    />
+                    <span>
+                      <span className="block text-[13px] font-semibold text-neutral-900">{p.label}</span>
+                      <span className="block text-[12px] text-neutral-500">{p.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
           {parts.length === 0 ? (
             <p className="text-[13px] text-neutral-500">Tick at least one thing to copy.</p>
@@ -269,6 +354,11 @@ export default function CarryOverModal({ schoolYear, years, initialParts = ["sec
                     to={schoolYear}
                     withSections={picked.has("sections")}
                   />
+                </div>
+              )}
+              {picked.has("fees") && preview.fees && (
+                <div className="flex flex-col gap-2">
+                  <FeesPreview result={preview.fees} from={from} to={schoolYear} />
                 </div>
               )}
             </div>
