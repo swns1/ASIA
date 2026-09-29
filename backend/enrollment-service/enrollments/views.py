@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
-from grading.deped import general_average, summarize_subjects
+from grading.deped import BLOCKING_REMARKS, general_average, summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
     STAFF_FULL_WRITE_ROLES,
@@ -1958,7 +1958,7 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             # quarters, not the worst of them.
             failed = [
                 o for o in outcomes.values()
-                if o["remarks"] in ("failed", "incomplete", "dropped")
+                if o["remarks"] in BLOCKING_REMARKS
             ]
             if failed:
                 failed_names = ", ".join(
@@ -2211,7 +2211,7 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             )
             failed_outcomes = [
                 o for o in outcomes.values()
-                if o["remarks"] in ("failed", "incomplete", "dropped")
+                if o["remarks"] in BLOCKING_REMARKS
             ]
             if failed_outcomes:
                 can_repeat = True

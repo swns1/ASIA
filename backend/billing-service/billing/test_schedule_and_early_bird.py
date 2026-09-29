@@ -18,9 +18,11 @@ import pytest
 
 from billing.services import (
     _is_early_bird,
+    _fetch_enrollment_scholarships,
     _split_voucher_and_scholarship,
     default_sy_start,
     early_bird_cutoff,
+    earns_early_bird,
     generate_installment_schedule,
     generate_installment_schedule_prorated,
     sy_start_for,
@@ -203,6 +205,71 @@ def test_early_bird_counts_from_the_enrollments_year_when_given(_s):
     assert early_bird_cutoff(sy_start=date(2026, 8, 3)) == date(2026, 8, 9)
     assert _is_early_bird(date(2026, 8, 9), date(2026, 8, 3)) is True
     assert _is_early_bird(date(2026, 8, 10), date(2026, 8, 3)) is False
+
+
+# Current year 2026-2027 opens 2026-06-01 (School Settings); the invoice
+# belongs to 2025-2026, which opened 2025-06-01 (the registry).
+@patch("billing.services.configured_dates", return_value=(date(2025, 6, 1), date(2026, 3, 31)))
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2026, 6, 1)))
+def test_an_older_invoice_is_judged_by_its_own_years_window(_s, _d):
+    """
+    The defect: recalculation asked _is_early_bird(invoice_date) with no start,
+    so the window was the CURRENT year's (cutoff 2026-06-07) and every
+    2025-2026 invoice -- all dated in 2025 -- earned Early Bird when that
+    year's fees were edited, including families invoiced after their own
+    year's window had closed.
+    """
+    assert earns_early_bird(date(2025, 6, 9), "2025-2026") is False
+    assert earns_early_bird(date(2025, 6, 7), "2025-2026") is True
+
+
+@patch("billing.services.configured_dates", return_value=None)
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2026, 6, 1)))
+def test_a_year_with_no_dates_earns_no_early_bird(_s, _d):
+    """No registered start, no window -- not the current year's by default."""
+    assert earns_early_bird(date(2025, 5, 1), "2025-2026") is False
+
+
+def test_an_undated_invoice_earns_no_early_bird():
+    assert earns_early_bird(None, "2025-2026") is False
+
+
+# -- Scholarships as the database hands them over -----------------------------
+
+def test_scholarship_rows_carry_the_code_the_voucher_split_reads():
+    """
+    The defect: _fetch_enrollment_scholarships read
+    `scholarship_type.scholarship_code`, but ScholarshipTypeMirror had no such
+    field -- so generating or recalculating the invoice of ANY learner with a
+    scholarship raised AttributeError. The other tests here hand the split
+    plain dicts and never touched the mirror, which is how it went unseen.
+
+    Real (unsaved) mirror instances, so a field missing from the mirror fails
+    here rather than in front of a cashier.
+    """
+    from billing.enrollment_mirror import EnrollmentScholarshipMirror, ScholarshipTypeMirror
+
+    esc = ScholarshipTypeMirror(
+        scholarship_type_id=1, scholarship_code="ESC", discount_mode="fixed_amount",
+        scholarship_name="Education Service Contracting (ESC)", discount_value=Decimal("14000"),
+    )
+    honor = ScholarshipTypeMirror(
+        scholarship_type_id=3, scholarship_code="HONOR", discount_mode="percentage",
+        scholarship_name="Academic Excellence Award", discount_value=Decimal("10"),
+    )
+    rows = [
+        EnrollmentScholarshipMirror(enrollment_id=207, scholarship_type=esc),
+        EnrollmentScholarshipMirror(enrollment_id=207, scholarship_type=honor),
+    ]
+
+    with patch("billing.enrollment_mirror.EnrollmentScholarshipMirror") as mirror:
+        mirror.objects.filter.return_value.select_related.return_value = rows
+        scholarships = _fetch_enrollment_scholarships(207)
+
+    assert [s["scholarship_code"] for s in scholarships] == ["ESC", "HONOR"]
+    voucher, scholarship = _split_voucher_and_scholarship(Decimal("23000"), scholarships)
+    assert voucher == Decimal("14000")        # ESC lands in the voucher stage
+    assert scholarship == Decimal("900.00")   # 10% of what the voucher left
 
 
 # -- Voucher vs scholarship ---------------------------------------------------

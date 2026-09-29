@@ -100,7 +100,8 @@ describe("Billing Settings — fees per school year", () => {
     // Fees are the only thing Billing Settings copies: no sections or advisers.
     expect(screen.queryByRole("checkbox")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy fees for 2 grades" }));
+    expect(screen.getByText("fees for 2 grades")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(billing.carryOverFees).toHaveBeenLastCalledWith({ from: "2026-2027", to: "2027-2028" }));
     expect(carryOverSchoolYear).not.toHaveBeenCalled();
   });

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from grading.deped import blocking_subjects
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year, start_year
 from .models import Enrollment, EnrollmentTransfer, SchoolYear, Section, SectionAdvisory, Student
 
@@ -539,15 +540,23 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                                 )
                             })
 
-                # ── Failed/incomplete subjects block promotion ─────────────────
+                # ── Subjects failed ON THE YEAR block promotion ────────────────
+                # Decided from each learning area's year outcome
+                # (grading.deped.blocking_subjects), the same rule bulk
+                # promotion, the eligibility report and the report card use.
+                # This used to block on ANY period marked failed/incomplete, so
+                # a learner who failed Q1 and passed the year could be promoted
+                # in bulk, was told they were eligible, and was then refused
+                # here.
                 if not progression_override and grade_level != last_grade:
-                    failed = Grade.objects.filter(
-                        enrollment=last_completed,
-                        remarks__in=["failed", "incomplete"],
-                    ).select_related("subject")
-                    if failed.exists():
+                    blocking = blocking_subjects(
+                        Grade.objects.filter(enrollment=last_completed).select_related("subject")
+                    )
+                    if blocking:
                         names = ", ".join(
-                            g.subject.subject_name for g in failed
+                            f"{o['subject'].subject_name} "
+                            f"({o['average'] if o['average'] is not None else o['remarks']})"
+                            for o in blocking
                         )
                         raise serializers.ValidationError({
                             "grade_level": (

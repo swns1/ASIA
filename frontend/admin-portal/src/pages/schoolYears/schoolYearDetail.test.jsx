@@ -140,9 +140,10 @@ describe("SchoolYearDetailPage — sections", () => {
     api.carryOverSchoolYear.mockImplementation((label, body) => Promise.resolve({
       from: "2026-2027", to: label, dry_run: Boolean(body.dry_run),
       sections: {
+        // As the server sorts them: grade_level as text, so 11 before 7.
         copied: [
-          { grade_level: "Grade 7", name: "Rizal", strand: null },
           { grade_level: "Grade 11", name: "STEM-A", strand: "STEM" },
+          { grade_level: "Grade 7", name: "Rizal", strand: null },
         ],
         skipped: [{ grade_level: "Grade 7", name: "Mabini", strand: null }],
       },
@@ -157,8 +158,12 @@ describe("SchoolYearDetailPage — sections", () => {
     expect(await screen.findByText("Will add 2 sections:")).toBeTruthy();
     expect(screen.getByText("STEM-A · STEM")).toBeTruthy();
     expect(screen.getByText(/1 already here is left as it is/)).toBeTruthy();
+    // Listed in school order, not the server's.
+    const grades = within(screen.getByRole("dialog")).getAllByText(/^Grade \d+$/);
+    expect(grades.map((g) => g.textContent)).toEqual(["Grade 7", "Grade 11"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy 2 sections" }));
+    expect(screen.getByText("2 sections")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["sections"] },
     ));
@@ -245,7 +250,9 @@ describe("SchoolYearDetailPage — advisers", () => {
       "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"], dry_run: true },
     ));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Copy 1 adviser" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copy" }).disabled).toBe(false));
+    expect(screen.getByText("1 adviser")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"] },
     ));
@@ -343,7 +350,8 @@ describe("SchoolYearDetailPage — fees", () => {
     expect(carryOverFees).toHaveBeenCalledWith({ from: "2026-2027", to: "2027-2028", dry_run: true });
     expect(await screen.findByText("Will add fees for 1 grade:")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy 1 section and fees for 1 grade" }));
+    expect(screen.getByText("1 section · fees for 1 grade")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(carryOverFees).toHaveBeenLastCalledWith({ from: "2026-2027", to: "2027-2028" }));
     expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar"] },
@@ -389,7 +397,8 @@ describe("SchoolYearDetailPage — calendar", () => {
     expect(screen.getByText("Christmas Day")).toBeTruthy();
     expect(screen.getByText(/Check holidays that move each year/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy 2 calendar events" }));
+    expect(screen.getByText("2 calendar events")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["calendar"] },
     ));

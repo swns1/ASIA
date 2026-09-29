@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import Modal from "../ui/Modal";
@@ -10,6 +10,7 @@ import { carryOverSchoolYear } from "../../api/enrollmentApi";
 import { carryOverFees } from "../../api/billingApi";
 import { firstMessageFrom } from "../../utils/apiError";
 import { fmtDate } from "../../utils/format";
+import { GRADE_ORDER } from "../../utils/grading";
 
 // Start a year from an earlier one: copy its sections, the advisers of those
 // sections, its calendar and its fees across so that what didn't change needs
@@ -44,9 +45,15 @@ const ADVISER_SKIPS = {
   not_a_teacher: () => "no longer a teacher account",
 };
 
+// The servers sort grade_level as text (Grade 1, Grade 10, Grade 11, Grade 2);
+// list grades in school order instead. Stable, so each grade keeps the
+// servers' order within it.
+const gradeRank = (g) => (GRADE_ORDER.includes(g) ? GRADE_ORDER.indexOf(g) : GRADE_ORDER.length);
+const byGrade = (rows) => [...rows].sort((a, b) => gradeRank(a.grade_level) - gradeRank(b.grade_level));
+
 function groupByGrade(rows) {
   const groups = new Map();
-  rows.forEach((r) => {
+  byGrade(rows).forEach((r) => {
     if (!groups.has(r.grade_level)) groups.set(r.grade_level, []);
     groups.get(r.grade_level).push(r);
   });
@@ -96,7 +103,7 @@ function AdvisersPreview({ result, from, to, withSections }) {
   const skipped = result?.skipped ?? [];
   const byReason = useMemo(() => {
     const map = new Map();
-    (result?.skipped ?? []).forEach((r) => {
+    byGrade(result?.skipped ?? []).forEach((r) => {
       if (!map.has(r.reason)) map.set(r.reason, []);
       map.get(r.reason).push(r);
     });
@@ -117,7 +124,7 @@ function AdvisersPreview({ result, from, to, withSections }) {
             Will assign {plural(toCopy.length, "adviser", "advisers")}:
           </p>
           <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
-            {toCopy.map((r) => (
+            {byGrade(toCopy).map((r) => (
               <li key={`${r.teacher_user_id}-${r.grade_level}-${r.section}`} className="flex items-center gap-2 text-[12.5px]">
                 <span className="w-24 shrink-0 font-semibold text-neutral-700">{r.grade_level}</span>
                 <Badge variant="info" size="sm">{r.strand ? `${r.section} · ${r.strand}` : r.section}</Badge>
@@ -163,7 +170,7 @@ function FeesPreview({ result, from, to }) {
         Will add fees for {plural(toCopy.length, "grade", "grades")}:
       </p>
       <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
-        {toCopy.map((r) => (
+        {byGrade(toCopy).map((r) => (
           <li key={`${r.school_level}-${r.grade_level}`} className="flex items-center gap-2 text-[12.5px]">
             <span className="w-24 shrink-0 font-semibold text-neutral-700">{r.grade_level}</span>
             <span className="font-semibold text-neutral-800">{peso(r.total)}</span>
@@ -268,6 +275,7 @@ export default function CarryOverModal({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
+  const summaryId = useId();
 
   // Always in the order they're applied, however the boxes were ticked.
   const parts = ALL_PARTS.filter((id) => picked.has(id));
@@ -296,7 +304,7 @@ export default function CarryOverModal({
     count("advisers") && plural(count("advisers"), "adviser", "advisers"),
     count("calendar") && plural(count("calendar"), "calendar event", "calendar events"),
     count("fees") && `fees for ${plural(count("fees"), "grade", "grades")}`,
-  ].filter(Boolean).join(" and ");
+  ].filter(Boolean).join(" · ");
 
   const handleApply = async () => {
     setApplying(true); setError("");
@@ -336,11 +344,24 @@ export default function CarryOverModal({
       title="Copy from an earlier year"
       description={`Start S.Y. ${schoolYear} from another year's setup`}
       footer={
-        <div className="flex justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose} disabled={applying}>Cancel</Button>
-          <Button icon="ti-copy" loading={applying} disabled={loading || !summary} onClick={handleApply}>
-            {summary ? `Copy ${summary}` : "Nothing to copy"}
-          </Button>
+        // The counts sit beside the buttons, not in one: four parts' worth
+        // made the button wider than the modal and pushed Cancel out of view.
+        <div className="flex items-center justify-between gap-4">
+          <p id={summaryId} className="min-w-0 text-[12.5px] text-neutral-600">
+            {summary || "Nothing to copy"}
+          </p>
+          <div className="flex shrink-0 gap-2.5">
+            <Button variant="secondary" onClick={onClose} disabled={applying}>Cancel</Button>
+            <Button
+              icon="ti-copy"
+              loading={applying}
+              disabled={loading || !summary}
+              onClick={handleApply}
+              aria-describedby={summaryId}
+            >
+              Copy
+            </Button>
+          </div>
         </div>
       }
     >

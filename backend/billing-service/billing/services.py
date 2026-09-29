@@ -357,6 +357,24 @@ def _is_early_bird(invoice_date: date, sy_start: date = None) -> bool:
     return invoice_date <= cutoff
 
 
+def earns_early_bird(invoice_date: date, school_year: str) -> bool:
+    """
+    Whether an invoice dated `invoice_date` for an enrollment in `school_year`
+    earns Early Bird, measured from that year's own start in the registry. A
+    year with no dates set earns none: there is no window to be early for.
+
+    Generation and recalculation both decide it here. Recalculation used to
+    call _is_early_bird(invoice_date) with no start, which falls back to
+    School Settings -- the CURRENT year's start -- so editing a past year's
+    fees granted Early Bird to every invoice in that year, all of them dated
+    before the current year's cutoff.
+    """
+    if not invoice_date:
+        return False
+    year_start = configured_sy_start(school_year)
+    return year_start is not None and _is_early_bird(invoice_date, year_start)
+
+
 def _fetch_enrollment(enrollment_id: int):
     """Return enrollment data from the shared DB using the ORM mirror model."""
     from .enrollment_mirror import EnrollmentMirror
@@ -535,7 +553,7 @@ def _build_invoice_for_enrollment(enrollment_id: int, payment_plan: str, effecti
     # that had already passed. A year with no dates set earns no Early Bird
     # (there is no window to be early for), same as an unconfigured calendar.
     year_start = configured_sy_start(enrollment["school_year"])
-    eb = year_start is not None and _is_early_bird(today, year_start)
+    eb = earns_early_bird(today, enrollment["school_year"])
 
     # 3) Run discount waterfall
     waterfall = compute_discount_waterfall(
@@ -723,7 +741,9 @@ def recalculate_invoices_for_schedule(fee_schedule_id: int):
             fee_data["tuition_total"], scholarships
         )
 
-        eb = _is_early_bird(inv.invoice_date) if inv.invoice_date else False
+        # From the schedule's own year, as generation does -- not the current
+        # year's start, which every older invoice predates.
+        eb = earns_early_bird(inv.invoice_date, schedule_sy)
 
         waterfall = compute_discount_waterfall(
             raw_tuition=fee_data["tuition_total"],

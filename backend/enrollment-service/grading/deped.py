@@ -242,3 +242,25 @@ def summarize_subjects(grades):
             "periods": bucket["periods"],
         }
     return out
+
+
+# Year outcomes that hold a learner in their grade. Bulk promotion, the
+# eligibility report and the enrollment form's progression gate all decide
+# "can this learner move up" from this one list, so none of them can block a
+# learner the others (and the report card) would pass.
+BLOCKING_REMARKS = ("failed", "incomplete", "dropped")
+
+
+def blocking_subjects(grades):
+    """
+    The learning areas that keep a learner from being promoted: those whose
+    YEAR outcome (summarize_subjects) is failed, incomplete or dropped.
+
+    A single failed quarter is not enough -- DO 8 sets the Final Grade as the
+    mean of the quarters, so a learner who failed Q1 and recovered passes the
+    subject. Returns the outcome dicts, empty when nothing blocks.
+    """
+    return [
+        outcome for outcome in summarize_subjects(grades).values()
+        if outcome["remarks"] in BLOCKING_REMARKS
+    ]
