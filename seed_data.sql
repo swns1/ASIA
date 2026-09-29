@@ -10,7 +10,7 @@
 --   observed values, attendance -> scholarships -> invoice -> installments
 --   -> payments.
 -- S.Y. 2026-2027 is registered but left empty so carry-over (sections,
--- advisers, calendar, fees) can be tried into it.
+-- advisers, calendar, subjects, fees) can be tried into it.
 --
 -- Accounts (password SlisDemo2026! for all):
 --   superadmin@slis.test  super_admin   admin@slis.test       admin
@@ -97,13 +97,15 @@ UPDATE school_settings s
 
 
 -- =====================================================
--- 3. SUBJECTS
--- The full offering for all fourteen grades. Senior High is split by
--- semester: core subjects carry no strand, strand subjects carry STEM or ABM.
+-- 3. SUBJECTS, S.Y. 2025-2026
+-- Each year has its own curriculum. This is S.Y. 2025-2026's: the full offering
+-- for all fourteen grades, Senior High split by semester (core subjects carry
+-- no strand, strand subjects carry STEM or ABM). S.Y. 2026-2027 gets none, so
+-- the School Year page's carry-over can copy them forward.
 -- =====================================================
 
-INSERT INTO subjects (subject_code, subject_name, school_level, grade_level, strand, semester, grading_template_id)
-SELECT v.code, v.name, v.lvl, v.grade, v.strand, v.sem, t.grading_template_id
+INSERT INTO subjects (school_year, subject_code, subject_name, school_level, grade_level, strand, semester, grading_template_id)
+SELECT '2025-2026', v.code, v.name, v.lvl, v.grade, v.strand, v.sem, t.grading_template_id
   FROM (VALUES
     ('N-LLC', 'Language, Literacy and Communication', 'nursery', 'Nursery', NULL, NULL, 'Standard Kindergarten'),
     ('N-MATH', 'Mathematics', 'nursery', 'Nursery', NULL, NULL, 'Standard Kindergarten'),
@@ -228,7 +230,7 @@ SELECT v.code, v.name, v.lvl, v.grade, v.strand, v.sem, t.grading_template_id
     ('G12-ABM-BUSETHICS', 'Business Ethics and Social Responsibility', 'senior_highschool', 'Grade 12', 'ABM', '2nd', 'Standard Senior High Core')
   ) AS v(code, name, lvl, grade, strand, sem, template)
   JOIN grading_templates t ON t.template_name = v.template
-ON CONFLICT (subject_code) DO NOTHING;
+ON CONFLICT (school_year, subject_code) DO NOTHING;
 
 
 -- =====================================================
@@ -2651,7 +2653,8 @@ INSERT INTO seed_scores VALUES
 INSERT INTO score_entries (enrollment_id, subject_id, grading_component_id, grading_period, label, score, max_score, recorded_at)
 SELECT s.eid, sub.subject_id, gc.grading_component_id, s.period, s.label, s.score, s.top, s.rec
   FROM seed_scores s
-  JOIN subjects sub ON sub.subject_code = s.code
+  JOIN enrollments e ON e.enrollment_id = s.eid
+  JOIN subjects sub ON sub.subject_code = s.code AND sub.school_year = e.school_year
   JOIN grading_components gc ON gc.grading_template_id = sub.grading_template_id AND gc.component_name = s.comp;
 
 DO $$
@@ -2917,7 +2920,8 @@ SELECT v.eid, sub.subject_id, v.period, v.grade, v.remarks, v.rec::timestamp
     (211, 'G12-STEM-GENPHYS2', '2nd_semester', 91.00, 'passed', '2026-03-31 16:00:00'),
     (211, 'G12-STEM-GENBIO2', '2nd_semester', 96.00, 'passed', '2026-03-31 16:00:00')
   ) AS v(eid, code, period, grade, remarks, rec)
-  JOIN subjects sub ON sub.subject_code = v.code;
+  JOIN enrollments e ON e.enrollment_id = v.eid
+  JOIN subjects sub ON sub.subject_code = v.code AND sub.school_year = e.school_year;
 
 INSERT INTO narrative_reports (enrollment_id, category_id, grading_period, rating, recorded_at) VALUES
   (200, 900, '1st_quarter', 'AO', '2025-08-22 16:30:00'),
