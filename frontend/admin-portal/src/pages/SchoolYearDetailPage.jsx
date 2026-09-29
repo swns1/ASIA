@@ -103,7 +103,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
               : "None yet — enrollment and advisers pick from these"}
           >
             {!readOnly && sectionsCount === 0 && canCopy && (
-              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers", "fees"])}>
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["sections", "advisers", "calendar", "fees"])}>
                 Copy from an earlier year
               </Button>
             )}
@@ -157,6 +157,11 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
             title="Quarter dates"
             detail={`${c?.quarters_set ?? 0} of 4 grading periods set on the calendar`}
           >
+            {!readOnly && c && c.quarters_set === 0 && c.holidays === 0 && canCopy && (
+              <Button variant="secondary" size="sm" icon="ti-copy" onClick={() => onCopy(["calendar"])}>
+                Copy from an earlier year
+              </Button>
+            )}
             <Button variant="ghost" size="sm" to={`/academic-calendar${yearLink}`}>Calendar</Button>
           </ChecklistItem>
 

@@ -39,6 +39,9 @@ vi.mock("../../api/billingApi", () => ({
 }));
 vi.mock("../../api/studentApi", () => ({ updateStudentStatus: pass("updateStudentStatus") }));
 vi.mock("../../components/requirements/RequirementDocumentsPanel", () => ({ default: () => null }));
+// The page checks whether the enrollment's year is archived (read-only); these
+// enrollments are in an open year.
+vi.mock("../../context/SchoolYearContext", () => ({ useSchoolYear: () => ({ yearStates: {} }) }));
 
 const { default: EnrollmentDetailPage } = await import("../EnrollmentDetailPage");
 

@@ -313,7 +313,7 @@ describe("SchoolYearDetailPage — archiving", () => {
 });
 
 describe("SchoolYearDetailPage — fees", () => {
-  it("starts an empty year from an earlier one: sections, advisers and fees", async () => {
+  it("starts an empty year from an earlier one: sections, advisers, calendar and fees", async () => {
     api.getSchoolYearSetup.mockResolvedValue({
       enrollments: { total: 0, unfinished: 0 },
       sections: { count: 0, grades: 0 },
@@ -338,7 +338,7 @@ describe("SchoolYearDetailPage — fees", () => {
 
     // Each server previews its own parts.
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenCalledWith(
-      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"], dry_run: true },
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar"], dry_run: true },
     ));
     expect(carryOverFees).toHaveBeenCalledWith({ from: "2026-2027", to: "2027-2028", dry_run: true });
     expect(await screen.findByText("Will add fees for 1 grade:")).toBeTruthy();
@@ -346,7 +346,7 @@ describe("SchoolYearDetailPage — fees", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy 1 section and fees for 1 grade" }));
     await waitFor(() => expect(carryOverFees).toHaveBeenLastCalledWith({ from: "2026-2027", to: "2027-2028" }));
     expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
-      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers"] },
+      "2027-2028", { from: "2026-2027", parts: ["sections", "advisers", "calendar"] },
     );
   });
 
@@ -354,5 +354,44 @@ describe("SchoolYearDetailPage — fees", () => {
     renderAt();
     const link = await screen.findByRole("link", { name: "Billing Settings" });
     expect(link.getAttribute("href")).toBe("/settings?tab=fees&school_year=2027-2028");
+  });
+});
+
+describe("SchoolYearDetailPage — calendar", () => {
+  it("copies an earlier year's calendar, a year on, with a reminder to check it", async () => {
+    api.getSections.mockResolvedValue([section(1, "Grade 7", "Rizal")]);
+    api.getSchoolYearSetup.mockResolvedValue({
+      enrollments: { total: 0, unfinished: 0 },
+      sections: { count: 1, grades: 1 },
+      advisers: { sections: 1, with_adviser: 1 },
+      fees: { grades: 14, of: 14 },
+      calendar: { quarters_set: 0, holidays: 0 },
+    });
+    api.carryOverSchoolYear.mockImplementation((label, body) => Promise.resolve({
+      from: body.from, to: label, dry_run: Boolean(body.dry_run),
+      calendar: {
+        shift_years: 1,
+        copied: [
+          { title: "1st Quarter", event_type: "grading_period", grading_period: "1st_quarter", start_date: "2027-06-07", end_date: "2027-08-20" },
+          { title: "Christmas Day", event_type: "holiday", grading_period: null, start_date: "2027-12-25", end_date: "2027-12-25" },
+        ],
+        skipped: [],
+      },
+    }));
+    renderAt();
+
+    // The Quarter dates row offers it while the year's calendar is empty.
+    fireEvent.click(await screen.findByRole("button", { name: /Copy from an earlier year/ }));
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["calendar"], dry_run: true },
+    ));
+    expect(await screen.findByText("Will add 2 calendar events, 1 year on:")).toBeTruthy();
+    expect(screen.getByText("Christmas Day")).toBeTruthy();
+    expect(screen.getByText(/Check holidays that move each year/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy 2 calendar events" }));
+    await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
+      "2027-2028", { from: "2026-2027", parts: ["calendar"] },
+    ));
   });
 });

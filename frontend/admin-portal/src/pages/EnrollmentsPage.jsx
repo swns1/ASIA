@@ -33,6 +33,8 @@ import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
 import SectionSelect from "../components/sections/SectionSelect";
 import useSections from "../hooks/useSections";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -1126,6 +1128,11 @@ export default function EnrollmentsPage() {
   // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered.
   // The year follows hooks/useYearFilter: the link's year if it names one, else the current school year.
   const [schoolYear,   setSchoolYear, yearIsDefault] = useYearFilter();
+  // An archived year takes no new enrollments and no edits. Promotion stays:
+  // moving last year's finished classes up is exactly what it's for.
+  const isArchived = useArchivedYears();
+  const yearArchived = isArchived(schoolYear);
+  const archivedTitle = yearArchived ? `S.Y. ${schoolYear} is archived` : undefined;
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
@@ -1230,10 +1237,12 @@ export default function EnrollmentsPage() {
                     Promote Section
                   </Button>
                 )}
-                <Button variant="secondary" icon="ti-users-plus" onClick={() => setShowMassEnroll(true)}>
+                <Button variant="secondary" icon="ti-users-plus" disabled={yearArchived} title={archivedTitle}
+                  onClick={() => setShowMassEnroll(true)}>
                   Mass Enroll
                 </Button>
-                <Button icon="ti-clipboard-plus" onClick={() => navigate("/enrollments/new")}>
+                <Button icon={yearArchived ? "ti-lock" : "ti-clipboard-plus"} disabled={yearArchived} title={archivedTitle}
+                  onClick={() => navigate("/enrollments/new")}>
                   New Enrollment
                 </Button>
               </>
@@ -1337,6 +1346,8 @@ export default function EnrollmentsPage() {
               </FilterRow>
             </FilterBar>
 
+            <ArchivedYearNotice schoolYear={schoolYear} records="enrollments" />
+
             {/* ── Table ── */}
             <motion.div
               initial={isFirstRender ? { opacity: 0, y: 12 } : false}
@@ -1355,7 +1366,7 @@ export default function EnrollmentsPage() {
                     icon: "ti-clipboard-off",
                     title: "No enrollments found",
                     subtitle: "Try adjusting your filters or enroll a new student",
-                    action: (
+                    action: yearArchived ? undefined : (
                       <Button size="sm" icon="ti-plus" onClick={() => navigate("/enrollments/new")}>
                         New Enrollment
                       </Button>
@@ -1424,13 +1435,23 @@ export default function EnrollmentsPage() {
                         {/* Stop propagation so the edit action doesn't also
                             trigger the row's navigate-to-detail. */}
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon="ti-pencil"
-                            aria-label={`Edit enrollment ${en.enrollment_id}`}
-                            onClick={() => navigate(`/enrollments/${en.enrollment_id}/edit`)}
-                          />
+                          {isArchived(en.school_year) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon="ti-eye"
+                              aria-label={`View enrollment ${en.enrollment_id} (S.Y. ${en.school_year} is archived)`}
+                              onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
+                            />
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon="ti-pencil"
+                              aria-label={`Edit enrollment ${en.enrollment_id}`}
+                              onClick={() => navigate(`/enrollments/${en.enrollment_id}/edit`)}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     );

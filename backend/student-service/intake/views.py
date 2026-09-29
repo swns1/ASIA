@@ -7,6 +7,7 @@ Staff-facing (Bearer-authenticated, HasRole {super_admin, admin, registrar}):
     POST      /api/application-invites/{id}/reissue/
     GET       /api/student-applications/[{id}/]
     PATCH     /api/student-applications/{id}/claim/
+    PATCH     /api/student-applications/{id}/school-year/
     POST      /api/student-applications/{id}/approve/
     POST      /api/student-applications/{id}/reject/
 
@@ -54,6 +55,7 @@ from .serializers import (
     ApplicationInviteIssueSerializer,
     ApplicationInviteSerializer,
     ApplicationRejectSerializer,
+    ApplicationSchoolYearSerializer,
     StudentApplicationDetailSerializer,
     StudentApplicationListSerializer,
 )
@@ -210,6 +212,28 @@ class StudentApplicationViewSet(
         with transaction.atomic():
             application = StudentApplication.objects.select_for_update().get(pk=pk)
             services.transition(application, StudentApplication.IN_REVIEW, actor=request.user)
+        return Response(StudentApplicationDetailSerializer(application).data)
+
+    @action(detail=True, methods=["patch"], url_path="school-year")
+    def change_school_year(self, request, pk=None):
+        """
+        Correct the year an application is for -- the invite may have been
+        issued for the wrong one. Only until it's approved: from then on the
+        year lives on the enrolment made from it, which is where it changes.
+        """
+        payload = ApplicationSchoolYearSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        get_object_or_404(StudentApplication, pk=pk)
+        with transaction.atomic():
+            application = StudentApplication.objects.select_for_update().get(pk=pk)
+            if application.status == StudentApplication.APPROVED:
+                return Response(
+                    {"detail": "This application is approved. Change the year on the enrolment made from it."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            application.school_year = payload.validated_data["school_year"]
+            application.updated_at = timezone.now()
+            application.save(update_fields=["school_year", "updated_at"])
         return Response(StudentApplicationDetailSerializer(application).data)
 
     @action(detail=True, methods=["post"])

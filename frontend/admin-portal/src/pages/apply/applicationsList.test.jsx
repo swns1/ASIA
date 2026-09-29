@@ -14,6 +14,7 @@ const getStudentApplications = vi.fn();
 const createApplicationInvite = vi.fn();
 const getStudentApplication = vi.fn();
 const approveStudentApplication = vi.fn();
+const changeApplicationSchoolYear = vi.fn();
 const navigate = vi.fn();
 
 vi.mock("../../api/applicationApi", () => ({
@@ -22,6 +23,7 @@ vi.mock("../../api/applicationApi", () => ({
   getStudentApplication: (...a) => getStudentApplication(...a),
   claimStudentApplication: vi.fn(() => Promise.resolve({})),
   approveStudentApplication: (...a) => approveStudentApplication(...a),
+  changeApplicationSchoolYear: (...a) => changeApplicationSchoolYear(...a),
   rejectStudentApplication: vi.fn(),
 }));
 vi.mock("react-router-dom", async (importOriginal) => ({
@@ -161,5 +163,30 @@ describe("StudentApplicationsPage — school year", () => {
     const params = new URLSearchParams(navigate.mock.calls[0][0].split("?")[1]);
     expect(params.get("school_year")).toBe("2027-2028");
     expect(params.get("grade_level")).toBe("Grade 7");
+  });
+});
+
+describe("StudentApplicationsPage — correcting the year", () => {
+  it("changes an application's year before it's approved, and enrols for that year", async () => {
+    getStudentApplications.mockResolvedValue({ results: [application(4, "Reyes")], next: null });
+    getStudentApplication.mockResolvedValue({
+      ...application(4, "Reyes"), status: "in_review", school_year: "2026-2027",
+      payload_json: { student: { lrn: "123456789012" }, applying_for: { grade_level: "Grade 7" } },
+    });
+    changeApplicationSchoolYear.mockResolvedValue({ school_year: "2027-2028" });
+    approveStudentApplication.mockResolvedValue({ created_student_id: 55 });
+    renderPage();
+    fireEvent.click(await screen.findByText("APP-4"));
+
+    const year = await screen.findByRole("combobox", { name: "Enrol for" });
+    expect(year.value).toBe("2026-2027");
+    fireEvent.change(year, { target: { value: "2027-2028" } });
+    await waitFor(() => expect(changeApplicationSchoolYear).toHaveBeenCalledWith(4, "2027-2028"));
+    expect(await screen.findByText(/Grade 7 · S\.Y\. 2027-2028/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Approve/ }));
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    const params = new URLSearchParams(navigate.mock.calls.at(-1)[0].split("?")[1]);
+    expect(params.get("school_year")).toBe("2027-2028");
   });
 });

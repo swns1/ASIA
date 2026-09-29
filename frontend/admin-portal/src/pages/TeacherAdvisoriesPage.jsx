@@ -27,6 +27,8 @@ import { getUsers } from "../api/identityApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
 import SectionSelect from "../components/sections/SectionSelect";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
 // `tone` names the shared ChipGroup/Badge palette entry, so a school level
@@ -234,11 +236,11 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
 }
 
 // ── Table Row ─────────────────────────────────────────────────────────────────
-function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
+function AdvisoryRow({ advisory, teacherName, readOnly, onEdit, onDelete }) {
   const lvlMeta = getLevelMeta(advisory.school_level);
 
   return (
-    <TableRow onClick={() => onEdit(advisory)}>
+    <TableRow onClick={readOnly ? undefined : () => onEdit(advisory)}>
       <TableCell>
         <div className="flex items-center gap-2.5">
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${lvlMeta?.chip ?? "bg-brand-100 text-brand-600"}`}>
@@ -273,6 +275,9 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
       </TableCell>
 
       <TableCell onClick={(e) => e.stopPropagation()}>
+        {readOnly ? (
+          <span className="text-xs font-semibold text-neutral-500" title={`S.Y. ${advisory.school_year} is archived`}>Archived</span>
+        ) : (
         <div className="flex gap-1">
           <Button
             variant="ghost" size="sm" icon="ti-pencil"
@@ -285,6 +290,7 @@ function AdvisoryRow({ advisory, teacherName, onEdit, onDelete }) {
             onClick={() => onDelete(advisory)}
           />
         </div>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -305,6 +311,9 @@ export default function TeacherAdvisoriesPage() {
   // Opens on the current school year — still freely switchable to "All years"
   // ("") or any other year in use below.
   const [yearFilter, setYearFilter, yearIsDefault] = useYearFilter();
+  // An archived year's advisers stay as they were. New assignments are still
+  // fine: the form only offers years that are open.
+  const isArchived = useArchivedYears();
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
@@ -429,6 +438,8 @@ export default function TeacherAdvisoriesPage() {
           }
         />
 
+        <ArchivedYearNotice schoolYear={yearFilter} records="advisory assignments" />
+
         {/* Table */}
         <motion.div
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
@@ -459,6 +470,7 @@ export default function TeacherAdvisoriesPage() {
                   key={a.advisory_id}
                   advisory={a}
                   teacherName={teacherMap.get(a.teacher_user_id) || `User #${a.teacher_user_id}`}
+                  readOnly={isArchived(a.school_year)}
                   onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
                   onDelete={(adv) => setToDelete(adv)}
                 />

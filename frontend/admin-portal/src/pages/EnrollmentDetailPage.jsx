@@ -17,6 +17,8 @@ import { getCurrentUser, hasAnyRole, BILLING_ROLES } from "../utils/auth";
 import { StatusBadge } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { todayISO, fmtDate } from "../utils/format";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 const C = {
   red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
@@ -72,6 +74,7 @@ export default function EnrollmentDetailPage() {
   const navigate = useNavigate();
 
   const [enrollment, setEnrollment] = useState(null);
+  const isArchived = useArchivedYears();
   const [grades, setGrades] = useState([]);
   const [scholarships, setScholarships] = useState([]);
   // Taken from the eligibility endpoint rather than derived here, so the
@@ -255,6 +258,8 @@ export default function EnrollmentDetailPage() {
     .filter((p) => Object.values(gradesBySubject).some((s) => s.periods[p]));
 
   const canMarkCompleted = enrollment.enrollment_status === "enrolled";
+  // An archived year's enrollment is read-only: printing stays, changes go.
+  const readOnly = isArchived(enrollment.school_year);
 
   // Compact enrollment info fields for the horizontal strip
   const infoFields = [
@@ -306,17 +311,19 @@ export default function EnrollmentDetailPage() {
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-invoice" style={{ fontSize: 11, marginRight: 4 }} />Print COR
               </button>
+              {!readOnly && (
               <button onClick={() => navigate(`/enrollments/${id}/edit`)}
                 style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-edit" style={{ fontSize: 11, marginRight: 4 }} />Edit
               </button>
-              {canMarkCompleted && (
+              )}
+              {!readOnly && canMarkCompleted && (
                 <button onClick={() => setCompleteConfirm(true)}
                   style={{ background: "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   <i className="ti ti-circle-check" style={{ fontSize: 12, marginRight: 4 }} />Mark Completed
                 </button>
               )}
-              {canMarkCompleted && (
+              {!readOnly && canMarkCompleted && (
                 <button onClick={() => setTransferConfirm(true)}
                   style={{ background: "transparent", border: "1.5px solid #f0a830", color: "#7a4a08", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   <i className="ti ti-transfer" style={{ fontSize: 12, marginRight: 4 }} />Transfer Out
@@ -324,6 +331,8 @@ export default function EnrollmentDetailPage() {
               )}
             </div>
           </div>
+
+          <ArchivedYearNotice schoolYear={enrollment.school_year} records="enrollments" className="mb-4" />
 
           {/* ── Horizontal info strip ── */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 0, background: "white", borderRadius: 12, border: "1px solid #f5eaea", marginBottom: 16, overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.04)" }}>

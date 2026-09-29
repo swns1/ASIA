@@ -63,6 +63,14 @@ export async function getStudentApplication(id) {
   return res.data;
 }
 
+// Correct the year an application is for (until it's approved).
+export async function changeApplicationSchoolYear(id, schoolYear) {
+  const res = await applicationClient.patch(`/student-applications/${id}/school-year/`, {
+    school_year: schoolYear,
+  });
+  return res.data;
+}
+
 export async function claimStudentApplication(id) {
   const res = await applicationClient.patch(`/student-applications/${id}/claim/`);
   return res.data;

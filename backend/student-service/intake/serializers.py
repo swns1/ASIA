@@ -190,13 +190,32 @@ class ApplicationInviteIssueSerializer(serializers.Serializer):
                     "school_year": "No current school year is set up. Pick the year they're applying for.",
                 })
         else:
-            year = SchoolYearMirror.objects.filter(label=label).values("archived_at").first()
-            if year is None:
-                raise serializers.ValidationError({"school_year": f"S.Y. {label} isn't a registered school year."})
-            if year["archived_at"] is not None:
-                raise serializers.ValidationError({"school_year": f"S.Y. {label} is archived."})
+            _require_open_year(label)
         attrs["school_year"] = label
         return attrs
+
+
+def _require_open_year(label):
+    """An application's year: registered, and not archived -- an archived
+    year takes no new enrolments."""
+    from accounts.enrollment_mirror import SchoolYearMirror  # see validate() above on why here
+
+    year = SchoolYearMirror.objects.filter(label=label).values("archived_at").first()
+    if year is None:
+        raise serializers.ValidationError({"school_year": f"S.Y. {label} isn't a registered school year."})
+    if year["archived_at"] is not None:
+        raise serializers.ValidationError({"school_year": f"S.Y. {label} is archived."})
+
+
+class ApplicationSchoolYearSerializer(serializers.Serializer):
+    """Input for PATCH .../school-year/ -- correcting the year an application
+    is for, when the invite was issued for the wrong one."""
+    school_year = serializers.CharField(max_length=20)
+
+    def validate_school_year(self, value):
+        label = value.strip()
+        _require_open_year(label)
+        return label
 
 
 class ApplicationInviteSerializer(serializers.ModelSerializer):

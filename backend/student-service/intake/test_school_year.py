@@ -149,3 +149,53 @@ def test_the_review_queue_filters_by_year():
     view.format_kwarg = None
     sql = str(view.get_queryset().query)
     assert '"student_applications"."school_year" = 2027-2028' in sql
+
+
+# -- correcting the year ------------------------------------------------------
+
+def _change_year(application, year):
+    request = factory.patch(
+        f"/api/student-applications/{application.pk}/school-year/", {"school_year": year}, format="json",
+    )
+    force_authenticate(request, user=REGISTRAR)
+    with _years(registered={"2026-2027": None, "2027-2028": None, "2024-2025": timezone.now()}), \
+         patch("intake.views.get_object_or_404"), \
+         patch("intake.views.StudentApplication.objects.select_for_update") as locked, \
+         patch("intake.views.transaction.atomic", return_value=nullcontext()):
+        locked.return_value.get.return_value = application
+        application.save = MagicMock()
+        return StudentApplicationViewSet.as_view({"patch": "change_school_year"})(request, pk=application.pk)
+
+
+def _application(status_=StudentApplication.IN_REVIEW):
+    invite = ApplicationInvite(
+        invite_id=uuid.uuid4(), school_year="2026-2027", issued_by_user_id=1,
+        expires_at=timezone.now() + timedelta(days=1), **NAMES,
+    )
+    application = StudentApplication(
+        student_application_id=5, status=status_, school_year="2026-2027", payload_json={},
+    )
+    application.invite = invite
+    return application
+
+
+def test_an_application_issued_for_the_wrong_year_can_be_corrected():
+    application = _application()
+    response = _change_year(application, "2027-2028")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["school_year"] == "2027-2028"
+    application.save.assert_called_once_with(update_fields=["school_year", "updated_at"])
+
+
+def test_only_to_an_open_registered_year():
+    response = _change_year(_application(), "2024-2025")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "archived" in str(response.data["school_year"])
+
+
+def test_not_once_approved():
+    application = _application(StudentApplication.APPROVED)
+    application.created_student_id = 12
+    response = _change_year(application, "2027-2028")
+    assert response.status_code == status.HTTP_409_CONFLICT
+    application.save.assert_not_called()

@@ -941,7 +941,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
 
     # In the order they're applied: advisers land in sections, so sections
     # copied in the same run have to exist first.
-    CARRY_OVER_PARTS = ("sections", "advisers")
+    CARRY_OVER_PARTS = ("sections", "advisers", "calendar")
 
     @action(detail=True, methods=["post"], url_path="carry-over")
     def carry_over(self, request, label=None):
@@ -959,8 +959,8 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
         setting a few things up by hand, is safe. dry_run answers the same
         question without writing -- the preview.
 
-        Parts: "sections", "advisers". The calendar and fees join as their
-        phases land.
+        Parts: "sections", "advisers", "calendar". Fees are billing's to copy
+        (POST /api/fee-schedules/carry-over/ on billing-service).
         """
         target = self.get_object()
         source_label = (request.data.get("from") or "").strip()
@@ -1000,6 +1000,8 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 # preview still has to count advisers going into them.
                 planned = result["sections"]["copied"] if dry_run and "sections" in parts else []
                 result["advisers"] = self._carry_over_advisers(source, target, dry_run, planned)
+            if "calendar" in parts:
+                result["calendar"] = self._carry_over_calendar(source, target, dry_run)
         return Response(result)
 
     def _carry_over_sections(self, source, target, dry_run):
@@ -1098,6 +1100,60 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 for r in copied
             ])
         return {"copied": copied, "skipped": skipped}
+
+    def _carry_over_calendar(self, source, target, dry_run):
+        """
+        The source year's calendar, moved to the same day and month in the
+        target year (2025-2026 -> 2026-2027 is one year on). Right for fixed
+        holidays and a fair first draft of the rest; holidays that move
+        (Holy Week, Eid) and the quarter dates need checking, which the
+        preview says.
+
+        Skipped: an event this year already has (same type, same title, any
+        capitalisation), and a quarter this year already has dates for.
+        """
+        from academic_calendar.models import CalendarEvent
+
+        shift = int(target.label[:4]) - int(source.label[:4])
+
+        def moved(day):
+            try:
+                return day.replace(year=day.year + shift)
+            except ValueError:          # 29 February into a common year
+                return day.replace(year=day.year + shift, day=28)
+
+        existing = {
+            (event_type, title.lower())
+            for event_type, title in CalendarEvent.objects.filter(school_year=target.label)
+            .values_list("event_type", "title")
+        }
+        quarters = set(
+            CalendarEvent.objects.filter(school_year=target.label, grading_period__isnull=False)
+            .values_list("grading_period", flat=True)
+        )
+        copied, skipped = [], []
+        for event in CalendarEvent.objects.filter(school_year=source.label).order_by("start_date", "title"):
+            row = {
+                "title":          event.title,
+                "event_type":     event.event_type,
+                "grading_period": event.grading_period,
+                "start_date":     moved(event.start_date),
+                "end_date":       moved(event.end_date),
+                "description":    event.description,
+            }
+            if (event.event_type, event.title.lower()) in existing or event.grading_period in quarters:
+                skipped.append(row)
+            else:
+                copied.append(row)
+        if copied and not dry_run:
+            CalendarEvent.objects.bulk_create([
+                CalendarEvent(school_year=target.label, **row) for row in copied
+            ])
+        def listed(rows):
+            # The preview names each event; descriptions would only crowd it.
+            return [{k: v for k, v in r.items() if k != "description"} for r in rows]
+
+        return {"shift_years": shift, "copied": listed(copied), "skipped": listed(skipped)}
 
     @action(detail=True, methods=["get"], url_path="setup")
     def setup(self, request, label=None):

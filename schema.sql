@@ -828,6 +828,7 @@ CREATE TABLE public.enrollments (
     strand character varying(50),
     semester character varying(20),
     enrollment_status character varying(20) DEFAULT 'enrolled'::character varying NOT NULL,
+    CONSTRAINT ck_enrollments_school_year_format CHECK (((school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text)),
     CONSTRAINT enrollments_check CHECK (((((school_level)::text = 'senior_highschool'::text) AND ((semester)::text = ANY ((ARRAY['1st'::character varying, '2nd'::character varying])::text[]))) OR (((school_level)::text <> 'senior_highschool'::text) AND (semester IS NULL)))),
     CONSTRAINT enrollments_enrollment_status_check CHECK (((enrollment_status)::text = ANY ((ARRAY['enrolled'::character varying, 'pending'::character varying, 'cancelled'::character varying, 'completed'::character varying, 'transferred_out'::character varying])::text[]))),
     CONSTRAINT enrollments_school_level_check CHECK (((school_level)::text = ANY ((ARRAY['nursery'::character varying, 'kindergarten'::character varying, 'elementary'::character varying, 'junior_highschool'::character varying, 'senior_highschool'::character varying])::text[])))
@@ -1353,7 +1354,8 @@ CREATE TABLE public.school_settings (
     school_address text,
     contact_email character varying(150),
     contact_phone character varying(50),
-    updated_at timestamp without time zone DEFAULT now() NOT NULL
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_school_settings_school_year_format CHECK (((current_school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text))
 );
 
 
@@ -1460,7 +1462,8 @@ CREATE TABLE public.section_advisories (
     grade_level character varying(20) NOT NULL,
     section character varying(50) NOT NULL,
     strand character varying(50),
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_section_advisories_school_year_format CHECK (((school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text))
 );
 
 

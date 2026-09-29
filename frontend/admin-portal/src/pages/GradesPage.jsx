@@ -41,6 +41,8 @@ import {
 } from "../api/enrollmentApi";
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 import useYearFilter from "../hooks/useYearFilter";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 
 const getStudents            = (p = {}) => _getStudents(p);
@@ -317,6 +319,8 @@ function OverviewTab({ onNavigate }) {
           />
         </FilterRow>
       </FilterBar>
+
+      <ArchivedYearNotice schoolYear={schoolYear} records="grades" />
 
       {/* ── Table ── */}
       <motion.div
@@ -787,7 +791,7 @@ function SummaryTable({ enrollment, grades, subjects, loading }) {
 }
 
 // ── Score Row ─────────────────────────────────────────────────────────────────
-function ScoreRow({ entry, onUpdate, onDelete, color }) {
+function ScoreRow({ entry, onUpdate, onDelete, color, readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [label,   setLabel]   = useState(entry.label);
   const [score,   setScore]   = useState(String(entry.score));
@@ -860,6 +864,7 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
           <span style={{ flex:1, fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{entry.label}</span>
           <span style={{ fontSize:13, color:"#5a4a4a" }}>{entry.score} / {entry.max_score}</span>
           <span style={{ fontSize:12, fontWeight:700, padding:"2px 8px", borderRadius:6, background:gc.bg, color:gc.color }}>{pct}%</span>
+          {!readOnly && <>
           <Button
             variant="ghost" size="sm" icon="ti-pencil"
             aria-label={`Edit score entry ${entry.label}`}
@@ -870,6 +875,7 @@ function ScoreRow({ entry, onUpdate, onDelete, color }) {
             aria-label={`Delete score entry ${entry.label}`}
             onClick={() => setConfirmDelete(true)}
           />
+          </>}
         </>
       )}
       <AnimatePresence>
@@ -956,7 +962,7 @@ const NARRATIVE_RATINGS = [
   { value: "needs_improvement", label: "Needs Improvement", color: "#854f0b", bg: "#faeeda" },
 ];
 
-function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, categories, reports, loading, savingStates, onRatingChange }) {
+function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, categories, reports, loading, savingStates, onRatingChange, readOnly = false }) {
   const reportMap = {};
   reports.forEach((r) => { reportMap[r.category] = r; });
 
@@ -1024,7 +1030,7 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
                   {NARRATIVE_RATINGS.map((r) => {
                     const active = currentRating === r.value;
                     return (
-                      <motion.button key={r.value} onClick={() => !saving && onRatingChange(cat, existing, r.value)} disabled={saving}
+                      <motion.button key={r.value} onClick={() => !saving && !readOnly && onRatingChange(cat, existing, r.value)} disabled={saving || readOnly}
                         initial={false}
                         animate={{ backgroundColor: active ? r.bg : "#ffffff", color: active ? r.color : "#855c5c", borderColor: active ? r.color : "#e8e0f0" }}
                         transition={{ duration: 0.15 }} whileTap={{ scale: 0.96 }}
@@ -1034,7 +1040,7 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
                       </motion.button>
                     );
                   })}
-                  {currentRating && (
+                  {currentRating && !readOnly && (
                     <motion.button onClick={() => !saving && onRatingChange(cat, existing, null)} disabled={saving}
                       whileHover={{ backgroundColor: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
                       title="Clear rating"
@@ -1061,6 +1067,10 @@ export default function GradesPage() {
   const [student,     setStudent]     = useState(null);
   const [enrollments, setEnrollments] = useState([]);
   const [enrollment,  setEnrollment]  = useState(null);
+  // Grades of an archived year can be read, not changed -- corrections mean
+  // unarchiving the year first.
+  const isArchived = useArchivedYears();
+  const entryReadOnly = isArchived(enrollment?.school_year);
   const [loadingEnr,  setLoadingEnr]  = useState(false);
 
   // ── Summary tab state ────────────────────────────────────────────────────
@@ -1614,6 +1624,7 @@ export default function GradesPage() {
   // ── Entry right panel ─────────────────────────────────────────────────────
   const entryPanel = (
     <>
+    <ArchivedYearNotice schoolYear={enrollment?.school_year} records="grades" className="mb-3.5" />
     {!student || !enrollment ? (
     <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
       <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
@@ -1751,16 +1762,16 @@ export default function GradesPage() {
               </div>
               <div style={{ padding:"12px 18px", display:"flex", flexDirection:"column", gap:6 }}>
                 {entries.map((entry) => (
-                  <ScoreRow key={entry.score_entry_id} entry={entry} color={color} onUpdate={handleUpdateScore} onDelete={handleDeleteScore} />
+                  <ScoreRow key={entry.score_entry_id} entry={entry} color={color} onUpdate={handleUpdateScore} onDelete={handleDeleteScore} readOnly={entryReadOnly} />
                 ))}
-                <AddScoreForm
+                {!entryReadOnly && <AddScoreForm
                   componentId={comp.grading_component_id}
                   enrollmentId={enrollment.enrollment_id}
                   subjectId={subject.subject_id}
                   gradingPeriod={gradingPeriod}
                   onAdded={() => { loadScores(); setComputation(null); }}
                   color={color}
-                />
+                />}
               </div>
               {avgPct !== null && (
                 <div style={{ padding:"10px 18px", borderTop:"1px solid #f9f0f0", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
@@ -1791,6 +1802,8 @@ export default function GradesPage() {
                   <span style={{ fontSize:28, fontWeight:700, padding:"6px 18px", borderRadius:12, ...gc }}>{computation.final_grade}</span>
                   <select
                     value={manualRemarks}
+                    disabled={entryReadOnly}
+                    aria-label="Remarks"
                     onChange={(e) => setManualRemarks(e.target.value)}
                     style={{
                       fontSize:13, fontWeight:700, padding:"6px 14px", borderRadius:99, border:"1.5px solid transparent",
@@ -1816,7 +1829,7 @@ export default function GradesPage() {
                 {computing ? <i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-calculator" style={{ fontSize:14 }} />}
                 {computing ? "Computing…" : "Compute"}
               </motion.button>
-              {computation && (
+              {computation && !entryReadOnly && (
                 <motion.button
                   onClick={handleSaveFinal} disabled={savingFinal}
                   whileHover={!savingFinal ? { opacity:0.88 } : {}}
@@ -1867,6 +1880,7 @@ export default function GradesPage() {
           loading={loadingNarrative}
           savingStates={narrativeSavingStates}
           onRatingChange={handleNarrativeRating}
+          readOnly={entryReadOnly}
         />
       </div>
     )}

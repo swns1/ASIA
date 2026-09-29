@@ -20,6 +20,7 @@ import Tabs, { TabPanel } from "../components/ui/Tabs";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import useTabs from "../hooks/useTabs";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { yearOptionsForEntry } from "../utils/schoolYear";
 import { Field, Input, Select, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
@@ -31,6 +32,7 @@ import {
   getStudentApplications,
   getStudentApplication,
   claimStudentApplication,
+  changeApplicationSchoolYear,
   approveStudentApplication,
   rejectStudentApplication,
 } from "../api/applicationApi";
@@ -311,6 +313,8 @@ function IssuedInvite({ issued, copied, onCopy, onClose }) {
 
 function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
   const navigate = useNavigate();
+  const { entryYears } = useSchoolYear();
+  const [savingYear, setSavingYear] = useState(false);
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -385,6 +389,23 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
       setActionError(err.message || "Could not approve this application.");
     } finally {
       setApproving(false);
+    }
+  };
+
+  // Saved as soon as it's picked, so the queue's year column is right even if
+  // the decision waits.
+  const handleYearChange = async (schoolYear) => {
+    setSavingYear(true);
+    setActionError("");
+    try {
+      const updated = await changeApplicationSchoolYear(applicationId, schoolYear);
+      setApplication((a) => ({ ...a, school_year: updated.school_year }));
+      toast.success(`Now applying for S.Y. ${updated.school_year}.`);
+      onDecided?.();
+    } catch (err) {
+      setActionError(err.message || "Could not change the school year.");
+    } finally {
+      setSavingYear(false);
     }
   };
 
@@ -483,6 +504,19 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
           ) : (
             <div className="mt-5 border-t border-neutral-200 pt-4">
               {actionError && <Alert variant="error" className="mb-3">{actionError}</Alert>}
+              <Field label="Enrol for" hint="The year the link was issued for. Change it if that was wrong.">
+                <Select
+                  value={application.school_year || ""}
+                  disabled={savingYear}
+                  aria-label="Enrol for"
+                  onChange={(e) => handleYearChange(e.target.value)}
+                >
+                  {!application.school_year && <option value="">Not set</option>}
+                  {yearOptionsForEntry(entryYears, application.school_year).map((y) => (
+                    <option key={y} value={y}>{`S.Y. ${y}`}</option>
+                  ))}
+                </Select>
+              </Field>
               <Field label="LRN" required hint="Structurally required to create the student record.">
                 <Input value={lrn} onChange={(e) => setLrn(e.target.value)} placeholder="12-digit LRN" />
               </Field>

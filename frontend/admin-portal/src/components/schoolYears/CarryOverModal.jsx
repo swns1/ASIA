@@ -9,9 +9,11 @@ import { Field, Select } from "../FormField";
 import { carryOverSchoolYear } from "../../api/enrollmentApi";
 import { carryOverFees } from "../../api/billingApi";
 import { firstMessageFrom } from "../../utils/apiError";
+import { fmtDate } from "../../utils/format";
 
 // Start a year from an earlier one: copy its sections, the advisers of those
-// sections, and its fees across so that what didn't change needs no retyping.
+// sections, its calendar and its fees across so that what didn't change needs
+// no retyping.
 //
 // The preview is the servers' own dry run, so what it lists is exactly what
 // Copy will do. Nothing this year already has is touched -- a section with
@@ -19,13 +21,14 @@ import { firstMessageFrom } from "../../utils/apiError";
 // already has one, and so is a grade that already has fees -- so it's safe
 // after setting a few things up by hand, or run twice.
 //
-// Sections and advisers are enrollment-service's to copy, fees billing's; the
-// modal asks each for its own parts and shows them as one.
+// Sections, advisers and the calendar are enrollment-service's to copy, fees
+// billing's; the modal asks each for its own parts and shows them as one.
 
 // In the order they're applied: advisers land in sections.
 const PARTS = [
   { id: "sections", label: "Sections", hint: "Each grade's section names and strands" },
   { id: "advisers", label: "Advisers", hint: "Each section's adviser, into the section of the same name here" },
+  { id: "calendar", label: "Calendar", hint: "Holidays, quarters and events, on the same day and month" },
   { id: "fees",     label: "Fees",     hint: "Each grade's fee schedule and its items, ready to adjust" },
 ];
 const ALL_PARTS = PARTS.map((p) => p.id);
@@ -177,8 +180,48 @@ function FeesPreview({ result, from, to }) {
   );
 }
 
-// Each server's share of the parts, run one after the other: sections and
-// advisers first (enrollment-service), then fees (billing-service).
+function CalendarPreview({ result, from, to }) {
+  const toCopy = result?.copied ?? [];
+  const skipped = result?.skipped ?? [];
+  const shift = result?.shift_years ?? 0;
+  if (toCopy.length === 0) {
+    return (
+      <p className="text-[13px] text-neutral-600">
+        {skipped.length
+          ? `S.Y. ${to}'s calendar already has all ${skipped.length} of S.Y. ${from}'s events.`
+          : `S.Y. ${from} has nothing on its calendar to copy.`}
+      </p>
+    );
+  }
+  const moved = `${Math.abs(shift)} ${Math.abs(shift) === 1 ? "year" : "years"} ${shift < 0 ? "back" : "on"}`;
+  return (
+    <>
+      <p className="text-[13px] font-semibold text-neutral-800">
+        Will add {plural(toCopy.length, "calendar event", "calendar events")}, {moved}:
+      </p>
+      <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
+        {toCopy.map((r) => (
+          <li key={`${r.event_type}-${r.title}-${r.start_date}`} className="flex items-center gap-2 text-[12.5px]">
+            <span className="w-28 shrink-0 font-semibold text-neutral-700">{fmtDate(r.start_date)}</span>
+            <span className="truncate text-neutral-800">{r.title}</span>
+          </li>
+        ))}
+      </ul>
+      {skipped.length > 0 && (
+        <p className="text-[12.5px] text-neutral-500">
+          {skipped.length} already on this year's calendar {skipped.length === 1 ? "is" : "are"} left as {skipped.length === 1 ? "it is" : "they are"}.
+        </p>
+      )}
+      <Alert variant="info">
+        Same day and month, {moved}. Check holidays that move each year (Holy Week, Eid) and the
+        quarter dates on the calendar afterwards.
+      </Alert>
+    </>
+  );
+}
+
+// Each server's share of the parts, run one after the other: sections,
+// advisers and the calendar first (enrollment-service), then fees (billing).
 async function carryOver(schoolYear, from, parts, dryRun) {
   const schoolParts = parts.filter((p) => p !== "fees");
   const result = {};
@@ -198,6 +241,7 @@ function describe(result) {
   return [
     result.sections && plural(result.sections.copied?.length ?? 0, "section", "sections"),
     result.advisers && plural(result.advisers.copied?.length ?? 0, "adviser", "advisers"),
+    result.calendar && plural(result.calendar.copied?.length ?? 0, "calendar event", "calendar events"),
     result.fees && `fees for ${plural(result.fees.copied?.length ?? 0, "grade", "grades")}`,
   ].filter(Boolean).join(" and ");
 }
@@ -250,6 +294,7 @@ export default function CarryOverModal({
   const summary = [
     count("sections") && plural(count("sections"), "section", "sections"),
     count("advisers") && plural(count("advisers"), "adviser", "advisers"),
+    count("calendar") && plural(count("calendar"), "calendar event", "calendar events"),
     count("fees") && `fees for ${plural(count("fees"), "grade", "grades")}`,
   ].filter(Boolean).join(" and ");
 
@@ -354,6 +399,11 @@ export default function CarryOverModal({
                     to={schoolYear}
                     withSections={picked.has("sections")}
                   />
+                </div>
+              )}
+              {picked.has("calendar") && preview.calendar && (
+                <div className="flex flex-col gap-2">
+                  <CalendarPreview result={preview.calendar} from={from} to={schoolYear} />
                 </div>
               )}
               {picked.has("fees") && preview.fees && (
