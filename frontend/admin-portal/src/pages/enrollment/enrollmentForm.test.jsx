@@ -24,6 +24,8 @@ const api = {
   getStudent: vi.fn(),
   generateInvoice: vi.fn(),
   createPreviousSchool: vi.fn(),
+  getSections: vi.fn(),
+  createSection: vi.fn(),
 };
 const pass = (name) => (...a) => api[name](...a);
 
@@ -37,6 +39,8 @@ vi.mock("../../api/enrollmentApi", () => ({
   createEnrollmentScholarship: pass("createEnrollmentScholarship"),
   sendEnrollmentEmail: pass("sendEnrollmentEmail"),
   transferInEnrollment: pass("transferInEnrollment"),
+  getSections: pass("getSections"),
+  createSection: pass("createSection"),
 }));
 vi.mock("../../api/studentApi", () => ({ getStudents: pass("getStudents"), getStudent: pass("getStudent") }));
 vi.mock("../../api/billingApi", () => ({ generateInvoice: pass("generateInvoice") }));
@@ -54,6 +58,14 @@ vi.mock("../../context/SchoolYearContext", () => ({
 }));
 
 const { default: EnrollmentFormPage } = await import("../EnrollmentFormPage");
+const { invalidateSections } = await import("../../hooks/useSections");
+
+// Sections are picked from the year's list now, not typed.
+const SECTIONS = ["Sampaguita", "Rizal", "Rizal B"].map((name, i) => ({
+  section_id: i + 1, school_year: "2026-2027", school_level: "elementary",
+  grade_level: "Grade 4", name, strand: null, enrollment_count: 0, adviser_count: 0,
+}));
+const sectionPicker = () => screen.getByRole("combobox", { name: "Section" });
 
 const STUDENT = { student_id: 9, first_name: "Ana", last_name: "Cruz", lrn: "123456789012", student_number: "2025-00142", email: null };
 
@@ -98,6 +110,8 @@ beforeEach(() => {
   api.getScholarshipTypes.mockResolvedValue([]);
   api.createEnrollment.mockResolvedValue({ enrollment_id: 77 });
   api.updateEnrollment.mockResolvedValue({ enrollment_id: 55 });
+  api.getSections.mockResolvedValue(SECTIONS);
+  invalidateSections();
 });
 
 describe("New enrollment", () => {
@@ -117,7 +131,8 @@ describe("New enrollment", () => {
     renderAt("/enrollments/new?student=9");
     await screen.findByText("Missing required documents (1)");
 
-    fireEvent.change(screen.getByPlaceholderText(/Sampaguita/), { target: { value: "Sampaguita" } });
+    await screen.findByRole("option", { name: "Sampaguita" });
+    fireEvent.change(sectionPicker(), { target: { value: "Sampaguita" } });
 
     const submit = screen.getByRole("button", { name: "Submit Enrollment" });
     expect(submit.disabled).toBe(true);
@@ -178,7 +193,8 @@ describe("Edit enrollment", () => {
     expect(await screen.findByText("Grade placement is locked")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Senior High/ }).disabled).toBe(true);
 
-    fireEvent.change(await screen.findByDisplayValue("Rizal"), { target: { value: "Rizal B" } });
+    await screen.findByRole("option", { name: "Rizal B" });
+    fireEvent.change(sectionPicker(), { target: { value: "Rizal B" } });
     fireEvent.click(screen.getByRole("button", { name: "Update Enrollment" }));
 
     await waitFor(() => expect(api.updateEnrollment).toHaveBeenCalledTimes(1));
@@ -194,5 +210,36 @@ describe("Edit enrollment", () => {
       is_transfer_in: false,
     });
     expect(api.createEnrollment).not.toHaveBeenCalled();
+  });
+});
+
+describe("Section picker", () => {
+  it("offers only the grade's sections for that year", async () => {
+    renderAt("/enrollments/new?student=9");
+    await screen.findByText("Missing required documents (1)");
+    await screen.findByRole("option", { name: "Sampaguita" });
+    expect(api.getSections).toHaveBeenLastCalledWith({ school_year: "2026-2027", grade_level: "Grade 4" });
+    expect(screen.getByRole("option", { name: /Add a section/ })).toBeTruthy();
+  });
+
+  it("adds a missing section on the spot and selects it", async () => {
+    api.createSection.mockResolvedValue({
+      section_id: 9, school_year: "2026-2027", school_level: "elementary",
+      grade_level: "Grade 4", name: "Mabini", strand: null,
+    });
+    renderAt("/enrollments/new?student=9");
+    await screen.findByText("Missing required documents (1)");
+    await screen.findByRole("option", { name: "Sampaguita" });
+
+    fireEvent.change(sectionPicker(), { target: { value: "__add_section__" } });
+    fireEvent.change(await screen.findByPlaceholderText("e.g. Rizal"), { target: { value: "Mabini" } });
+    api.getSections.mockResolvedValue([...SECTIONS, { ...SECTIONS[0], section_id: 9, name: "Mabini" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Add section" }));
+
+    await waitFor(() => expect(api.createSection).toHaveBeenCalledWith({
+      school_year: "2026-2027", school_level: "elementary", grade_level: "Grade 4",
+      name: "Mabini", strand: null,
+    }));
+    await waitFor(() => expect(sectionPicker().value).toBe("Mabini"));
   });
 });

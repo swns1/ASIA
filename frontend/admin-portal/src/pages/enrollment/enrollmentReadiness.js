@@ -77,11 +77,13 @@ export function readinessChecks({
 
   // ── Placement ──────────────────────────────────────────────────────────────
   if (!form.section.trim()) {
-    checks.push({ id: "placement", state: "todo", title: "Enter a section", detail: null });
+    checks.push({ id: "placement", state: "todo", title: "Pick a section", detail: null });
   } else if (isSHS && !form.semester) {
     checks.push({ id: "placement", state: "todo", title: "Pick a semester", detail: "Required for Senior High." });
   } else if (isSHS && !form.strand.trim()) {
-    checks.push({ id: "placement", state: "todo", title: "Pick a strand", detail: "Required for Senior High." });
+    // The strand comes with the section; a Senior High section without one
+    // can't be saved, so this only shows before a section is picked.
+    checks.push({ id: "placement", state: "todo", title: "Pick a strand", detail: "Comes from the Senior High section." });
   } else {
     checks.push({ id: "placement", state: "ok", title: "Placement set", detail: `${form.grade_level} · ${form.section.trim()}` });
   }

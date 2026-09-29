@@ -26,6 +26,7 @@ import {
 import { getUsers } from "../api/identityApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
+import SectionSelect from "../components/sections/SectionSelect";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
 // `tone` names the shared ChipGroup/Badge palette entry, so a school level
@@ -47,10 +48,6 @@ const GRADE_LEVELS_BY_LEVEL = {
   junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
   senior_highschool: ["Grade 11","Grade 12"],
 };
-
-const SHS_STRANDS = [
-  "STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports",
-];
 
 const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? null;
 
@@ -82,7 +79,12 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
-  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // A section belongs to one grade of one year: changing either clears it.
+  const setF = (k, v) => setForm((f) => ({
+    ...f,
+    [k]: v,
+    ...(k === "school_year" || k === "grade_level" ? { section: "", strand: "" } : {}),
+  }));
 
   const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
   const isSHS = form.school_level === "senior_highschool";
@@ -179,7 +181,7 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
         <ChipGroup
           options={SCHOOL_LEVELS}
           value={form.school_level}
-          onChange={(v) => setForm((f) => ({ ...f, school_level: v, grade_level: "", strand: "" }))}
+          onChange={(v) => setForm((f) => ({ ...f, school_level: v, grade_level: "", section: "", strand: "" }))}
           label="School level"
           className="mb-3.5"
         />
@@ -193,10 +195,14 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
           </Select>
         </Field>
         <Field label="Section" required>
-          <Input
+          <SectionSelect
+            as={Select}
+            schoolYear={form.school_year}
+            gradeLevel={form.grade_level}
+            schoolLevel={form.school_level}
             value={form.section}
-            onChange={(e) => setF("section", e.target.value)}
-            placeholder="e.g. Rizal"
+            aria-label="Section"
+            onChange={(name, section) => setForm((f) => ({ ...f, section: name, strand: section?.strand ?? "" }))}
           />
         </Field>
       </div>
@@ -204,11 +210,9 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
       {/* Strand is Senior High only, but stays mounted and animates open so
           picking SHS slides it in rather than shoving the footer down. */}
       <CollapsibleFilterRow open={isSHS} maxHeight={110}>
-        <Field label="Strand">
-          <Select value={form.strand} onChange={(e) => setF("strand", e.target.value)}>
-            <option value="">None</option>
-            {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </Select>
+        {/* The strand is the section's: picking STEM-A is picking STEM. */}
+        <Field label="Strand" hint="Set by the section">
+          <Input value={form.strand || "—"} readOnly disabled />
         </Field>
       </CollapsibleFilterRow>
     </Modal>

@@ -32,10 +32,11 @@ import {
 import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
 import { generateInvoice as _generateInvoice } from "../api/billingApi";
 import { createPreviousSchool as _createPreviousSchool } from "../api/previousSchoolApi";
-import { GRADE_LEVELS_BY_LEVEL, SHS_STRANDS, schoolLevelForGrade } from "../constants/schoolLevels";
+import { GRADE_LEVELS_BY_LEVEL, schoolLevelForGrade } from "../constants/schoolLevels";
 import { todayISO } from "../utils/format";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
+import SectionSelect from "../components/sections/SectionSelect";
 
 const getStudents                 = (p = {}) => _getStudents(p);
 const getStudent                  = (id)     => _getStudent(id);
@@ -792,6 +793,18 @@ export default function EnrollmentFormPage() {
     setForm((f) => (f.school_year === previous ? { ...f, school_year: currentYear } : f));
   }, [currentYear, isEdit]);
 
+  // A section belongs to one grade of one year, so changing either leaves the
+  // chosen section behind. The ref holds the placement last seen, set by the
+  // edit load too, so loading an enrollment doesn't clear its own section.
+  const placementKeyRef = useRef(null);
+  useEffect(() => {
+    const key = `${form.school_year}|${form.grade_level}`;
+    const previous = placementKeyRef.current;
+    placementKeyRef.current = key;
+    if (previous === null || previous === key) return;
+    setForm((f) => (f.section ? { ...f, section: "", strand: f.school_level === "senior_highschool" ? "" : f.strand } : f));
+  }, [form.school_year, form.grade_level]);
+
   const [scholarshipTypes,     setScholarshipTypes] = useState([]);
   const [selectedScholarships, setSelectedSchols]   = useState([]);
   const [scholarshipNotes,     setScholarshipNotes] = useState("");
@@ -807,6 +820,7 @@ export default function EnrollmentFormPage() {
     setLoading(true);
     getEnrollment(id)
       .then(async (e) => {
+        placementKeyRef.current = `${e.school_year}|${e.grade_level}`;
         setForm({
           school_year:       e.school_year,
           school_level:      e.school_level,
@@ -1348,7 +1362,23 @@ export default function EnrollmentFormPage() {
                       )}
                     </Field>
                     <Field label="Section" required>
-                      <Input value={form.section} onChange={(e) => setField("section", e.target.value)} placeholder="e.g. Sampaguita, Section A" />
+                      <SectionSelect
+                        as={Select}
+                        schoolYear={form.school_year}
+                        gradeLevel={form.grade_level}
+                        schoolLevel={form.school_level}
+                        value={form.section}
+                        allowQuickAdd
+                        aria-label="Section"
+                        onChange={(name, section) =>
+                          setForm((f) => ({
+                            ...f,
+                            section: name,
+                            // A Senior High section decides the strand.
+                            strand: f.school_level === "senior_highschool" ? (section?.strand ?? "") : f.strand,
+                          }))
+                        }
+                      />
                     </Field>
                   </div>
 
@@ -1390,15 +1420,10 @@ export default function EnrollmentFormPage() {
                     <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 p-4">
                       <div className="mb-3 text-xs font-bold uppercase tracking-[0.07em] text-brand-600">Senior High details</div>
                       <div className="-mb-3.5 grid grid-cols-1 gap-x-5 sm:grid-cols-2">
-                        <Field label="Strand" required>
-                          {placementLocked ? (
-                            <LockedValue>{form.strand || "—"}</LockedValue>
-                          ) : (
-                            <Select value={form.strand} onChange={(e) => setField("strand", e.target.value)}>
-                              <option value="">— Select strand —</option>
-                              {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                            </Select>
-                          )}
+                        {/* The strand belongs to the section now: picking
+                            STEM-A is picking STEM. Shown, not chosen. */}
+                        <Field label="Strand" required hint={placementLocked ? undefined : "Set by the section"}>
+                          <LockedValue>{form.strand || "Pick a section"}</LockedValue>
                         </Field>
                         <Field label="Semester" required>
                           {placementLocked ? (

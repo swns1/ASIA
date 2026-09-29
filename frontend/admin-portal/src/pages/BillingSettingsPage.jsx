@@ -456,7 +456,9 @@ const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      color: "#be185d", bg: "#fde8f8", icon: "ti-baby-carriage",
     grades: ["Nursery"] },
   { value: "kindergarten",      label: "Kindergarten", color: "#854f0b", bg: "#fdf5e8", icon: "ti-star",
-    grades: ["Junior Kinder", "Senior Kinder"] },
+    // One Kindergarten, as on every other screen; "Senior Kinder" here meant
+    // a Kindergarten enrollment found no fee schedule.
+    grades: ["Kindergarten"] },
   { value: "elementary",        label: "Elementary",   color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-book",
     grades: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"] },
   { value: "junior_highschool", label: "Junior HS",    color: "#1455a0", bg: "#e3f0fd", icon: "ti-school",

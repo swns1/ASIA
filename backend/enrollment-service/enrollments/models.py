@@ -331,3 +331,57 @@ class SchoolYear(models.Model):
 
     def __str__(self):  # pragma: no cover
         return self.label
+
+
+# ─── Sections per school year ─────────────────────────────────────────────────
+class Section(models.Model):
+    """
+    A class within one grade of one school year: "Grade 7 · Rizal" in
+    2026-2027. Set up per year on the School Year page (usually carried over
+    from an earlier year), then picked -- not typed -- wherever a placement is
+    made.
+
+    `section` on enrollments and section_advisories stays a plain CharField;
+    the database holds (school_year, grade_level, section) on both to a row
+    here by composite foreign key (migration 0007). That foreign key is also
+    what makes a rename safe: ON UPDATE CASCADE carries the new name onto
+    every enrollment and advisory, so a class is never split by a spelling.
+
+    Names are unique within a grade and year, strands included (STEM-A and
+    ABM-A, not two "A"s). The strand is the section's: picking a Senior High
+    section decides the learner's strand. Keying on name alone is also what
+    keeps the foreign key whole -- strand is NULL below Senior High, and a
+    composite key with a NULL column is simply not checked.
+    """
+
+    section_id = models.BigAutoField(primary_key=True)
+
+    school_year = models.ForeignKey(
+        SchoolYear,
+        to_field="label",
+        db_column="school_year",
+        on_delete=models.PROTECT,
+        related_name="sections",
+    )
+    school_level = models.CharField(max_length=20, choices=Enrollment.SCHOOL_LEVEL_CHOICES)
+    grade_level  = models.CharField(max_length=20)
+    name         = models.CharField(max_length=50)
+    strand       = models.CharField(max_length=50, null=True, blank=True)  # Senior High only
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "sections"
+        ordering = ["school_year", "grade_level", "name"]
+        constraints = [
+            # Also the target of the composite foreign keys in 0007.
+            models.UniqueConstraint(
+                fields=["school_year", "grade_level", "name"],
+                name="uniq_section_per_grade",
+            ),
+        ]
+
+    def __str__(self):  # pragma: no cover
+        return f"{self.school_year_id} {self.grade_level} · {self.name}"

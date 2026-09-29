@@ -35,6 +35,9 @@ export const getTeachersToday = (params = {}) =>
 export const listRegisteredSchoolYears = () =>
   enrollmentClient.get("/school-years/").then((r) => r.data);
 
+export const getSchoolYear = (label) =>
+  enrollmentClient.get(`/school-years/${label}/`).then((r) => r.data);
+
 export const createSchoolYear = (data) =>
   enrollmentClient.post("/school-years/", data).then((r) => r.data);
 
@@ -46,6 +49,31 @@ export const deleteSchoolYear = (label) =>
 
 export const makeSchoolYearCurrent = (label) =>
   enrollmentClient.post(`/school-years/${label}/make-current/`).then((r) => r.data);
+
+// The numbers behind a year's setup checklist: sections, advisers, calendar.
+export const getSchoolYearSetup = (label) =>
+  enrollmentClient.get(`/school-years/${label}/setup/`).then((r) => r.data);
+
+// Copy parts of an earlier year into this one. Never overwrites; `dry_run`
+// is the preview. Body: { from, parts: ["sections"], dry_run }.
+export const carryOverSchoolYear = (label, data) =>
+  enrollmentClient.post(`/school-years/${label}/carry-over/`, data).then((r) => r.data);
+
+// ── Sections (per school year) ───────────────────────────────────────────────
+// Unpaginated. Filter with { school_year, grade_level?, school_level? }.
+// Writes: admin/registrar. A rename carries onto every enrollment and adviser
+// in the section; a delete is refused while anyone is filed under it.
+export const getSections = (params = {}) =>
+  enrollmentClient.get("/sections/", { params }).then((r) => r.data);
+
+export const createSection = (data) =>
+  enrollmentClient.post("/sections/", data).then((r) => r.data);
+
+export const updateSection = (id, data) =>
+  enrollmentClient.patch(`/sections/${id}/`, data).then((r) => r.data);
+
+export const deleteSection = (id) =>
+  enrollmentClient.delete(`/sections/${id}/`).then((r) => r.data);
 
 // ── Enrollments ───────────────────────────────────────────────────────────────
 // Every registered school year, newest first, with its enrollment count and

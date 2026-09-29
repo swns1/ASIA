@@ -31,6 +31,8 @@ import { getStudents as apiGetStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
+import SectionSelect from "../components/sections/SectionSelect";
+import useSections from "../hooks/useSections";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -101,7 +103,6 @@ const GRADE_LEVELS_BY_LEVEL_MODAL = {
   junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
   senior_highschool: ["Grade 11","Grade 12"],
 };
-const SHS_STRANDS = ["STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports"];
 const SEMESTERS   = [{ value:"1st", label:"1st Semester" },{ value:"2nd", label:"2nd Semester" }];
 
 const inp = {
@@ -152,6 +153,12 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
     setGradeLevel(opts[0] ?? "");
     setStrand("");
   }, [schoolLevel]);
+
+  // A section belongs to one grade of one year; changing either clears it.
+  useEffect(() => {
+    setSection(""); // eslint-disable-line react-hooks/set-state-in-effect
+    setStrand("");
+  }, [schoolYear, gradeLevel]);
 
   const reloadEnrolled = () => {
     if (!classReady) return;
@@ -362,7 +369,15 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
             </div>
             <div>
               <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
-              <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. Sampaguita" style={inp} />
+              <SectionSelect
+                schoolYear={schoolYear}
+                gradeLevel={gradeLevel}
+                schoolLevel={schoolLevel}
+                value={section}
+                aria-label="Section"
+                style={sel}
+                onChange={(name, sec) => { setSection(name); setStrand(sec?.strand ?? ""); }}
+              />
             </div>
             <div>
               <label style={lbl}>School Year</label>
@@ -375,14 +390,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           {isSHS && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginTop:10 }}>
               <div style={{ gridColumn:"1/3" }}>
-                <label style={lbl}>Strand <span style={{ color:"#c92a2a" }}>*</span></label>
-                <select value={strand} onChange={(e) => setStrand(e.target.value)} style={{ ...sel, borderColor: isSHS && !strand ? "#fca5a5" : undefined }}>
-                  <option value="">— Select strand —</option>
-                  {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {isSHS && !strand && (
-                  <div style={{ fontSize:10, color:"#c92a2a", marginTop:3 }}>Strand is required for Senior HS</div>
-                )}
+                {/* The strand is the section's: picking STEM-A is picking STEM. */}
+                <label style={lbl}>Strand</label>
+                <input value={strand || "Set by the section"} readOnly style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }} />
               </div>
               <div style={{ gridColumn:"3/5" }}>
                 <label style={lbl}>Semester</label>
@@ -665,8 +675,26 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
     setStep(next);
   }
 
-  // Auto-populate toSection when fromSection changes (can be overridden)
-  useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
+  // The destination is one of next year's sections of the next grade. When
+  // one has the source section's name it's the natural default (Grade 7
+  // Rizal -> Grade 8 Rizal); otherwise it stays unpicked rather than
+  // pointing at a section that doesn't exist.
+  const toGradeLevel = fromGradeLevel ? getNextGrade(fromGradeLevel) : null;
+  const { sections: toSections } = useSections(toSchoolYear, toGradeLevel);
+  useEffect(() => {
+    const same = toSections.find((sec) => sec.name.toLowerCase() === fromSection.trim().toLowerCase());
+    setToSection(same ? same.name : ""); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [toSections, fromSection]);
+
+  // A source section belongs to its grade and year too: changing either
+  // clears it (but opening the dialog on a given section keeps that one).
+  const fromKeyRef = useRef(`${fromSchoolYear}|${fromGradeLevel}`);
+  useEffect(() => {
+    const key = `${fromSchoolYear}|${fromGradeLevel}`;
+    if (fromKeyRef.current === key) return;
+    fromKeyRef.current = key;
+    setFromSection("");
+  }, [fromSchoolYear, fromGradeLevel]);
 
   // Same list as the enrolment form: a promotion's target year is next year,
   // which has no records yet but is registered as upcoming. This was a
@@ -683,7 +711,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
     // Grade 12 excluded — nothing follows it
   ];
 
-  const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear;
+  const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear && toSection;
 
   async function handlePreview() {
     setError("");
@@ -694,7 +722,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
         from_grade_level: fromGradeLevel,
         from_section:     fromSection.trim(),
         to_school_year:   toSchoolYear,
-        to_section:       toSection.trim() || fromSection.trim(),
+        to_section:       toSection,
       });
       setPreviewData(data);
       goStep("preview");
@@ -714,7 +742,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
         from_grade_level: fromGradeLevel,
         from_section:     fromSection.trim(),
         to_school_year:   toSchoolYear,
-        to_section:       toSection.trim() || fromSection.trim(),
+        to_section:       toSection,
       });
       setResultData(data);
       goStep("result");
@@ -840,7 +868,14 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                       </div>
                       <div>
                         <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
-                        <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
+                        <SectionSelect
+                          schoolYear={fromSchoolYear}
+                          gradeLevel={fromGradeLevel}
+                          value={fromSection}
+                          aria-label="Source section"
+                          style={sel}
+                          onChange={(name) => setFromSection(name)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -865,9 +900,16 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                         <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Auto-computed from source grade</div>
                       </div>
                       <div>
-                        <label style={lbl}>Section</label>
-                        <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
-                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Defaults to source section name</div>
+                        <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
+                        <SectionSelect
+                          schoolYear={toSchoolYear}
+                          gradeLevel={toGradeLevel}
+                          value={toSection}
+                          aria-label="Destination section"
+                          style={sel}
+                          onChange={(name) => setToSection(name)}
+                        />
+                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Set up under School Years → Sections</div>
                       </div>
                     </div>
                   </div>
@@ -894,7 +936,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
                     {[
                       { label:"From",         value:`${fromGradeLevel} · ${fromSection}`,                         color:"#1a0a0a" },
-                      { label:"To",           value:`${previewData.to_grade_level} · ${previewData.to_section}`,  color:"#1a0a0a" },
+                      { label:"To",           value:`${previewData.to_grade_level} · ${previewData.to_section}${previewData.to_semester ? ` · ${previewData.to_semester} semester` : ""}`,  color:"#1a0a0a" },
                       { label:"Will Promote", value:previewData.to_promote.length,                                color:"#2e6b0d" },
                       { label:"Will Skip",    value:previewData.to_skip.length,                                   color: previewData.to_skip.length ? "#c92a2a" : "#7a5050" },
                     ].map(({ label, value, color }, i) => (
@@ -1013,7 +1055,7 @@ function PromoteSectionModal({ onClose, onSuccess, initSchoolYear, initGradeLeve
                       transition={{ duration: 0.22, delay: 0.18 }}
                       style={{ fontSize:13, color:"#7a5050", marginTop:4 }}>
                       {resultData.created.length} student{resultData.created.length !== 1 ? "s" : ""} promoted to{" "}
-                      <strong>{resultData.to_grade_level}</strong> · {resultData.to_section} · SY {resultData.to_school_year}
+                      <strong>{resultData.to_grade_level}</strong> · {resultData.to_section}{resultData.to_semester ? ` · ${resultData.to_semester} semester` : ""} · SY {resultData.to_school_year}
                       {" "}as <strong>Pending</strong>
                     </motion.div>
                   </div>

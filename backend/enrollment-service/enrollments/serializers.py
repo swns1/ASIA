@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year, start_year
-from .models import Enrollment, EnrollmentTransfer, SchoolYear, SectionAdvisory, Student
+from .models import Enrollment, EnrollmentTransfer, SchoolYear, Section, SectionAdvisory, Student
 
 
 class SchoolYearField(serializers.CharField):
@@ -103,6 +103,48 @@ class SchoolYearSerializer(serializers.ModelSerializer):
         return attrs
 
 
+def resolve_placement_section(attrs, instance=None):
+    """
+    Hold a placement (an enrollment or an advisory) to a registered section.
+
+    Sections are set up per year and picked, not typed; the database enforces
+    that by composite foreign key (migration 0007). Checking here turns what
+    would be a 500 into a message saying what to do, matches the name
+    case-insensitively and stores the section's own spelling -- "rizal" files
+    under "Rizal" instead of failing -- and takes a Senior High learner's
+    strand from the section, which is where the strand now lives.
+
+    Only runs when the placement itself is being written; an update that
+    doesn't touch year, grade or section leaves it alone.
+    """
+    placement_keys = ("school_year", "grade_level", "section")
+    if instance is not None and not any(k in attrs for k in placement_keys):
+        return attrs
+
+    year = attrs.get("school_year", getattr(instance, "school_year", None))
+    grade = attrs.get("grade_level", getattr(instance, "grade_level", None))
+    name = (attrs.get("section", getattr(instance, "section", None)) or "").strip()
+    if not (year and grade and name):
+        return attrs  # the missing field's own "required" error says it better
+
+    section = (
+        Section.objects.filter(school_year_id=year, grade_level=grade, name__iexact=name)
+        .only("name", "school_level", "strand")
+        .first()
+    )
+    if section is None:
+        raise serializers.ValidationError({
+            "section": (
+                f"S.Y. {year} {grade} has no section named \u201c{name}\u201d. "
+                "Add it first, or pick one of that grade's sections."
+            ),
+        })
+    attrs["section"] = section.name
+    if section.school_level == "senior_highschool":
+        attrs["strand"] = section.strand
+    return attrs
+
+
 class SectionAdvisorySerializer(serializers.ModelSerializer):
     school_year = SchoolYearField(registered=True)
 
@@ -114,6 +156,90 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("advisory_id", "created_at")
+
+    def to_internal_value(self, data):
+        return resolve_placement_section(super().to_internal_value(data), self.instance)
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    """
+    A section of one grade in one school year.
+
+    Only `name` and `strand` change after creation. Moving a section to
+    another grade or year would carry every enrolled learner with it -- the
+    foreign key cascades -- so that is a new section, not an edit. A rename
+    does cascade, deliberately: that is the point of it.
+    """
+
+    school_year = serializers.SlugRelatedField(
+        slug_field="label",
+        queryset=SchoolYear.objects.all(),
+        error_messages={"does_not_exist": "S.Y. {value} hasn't been set up yet."},
+    )
+    enrollment_count = serializers.SerializerMethodField()
+    adviser_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Section
+        fields = (
+            "section_id", "school_year", "school_level", "grade_level", "name", "strand",
+            "enrollment_count", "adviser_count", "created_at", "updated_at",
+        )
+        read_only_fields = ("section_id", "created_at", "updated_at")
+        # DRF would add a case-sensitive UniqueTogetherValidator from the
+        # model's constraint; validate() does the case-insensitive check
+        # (and says which section it clashes with) instead.
+        validators = []
+
+    def _count(self, key, obj):
+        return self.context.get(key, {}).get((obj.school_year_id, obj.grade_level, obj.name), 0)
+
+    def get_enrollment_count(self, obj):
+        return self._count("enrollment_counts", obj)
+
+    def get_adviser_count(self, obj):
+        return self._count("adviser_counts", obj)
+
+    def validate_name(self, value):
+        name = " ".join(value.split())
+        if not name:
+            raise serializers.ValidationError("A section needs a name.")
+        return name
+
+    def validate(self, attrs):
+        instance = self.instance
+        if instance is not None:
+            for fixed in ("school_year", "school_level", "grade_level"):
+                if fixed in attrs and attrs[fixed] != getattr(instance, fixed):
+                    raise serializers.ValidationError({
+                        fixed: "A section can't move to another year or grade; add a new section there instead.",
+                    })
+
+        year = attrs.get("school_year", getattr(instance, "school_year", None))
+        level = attrs.get("school_level", getattr(instance, "school_level", None))
+        grade = attrs.get("grade_level", getattr(instance, "grade_level", None))
+        name = attrs.get("name", getattr(instance, "name", None))
+
+        if grade not in GRADE_LEVELS_BY_LEVEL.get(level, []):
+            raise serializers.ValidationError({"grade_level": f"{grade} isn't a {level.replace('_', ' ') if level else ''} grade."})
+
+        strand = attrs.get("strand", getattr(instance, "strand", None))
+        strand = (strand or "").strip() or None
+        if level == "senior_highschool" and not strand:
+            raise serializers.ValidationError({"strand": "Senior High sections belong to a strand."})
+        if level != "senior_highschool":
+            strand = None
+        attrs["strand"] = strand
+
+        clash = Section.objects.filter(school_year=year, grade_level=grade, name__iexact=name)
+        if instance is not None:
+            clash = clash.exclude(pk=instance.pk)
+        existing = clash.first()
+        if existing is not None:
+            raise serializers.ValidationError({
+                "name": f"{grade} already has a section named \u201c{existing.name}\u201d in S.Y. {year.label}.",
+            })
+        return attrs
 
 
 class EnrollmentTransferSerializer(serializers.ModelSerializer):
@@ -138,6 +264,26 @@ GRADE_ORDER = [
     "Grade 7", "Grade 8", "Grade 9", "Grade 10",
     "Grade 11", "Grade 12",
 ]
+
+
+# The same ladder split by school level -- the one list sections, promotion
+# and placement validate grades against. Mirrors the frontend's
+# constants/schoolLevels.js GRADE_LEVELS_BY_LEVEL.
+GRADE_LEVELS_BY_LEVEL = {
+    "nursery":           ["Nursery"],
+    "kindergarten":      ["Kindergarten"],
+    "elementary":        ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
+    "junior_highschool": ["Grade 7", "Grade 8", "Grade 9", "Grade 10"],
+    "senior_highschool": ["Grade 11", "Grade 12"],
+}
+
+
+def school_level_for_grade(grade):
+    """The school level a grade belongs to, or None if it isn't on the ladder."""
+    for level, grades in GRADE_LEVELS_BY_LEVEL.items():
+        if grade in grades:
+            return level
+    return None
 
 
 def get_next_grade_level(current):
@@ -227,6 +373,9 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             return None
         parts = [s.first_name, s.middle_name, s.last_name, s.suffix]
         return " ".join(p for p in parts if p)
+
+    def to_internal_value(self, data):
+        return resolve_placement_section(super().to_internal_value(data), self.instance)
 
     def validate(self, attrs):
         # ── Pull override flags before any other check ─────────────────────────

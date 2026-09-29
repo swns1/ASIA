@@ -2,6 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
@@ -9,17 +10,15 @@ import Card from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
 import { StatusBadge } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
-import Modal, { ConfirmDialog } from "../components/ui/Modal";
-import { Field, Input } from "../components/FormField";
+import { ConfirmDialog } from "../components/ui/Modal";
+import YearModal from "../components/schoolYears/YearModal";
+import { progressThrough, suggestNewYear } from "../components/schoolYears/yearHelpers";
 import { SCHOOL_YEAR_STATE_MAP } from "../constants/statusMaps";
 import { fmtDate } from "../utils/format";
-import { fieldErrorsFrom, firstMessageFrom } from "../utils/apiError";
-import { computeDefaultSchoolYear } from "../utils/schoolYear";
+import { firstMessageFrom } from "../utils/apiError";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import {
   listRegisteredSchoolYears,
-  createSchoolYear,
-  updateSchoolYear,
   deleteSchoolYear,
   makeSchoolYearCurrent,
 } from "../api/enrollmentApi";
@@ -39,136 +38,8 @@ const TABLE_COLUMNS = [
   { key: "actions",     label: "",            width: "22%" },
 ];
 
-// "2025-06-08" -> "2026-06-08". Date strings, not Date objects: a Date built
-// from a bare ISO date is UTC midnight, and shifting it can land a day off.
-function shiftYear(iso, years) {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${Number(y) + years}-${m}-${d}`;
-}
-
-function nextLabel(label) {
-  const first = parseInt(String(label).slice(0, 4), 10);
-  return Number.isNaN(first) ? "" : `${first + 1}-${first + 2}`;
-}
-
-// A new year starts as a copy of the latest one, a year later: most schools
-// keep the same calendar shape, so the dates only need a nudge, not typing.
-function suggestNewYear(years) {
-  const latest = years[0];
-  if (!latest) return { label: computeDefaultSchoolYear(), start_date: "", end_date: "" };
-  return {
-    label: nextLabel(latest.label),
-    start_date: shiftYear(latest.start_date, 1),
-    end_date: shiftYear(latest.end_date, 1),
-  };
-}
-
-function progressThrough(start, end) {
-  const s = new Date(start).getTime();
-  const e = new Date(end).getTime();
-  const now = Date.now();
-  if (!s || !e || now <= s) return 0;
-  if (now >= e) return 100;
-  return Math.round(((now - s) / (e - s)) * 100);
-}
-
-// ── Create / edit modal ──────────────────────────────────────────────────────
-function YearModal({ year, suggestion, onClose, onSaved }) {
-  const isEdit = Boolean(year);
-  const [form, setForm] = useState(() => ({
-    label:      year?.label      ?? suggestion.label,
-    start_date: year?.start_date ?? suggestion.start_date,
-    end_date:   year?.end_date   ?? suggestion.end_date,
-  }));
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [error, setError] = useState("");
-
-  const setF = (k, v) => {
-    setForm((f) => ({ ...f, [k]: v }));
-    setErrors((e) => ({ ...e, [k]: undefined }));
-  };
-
-  const handleSave = async () => {
-    const local = {};
-    if (!isEdit && !/^\d{4}-\d{4}$/.test(form.label.trim())) local.label = "Use the form 2026-2027.";
-    if (!form.start_date) local.start_date = "Pick the first day of classes.";
-    if (!form.end_date) local.end_date = "Pick the last day of the year.";
-    if (Object.keys(local).length) { setErrors(local); return; }
-
-    setSaving(true); setError(""); setErrors({});
-    try {
-      const saved = isEdit
-        ? await updateSchoolYear(year.label, { start_date: form.start_date, end_date: form.end_date })
-        : await createSchoolYear({ label: form.label.trim(), start_date: form.start_date, end_date: form.end_date });
-      toast.success(isEdit ? `S.Y. ${saved.label} updated.` : `S.Y. ${saved.label} added as ${saved.state}.`);
-      onSaved();
-      onClose();
-    } catch (e) {
-      const fields = fieldErrorsFrom(e);
-      if (Object.keys(fields).length) setErrors(fields);
-      else setError(firstMessageFrom(e) || "Failed to save the school year.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      onClose={onClose}
-      size="md"
-      showClose
-      loading={saving}
-      icon="ti-calendar-plus"
-      title={isEdit ? `Edit S.Y. ${year.label}` : "New School Year"}
-      description={
-        isEdit
-          ? "Change when this year starts and ends"
-          : "Set up a year ahead of time — it stays Upcoming until you make it current"
-      }
-      closeOnBackdrop={false}
-      footer={
-        <div className="flex justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button icon="ti-check" loading={saving} onClick={handleSave}>
-            {saving ? "Saving…" : isEdit ? "Save Dates" : "Add School Year"}
-          </Button>
-        </div>
-      }
-    >
-      <AnimatePresence>
-        {error && <Alert variant="error" className="mb-4">{error}</Alert>}
-      </AnimatePresence>
-
-      <Field
-        label="School Year"
-        required={!isEdit}
-        error={errors.label}
-        hint={isEdit ? "A year's label can't change; every record in it is filed under it." : undefined}
-      >
-        <Input
-          value={form.label}
-          onChange={(e) => setF("label", e.target.value)}
-          placeholder="e.g. 2026-2027"
-          disabled={isEdit}
-        />
-      </Field>
-
-      <div className="grid gap-x-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-        <Field label="Start Date" required error={errors.start_date} hint="Installments and Early Bird count from here">
-          <Input type="date" value={form.start_date} onChange={(e) => setF("start_date", e.target.value)} />
-        </Field>
-        <Field label="End Date" required error={errors.end_date}>
-          <Input type="date" value={form.end_date} onChange={(e) => setF("end_date", e.target.value)} />
-        </Field>
-      </div>
-    </Modal>
-  );
-}
-
 // ── Row ──────────────────────────────────────────────────────────────────────
-function YearRow({ year, onEdit, onMakeCurrent, onDelete }) {
+function YearRow({ year, onOpen, onEdit, onMakeCurrent, onDelete }) {
   const isCurrent = year.state === "current";
   const canMakeCurrent = !isCurrent && year.state !== "archived";
   // The server refuses both anyway; the button says why before anyone tries.
@@ -180,13 +51,19 @@ function YearRow({ year, onEdit, onMakeCurrent, onDelete }) {
   const pct = isCurrent ? progressThrough(year.start_date, year.end_date) : null;
 
   return (
-    <TableRow>
+    <TableRow onClick={() => onOpen(year)}>
       <TableCell>
         <div className="flex items-center gap-2.5">
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${isCurrent ? "bg-success-50 text-success-500" : "bg-brand-100 text-brand-600"}`}>
             <i className="ti ti-calendar text-[15px]" aria-hidden="true" />
           </div>
-          <div className="text-[13.5px] font-bold text-neutral-900">S.Y. {year.label}</div>
+          <Link
+            to={`/school-years/${year.label}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[13.5px] font-bold text-neutral-900 transition-colors hover:text-brand-600 group-hover:text-brand-600"
+          >
+            S.Y. {year.label}
+          </Link>
         </div>
       </TableCell>
 
@@ -212,7 +89,7 @@ function YearRow({ year, onEdit, onMakeCurrent, onDelete }) {
         {year.enrollment_count ?? 0}
       </TableCell>
 
-      <TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">
           {canMakeCurrent && (
             <Button variant="secondary" size="sm" icon="ti-player-play" onClick={() => onMakeCurrent(year)}>
@@ -244,6 +121,7 @@ export default function SchoolYearsPage() {
   usePageTitle("School Years");
   const isFirstRender = useIsFirstRender();
   const { refreshYears } = useSchoolYear();
+  const navigate = useNavigate();
 
   const [years, setYears] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -366,6 +244,7 @@ export default function SchoolYearsPage() {
                 <YearRow
                   key={y.label}
                   year={y}
+                  onOpen={(year) => navigate(`/school-years/${year.label}`)}
                   onEdit={(year) => setModal({ mode: "edit", year })}
                   onMakeCurrent={setToMakeCurrent}
                   onDelete={setToDelete}
