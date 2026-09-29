@@ -351,7 +351,7 @@ export default function SchoolYearDetailPage() {
         )}
       />
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
+      <div className="relative flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
         {isArchived && (
           <Alert variant="info" title={`Archived ${fmtDate(year.archived_at)}`}>
             Its records are read-only, grade corrections included. Payments still go through.

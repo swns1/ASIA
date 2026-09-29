@@ -395,7 +395,7 @@ export default function SchoolYearComparePage() {
         subtitle={`Up to ${MAX_YEARS} years side by side. Each year shows its change from the one to its left.`}
       />
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
+      <div className="relative flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
         {registry.error ? (
           <ErrorState error={registry.error} subject="school years" onRetry={fetchRegistry} />
         ) : !registry.loading && labels.length === 0 ? (
