@@ -10,6 +10,7 @@ from accounts.permissions import (
     teacher_student_ids,
 )
 from enrollment_service.deletes import InUseDeleteMixin
+from enrollments.archive import ArchivedYearGuard
 from .models import Grade, NarrativeCategory, NarrativeReport
 from .serializers import GradeSerializer, NarrativeCategorySerializer, NarrativeReportSerializer
 
@@ -26,7 +27,7 @@ def _scope_to_student_records(qs, user, path="enrollment__student_id"):
     return qs
 
 
-class GradeViewSet(viewsets.ModelViewSet):
+class GradeViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset = Grade.objects.select_related("enrollment", "subject").all()
     serializer_class = GradeSerializer
     permission_classes = [IsAdvisoryTeacherOrStaff]
@@ -48,7 +49,7 @@ class GradeViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         # The object check saw the grade where it was; a PATCH can move it onto
@@ -57,7 +58,7 @@ class GradeViewSet(viewsets.ModelViewSet):
             self.request.user,
             serializer.validated_data.get("enrollment") or serializer.instance.enrollment,
         )
-        serializer.save()
+        super().perform_update(serializer)
 
 
 class NarrativeCategoryViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
@@ -74,7 +75,7 @@ class NarrativeCategoryViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
     ordering           = ("sort_order", "name")
 
 
-class NarrativeReportViewSet(viewsets.ModelViewSet):
+class NarrativeReportViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset           = NarrativeReport.objects.select_related("enrollment", "category").all()
     serializer_class   = NarrativeReportSerializer
     permission_classes = [IsAdvisoryTeacherOrStaff]
@@ -91,11 +92,11 @@ class NarrativeReportViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         assert_teacher_may_write_enrollment(
             self.request.user,
             serializer.validated_data.get("enrollment") or serializer.instance.enrollment,
         )
-        serializer.save()
+        super().perform_update(serializer)

@@ -417,11 +417,22 @@ export default function AnalyticsPage() {
     [schoolYear, gradingPeriod, schoolLevel, gradeLevel]
   );
 
+  // The picked year's subjects: each year has its own. A subject picked
+  // before the year changed isn't one of them, so the pick is cleared.
   useEffect(() => {
-    _getSubjects({ page_size: 500, school_level: schoolLevel || undefined, grade_level: gradeLevel || undefined })
-      .then((d) => setSubjects(d.results ?? d ?? []))
+    _getSubjects({
+      page_size: 500,
+      school_year: schoolYear || undefined,
+      school_level: schoolLevel || undefined,
+      grade_level: gradeLevel || undefined,
+    })
+      .then((d) => {
+        const list = d.results ?? d ?? [];
+        setSubjects(list);
+        setSubjectId((id) => (list.some((s) => String(s.subject_id) === String(id)) ? id : ""));
+      })
       .catch(() => setSubjects([]));
-  }, [schoolLevel, gradeLevel]);
+  }, [schoolYear, schoolLevel, gradeLevel]);
 
   // Show the last saved assessment on arrival so the page is never blank for
   // someone who only reads it (a teacher can't trigger a run at all).

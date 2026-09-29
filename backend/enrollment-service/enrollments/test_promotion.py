@@ -88,10 +88,26 @@ def _post(action, data, role="registrar"):
     return getattr(view, action)(request)
 
 
-def _run(action, data, enrollments, grades):
+class SectionStore:
+    """Section.objects: next year has every section asked for, a Senior High
+    one carrying `strand`."""
+
+    def __init__(self, strand="STEM"):
+        self.strand = strand
+
+    def filter(self, **kw):
+        shs = kw.get("grade_level") in ("Grade 11", "Grade 12")
+        section = SimpleNamespace(name=kw.get("name__iexact"), strand=self.strand if shs else None)
+        return SimpleNamespace(first=lambda: section)
+
+
+def _run(action, data, enrollments, grades, section_strand="STEM"):
     store = EnrollmentStore(enrollments)
     with patch("enrollments.views.Enrollment.objects", new=store), \
          patch("grades.models.Grade.objects", new=FakeQuerySet(grades)), \
+         patch("enrollments.views.SchoolYear.objects", new=FakeQuerySet([SimpleNamespace(label="2026-2027")])), \
+         patch("enrollments.views.Section.objects", new=SectionStore(section_strand)), \
+         patch("enrollments.archive.archived_among", return_value=set()), \
          patch("enrollments.views.transaction.atomic", nullcontext):
         response = _post(action, data)
     return response, store
@@ -180,6 +196,22 @@ def test_grade_11_promotes_once_with_semester_and_strand():
     assert created.school_level == "senior_highschool"
     assert created.semester == "1st"
     assert created.strand == "STEM"
+
+
+def test_grade_12_takes_the_destination_sections_strand():
+    """A Senior High section carries its strand, so the new row takes it from
+    the section it joins, not from whatever the Grade 11 row held."""
+    ana = student(1)
+    first = enrollment(ana, grade="Grade 11", section="STEM-A", semester="1st")
+    second = enrollment(ana, grade="Grade 11", section="STEM-A", semester="2nd")
+
+    response, store = _run("promote_confirm", {
+        "from_school_year": "2025-2026", "from_grade_level": "Grade 11",
+        "from_section": "STEM-A", "to_school_year": "2026-2027",
+    }, [first, second], [grade(first, MATH, 85), grade(second, SCIENCE, 88)])
+
+    assert response.status_code == 201
+    assert [(c.semester, c.strand) for c in store.created] == [("1st", "STEM")]
 
 
 def test_grade_11_failure_in_first_semester_blocks_promotion():

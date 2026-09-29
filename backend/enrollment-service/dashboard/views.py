@@ -221,7 +221,7 @@ class TeachersTodayView(APIView):
                 sections=sections,
                 advisers=self._advisers(school_year),
                 attendance_rows=self._attendance_today(school_year, today),
-                subjects=list(Subject.objects.values(
+                subjects=list(Subject.objects.filter(school_year=school_year).values(
                     "subject_id", "school_level", "grade_level", "strand", "semester",
                 )),
                 graded=self._graded_pairs(school_year, [period["key"], period["semester"]]),
@@ -241,14 +241,20 @@ class TeachersTodayView(APIView):
         rows = list(SectionAdvisory.objects.filter(school_year=school_year).values(
             "teacher_user_id", "school_level", "grade_level", "section", "strand",
         ))
-        names = dict(
-            User.objects.filter(user_id__in={r["teacher_user_id"] for r in rows})
-                        .values_list("user_id", "name")
-        )
+        accounts = {
+            user_id: (name, is_active)
+            for user_id, name, is_active in User.objects.filter(
+                user_id__in={r["teacher_user_id"] for r in rows},
+            ).values_list("user_id", "name", "is_active")
+        }
         advisers = {}
         for r in rows:
             key = section_key(r["school_level"], r["grade_level"], r["section"], r["strand"])
-            advisers.setdefault(key, []).append(names.get(r["teacher_user_id"], "Unknown teacher"))
+            name, is_active = accounts.get(r["teacher_user_id"], ("Unknown teacher", True))
+            # A deactivated adviser has left: nobody is taking that section's
+            # attendance, so it reads as having no adviser until reassigned.
+            if is_active:
+                advisers.setdefault(key, []).append(name)
         return advisers
 
     @staticmethod

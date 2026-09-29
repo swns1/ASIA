@@ -56,7 +56,7 @@ def resolve_user_from_request(request):
     except DatabaseError:
         return None
 
-    if not user:
+    if not user or not user.is_active:
         return None
 
     # Deactivating clears current_session_id, so the sid check below already

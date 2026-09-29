@@ -37,7 +37,7 @@ def _teacher_roster(user):
     """(enrollment_id, student_id) for every `enrolled` row in the teacher's
     SectionAdvisory sections. Empty -- never raises -- for a teacher with no
     advisory yet: fail closed."""
-    from enrollments.models import Enrollment, SectionAdvisory
+    from enrollments.models import SectionAdvisory, advisory_roster
 
     teacher_user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
     if not teacher_user_id:
@@ -45,16 +45,7 @@ def _teacher_roster(user):
 
     roster = set()
     for advisory in SectionAdvisory.objects.filter(teacher_user_id=teacher_user_id):
-        qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        )
-        if advisory.strand:
-            qs = qs.filter(strand=advisory.strand)
-        roster.update(qs.values_list("enrollment_id", "student_id"))
+        roster.update(advisory_roster(advisory).values_list("enrollment_id", "student_id"))
     return roster
 
 

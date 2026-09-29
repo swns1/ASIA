@@ -13,6 +13,7 @@ from accounts.permissions import (
     teacher_student_ids,
 )
 from enrollment_service.deletes import InUseDeleteMixin
+from enrollments.archive import ArchivedYearGuard
 from enrollments.models import Enrollment
 from subjects.models import Subject
 from .deped import (
@@ -66,7 +67,7 @@ class GradingComponentViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
         return qs
 
 
-class ScoreEntryViewSet(viewsets.ModelViewSet):
+class ScoreEntryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset = ScoreEntry.objects.select_related("grading_component").all()
     serializer_class = ScoreEntrySerializer
     permission_classes = [IsAdvisoryTeacherOrStaff]
@@ -105,7 +106,7 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save()
+        super().perform_create(serializer)
 
     def perform_update(self, serializer):
         # Detail routes DO get has_object_permission, but only against the row
@@ -117,7 +118,7 @@ class ScoreEntryViewSet(viewsets.ModelViewSet):
             serializer.validated_data.get("enrollment")
             or getattr(serializer.instance, "enrollment", None),
         )
-        serializer.save()
+        super().perform_update(serializer)
 
     @action(detail=False, methods=["get"], url_path="compute")
     def compute_grade(self, request):

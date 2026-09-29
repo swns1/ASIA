@@ -20,12 +20,15 @@ vi.mock("../../api/enrollmentApi", () => ({
   createSectionAdvisory: vi.fn(),
   updateSectionAdvisory: vi.fn(),
   deleteSectionAdvisory: vi.fn(),
+  getSections: vi.fn(() => Promise.resolve([])),
+  createSection: vi.fn(),
 }));
 vi.mock("../../api/identityApi", () => ({ getUsers: (...a) => api.getUsers(...a) }));
 vi.mock("../../components/ui/SchoolYearPicker", () => ({ default: () => null }));
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
     currentYear: "2026-2027", options: ["2026-2027", "2025-2026"], yearCounts: {},
+    entryYears: ["2026-2027"], yearStates: {},
   }),
 }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));

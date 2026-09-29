@@ -25,6 +25,10 @@ import {
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { yearOptionsForEntry } from "../utils/schoolYear";
+import SectionSelect from "../components/sections/SectionSelect";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 // ── School level / grade level options (mirrors EnrollmentFormPage.jsx) ────────
 // `tone` names the shared ChipGroup/Badge palette entry, so a school level
@@ -47,10 +51,6 @@ const GRADE_LEVELS_BY_LEVEL = {
   senior_highschool: ["Grade 11","Grade 12"],
 };
 
-const SHS_STRANDS = [
-  "STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports",
-];
-
 const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? null;
 
 const TABLE_COLUMNS = [
@@ -65,14 +65,16 @@ const TABLE_COLUMNS = [
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
 function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, onClose, onSaved }) {
   const isEdit = Boolean(advisory?.advisory_id);
-  const { currentYear } = useSchoolYear();
+  const { currentYear, entryYears } = useSchoolYear();
   // A deactivated teacher can't sign in to use a section, so they are never
-  // offered as its adviser. Editing a section whose adviser was deactivated
-  // (or whose account is gone) starts with the picker empty, asking for a
-  // new one.
-  const activeTeachers = teachers.filter((t) => t.is_active !== false);
-  const currentAdviserActive = activeTeachers.some((t) => t.user_id === advisory?.teacher_user_id);
-  const needsNewAdviser = isEdit && !teachersUnavailable && !currentAdviserActive;
+  // offered as a new adviser. Editing this year's (or a later year's) section
+  // whose adviser was deactivated, or whose account is gone, starts with the
+  // picker empty, asking for a new one; a past year's keeps its adviser.
+  const currentAdviserActive = teachers.some(
+    (t) => t.is_active !== false && t.user_id === advisory?.teacher_user_id,
+  );
+  const needsNewAdviser = isEdit && !teachersUnavailable && !currentAdviserActive
+    && (!currentYear || advisory.school_year >= currentYear);
 
   const [form, setForm] = useState({
     teacher_user_id: needsNewAdviser ? "" : (advisory?.teacher_user_id ?? ""),
@@ -88,7 +90,21 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
-  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // Only active teachers can be assigned. Editing a deactivated teacher's
+  // existing advisory still shows them, so the form doesn't silently
+  // switch the teacher.
+  const teacherOptions = useMemo(
+    () => teachers.filter((t) => t.is_active !== false
+      || (!needsNewAdviser && t.user_id === advisory?.teacher_user_id)),
+    [teachers, advisory, needsNewAdviser],
+  );
+
+  // A section belongs to one grade of one year: changing either clears it.
+  const setF = (k, v) => setForm((f) => ({
+    ...f,
+    [k]: v,
+    ...(k === "school_year" || k === "grade_level" ? { section: "", strand: "" } : {}),
+  }));
 
   const gradeOptions = useMemo(() => GRADE_LEVELS_BY_LEVEL[form.school_level] ?? [], [form.school_level]);
   const isSHS = form.school_level === "senior_highschool";
@@ -156,7 +172,7 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
       <Field label="Teacher" required>
         <Select value={form.teacher_user_id} onChange={(e) => setF("teacher_user_id", e.target.value)}>
           <option value="">Select a teacher…</option>
-          {activeTeachers.map((t) => (
+          {teacherOptions.map((t) => (
             <option key={t.user_id} value={t.user_id}>{t.name} ({t.email})</option>
           ))}
         </Select>
@@ -175,19 +191,22 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
         )}
       </Field>
 
+      {/* A registered year, not free text: the database only accepts years an
+          admin has set up, and a typo here used to cut the adviser off from
+          their own students. */}
       <Field label="School Year" required>
-        <Input
-          value={form.school_year}
-          onChange={(e) => setF("school_year", e.target.value)}
-          placeholder="e.g. 2025-2026"
-        />
+        <Select value={form.school_year} onChange={(e) => setF("school_year", e.target.value)}>
+          {yearOptionsForEntry(entryYears, form.school_year).map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </Select>
       </Field>
 
       <FilterRow label="School Level *">
         <ChipGroup
           options={SCHOOL_LEVELS}
           value={form.school_level}
-          onChange={(v) => setForm((f) => ({ ...f, school_level: v, grade_level: "", strand: "" }))}
+          onChange={(v) => setForm((f) => ({ ...f, school_level: v, grade_level: "", section: "", strand: "" }))}
           label="School level"
           className="mb-3.5"
         />
@@ -201,10 +220,14 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
           </Select>
         </Field>
         <Field label="Section" required>
-          <Input
+          <SectionSelect
+            as={Select}
+            schoolYear={form.school_year}
+            gradeLevel={form.grade_level}
+            schoolLevel={form.school_level}
             value={form.section}
-            onChange={(e) => setF("section", e.target.value)}
-            placeholder="e.g. Rizal"
+            aria-label="Section"
+            onChange={(name, section) => setForm((f) => ({ ...f, section: name, strand: section?.strand ?? "" }))}
           />
         </Field>
       </div>
@@ -212,11 +235,9 @@ function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, o
       {/* Strand is Senior High only, but stays mounted and animates open so
           picking SHS slides it in rather than shoving the footer down. */}
       <CollapsibleFilterRow open={isSHS} maxHeight={110}>
-        <Field label="Strand">
-          <Select value={form.strand} onChange={(e) => setF("strand", e.target.value)}>
-            <option value="">None</option>
-            {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </Select>
+        {/* The strand is the section's: picking STEM-A is picking STEM. */}
+        <Field label="Strand" hint="Set by the section">
+          <Input value={form.strand || "—"} readOnly disabled />
         </Field>
       </CollapsibleFilterRow>
     </Modal>
@@ -238,11 +259,11 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
 }
 
 // ── Table Row ─────────────────────────────────────────────────────────────────
-function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, onEdit, onDelete }) {
+function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, readOnly, onEdit, onDelete }) {
   const lvlMeta = getLevelMeta(advisory.school_level);
 
   return (
-    <TableRow onClick={() => onEdit(advisory)}>
+    <TableRow onClick={readOnly ? undefined : () => onEdit(advisory)}>
       <TableCell>
         <div className="flex items-center gap-2.5">
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${lvlMeta?.chip ?? "bg-brand-100 text-brand-600"}`}>
@@ -284,6 +305,9 @@ function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, onEdit,
       </TableCell>
 
       <TableCell onClick={(e) => e.stopPropagation()}>
+        {readOnly ? (
+          <span className="text-xs font-semibold text-neutral-500" title={`S.Y. ${advisory.school_year} is archived`}>Archived</span>
+        ) : (
         <div className="flex gap-1">
           <Button
             variant="ghost" size="sm" icon="ti-pencil"
@@ -296,6 +320,7 @@ function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, onEdit,
             onClick={() => onDelete(advisory)}
           />
         </div>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -316,6 +341,9 @@ export default function TeacherAdvisoriesPage() {
   // Opens on the current school year — still freely switchable to "All years"
   // ("") or any other year in use below.
   const [yearFilter, setYearFilter, yearIsDefault] = useYearFilter();
+  // An archived year's advisers stay as they were. New assignments are still
+  // fine: the form only offers years that are open.
+  const isArchived = useArchivedYears();
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
@@ -458,6 +486,8 @@ export default function TeacherAdvisoriesPage() {
           }
         />
 
+        <ArchivedYearNotice schoolYear={yearFilter} records="advisory assignments" />
+
         {needingAdviser.length > 0 && (
           <Alert variant="warning">
             {needingAdviser.length} section{needingAdviser.length === 1 ? "" : "s"} need{needingAdviser.length === 1 ? "s" : ""} a new adviser — the assigned teacher&apos;s account was deactivated or removed, so nobody can take attendance or enter grades there. Open the section to reassign it.
@@ -496,6 +526,7 @@ export default function TeacherAdvisoriesPage() {
                   teacherName={teacherMap.get(a.teacher_user_id) || `Removed account #${a.teacher_user_id}`}
                   adviserGone={adviserGone(a)}
                   needsAdviser={needsAdviser(a)}
+                  readOnly={isArchived(a.school_year)}
                   onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
                   onDelete={(adv) => setToDelete(adv)}
                 />

@@ -51,6 +51,9 @@ export default function SchoolYearPicker({
   className = "",
 }) {
   const ctx = useSchoolYear();
+  // An archived year is read-only everywhere; the picker says so wherever it
+  // names one, so nobody has to find out from a refused save.
+  const isArchived = (year) => Boolean(year) && ctx.yearStates?.[year] === "archived";
   const options = optionsProp ?? ctx.options;
   const counts = countsProp ?? ctx.yearCounts;
   const currentYear = currentYearProp ?? ctx.currentYear;
@@ -209,7 +212,7 @@ export default function SchoolYearPicker({
         onKeyDown={onKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`${label}: ${triggerLabel}`}
+        aria-label={`${label}: ${triggerLabel}${isArchived(value) ? " (archived)" : ""}`}
         className={`focus-ring flex h-[42px] items-center gap-2.5 rounded-lg border-[1.5px] px-3 text-left transition-colors duration-150 ${
           emphasised
             ? "border-brand-500 bg-brand-100"
@@ -232,6 +235,12 @@ export default function SchoolYearPicker({
             {triggerLabel}
           </span>
         </span>
+
+        {isArchived(value) && (
+          <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-px text-[10px] font-bold text-neutral-700">
+            Archived
+          </span>
+        )}
 
         {triggerCount != null && (
           <span
@@ -343,6 +352,9 @@ export default function SchoolYearPicker({
                       aria-hidden="true"
                     />
                     <span className="flex-1 tabular-nums">{isAll ? "All years" : year}</span>
+                    {!isAll && isArchived(year) && (
+                      <span className="text-[10.5px] font-semibold text-neutral-500">Archived</span>
+                    )}
                     {n != null && (
                       <span
                         className={`text-[11px] font-semibold tabular-nums ${

@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { modalVariants, springTransition } from "../../utils/motion";
 import useFocusTrap from "../../hooks/useFocusTrap";
@@ -42,6 +42,9 @@ export default function Modal({
   const dialogRef = useRef(null);
   const titleId = useId();
   const descId = useId();
+  // Draws the line under the close button's strip once the body has scrolled
+  // under it, the way the footer's border marks where content continues.
+  const [scrolled, setScrolled] = useState(false);
 
   // While an action is in flight, Escape and backdrop clicks are ignored so a
   // stray keypress can't abandon a request the user already committed to.
@@ -85,19 +88,30 @@ export default function Modal({
           SIZES[size] ?? SIZES.sm
         } ${className}`}
       >
+        {/* A strip of its own that doesn't scroll: floated over the body, the
+            button sat on top of whatever scrolled beneath it. */}
         {showClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            aria-label="Close dialog"
-            className="focus-ring absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-brand-50 hover:text-brand-600 disabled:opacity-40"
+          <div
+            className={`flex shrink-0 justify-end border-b px-4 pt-4 transition-colors ${
+              scrolled ? "border-neutral-200" : "border-transparent"
+            }`}
           >
-            <i className="ti ti-x" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              aria-label="Close dialog"
+              className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-brand-50 hover:text-brand-600 disabled:opacity-40"
+            >
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-6 pt-8">
+        <div
+          onScroll={showClose ? (e) => setScrolled(e.currentTarget.scrollTop > 0) : undefined}
+          className={`min-h-0 flex-1 overflow-y-auto px-8 pb-6 ${showClose ? "pt-0" : "pt-8"}`}
+        >
           {(icon || title || description) && (
             <div className="mb-5 flex flex-col items-center gap-3 text-center">
               {icon && (

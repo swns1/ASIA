@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from grading.deped import PASSING_GRADE, general_average, summarize_subjects
+from grading.deped import PASSING_GRADE, blocking_subjects, general_average, summarize_subjects
 
 
 def subject(subject_id, name):
@@ -150,3 +150,35 @@ def test_general_average_is_a_whole_number_across_learning_areas():
 def test_general_average_ignores_uncomputed_subjects():
     assert general_average([Decimal("90"), None, Decimal("80")]) == 85
     assert general_average([None, None]) is None
+
+
+# -- what blocks promotion ------------------------------------------------------
+# blocking_subjects is the one rule bulk promotion, the eligibility report and
+# the enrollment form's gate share; the form used to test per-period remarks.
+
+def test_a_recovered_subject_does_not_block_promotion():
+    assert blocking_subjects([
+        grade(MATH, Decimal("73"), "failed"),
+        grade(MATH, Decimal("76"), "passed"),
+        grade(MATH, Decimal("78"), "passed"),
+        grade(MATH, Decimal("79"), "passed"),
+    ]) == []
+
+
+def test_a_subject_failed_on_the_year_blocks_promotion():
+    blocking = blocking_subjects([
+        grade(MATH, Decimal("70"), "failed"),
+        grade(MATH, Decimal("74"), "failed"),
+        grade(SCIENCE, Decimal("88"), "passed"),
+    ])
+    assert [o["subject"] for o in blocking] == [MATH]
+    assert blocking[0]["average"] == Decimal("72.00")
+
+
+@pytest.mark.parametrize("mark", ["incomplete", "dropped"])
+def test_incomplete_and_dropped_block_whatever_the_average(mark):
+    blocking = blocking_subjects([
+        grade(MATH, Decimal("90"), "passed"),
+        grade(MATH, Decimal("92"), mark),
+    ])
+    assert [o["remarks"] for o in blocking] == [mark]

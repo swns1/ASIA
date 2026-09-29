@@ -35,6 +35,7 @@ const api = {
   getStudents: vi.fn(),
   getStudent: vi.fn(),
   markStudentsGraduated: vi.fn(),
+  getSections: vi.fn(),
 };
 const pass = (name) => (...a) => api[name](...a);
 
@@ -53,6 +54,8 @@ vi.mock("../../api/enrollmentApi", () => ({
   createEnrollmentScholarship: pass("createEnrollmentScholarship"),
   sendEnrollmentEmail: pass("sendEnrollmentEmail"),
   transferInEnrollment: pass("transferInEnrollment"),
+  getSections: pass("getSections"),
+  createSection: vi.fn(),
 }));
 vi.mock("../../api/studentApi", () => ({
   getStudents: pass("getStudents"),
@@ -68,6 +71,8 @@ vi.mock("../../context/SchoolYearContext", () => ({
     schoolYear: "2025-2026",
     currentYear: "2025-2026",
     options: ["2025-2026", "2024-2025"],
+    entryYears: ["2026-2027", "2025-2026"],
+    yearStates: {},
     counts: {},
     setSchoolYear: () => {},
   }),
@@ -75,6 +80,14 @@ vi.mock("../../context/SchoolYearContext", () => ({
 
 const { default: EnrollmentsPage } = await import("../EnrollmentsPage");
 const { default: EnrollmentFormPage } = await import("../EnrollmentFormPage");
+const { invalidateSections } = await import("../../hooks/useSections");
+
+// Every grade of every year has a section named Rizal: sections are picked
+// from the year's list, not typed.
+const sectionsFor = ({ school_year, grade_level }) => Promise.resolve([{
+  section_id: 1, school_year, grade_level, school_level: "elementary",
+  name: "Rizal", strand: null, enrollment_count: 0, adviser_count: 0,
+}]);
 
 function LocationProbe() {
   const loc = useLocation();
@@ -98,7 +111,11 @@ async function openPromoteAndPreview({ grade = "Grade 4" } = {}) {
   const [fromYear, fromGrade] = within(dialog).getAllByRole("combobox");
   fireEvent.change(fromYear, { target: { value: "2025-2026" } });
   fireEvent.change(fromGrade, { target: { value: grade } });
-  fireEvent.change(within(dialog).getByPlaceholderText("e.g. Rizal"), { target: { value: "Rizal" } });
+  const source = within(dialog).getByRole("combobox", { name: "Source section" });
+  await within(source).findByRole("option", { name: "Rizal" });
+  fireEvent.change(source, { target: { value: "Rizal" } });
+  // Next year's section of the same name is picked for the destination.
+  await waitFor(() => expect(within(dialog).getByRole("combobox", { name: "Destination section" }).value).toBe("Rizal"));
   // Not a choice any more: a class is promoted into the following year only.
   expect(within(dialog).getByLabelText("Destination school year").value).toBe("2026-2027");
   fireEvent.click(within(dialog).getByRole("button", { name: /Preview/ }));
@@ -122,6 +139,8 @@ beforeEach(() => {
   api.getUnplacedStudents.mockResolvedValue({ school_year: "2025-2026", count: 0, results: [] });
   api.getStudents.mockResolvedValue({ results: [] });
   api.getScholarshipTypes.mockResolvedValue({ results: [] });
+  api.getSections.mockImplementation(sectionsFor);
+  invalidateSections();
 });
 
 // Each test here renders the whole Enrollments page and walks a modal; in the

@@ -20,6 +20,9 @@ class User(models.Model):
     role = models.CharField(max_length=30, choices=ROLE_CHOICES)
     password = models.CharField(max_length=255)
     current_session_id = models.UUIDField(null=True, blank=True)
+    # Column owned by identity-service (its migration 0003). A deactivated
+    # account's tokens are refused here too -- SimpleJWT checks is_active.
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         managed = False
@@ -30,10 +33,6 @@ class User(models.Model):
 
     def __str__(self):
         return self.email
-
-    @property
-    def is_active(self):
-        return True
 
     @property
     def is_staff(self):

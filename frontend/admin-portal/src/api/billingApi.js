@@ -6,8 +6,14 @@ const billingClient = createApiClient({
 });
 
 // ── Fee schedules ─────────────────────────────────────────────────────────────
+// One per grade per school year: filter with { school_year }.
 export const getFeeSchedules = (params = {}) =>
   billingClient.get("/fee-schedules/", { params }).then((r) => r.data);
+
+// Copy an earlier year's fees into another year. Never overwrites; `dry_run`
+// is the preview. Body: { from, to, dry_run } -> { fees: { copied, skipped } }.
+export const carryOverFees = (data) =>
+  billingClient.post("/fee-schedules/carry-over/", data).then((r) => r.data);
 
 export const getFeeSchedule = (id) =>
   billingClient.get(`/fee-schedules/${id}/`).then((r) => r.data);
@@ -23,14 +29,6 @@ export const deleteFeeSchedule = (id) =>
 
 export const recalculateFeeSchedule = (id) =>
   billingClient.post(`/fee-schedules/${id}/recalculate/`).then((r) => r.data);
-
-// Starts one school year's price list from another's: every schedule (with
-// its items) the target year doesn't have yet. -> { created, skipped_existing }
-export const copyFeeSchedulesToYear = (fromSchoolYear, toSchoolYear) =>
-  billingClient.post("/fee-schedules/copy-year/", {
-    from_school_year: fromSchoolYear,
-    to_school_year: toSchoolYear,
-  }).then((r) => r.data);
 
 // ── Fee schedule items ────────────────────────────────────────────────────────
 export const createFeeScheduleItem = (payload) =>

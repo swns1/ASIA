@@ -166,13 +166,63 @@ from .models import ApplicationInvite, StudentApplication  # noqa: E402 — grou
 
 class ApplicationInviteIssueSerializer(serializers.Serializer):
     """Input for POST /api/application-invites/ — what a staff member fills
-    in to issue a new invite."""
+    in to issue a new invite.
+
+    `school_year` is the year the applicant is applying for. Left out, it's
+    the current year. It has to be a registered year that isn't archived:
+    the application carries it into the enrolment the registrar creates on
+    approval, and an archived year takes no new enrolments."""
     applicant_first_name = serializers.CharField(max_length=50)
     applicant_last_name = serializers.CharField(max_length=50)
     # 150 is the column width; without it a longer address passed validation
     # and failed at the database as a 500.
     contact_email = serializers.EmailField(max_length=150, required=False, allow_null=True, allow_blank=True)
     contact_mobile = serializers.CharField(max_length=20, required=False, allow_null=True, allow_blank=True)
+    school_year = serializers.CharField(max_length=20, required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        # Imported here, as accounts/permissions.py does: importing the
+        # mirrors at module load registers them as models of `accounts`, and
+        # makemigrations would then want migrations for tables it doesn't own.
+        from accounts.enrollment_mirror import SchoolYearMirror
+
+        label = (attrs.get("school_year") or "").strip()
+        if not label:
+            label = (
+                SchoolYearMirror.objects.filter(is_current=True)
+                .values_list("label", flat=True).first()
+            )
+            if not label:
+                raise serializers.ValidationError({
+                    "school_year": "No current school year is set up. Pick the year they're applying for.",
+                })
+        else:
+            _require_open_year(label)
+        attrs["school_year"] = label
+        return attrs
+
+
+def _require_open_year(label):
+    """An application's year: registered, and not archived -- an archived
+    year takes no new enrolments."""
+    from accounts.enrollment_mirror import SchoolYearMirror  # see validate() above on why here
+
+    year = SchoolYearMirror.objects.filter(label=label).values("archived_at").first()
+    if year is None:
+        raise serializers.ValidationError({"school_year": f"S.Y. {label} isn't a registered school year."})
+    if year["archived_at"] is not None:
+        raise serializers.ValidationError({"school_year": f"S.Y. {label} is archived."})
+
+
+class ApplicationSchoolYearSerializer(serializers.Serializer):
+    """Input for PATCH .../school-year/ -- correcting the year an application
+    is for, when the invite was issued for the wrong one."""
+    school_year = serializers.CharField(max_length=20)
+
+    def validate_school_year(self, value):
+        label = value.strip()
+        _require_open_year(label)
+        return label
 
 
 class ApplicationInviteSerializer(serializers.ModelSerializer):
@@ -190,7 +240,7 @@ class ApplicationInviteSerializer(serializers.ModelSerializer):
         model = ApplicationInvite
         fields = (
             "invite_id", "applicant_first_name", "applicant_last_name", "applicant_full_name",
-            "contact_email", "contact_mobile",
+            "contact_email", "contact_mobile", "school_year",
             "issued_by_user_id", "issued_at", "expires_at", "revoked_at",
             "consumed_at", "consumed_by_application_id", "code_attempts",
             "is_usable", "is_locked", "is_expired", "is_revoked", "is_consumed",
@@ -207,7 +257,7 @@ class StudentApplicationListSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentApplication
         fields = (
-            "student_application_id", "reference", "status",
+            "student_application_id", "reference", "status", "school_year",
             "first_name", "last_name", "lrn", "birth_date",
             "submitted_at", "decided_at",
             "duplicate_of_student_id",

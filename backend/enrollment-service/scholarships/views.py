@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
 from enrollment_service.deletes import InUseDeleteMixin
+from enrollments.archive import ArchivedYearGuard
 from .filters import EnrollmentScholarshipFilter
 from .models import ScholarshipType, EnrollmentScholarship
 from .serializers import (
@@ -61,7 +62,7 @@ class ScholarshipTypeViewSet(InUseDeleteMixin, viewsets.ModelViewSet):
     filterset_fields = ("is_active", "discount_mode")
 
 
-class EnrollmentScholarshipViewSet(viewsets.ModelViewSet):
+class EnrollmentScholarshipViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/enrollment-scholarships/
 

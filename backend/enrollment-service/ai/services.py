@@ -85,28 +85,16 @@ _DEFAULT_SY_CLOSE = (3, 31)
 def _configured_sy_dates(school_year):
     """The school's own start/end dates for `school_year`, or None.
 
-    `school_settings` is billing-service's table. Reading it here is a
-    cross-service read of the shared database, which is the same thing billing
-    does to `enrollments` -- these are separate processes over one schema, not
-    separate datastores. Any failure returns None and the caller falls back to
-    the convention below, because a missing settings row must not take the
-    risk model down.
+    Read from the school_years registry, which has dates for every year the
+    school has set up. This used to read school_settings, which only ever
+    held the current year's dates -- so scoring any other year silently fell
+    back to the convention below. Any failure answers None (see
+    shared.school_year.configured_dates) and the caller falls back, because
+    a registry read must not take the risk model down.
     """
-    from django.db import connection
+    from shared.school_year import configured_dates
 
-    try:
-        with connection.cursor() as cur:
-            cur.execute(
-                "SELECT sy_start_date, sy_end_date FROM school_settings "
-                "WHERE current_school_year = %s LIMIT 1",
-                [str(school_year)],
-            )
-            row = cur.fetchone()
-    except Exception:  # noqa: BLE001 — never break scoring over a settings read
-        return None
-    if not row or not row[0] or not row[1]:
-        return None
-    return row[0], row[1]
+    return configured_dates(school_year)
 
 
 def _school_year_bounds(school_year):

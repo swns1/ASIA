@@ -310,6 +310,7 @@ def test_eligibility_rejects_a_non_numeric_student_id():
 def _transfer_in(enrollment, body, existing=()):
     view, request = _view("post", f"/api/enrollments/{enrollment.pk}/transfer-in/", body)
     with patch.object(EnrollmentViewSet, "get_object", return_value=enrollment), \
+         patch("enrollments.archive.archived_among", return_value=set()), \
          patch("enrollments.views.EnrollmentTransfer.objects") as transfers:
         transfers.filter.return_value.exists.return_value = bool(existing)
         response = view.transfer_in(request, pk=enrollment.pk)

@@ -15,6 +15,7 @@ from accounts.permissions import (
     teacher_enrollment_ids,
     teacher_student_ids,
 )
+from enrollments.archive import ArchivedYearGuard, ensure_open
 from enrollments.models import Enrollment
 from .models import AttendanceRecord
 from .serializers import AttendanceRecordSerializer, BulkAttendanceSerializer, attendance_problem
@@ -27,7 +28,7 @@ def _query_date(value, name):
         raise ValidationError({name: "Must be a date (YYYY-MM-DD)."})
 
 
-class AttendanceViewSet(viewsets.ModelViewSet):
+class AttendanceViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     queryset = AttendanceRecord.objects.select_related(
         "enrollment__student"
     ).all()
@@ -63,7 +64,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         assert_teacher_may_write_enrollment(
             self.request.user, serializer.validated_data.get("enrollment")
         )
-        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
+        super().perform_create(serializer, recorded_by=getattr(self.request.user, "user_id", None))
 
     def perform_update(self, serializer):
         # has_object_permission checked the record where it was; a PATCH can
@@ -72,7 +73,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             self.request.user,
             serializer.validated_data.get("enrollment") or serializer.instance.enrollment,
         )
-        serializer.save(recorded_by=getattr(self.request.user, "user_id", None))
+        super().perform_update(serializer, recorded_by=getattr(self.request.user, "user_id", None))
 
     # POST /api/attendance/bulk/
     @action(detail=False, methods=["post"], url_path="bulk")
@@ -109,6 +110,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"detail": "No attendance was saved.", "records": problems},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # A day's register can span learners of more than one year only by
+        # mistake, but every year it touches has to be open.
+        ensure_open(*{e.school_year for e in enrollments.values()})
 
         with transaction.atomic():
             for item in records:

@@ -2,7 +2,7 @@
  * Billing Settings after the billing QA pass.
  *
  * - Fee schedules had no school year: entering next year's fees rewrote this
- *   year's. Each year now has its own, and a new year starts from a copy.
+ *   year's. Each year now has its own (billingSettings/feesPerYear.test.jsx).
  * - The plan and Early Bird discount rates could only be changed through the
  *   API, and the page described them with hardcoded percentages.
  */
@@ -13,7 +13,6 @@ import { MemoryRouter } from "react-router-dom";
 const api = {
   getSchoolSettings: vi.fn(),
   getFeeSchedules: vi.fn(),
-  copyFeeSchedulesToYear: vi.fn(),
   getDiscountTypes: vi.fn(),
   updateDiscountType: vi.fn(),
 };
@@ -28,7 +27,6 @@ vi.mock("../../api/billingApi", () => ({
   updateFeeScheduleItem: vi.fn(),
   deleteFeeScheduleItem: vi.fn(),
   recalculateFeeSchedule: vi.fn(),
-  copyFeeSchedulesToYear: pass("copyFeeSchedulesToYear"),
   getDiscountTypes: pass("getDiscountTypes"),
   updateDiscountType: pass("updateDiscountType"),
 }));
@@ -56,28 +54,6 @@ beforeEach(() => {
     { discount_type_id: 4, discount_code: "ANNUAL_PLAN", discount_value: "5.00" },
     { discount_type_id: 5, discount_code: "EARLY_BIRD", discount_value: "5.00" },
   ]);
-});
-
-describe("Fee schedules per school year", () => {
-  it("loads the current year's schedules, and a year with none starts from last year's", async () => {
-    api.getFeeSchedules.mockImplementation((params) => Promise.resolve(
-      params.school_year === "2027-2028" ? [] : [{
-        fee_schedule_id: 1, school_level: "elementary", grade_level: "Grade 4", school_year: "2026-2027",
-        items: [], total_tuition: 28000, total_misc: 7500, total_other: 3000, grand_total: 38500,
-      }],
-    ));
-    api.copyFeeSchedulesToYear.mockResolvedValue({ created: 14, skipped_existing: 0 });
-    renderAt("?tab=fees");
-
-    await waitFor(() => expect(api.getFeeSchedules).toHaveBeenCalledWith({ school_year: "2026-2027" }));
-    expect(await screen.findByText("Grade 4")).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText("Fee schedule school year"), { target: { value: "2027-2028" } });
-    await waitFor(() => expect(api.getFeeSchedules).toHaveBeenLastCalledWith({ school_year: "2027-2028" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Copy from SY 2026-2027" }));
-
-    await waitFor(() => expect(api.copyFeeSchedulesToYear).toHaveBeenCalledWith("2026-2027", "2027-2028"));
-  });
 });
 
 describe("Discount rates", () => {

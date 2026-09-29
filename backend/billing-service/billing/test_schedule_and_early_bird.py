@@ -19,9 +19,11 @@ import pytest
 from billing import services
 from billing.services import (
     _is_early_bird,
+    _fetch_enrollment_scholarships,
     _split_voucher_and_scholarship,
     default_sy_start,
     early_bird_cutoff,
+    earns_early_bird,
     generate_installment_schedule,
     generate_installment_schedule_prorated,
     sy_start_for,
@@ -173,61 +175,64 @@ def test_default_sy_start_cuts_at_july_like_the_rest_of_the_app():
     assert default_sy_start(date(2026, 7, 1)) == date(2026, 7, 1)
 
 
-# -- Invoicing a school year other than the configured one --------------------
+# -- The enrollment's own school year ------------------------------------------
 
-def configured(current="2026-2027", sy_start=date(2026, 6, 1), early_bird_days=7):
-    return SimpleNamespace(
-        current_school_year=current, sy_start_date=sy_start, early_bird_days=early_bird_days,
-    )
-
-
-def test_configured_year_opens_on_the_configured_date():
-    assert sy_start_for("2026-2027", configured()) == date(2026, 6, 1)
-
-
-@pytest.mark.parametrize("school_year,expected", [
-    ("2027-2028", date(2027, 6, 1)),
-    ("2025-2026", date(2025, 6, 1)),
-])
-def test_other_years_keep_the_opening_day_in_their_own_year(school_year, expected):
+@patch("billing.services.configured_dates", return_value=(date(2026, 8, 3), date(2027, 5, 28)))
+def test_installments_count_from_the_enrollments_own_year(_d):
     """
-    The defect: every invoice used settings.sy_start_date whatever year it was
-    for, so next year's enrollments were billed on this year's calendar.
+    The defect: every invoice built its installments from School Settings'
+    sy_start_date -- the CURRENT year's -- so a family enrolled early for
+    2026-2027 got 2025-2026's due dates (Aug 2025 to May 2026, all before
+    their year began).
     """
-    assert sy_start_for(school_year, configured()) == expected
+    assert sy_start_for("2026-2027") == date(2026, 8, 3)
 
 
-def test_unreadable_school_year_falls_back_to_the_configured_date():
-    assert sy_start_for("", configured()) == date(2026, 6, 1)
-    assert sy_start_for(None, configured()) == date(2026, 6, 1)
+@patch("billing.services.configured_dates", return_value=None)
+def test_an_unregistered_year_starts_july_first_of_its_own_year(_d):
+    """Not today's year: an unset-up 2027-2028 still counts from 2027."""
+    assert sy_start_for("2027-2028") == date(2027, 7, 1)
 
 
-def test_settings_without_a_named_year_are_read_as_their_start_dates_year():
-    assert sy_start_for("2027-2028", settings_row(sy_start=date(2026, 8, 1))) == date(2027, 8, 1)
+@patch("billing.services.configured_dates", return_value=None)
+def test_no_usable_year_falls_back_to_today(_d):
+    assert sy_start_for("", today=date(2026, 9, 1)) == date(2026, 7, 1)
 
 
-def test_unconfigured_calendar_opens_the_school_years_own_july():
-    assert sy_start_for("2027-2028", None) == date(2027, 7, 1)
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2025, 6, 1)))
+def test_early_bird_counts_from_the_enrollments_year_when_given(_s):
+    """The window length is the school's setting; the start is the
+    enrollment's year, not the current year's start from settings."""
+    assert early_bird_cutoff(sy_start=date(2026, 8, 3)) == date(2026, 8, 9)
+    assert _is_early_bird(date(2026, 8, 9), date(2026, 8, 3)) is True
+    assert _is_early_bird(date(2026, 8, 10), date(2026, 8, 3)) is False
 
 
-def test_a_29_february_opening_moves_to_the_28th():
-    leap = configured(current="2028-2029", sy_start=date(2028, 2, 29))
-    assert sy_start_for("2029-2030", leap) == date(2029, 2, 28)
+# Current year 2026-2027 opens 2026-06-01 (School Settings); the invoice
+# belongs to 2025-2026, which opened 2025-06-01 (the registry).
+@patch("billing.services.configured_dates", return_value=(date(2025, 6, 1), date(2026, 3, 31)))
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2026, 6, 1)))
+def test_an_older_invoice_is_judged_by_its_own_years_window(_s, _d):
+    """
+    The defect: recalculation asked _is_early_bird(invoice_date) with no start,
+    so the window was the CURRENT year's (cutoff 2026-06-07) and every
+    2025-2026 invoice -- all dated in 2025 -- earned Early Bird when that
+    year's fees were edited, including families invoiced after their own
+    year's window had closed.
+    """
+    assert earns_early_bird(date(2025, 6, 9), "2025-2026") is False
+    assert earns_early_bird(date(2025, 6, 7), "2025-2026") is True
 
 
-def test_next_years_early_enroller_is_early_by_next_years_calendar():
-    """Invoiced in February for the year opening in June: Early Bird. It was
-    refused against this year's cutoff, which had passed eight months before."""
-    assert early_bird_cutoff(configured(), "2027-2028") == date(2027, 6, 7)
-    assert _is_early_bird(date(2027, 2, 10), "2027-2028", configured()) is True
+@patch("billing.services.configured_dates", return_value=None)
+@patch("billing.services._get_school_settings", return_value=settings_row(sy_start=date(2026, 6, 1)))
+def test_a_year_with_no_dates_earns_no_early_bird(_s, _d):
+    """No registered start, no window -- not the current year's by default."""
+    assert earns_early_bird(date(2025, 5, 1), "2025-2026") is False
 
 
-def test_a_late_transferee_is_not_granted_next_years_early_bird():
-    """With settings already moved to next year, a February transferee into
-    the year still running was judged against next year's cutoff -- and with
-    no lower bound on the window, granted a discount for enrolling late."""
-    moved_on = configured(current="2027-2028", sy_start=date(2027, 6, 1))
-    assert _is_early_bird(date(2027, 2, 10), "2026-2027", moved_on) is False
+def test_an_undated_invoice_earns_no_early_bird():
+    assert earns_early_bird(None, "2025-2026") is False
 
 
 def test_next_years_invoice_is_scheduled_on_next_years_calendar():
@@ -247,7 +252,8 @@ def test_next_years_invoice_is_scheduled_on_next_years_calendar():
 
     with patch.object(services, "_read_fee_schedule", return_value=fee_data), \
             patch.object(services, "_fetch_enrollment_scholarships", return_value=[]), \
-            patch.object(services, "_get_school_settings", return_value=configured()), \
+            patch.object(services, "_get_school_settings", return_value=settings_row(sy_start=date(2026, 6, 1))), \
+            patch.object(services, "configured_dates", return_value=(date(2027, 6, 1), date(2028, 3, 31))), \
             patch.object(services, "_get_discount_type",
                          side_effect=lambda code: early_bird if code == "EARLY_BIRD" else None), \
             patch.object(services.timezone, "localdate", return_value=date(2027, 2, 10)), \
@@ -265,6 +271,44 @@ def test_next_years_invoice_is_scheduled_on_next_years_calendar():
 
     discount_rows = [c.kwargs["description"] for c in discounts.create.call_args_list]
     assert any(d.startswith("Early Bird (invoiced on or before 2027-06-07)") for d in discount_rows)
+
+
+# -- Scholarships as the database hands them over -----------------------------
+
+def test_scholarship_rows_carry_the_code_the_voucher_split_reads():
+    """
+    The defect: _fetch_enrollment_scholarships read
+    `scholarship_type.scholarship_code`, but ScholarshipTypeMirror had no such
+    field -- so generating or recalculating the invoice of ANY learner with a
+    scholarship raised AttributeError. The other tests here hand the split
+    plain dicts and never touched the mirror, which is how it went unseen.
+
+    Real (unsaved) mirror instances, so a field missing from the mirror fails
+    here rather than in front of a cashier.
+    """
+    from billing.enrollment_mirror import EnrollmentScholarshipMirror, ScholarshipTypeMirror
+
+    esc = ScholarshipTypeMirror(
+        scholarship_type_id=1, scholarship_code="ESC", discount_mode="fixed_amount",
+        scholarship_name="Education Service Contracting (ESC)", discount_value=Decimal("14000"),
+    )
+    honor = ScholarshipTypeMirror(
+        scholarship_type_id=3, scholarship_code="HONOR", discount_mode="percentage",
+        scholarship_name="Academic Excellence Award", discount_value=Decimal("10"),
+    )
+    rows = [
+        EnrollmentScholarshipMirror(enrollment_id=207, scholarship_type=esc),
+        EnrollmentScholarshipMirror(enrollment_id=207, scholarship_type=honor),
+    ]
+
+    with patch("billing.enrollment_mirror.EnrollmentScholarshipMirror") as mirror:
+        mirror.objects.filter.return_value.select_related.return_value = rows
+        scholarships = _fetch_enrollment_scholarships(207)
+
+    assert [s["scholarship_code"] for s in scholarships] == ["ESC", "HONOR"]
+    voucher, scholarship = _split_voucher_and_scholarship(Decimal("23000"), scholarships)
+    assert voucher == Decimal("14000")        # ESC lands in the voucher stage
+    assert scholarship == Decimal("900.00")   # 10% of what the voucher left
 
 
 # -- Voucher vs scholarship ---------------------------------------------------

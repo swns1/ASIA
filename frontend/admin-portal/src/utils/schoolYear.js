@@ -63,23 +63,19 @@ export function groupYears(options, currentYear) {
  * The year list for a form that ENROLLS INTO a year, rather than filtering
  * years that already have data — an enrollment form, or a promotion's target.
  *
- * Those forms need next year before it exists in any record (you enrol for
- * September in March), so the real list alone would leave the year you
- * actually want unofferable. They previously each built a rolling window off
- * `new Date()` instead — 4 years in one place, 5 in another, on the same page
- * — which ignored the real data entirely and went stale exactly the way the
- * old sidebar window did.
+ * Those forms offer the years an admin has set up and not archived: the
+ * context's `entryYears`. Next year is offerable before anyone is enrolled in
+ * it because an admin registers it as "upcoming" first — which replaces the
+ * old trick of inventing next year from the current year's label, a year the
+ * database would now refuse because nobody set it up.
  *
- * @param {string[]} options      years that exist in the data
- * @param {string}   currentYear  the active year
+ * @param {string[]} entryYears   registered, unarchived years (context)
+ * @param {string}   [keep]       a value to keep offerable even if it's no
+ *                                longer an entry year — an existing record's
+ *                                own year, when editing it
  */
-export function yearOptionsForEntry(options = [], currentYear) {
-  const base = currentYear || computeDefaultSchoolYear();
-  const startYear = parseInt(String(base).slice(0, 4), 10);
-  const next = Number.isNaN(startYear) ? null : `${startYear + 1}-${startYear + 2}`;
-
-  const all = new Set(options.filter(Boolean));
-  all.add(base);
-  if (next) all.add(next);
+export function yearOptionsForEntry(entryYears = [], keep) {
+  const all = new Set(entryYears.filter(Boolean));
+  if (keep) all.add(keep);
   return [...all].sort().reverse();
 }

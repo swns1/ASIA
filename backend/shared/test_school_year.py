@@ -14,11 +14,16 @@ from datetime import date
 
 import pytest
 
+from unittest.mock import patch
+
 from shared.school_year import (
     InvalidSchoolYear,
+    configured_current,
+    configured_dates,
     current,
     is_valid,
     normalize,
+    start_year,
 )
 
 
@@ -93,3 +98,42 @@ def test_current_cuts_at_july_like_the_rest_of_the_app():
 
 def test_current_returns_something_normalize_accepts():
     assert normalize(current(date(2026, 3, 1))) == current(date(2026, 3, 1))
+
+
+# -- the registry -------------------------------------------------------------
+
+def test_start_year_reads_the_opening_year():
+    assert start_year("2025-2026") == 2025
+    assert start_year("2025-26") is None
+    assert start_year(None) is None
+
+
+def test_configured_current_reads_the_registry():
+    with patch("shared.school_year._fetch_one", return_value=("2025-2026",)) as fetch:
+        assert configured_current() == "2025-2026"
+    assert "is_current" in fetch.call_args.args[0]
+
+
+def test_configured_current_is_none_with_no_current_year():
+    with patch("shared.school_year._fetch_one", return_value=None):
+        assert configured_current() is None
+
+
+def test_configured_dates_reads_the_years_own_dates():
+    row = (date(2026, 8, 3), date(2027, 5, 28))
+    with patch("shared.school_year._fetch_one", return_value=row) as fetch:
+        assert configured_dates(" 2026-2027 ") == row
+    assert fetch.call_args.args[1] == ["2026-2027"]
+
+
+def test_configured_dates_does_not_query_for_a_malformed_year():
+    with patch("shared.school_year._fetch_one") as fetch:
+        assert configured_dates("2026-27") is None
+    fetch.assert_not_called()
+
+
+def test_a_failed_registry_read_answers_none():
+    """_fetch_one swallows errors (table not migrated, dropped connection);
+    callers fall back rather than failing the request."""
+    with patch("shared.school_year._fetch_one", return_value=None):
+        assert configured_dates("2026-2027") is None

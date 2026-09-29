@@ -1,8 +1,9 @@
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
-from .models import Enrollment, EnrollmentTransfer, SectionAdvisory, Student
+from grading.deped import blocking_subjects
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year, start_year
+from .models import Enrollment, EnrollmentTransfer, SchoolYear, Section, SectionAdvisory, Student
 from .rules import (
     ATTENDED_STATUSES,
     GRADE_ORDER,
@@ -15,22 +16,145 @@ class SchoolYearField(serializers.CharField):
     """A school year, validated and normalized to canonical "YYYY-YYYY" form.
 
     school_year is the partition key every screen filters by and that billing
-    joins on in raw SQL, but the column is a plain varchar(20) with no CHECK
-    behind it. Validating on the way in is what keeps "2025-26" and a
+    joins on in raw SQL. Validating on the way in is what keeps "2025-26" and a
     trailing space from splitting one school year into several that no query
     ever brings back together.
+
+    `registered=True` also requires the year to exist in the registry. The
+    database enforces that by foreign key anyway (migration 0006); checking
+    here turns what would be a 500 into a message saying what to do.
     """
+
+    def __init__(self, *args, registered=False, **kwargs):
+        self.registered = registered
+        super().__init__(*args, **kwargs)
 
     def to_internal_value(self, data):
         text = super().to_internal_value(data)
         try:
-            return normalize_school_year(text)
+            label = normalize_school_year(text)
         except InvalidSchoolYear as exc:
             raise serializers.ValidationError(str(exc)) from exc
+        if self.registered and not SchoolYear.objects.filter(label=label).exists():
+            raise serializers.ValidationError(
+                f"S.Y. {label} hasn't been set up yet. An admin can add it under School Years."
+            )
+        return label
+
+
+class SchoolYearSerializer(serializers.ModelSerializer):
+    """
+    A registered school year. `state` is derived (see SchoolYear.state), so
+    the view passes the current year's label in the context once rather than
+    each row looking it up.
+
+    The label is fixed once created: every record in that year is filed under
+    it. `is_current` changes only through make-current, which moves it in one
+    transaction, and `archived_at` only through archiving.
+    """
+
+    label = SchoolYearField()
+    state = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SchoolYear
+        fields = (
+            "school_year_id", "label", "start_date", "end_date",
+            "is_current", "state", "archived_at", "created_at", "updated_at",
+        )
+        read_only_fields = (
+            "school_year_id", "is_current", "archived_at", "created_at", "updated_at",
+        )
+
+    def get_state(self, obj):
+        return obj.state(self.context.get("current_label"))
+
+    def validate_label(self, value):
+        if self.instance is not None and value != self.instance.label:
+            raise serializers.ValidationError(
+                "A school year's label can't be changed; every record in that year is filed under it."
+            )
+        if self.instance is None and SchoolYear.objects.filter(label=value).exists():
+            raise serializers.ValidationError(f"S.Y. {value} already exists.")
+        return value
+
+    def validate(self, attrs):
+        label = attrs.get("label", getattr(self.instance, "label", None))
+        start = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end = attrs.get("end_date", getattr(self.instance, "end_date", None))
+
+        if start and end and start >= end:
+            raise serializers.ValidationError({"end_date": "The end date has to be after the start date."})
+
+        first = start_year(label)
+        if first is not None and start and start.year != first:
+            raise serializers.ValidationError(
+                {"start_date": f"S.Y. {label} has to start in {first}."}
+            )
+        if first is not None and end and end.year != first + 1:
+            raise serializers.ValidationError(
+                {"end_date": f"S.Y. {label} has to end in {first + 1}."}
+            )
+
+        if start and end:
+            overlap = SchoolYear.objects.filter(start_date__lte=end, end_date__gte=start)
+            if self.instance is not None:
+                overlap = overlap.exclude(pk=self.instance.pk)
+            clash = overlap.first()
+            if clash is not None:
+                raise serializers.ValidationError({
+                    "start_date": (
+                        f"These dates overlap S.Y. {clash.label} "
+                        f"({clash.start_date:%b %-d, %Y} – {clash.end_date:%b %-d, %Y})."
+                    ),
+                })
+        return attrs
+
+
+def resolve_placement_section(attrs, instance=None):
+    """
+    Hold a placement (an enrollment or an advisory) to a registered section.
+
+    Sections are set up per year and picked, not typed; the database enforces
+    that by composite foreign key (migration 0007). Checking here turns what
+    would be a 500 into a message saying what to do, matches the name
+    case-insensitively and stores the section's own spelling -- "rizal" files
+    under "Rizal" instead of failing -- and takes a Senior High learner's
+    strand from the section, which is where the strand now lives.
+
+    Only runs when the placement itself is being written; an update that
+    doesn't touch year, grade or section leaves it alone.
+    """
+    placement_keys = ("school_year", "grade_level", "section")
+    if instance is not None and not any(k in attrs for k in placement_keys):
+        return attrs
+
+    year = attrs.get("school_year", getattr(instance, "school_year", None))
+    grade = attrs.get("grade_level", getattr(instance, "grade_level", None))
+    name = (attrs.get("section", getattr(instance, "section", None)) or "").strip()
+    if not (year and grade and name):
+        return attrs  # the missing field's own "required" error says it better
+
+    section = (
+        Section.objects.filter(school_year_id=year, grade_level=grade, name__iexact=name)
+        .only("name", "school_level", "strand")
+        .first()
+    )
+    if section is None:
+        raise serializers.ValidationError({
+            "section": (
+                f"S.Y. {year} {grade} has no section named \u201c{name}\u201d. "
+                "Add it first, or pick one of that grade's sections."
+            ),
+        })
+    attrs["section"] = section.name
+    if section.school_level == "senior_highschool":
+        attrs["strand"] = section.strand
+    return attrs
 
 
 class SectionAdvisorySerializer(serializers.ModelSerializer):
-    school_year = SchoolYearField()
+    school_year = SchoolYearField(registered=True)
 
     class Meta:
         model = SectionAdvisory
@@ -43,25 +167,20 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
 
     def validate_teacher_user_id(self, value):
         """
-        An adviser is an active teacher account.
-
-        Nothing checked this, so a section could be given to a guardian's
-        account or to a user id that does not exist -- and the section then
-        read as covered while no teacher could ever open it. Read straight from
-        `users`: this service's User stub always reports is_active=True.
+        Only an active teacher account can be made an adviser -- the id is
+        client-supplied, and the pickers hiding inactive staff is no guard.
+        Leaving an existing advisory's teacher as-is stays allowed, so a
+        deactivated teacher's past advisories can still be edited.
         """
-        from django.db import connection
+        from accounts.models import User
 
-        with connection.cursor() as cur:
-            cur.execute("SELECT role, is_active FROM users WHERE user_id = %s", [value])
-            row = cur.fetchone()
-        if row is None:
-            raise serializers.ValidationError("No user account has this id.")
-        role, is_active = row
-        if role != "teacher":
-            raise serializers.ValidationError("An adviser must be a teacher account.")
-        if not is_active:
-            raise serializers.ValidationError("This teacher's account is deactivated.")
+        if self.instance is not None and value == self.instance.teacher_user_id:
+            return value
+        user = User.objects.filter(user_id=value).values("role", "is_active").first()
+        if user is None or user["role"] != "teacher":
+            raise serializers.ValidationError("Choose a teacher account.")
+        if not user["is_active"]:
+            raise serializers.ValidationError("This teacher's account is inactive.")
         return value
 
     def validate(self, attrs):
@@ -78,6 +197,90 @@ class SectionAdvisorySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(problems)
         if school_level != "senior_highschool":
             attrs["strand"] = None
+        return attrs
+
+    def to_internal_value(self, data):
+        return resolve_placement_section(super().to_internal_value(data), self.instance)
+
+
+class SectionSerializer(serializers.ModelSerializer):
+    """
+    A section of one grade in one school year.
+
+    Only `name` and `strand` change after creation. Moving a section to
+    another grade or year would carry every enrolled learner with it -- the
+    foreign key cascades -- so that is a new section, not an edit. A rename
+    does cascade, deliberately: that is the point of it.
+    """
+
+    school_year = serializers.SlugRelatedField(
+        slug_field="label",
+        queryset=SchoolYear.objects.all(),
+        error_messages={"does_not_exist": "S.Y. {value} hasn't been set up yet."},
+    )
+    enrollment_count = serializers.SerializerMethodField()
+    adviser_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Section
+        fields = (
+            "section_id", "school_year", "school_level", "grade_level", "name", "strand",
+            "enrollment_count", "adviser_count", "created_at", "updated_at",
+        )
+        read_only_fields = ("section_id", "created_at", "updated_at")
+        # DRF would add a case-sensitive UniqueTogetherValidator from the
+        # model's constraint; validate() does the case-insensitive check
+        # (and says which section it clashes with) instead.
+        validators = []
+
+    def _count(self, key, obj):
+        return self.context.get(key, {}).get((obj.school_year_id, obj.grade_level, obj.name), 0)
+
+    def get_enrollment_count(self, obj):
+        return self._count("enrollment_counts", obj)
+
+    def get_adviser_count(self, obj):
+        return self._count("adviser_counts", obj)
+
+    def validate_name(self, value):
+        name = " ".join(value.split())
+        if not name:
+            raise serializers.ValidationError("A section needs a name.")
+        return name
+
+    def validate(self, attrs):
+        instance = self.instance
+        if instance is not None:
+            for fixed in ("school_year", "school_level", "grade_level"):
+                if fixed in attrs and attrs[fixed] != getattr(instance, fixed):
+                    raise serializers.ValidationError({
+                        fixed: "A section can't move to another year or grade; add a new section there instead.",
+                    })
+
+        year = attrs.get("school_year", getattr(instance, "school_year", None))
+        level = attrs.get("school_level", getattr(instance, "school_level", None))
+        grade = attrs.get("grade_level", getattr(instance, "grade_level", None))
+        name = attrs.get("name", getattr(instance, "name", None))
+
+        if grade not in GRADE_LEVELS_BY_LEVEL.get(level, []):
+            raise serializers.ValidationError({"grade_level": f"{grade} isn't a {level.replace('_', ' ') if level else ''} grade."})
+
+        strand = attrs.get("strand", getattr(instance, "strand", None))
+        strand = (strand or "").strip() or None
+        if level == "senior_highschool" and not strand:
+            raise serializers.ValidationError({"strand": "Senior High sections belong to a strand."})
+        if level != "senior_highschool":
+            strand = None
+        attrs["strand"] = strand
+
+        clash = Section.objects.filter(school_year=year, grade_level=grade, name__iexact=name)
+        if instance is not None:
+            clash = clash.exclude(pk=instance.pk)
+        existing = clash.first()
+        if existing is not None:
+            raise serializers.ValidationError({
+                "name": f"{grade} already has a section named \u201c{existing.name}\u201d in S.Y. {year.label}.",
+            })
         return attrs
 
 
@@ -126,6 +329,26 @@ def promotion_grades(last_completed):
     return Grade.objects.filter(enrollment=last_completed).select_related("subject")
 
 
+# The same ladder split by school level -- the one list sections, promotion
+# and placement validate grades against. Mirrors the frontend's
+# constants/schoolLevels.js GRADE_LEVELS_BY_LEVEL.
+GRADE_LEVELS_BY_LEVEL = {
+    "nursery":           ["Nursery"],
+    "kindergarten":      ["Kindergarten"],
+    "elementary":        ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
+    "junior_highschool": ["Grade 7", "Grade 8", "Grade 9", "Grade 10"],
+    "senior_highschool": ["Grade 11", "Grade 12"],
+}
+
+
+def school_level_for_grade(grade):
+    """The school level a grade belongs to, or None if it isn't on the ladder."""
+    for level, grades in GRADE_LEVELS_BY_LEVEL.items():
+        if grade in grades:
+            return level
+    return None
+
+
 def get_next_grade_level(current):
     try:
         idx = GRADE_ORDER.index(current)
@@ -167,7 +390,7 @@ class StudentSummarySerializer(serializers.ModelSerializer):
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
-    school_year = SchoolYearField()
+    school_year = SchoolYearField(registered=True)
 
     student_detail = StudentSummarySerializer(source="student", read_only=True)
     student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
@@ -232,6 +455,9 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             return None
         parts = [s.first_name, s.middle_name, s.last_name, s.suffix]
         return " ".join(p for p in parts if p)
+
+    def to_internal_value(self, data):
+        return resolve_placement_section(super().to_internal_value(data), self.instance)
 
     def validate(self, attrs):
         # ── Pull override flags before any other check ─────────────────────────
@@ -435,7 +661,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                 # is the one answer, so a learner can't be refused by Promote
                 # and let through here, or the reverse.
                 if not progression_override and grade_level != last_grade:
-                    from .promotion import SKIP_NO_GRADES, assess, failed_learning_areas
+                    from .promotion import SKIP_NO_GRADES, assess
 
                     year_grades = list(promotion_grades(last_completed))
                     _avg, skip = assess(
@@ -454,7 +680,12 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                             )
                         })
                     if skip:
-                        names = ", ".join(failed_learning_areas(year_grades))
+                        # Each with its year average, so the message shows why.
+                        names = ", ".join(
+                            f"{o['subject'].subject_name} "
+                            f"({o['average'] if o['average'] is not None else o['remarks']})"
+                            for o in blocking_subjects(year_grades)
+                        )
                         raise serializers.ValidationError({
                             "grade_level": (
                                 f"Cannot promote from {last_grade} — student has "

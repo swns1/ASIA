@@ -7,6 +7,7 @@ Staff-facing (Bearer-authenticated, HasRole {super_admin, admin, registrar}):
     POST      /api/application-invites/{id}/reissue/
     GET       /api/student-applications/[{id}/]
     PATCH     /api/student-applications/{id}/claim/
+    PATCH     /api/student-applications/{id}/school-year/
     POST      /api/student-applications/{id}/approve/
     POST      /api/student-applications/{id}/reject/
 
@@ -57,6 +58,7 @@ from .serializers import (
     ApplicationInviteIssueSerializer,
     ApplicationInviteSerializer,
     ApplicationRejectSerializer,
+    ApplicationSchoolYearSerializer,
     StudentApplicationDetailSerializer,
     StudentApplicationListSerializer,
 )
@@ -104,6 +106,7 @@ class ApplicationInviteViewSet(
             applicant_last_name=data["applicant_last_name"],
             contact_email=data.get("contact_email") or None,
             contact_mobile=data.get("contact_mobile") or None,
+            school_year=data["school_year"],
             issued_by_user_id=actor_id,
             expires_at=timezone.now() + timezone.timedelta(seconds=_invite_ttl_seconds()),
         )
@@ -158,6 +161,7 @@ class ApplicationInviteViewSet(
             applicant_last_name=old.applicant_last_name,
             contact_email=old.contact_email,
             contact_mobile=old.contact_mobile,
+            school_year=old.school_year,
             issued_by_user_id=actor_id,
             expires_at=timezone.now() + timezone.timedelta(seconds=_invite_ttl_seconds()),
         )
@@ -196,6 +200,9 @@ class StudentApplicationViewSet(
         status_param = self.request.query_params.get("status")
         if status_param:
             qs = qs.filter(status=status_param)
+        school_year = (self.request.query_params.get("school_year") or "").strip()
+        if school_year:
+            qs = qs.filter(school_year=school_year)
         search = self.request.query_params.get("search")
         if search:
             from django.db.models import Q
@@ -208,6 +215,28 @@ class StudentApplicationViewSet(
         with transaction.atomic():
             application = StudentApplication.objects.select_for_update().get(pk=pk)
             services.transition(application, StudentApplication.IN_REVIEW, actor=request.user)
+        return Response(StudentApplicationDetailSerializer(application).data)
+
+    @action(detail=True, methods=["patch"], url_path="school-year")
+    def change_school_year(self, request, pk=None):
+        """
+        Correct the year an application is for -- the invite may have been
+        issued for the wrong one. Only until it's approved: from then on the
+        year lives on the enrolment made from it, which is where it changes.
+        """
+        payload = ApplicationSchoolYearSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        get_object_or_404(StudentApplication, pk=pk)
+        with transaction.atomic():
+            application = StudentApplication.objects.select_for_update().get(pk=pk)
+            if application.status == StudentApplication.APPROVED:
+                return Response(
+                    {"detail": "This application is approved. Change the year on the enrolment made from it."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            application.school_year = payload.validated_data["school_year"]
+            application.updated_at = timezone.now()
+            application.save(update_fields=["school_year", "updated_at"])
         return Response(StudentApplicationDetailSerializer(application).data)
 
     @action(detail=True, methods=["post"])
@@ -293,13 +322,16 @@ class ApplyVerifyView(APIView):
         # link (with the code) safe.
         application, _ = StudentApplication.objects.get_or_create(
             invite=invite, status=StudentApplication.DRAFT,
-            defaults={"payload_json": {}},
+            defaults={"payload_json": {}, "school_year": invite.school_year},
         )
 
         token = invites.issue_session_token(invite, application)
         return Response({
             "token": token,
             "applicant_full_name": invite.applicant_full_name,
+            # Shown on the form so the family can see which year they're
+            # applying for. Not editable there: staff chose it at issue.
+            "school_year": application.school_year or invite.school_year,
             "payload": application.payload_json,
             "revision": application.revision,
         })
@@ -461,6 +493,9 @@ class ApplySubmitView(APIView):
             application.contact_mobile = student_data.get("mobile_number") or application.invite.contact_mobile
             application.duplicate_matches_json = matches
             application.duplicate_of_student_id = duplicates.strongest_student_id(matches)
+            # A draft opened before applications carried a year takes the
+            # invite's now.
+            application.school_year = application.school_year or application.invite.school_year
             application.status = StudentApplication.SUBMITTED
             application.submitted_at = timezone.now()
             application.save()

@@ -16,7 +16,12 @@ class Subject(models.Model):
     ]
 
     subject_id    = models.BigAutoField(primary_key=True)
-    subject_code  = models.CharField(max_length=30, unique=True)
+    # Each year has its own curriculum (subjects/migrations/0002): a code is
+    # unique within a year, and a grade only ever uses its enrollment's
+    # year's subjects. A plain label, held to school_years by foreign key in
+    # SQL, like every other year column.
+    school_year   = models.CharField(max_length=20)
+    subject_code  = models.CharField(max_length=30)
     subject_name  = models.CharField(max_length=150)
 
     school_level  = models.CharField(max_length=20, choices=SCHOOL_LEVEL_CHOICES)
@@ -36,6 +41,7 @@ class Subject(models.Model):
     class Meta:
         managed = False
         db_table = "subjects"
+        unique_together = (("school_year", "subject_code"),)
         ordering = ("school_level", "grade_level", "subject_name")
 
     def __str__(self):

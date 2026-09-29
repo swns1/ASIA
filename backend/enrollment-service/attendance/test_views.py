@@ -27,9 +27,11 @@ def test_perform_create_attributes_the_real_user_id():
     view = _view_with_user(11)
     serializer = MagicMock()
 
-    # The roster guard is exercised by its own tests below; this one is only
-    # about recorded_by attribution, and resolving a roster would need the DB.
-    with patch("attendance.views.assert_teacher_may_write_enrollment"):
+    # The roster guard is exercised by its own tests below, and the archived-
+    # year check by enrollments/test_archive.py; this one is only about
+    # recorded_by attribution, and resolving either would need the DB.
+    with patch("attendance.views.assert_teacher_may_write_enrollment"), \
+         patch("enrollments.archive.archived_among", return_value=set()):
         view.perform_create(serializer)
 
     serializer.save.assert_called_once_with(recorded_by=11)
@@ -59,7 +61,8 @@ def test_perform_update_attributes_the_real_user_id():
     serializer = MagicMock()
 
     # The destination guard has its own test below.
-    with patch("attendance.views.assert_teacher_may_write_enrollment"):
+    with patch("attendance.views.assert_teacher_may_write_enrollment"), \
+            patch("enrollments.archive.archived_among", return_value=set()):
         view.perform_update(serializer)
 
     serializer.save.assert_called_once_with(recorded_by=11)

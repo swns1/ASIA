@@ -1,16 +1,9 @@
 from django.db import migrations, models
 
-# Deactivation instead of deletion. Deleting a user left every id that pointed
-# at them dangling (users has no foreign keys): a departed teacher's section
-# advisories named nobody, a parent's guardian link pointed at nothing.
-#
-# `users` is managed=False, so the DDL is guarded exactly like
-# 0002_add_current_session_id: a no-op in the ephemeral pytest database,
-# where the table doesn't exist. Existing accounts default to active.
-#
-# The name is deliberately unique across the four services' `accounts` apps
-# (they share one django_migrations table -- see README, "Known in-progress
-# work"): enrollment-service already has an accounts 0003.
+# Staff who leave are deactivated, not deleted: their past advisories, grades
+# and audit entries still need a name to point at. Same guard as 0002 --
+# `users` is managed=False and doesn't exist in the test DB pytest-django
+# builds from migrations alone. Every existing account starts out active.
 ADD_COLUMN_SQL = """
 DO $$
 BEGIN

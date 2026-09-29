@@ -53,6 +53,7 @@ const NAV = [
     collapsible: true,
     defaultCollapsed: true,
     items: [
+      { label: "School Years",       icon: "ti-calendar-stats",   path: "/school-years",       allowedRoles: STAFF_ADMIN },
       { label: "Users",              icon: "ti-user-cog",         path: "/users",             allowedRoles: STAFF_ADMIN },
       { label: "Audit Trail",        icon: "ti-shield-check",     path: "/audit-trail",        allowedRoles: STAFF_ADMIN },
       { label: "Billing Settings",   icon: "ti-settings",         path: "/settings",           allowedRoles: BILLING_ROLES },

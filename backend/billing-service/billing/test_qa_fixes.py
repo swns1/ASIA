@@ -199,7 +199,7 @@ def test_recalculation_leaves_invoices_with_payments_as_billed():
 
     assert result["skipped_with_payments"] == 1 and result["updated"] == 0
     paid_invoice.items.all.return_value.delete.assert_not_called()
-    read.assert_called_once_with("elementary", "Grade 4", "2026-2027")
+    read.assert_called_once_with("2026-2027", "elementary", "Grade 4")
     assert cursor.execute.call_args.args[1][2] == "2026-2027"
 
 
@@ -275,13 +275,15 @@ class TestInputChecks:
 
 
 class TestSchoolSettings:
-    def test_school_year_must_be_real(self):
-        with pytest.raises(ValidationError):
-            SchoolSettingSerializer().validate_current_school_year("banana")
+    def test_the_school_year_and_its_dates_are_set_on_the_school_years_page(self):
+        # Copied here when a year is made current; writable here too, the
+        # settings row and the registry could disagree.
+        read_only = set(SchoolSettingSerializer.Meta.read_only_fields)
+        assert {"current_school_year", "sy_start_date", "sy_end_date"} <= read_only
 
-    def test_the_year_must_end_after_it_starts(self):
+    def test_early_bird_days_stay_within_a_year(self):
         with pytest.raises(ValidationError):
-            SchoolSettingSerializer().validate({"sy_start_date": date(2026, 6, 1), "sy_end_date": date(2020, 1, 1)})
+            SchoolSettingSerializer().validate_early_bird_days(400)
 
     def test_the_settings_row_cannot_be_created_or_deleted(self):
         assert not hasattr(SchoolSettingViewSet, "destroy")

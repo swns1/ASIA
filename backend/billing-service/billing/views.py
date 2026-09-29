@@ -17,6 +17,7 @@ from accounts.permissions import (
     guardian_enrollment_ids,
 )
 
+from .archive import ensure_year_open
 from .models import (
     FeeSchedule, FeeScheduleItem,
     StudentInvoice, StudentInvoiceItem, StudentInvoiceDiscount,
@@ -37,7 +38,6 @@ from .services import (
     close_out_invoice_for_transfer,
     compute_discount_waterfall,
 )
-from shared import school_year as school_year_rules
 
 PAYMENT_PLANS = {"monthly", "quarterly", "semi_annual", "annual"}
 
@@ -78,66 +78,121 @@ def _pk_or_404(pk):
 
 class FeeScheduleViewSet(viewsets.ModelViewSet):
     """
-    /api/fee-schedules/                       GET, POST
+    /api/fee-schedules/?school_year=2026-2027  GET, POST
     /api/fee-schedules/{id}/                  GET, PATCH, DELETE
-    /api/fee-schedules/{id}/recalculate/      POST  — recalc this schedule's unpaid invoices
-    /api/fee-schedules/copy-year/             POST  — copy one year's schedules into another
+    /api/fee-schedules/{id}/recalculate/      POST  — recalc this year's invoices at this grade
+    /api/fee-schedules/carry-over/            POST  — copy an earlier year's fees
 
-    Each schedule belongs to one school year (?school_year= filters).
+    One schedule per grade per school year. An archived year's schedules are
+    read-only (billing/archive.py).
     """
     queryset = FeeSchedule.objects.prefetch_related("items").all().order_by("school_level", "grade_level")
     serializer_class = FeeScheduleSerializer
     permission_classes = [HasRole]
     required_roles = BILLING_ROLES
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = ("school_level", "grade_level", "is_active", "school_year")
+    filterset_fields = ("school_year", "school_level", "grade_level", "is_active")
+
+    def perform_create(self, serializer):
+        ensure_year_open(serializer.validated_data.get("school_year"))
+        serializer.save()
+
+    def perform_update(self, serializer):
+        ensure_year_open(serializer.instance.school_year)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        ensure_year_open(instance.school_year)
+        instance.delete()
 
     @action(detail=True, methods=["post"], url_path="recalculate")
     def recalculate(self, request, pk=None):
-        result = recalculate_invoices_for_schedule(_pk_or_404(pk))
+        schedule_id = _pk_or_404(pk)
+        ensure_year_open(self.get_object().school_year)
+        result = recalculate_invoices_for_schedule(schedule_id)
         return Response(result, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="copy-year")
-    def copy_year(self, request):
+    @action(detail=False, methods=["post"], url_path="carry-over")
+    def carry_over(self, request):
         """
-        POST /api/fee-schedules/copy-year/  {from_school_year, to_school_year}
+        POST /api/fee-schedules/carry-over/
+        Body: {"from": "2025-2026", "to": "2026-2027", "dry_run": true}
 
-        Starts next year's price list from this year's: every schedule, with
-        its items, that the target year doesn't have yet. Grades the target
-        year already has are left alone and counted as skipped.
+        Start a year's fees from an earlier year's: each grade's schedule and
+        its items are copied as they are, ready to adjust. Never overwrites --
+        a grade the year already has fees for is skipped and reported -- so
+        it's safe to run after setting up a few grades by hand, or twice.
+        dry_run answers the same question without writing: the preview.
+
+        Lives here rather than with the rest of carry-over
+        (enrollment-service's /school-years/{label}/carry-over/) because these
+        tables are billing's to write.
         """
-        try:
-            source = school_year_rules.normalize(request.data.get("from_school_year"))
-            target = school_year_rules.normalize(request.data.get("to_school_year"))
-        except school_year_rules.InvalidSchoolYear as exc:
-            return Response({"detail": str(exc)}, status=400)
-        if source == target:
-            return Response({"detail": "Choose two different school years."}, status=400)
+        from .enrollment_mirror import SchoolYearMirror
 
-        created = skipped = 0
-        with transaction.atomic():
-            for schedule in FeeSchedule.objects.filter(school_year=source).prefetch_related("items"):
-                if FeeSchedule.objects.filter(
-                    school_level=schedule.school_level, grade_level=schedule.grade_level, school_year=target,
-                ).exists():
-                    skipped += 1
-                    continue
-                copy = FeeSchedule.objects.create(
-                    school_level=schedule.school_level, grade_level=schedule.grade_level,
-                    school_year=target, is_active=schedule.is_active, notes=schedule.notes,
+        source = (request.data.get("from") or "").strip()
+        target = (request.data.get("to") or "").strip()
+        dry_run = bool(request.data.get("dry_run", False))
+
+        years = {
+            y["label"]: y["archived_at"]
+            for y in SchoolYearMirror.objects.filter(label__in=[source, target]).values("label", "archived_at")
+        }
+        for label in (source, target):
+            if label not in years:
+                return Response(
+                    {"detail": f"S.Y. {label or '(none)'} isn't a registered year."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-                FeeScheduleItem.objects.bulk_create([
-                    FeeScheduleItem(
-                        fee_schedule=copy, item_category=item.item_category,
-                        item_name=item.item_name, amount=item.amount, sort_order=item.sort_order,
-                    )
-                    for item in schedule.items.all()
-                ])
-                created += 1
-        return Response(
-            {"created": created, "skipped_existing": skipped},
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        if source == target:
+            return Response({"detail": "Pick a different year to copy from."}, status=status.HTTP_400_BAD_REQUEST)
+        ensure_year_open(target)
+
+        existing = set(
+            FeeSchedule.objects.filter(school_year=target).values_list("school_level", "grade_level")
         )
+        copied, skipped = [], []
+        sources = list(
+            FeeSchedule.objects.filter(school_year=source)
+            .prefetch_related("items").order_by("school_level", "grade_level")
+        )
+        for schedule in sources:
+            items = list(schedule.items.all())
+            row = {
+                "school_level": schedule.school_level,
+                "grade_level":  schedule.grade_level,
+                "items":        len(items),
+                "total":        str(sum((Decimal(i.amount) for i in items), Decimal("0"))),
+            }
+            if (schedule.school_level, schedule.grade_level) in existing:
+                skipped.append(row)
+            else:
+                copied.append((row, schedule, items))
+
+        if copied and not dry_run:
+            with transaction.atomic():
+                for _, schedule, items in copied:
+                    new = FeeSchedule.objects.create(
+                        school_year=target,
+                        school_level=schedule.school_level,
+                        grade_level=schedule.grade_level,
+                        is_active=schedule.is_active,
+                        notes=schedule.notes,
+                    )
+                    FeeScheduleItem.objects.bulk_create([
+                        FeeScheduleItem(
+                            fee_schedule=new,
+                            item_category=i.item_category,
+                            item_name=i.item_name,
+                            amount=i.amount,
+                            sort_order=i.sort_order,
+                        )
+                        for i in items
+                    ])
+        return Response({
+            "from": source, "to": target, "dry_run": dry_run,
+            "fees": {"copied": [row for row, _, _ in copied], "skipped": skipped},
+        })
 
 
 class FeeScheduleItemViewSet(viewsets.ModelViewSet):
@@ -164,16 +219,22 @@ class FeeScheduleItemViewSet(viewsets.ModelViewSet):
     # read back from either.
     @transaction.atomic
     def perform_create(self, serializer):
+        ensure_year_open(serializer.validated_data["fee_schedule"].school_year)
         item = serializer.save()
         self.recalculation = recalculate_invoices_for_schedule(item.fee_schedule_id)
 
     @transaction.atomic
     def perform_update(self, serializer):
+        ensure_year_open(serializer.instance.fee_schedule.school_year)
+        moved_to = serializer.validated_data.get("fee_schedule")
+        if moved_to is not None:
+            ensure_year_open(moved_to.school_year)
         item = serializer.save()
         self.recalculation = recalculate_invoices_for_schedule(item.fee_schedule_id)
 
     @transaction.atomic
     def perform_destroy(self, instance):
+        ensure_year_open(instance.fee_schedule.school_year)
         sid = instance.fee_schedule_id
         instance.delete()
         self.recalculation = recalculate_invoices_for_schedule(sid)

@@ -35,6 +35,10 @@ import toast from "react-hot-toast";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { followingSchoolYear, yearOptionsForEntry } from "../utils/schoolYear";
+import SectionSelect from "../components/sections/SectionSelect";
+import useSections from "../hooks/useSections";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 // ── Grade progression helpers ─────────────────────────────────────────────────
 const ALL_GRADES_ORDERED = [
@@ -105,7 +109,6 @@ const GRADE_LEVELS_BY_LEVEL_MODAL = {
   junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
   senior_highschool: ["Grade 11","Grade 12"],
 };
-const SHS_STRANDS = ["STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports"];
 const SEMESTERS   = [{ value:"1st", label:"1st Semester" },{ value:"2nd", label:"2nd Semester" }];
 
 const inp = {
@@ -117,15 +120,11 @@ const sel = { ...inp, cursor:"pointer" };
 const lbl = { display:"block", fontSize:10, fontWeight:700, color:"#855c5c", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
 
 function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
-  // Years that exist in the data, plus next year — you enrol into September
-  // from March, before that year has a single record. This used to be a
-  // 4-year window generated from new Date(), which ignored the real list and
-  // went stale the same way the old sidebar window did.
-  const { options: yearOptions, currentYear } = useSchoolYear();
-  const yearOpts = useMemo(
-    () => yearOptionsForEntry(yearOptions, currentYear),
-    [yearOptions, currentYear],
-  );
+  // The years an admin has set up and not archived — next year included once
+  // it's registered as upcoming, which is how you enrol into September from
+  // March. This used to be a 4-year window generated from new Date().
+  const { entryYears } = useSchoolYear();
+  const yearOpts = useMemo(() => yearOptionsForEntry(entryYears), [entryYears]);
 
   const [schoolYear,  setSchoolYear]  = useState(initSchoolYear  || "");
   const [schoolLevel, setSchoolLevel] = useState(initSchoolLevel || "elementary");
@@ -160,6 +159,12 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
     setGradeLevel(opts[0] ?? "");
     setStrand("");
   }, [schoolLevel]);
+
+  // A section belongs to one grade of one year; changing either clears it.
+  useEffect(() => {
+    setSection(""); // eslint-disable-line react-hooks/set-state-in-effect
+    setStrand("");
+  }, [schoolYear, gradeLevel]);
 
   const reloadEnrolled = () => {
     if (!classReady) return;
@@ -370,7 +375,15 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
             </div>
             <div>
               <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
-              <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. Sampaguita" style={inp} />
+              <SectionSelect
+                schoolYear={schoolYear}
+                gradeLevel={gradeLevel}
+                schoolLevel={schoolLevel}
+                value={section}
+                aria-label="Section"
+                style={sel}
+                onChange={(name, sec) => { setSection(name); setStrand(sec?.strand ?? ""); }}
+              />
             </div>
             <div>
               <label style={lbl}>School Year</label>
@@ -383,14 +396,9 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
           {isSHS && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginTop:10 }}>
               <div style={{ gridColumn:"1/3" }}>
-                <label style={lbl}>Strand <span style={{ color:"#c92a2a" }}>*</span></label>
-                <select value={strand} onChange={(e) => setStrand(e.target.value)} style={{ ...sel, borderColor: isSHS && !strand ? "#fca5a5" : undefined }}>
-                  <option value="">— Select strand —</option>
-                  {SHS_STRANDS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {isSHS && !strand && (
-                  <div style={{ fontSize:10, color:"#c92a2a", marginTop:3 }}>Strand is required for Senior HS</div>
-                )}
+                {/* The strand is the section's: picking STEM-A is picking STEM. */}
+                <label style={lbl}>Strand</label>
+                <input value={strand || "Set by the section"} readOnly style={{ ...inp, background:"#f8f4f4", color:"#7a5050", cursor:"default" }} />
               </div>
               <div style={{ gridColumn:"3/5" }}>
                 <label style={lbl}>Semester</label>
@@ -685,18 +693,30 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
     setStep(next);
   }
 
-  // Auto-populate toSection when fromSection changes (can be overridden)
-  useEffect(() => { setToSection(initSection || fromSection); }, [fromSection, initSection]);
+  // The destination is one of next year's sections of the next grade. When
+  // one has the source section's name it's the natural default (Grade 7
+  // Rizal -> Grade 8 Rizal); otherwise it stays unpicked rather than
+  // pointing at a section that doesn't exist.
+  const toGradeLevel = fromGradeLevel ? getNextGrade(fromGradeLevel) : null;
+  const { sections: toSections } = useSections(toSchoolYear, toGradeLevel);
+  useEffect(() => {
+    const same = toSections.find((sec) => sec.name.toLowerCase() === fromSection.trim().toLowerCase());
+    setToSection(same ? same.name : ""); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [toSections, fromSection]);
 
-  // Same list as the enrolment form: a promotion's target year is next year,
-  // which by definition has no records yet. This was a *5*-year new Date()
-  // window while the form above used 4 — two different answers to the same
-  // question, on the same page.
-  const { options: promoteYearOptions, currentYear: promoteCurrentYear } = useSchoolYear();
-  const schoolYearOpts = useMemo(
-    () => yearOptionsForEntry(promoteYearOptions, promoteCurrentYear),
-    [promoteYearOptions, promoteCurrentYear],
-  );
+  // A source section belongs to its grade and year too: changing either
+  // clears it (but opening the dialog on a given section keeps that one).
+  const fromKeyRef = useRef(`${fromSchoolYear}|${fromGradeLevel}`);
+  useEffect(() => {
+    const key = `${fromSchoolYear}|${fromGradeLevel}`;
+    if (fromKeyRef.current === key) return;
+    fromKeyRef.current = key;
+    setFromSection("");
+  }, [fromSchoolYear, fromGradeLevel]);
+
+  // The source year only has to exist -- promoting reads it, never writes
+  // it -- so it can be any registered year, archived ones included.
+  const { options: registeredYears } = useSchoolYear();
 
   const allGrades = [
     "Nursery","Kindergarten",
@@ -705,14 +725,14 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
     // Grade 12 excluded — nothing follows it
   ];
 
-  const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear;
+  const inputReady = fromSchoolYear && fromGradeLevel && fromSection.trim() && toSchoolYear && toSection;
 
   const promotePayload = () => ({
     from_school_year: fromSchoolYear,
     from_grade_level: fromGradeLevel,
     from_section:     fromSection.trim(),
     to_school_year:   toSchoolYear,
-    to_section:       toSection.trim() || fromSection.trim(),
+    to_section:       toSection,
   });
 
   async function handlePreview() {
@@ -876,7 +896,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                         <label style={lbl}>School Year <span style={{ color:"#c92a2a" }}>*</span></label>
                         <select value={fromSchoolYear} onChange={(e) => setFromSchoolYear(e.target.value)} style={sel}>
                           <option value="">— Select —</option>
-                          {schoolYearOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                          {registeredYears.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                       </div>
                       <div>
@@ -887,7 +907,14 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                       </div>
                       <div>
                         <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
-                        <input value={fromSection} onChange={(e) => setFromSection(e.target.value)} placeholder="e.g. Rizal" style={inp} />
+                        <SectionSelect
+                          schoolYear={fromSchoolYear}
+                          gradeLevel={fromGradeLevel}
+                          value={fromSection}
+                          aria-label="Source section"
+                          style={sel}
+                          onChange={(name) => setFromSection(name)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -915,9 +942,16 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                         <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Auto-computed from source grade</div>
                       </div>
                       <div>
-                        <label style={lbl}>Section</label>
-                        <input value={toSection} onChange={(e) => setToSection(e.target.value)} placeholder="Same as source if blank" style={inp} />
-                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Defaults to source section name</div>
+                        <label style={lbl}>Section <span style={{ color:"#c92a2a" }}>*</span></label>
+                        <SectionSelect
+                          schoolYear={toSchoolYear}
+                          gradeLevel={toGradeLevel}
+                          value={toSection}
+                          aria-label="Destination section"
+                          style={sel}
+                          onChange={(name) => setToSection(name)}
+                        />
+                        <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3 }}>Set up under School Years → Sections</div>
                       </div>
                     </div>
                   </div>
@@ -967,7 +1001,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
                     {[
                       { label:"From",         value:`${fromGradeLevel} · ${fromSection}`,                         color:"#1a0a0a" },
-                      { label:"To",           value:`${previewData.to_grade_level} · ${previewData.to_section}`,  color:"#1a0a0a" },
+                      { label:"To",           value:`${previewData.to_grade_level} · ${previewData.to_section}${previewData.to_semester ? ` · ${previewData.to_semester} semester` : ""}`,  color:"#1a0a0a" },
                       { label:"Will Promote", value:previewData.to_promote.length,                                color:"#2e6b0d" },
                       { label:"Will Skip",    value:previewData.to_skip.length,                                   color: previewData.to_skip.length ? "#c92a2a" : "#7a5050" },
                     ].map(({ label, value, color }, i) => (
@@ -1104,7 +1138,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                       transition={{ duration: 0.22, delay: 0.18 }}
                       style={{ fontSize:13, color:"#7a5050", marginTop:4 }}>
                       {resultData.created.length} student{resultData.created.length !== 1 ? "s" : ""} promoted to{" "}
-                      <strong>{resultData.to_grade_level}</strong> · {resultData.to_section} · SY {resultData.to_school_year}
+                      <strong>{resultData.to_grade_level}</strong> · {resultData.to_section}{resultData.to_semester ? ` · ${resultData.to_semester} semester` : ""} · SY {resultData.to_school_year}
                       {" "}as <strong>Pending</strong>
                     </motion.div>
                   </div>
@@ -1202,6 +1236,11 @@ export default function EnrollmentsPage() {
   // Filters — seeded from the URL so links from elsewhere (e.g. Dashboard cards) can land pre-filtered.
   // The year follows hooks/useYearFilter: the link's year if it names one, else the current school year.
   const [schoolYear,   setSchoolYear, yearIsDefault] = useYearFilter();
+  // An archived year takes no new enrollments and no edits. Promotion stays:
+  // moving last year's finished classes up is exactly what it's for.
+  const isArchived = useArchivedYears();
+  const yearArchived = isArchived(schoolYear);
+  const archivedTitle = yearArchived ? `S.Y. ${schoolYear} is archived` : undefined;
   const [schoolLevel,  setSchoolLevel]  = useState(() => searchParams.get("school_level") ?? "");
   const [gradeLevel,   setGradeLevel]   = useState(() => searchParams.get("grade_level") ?? "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("enrollment_status") ?? "");
@@ -1374,10 +1413,12 @@ export default function EnrollmentsPage() {
                     <Button variant="secondary" icon="ti-arrow-up-right" onClick={() => setShowPromote(true)}>
                       Promote Section
                     </Button>
-                    <Button variant="secondary" icon="ti-users-plus" onClick={() => setShowMassEnroll(true)}>
+                    <Button variant="secondary" icon="ti-users-plus" disabled={yearArchived} title={archivedTitle}
+                      onClick={() => setShowMassEnroll(true)}>
                       Mass Enroll
                     </Button>
-                    <Button icon="ti-clipboard-plus" onClick={() => navigate("/enrollments/new")}>
+                    <Button icon={yearArchived ? "ti-lock" : "ti-clipboard-plus"} disabled={yearArchived} title={archivedTitle}
+                      onClick={() => navigate("/enrollments/new")}>
                       New Enrollment
                     </Button>
                   </>
@@ -1602,6 +1643,8 @@ export default function EnrollmentsPage() {
               </CollapsibleFilterRow>
             </FilterBar>
 
+            <ArchivedYearNotice schoolYear={schoolYear} records="enrollments" />
+
             {/* ── Table ── */}
             <motion.div
               initial={isFirstRender ? { opacity: 0, y: 12 } : false}
@@ -1620,7 +1663,7 @@ export default function EnrollmentsPage() {
                     icon: "ti-clipboard-off",
                     title: "No enrollments found",
                     subtitle: "Try adjusting your filters or enroll a new student",
-                    action: canManage && (
+                    action: canManage && !yearArchived && (
                       <Button size="sm" icon="ti-plus" onClick={() => navigate("/enrollments/new")}>
                         New Enrollment
                       </Button>
@@ -1699,13 +1742,23 @@ export default function EnrollmentsPage() {
                         {/* Stop propagation so the edit action doesn't also
                             trigger the row's navigate-to-detail. */}
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon="ti-pencil"
-                            aria-label={`Edit enrollment ${en.enrollment_id}`}
-                            onClick={() => navigate(`/enrollments/${en.enrollment_id}/edit`)}
-                          />
+                          {isArchived(en.school_year) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon="ti-eye"
+                              aria-label={`View enrollment ${en.enrollment_id} (S.Y. ${en.school_year} is archived)`}
+                              onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
+                            />
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon="ti-pencil"
+                              aria-label={`Edit enrollment ${en.enrollment_id}`}
+                              onClick={() => navigate(`/enrollments/${en.enrollment_id}/edit`)}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     );

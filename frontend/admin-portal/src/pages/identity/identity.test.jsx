@@ -35,6 +35,9 @@ vi.mock("../../api/identityApi", () => ({
   deleteUser: pass("deleteUser"),
 }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
+// Deactivating a teacher lists the sections they still advise.
+vi.mock("../../api/enrollmentApi", () => ({ getSectionAdvisories: vi.fn(() => Promise.resolve([])) }));
+vi.mock("../../context/SchoolYearContext", () => ({ useSchoolYear: () => ({ currentYear: "2026-2027" }) }));
 
 const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
 globalThis.fetch = fetchMock;
@@ -266,7 +269,7 @@ describe("UsersPage — one page at a time, from the server", () => {
     renderUsers({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });
     await screen.findByText("Tina Teacher");
 
-    expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1 });
+    expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, status: "active" });
   });
 
   it("draws the stat cards from the server's counts", async () => {
@@ -276,7 +279,7 @@ describe("UsersPage — one page at a time, from the server", () => {
     }));
     render(<MemoryRouter><UsersPage /></MemoryRouter>);
 
-    expect(await screen.findByText("480 accounts, 5 deactivated")).toBeTruthy();
+    expect(await screen.findByText("475 active accounts · 5 inactive")).toBeTruthy();
   });
 
   it("filters by a role group on the server", async () => {
@@ -286,7 +289,7 @@ describe("UsersPage — one page at a time, from the server", () => {
     fireEvent.click(screen.getByText("Staff").closest("button"));
 
     await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({
-      page: 1, role: "registrar,teacher,accounting",
+      page: 1, role: "registrar,teacher,accounting", status: "active",
     }));
   });
 
@@ -296,7 +299,7 @@ describe("UsersPage — one page at a time, from the server", () => {
 
     fireEvent.change(screen.getByLabelText(/Search users/), { target: { value: "tina" } });
 
-    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, search: "tina" }));
+    await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, status: "active", search: "tina" }));
   });
 });
 
@@ -307,8 +310,8 @@ describe("UsersPage — deactivating instead of deleting", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Deactivate Tina Teacher" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/give it a new adviser on Teacher Advisories/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate" }));
+    expect(within(dialog).getByText(/keep the name/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate account" }));
 
     await waitFor(() => expect(api.updateUser).toHaveBeenCalledWith(3, { is_active: false }));
     expect(api.deleteUser).not.toHaveBeenCalled();
@@ -319,10 +322,9 @@ describe("UsersPage — deactivating instead of deleting", () => {
     renderUsers({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" },
       [SUPER, ADMIN, { ...TEACHER, is_active: false }]);
 
-    expect(await screen.findByText("Deactivated", { selector: "span" })).toBeTruthy();
+    expect(await screen.findByText("Inactive", { selector: "span" })).toBeTruthy();
+    // One click: reactivating takes nothing away, so there's no confirm.
     fireEvent.click(screen.getByRole("button", { name: "Reactivate Tina Teacher" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Reactivate" }));
 
     await waitFor(() => expect(api.updateUser).toHaveBeenCalledWith(3, { is_active: true }));
   });

@@ -161,6 +161,29 @@ class SectionAdvisory(models.Model):
         return f"Teacher #{self.teacher_user_id} → {self.school_year} {self.grade_level}-{self.section}"
 
 
+def advisory_roster(advisory):
+    """
+    The enrollments an advisory covers: the learners currently `enrolled` in
+    its section. Everything a teacher may see or write -- My Sections, the
+    section grade/attendance/narrative grids, teacher_student_ids() -- is
+    scoped by this one query, so the rule can't drift between them.
+
+    Takes anything with the advisory's fields, not only a SectionAdvisory.
+    student-service keeps its own copy (accounts/permissions.py) because it
+    reads these tables through mirrors and can't import this app.
+    """
+    qs = Enrollment.objects.filter(
+        school_year=advisory.school_year,
+        school_level=advisory.school_level,
+        grade_level=advisory.grade_level,
+        section=advisory.section,
+        enrollment_status="enrolled",
+    )
+    if advisory.strand:
+        qs = qs.filter(strand=advisory.strand)
+    return qs
+
+
 # ─── Transfer audit log ───────────────────────────────────────────────────────
 class EnrollmentTransfer(models.Model):
     """
@@ -301,3 +324,135 @@ class EmailDeliveryFailure(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"Failed email to {self.to_email} · {self.created_at:%Y-%m-%d %H:%M}"
+
+
+# ─── School year registry ─────────────────────────────────────────────────────
+class SchoolYear(models.Model):
+    """
+    The school years the school has set up: each one's dates, which one is
+    current, and whether it has been archived.
+
+    `school_year` on enrollments, section_advisories, academic_calendar_events
+    and risk_assessment_runs stays a plain CharField, so nothing that reads
+    those columns changes. What changes is that the database now holds each
+    of them to a row here by foreign key on `label` (migration 0006): a year
+    exists because an admin created it, not because some record typed it.
+
+    Only `is_current` and `archived_at` are stored. The state people see --
+    upcoming, current, open, archived -- is derived from those and the label
+    (see `state()`), so there is no status column to drift out of step.
+
+    Django-managed, like SectionAdvisory. Some databases already have this
+    table from an abandoned branch's migrations; 0005 adopts it.
+    """
+
+    STATE_UPCOMING = "upcoming"
+    STATE_CURRENT = "current"
+    STATE_OPEN = "open"
+    STATE_ARCHIVED = "archived"
+
+    school_year_id = models.BigAutoField(primary_key=True)
+
+    label      = models.CharField(max_length=20, unique=True)  # "2025-2026"
+    start_date = models.DateField()
+    end_date   = models.DateField()
+    is_current = models.BooleanField(default=False)
+
+    # Set by archiving (a later phase); null means the year is still open.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.BigIntegerField(null=True, blank=True)  # user_id from identity-service JWT
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "school_years"
+        ordering = ["-label"]
+        constraints = [
+            # Exactly one current year is enforced by the database, not by
+            # whoever remembers to unset the old one.
+            models.UniqueConstraint(
+                fields=["is_current"],
+                condition=models.Q(is_current=True),
+                name="uniq_current_school_year",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_date__lt=models.F("end_date")),
+                name="school_years_start_before_end",
+            ),
+        ]
+
+    def state(self, current_label=None):
+        """
+        What this year is to the people using it, given the current year's
+        label. Labels sort chronologically ("2026-2027" > "2025-2026"), so a
+        year after the current one is being prepared and a year before it is
+        finished but not yet archived -- still open for final grades and late
+        payments. With no current year at all, nothing is "upcoming" relative
+        to anything, so every unarchived year reads as open.
+        """
+        if self.archived_at:
+            return self.STATE_ARCHIVED
+        if self.is_current:
+            return self.STATE_CURRENT
+        if current_label and self.label > current_label:
+            return self.STATE_UPCOMING
+        return self.STATE_OPEN
+
+    def __str__(self):  # pragma: no cover
+        return self.label
+
+
+# ─── Sections per school year ─────────────────────────────────────────────────
+class Section(models.Model):
+    """
+    A class within one grade of one school year: "Grade 7 · Rizal" in
+    2026-2027. Set up per year on the School Year page (usually carried over
+    from an earlier year), then picked -- not typed -- wherever a placement is
+    made.
+
+    `section` on enrollments and section_advisories stays a plain CharField;
+    the database holds (school_year, grade_level, section) on both to a row
+    here by composite foreign key (migration 0007). That foreign key is also
+    what makes a rename safe: ON UPDATE CASCADE carries the new name onto
+    every enrollment and advisory, so a class is never split by a spelling.
+
+    Names are unique within a grade and year, strands included (STEM-A and
+    ABM-A, not two "A"s). The strand is the section's: picking a Senior High
+    section decides the learner's strand. Keying on name alone is also what
+    keeps the foreign key whole -- strand is NULL below Senior High, and a
+    composite key with a NULL column is simply not checked.
+    """
+
+    section_id = models.BigAutoField(primary_key=True)
+
+    school_year = models.ForeignKey(
+        SchoolYear,
+        to_field="label",
+        db_column="school_year",
+        on_delete=models.PROTECT,
+        related_name="sections",
+    )
+    school_level = models.CharField(max_length=20, choices=Enrollment.SCHOOL_LEVEL_CHOICES)
+    grade_level  = models.CharField(max_length=20)
+    name         = models.CharField(max_length=50)
+    strand       = models.CharField(max_length=50, null=True, blank=True)  # Senior High only
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "sections"
+        ordering = ["school_year", "grade_level", "name"]
+        constraints = [
+            # Also the target of the composite foreign keys in 0007.
+            models.UniqueConstraint(
+                fields=["school_year", "grade_level", "name"],
+                name="uniq_section_per_grade",
+            ),
+        ]
+
+    def __str__(self):  # pragma: no cover
+        return f"{self.school_year_id} {self.grade_level} · {self.name}"

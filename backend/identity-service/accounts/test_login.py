@@ -51,6 +51,7 @@ def _fake_user(**overrides):
         role="teacher",
         profile_picture=None,
         password=make_password(CORRECT_PASSWORD),
+        is_active=True,
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -222,3 +223,17 @@ def test_failed_logins_from_one_address_are_rate_limited():
 
     assert blocked.status_code == 429
     assert "Retry-After" in blocked
+
+
+@pytest.mark.django_db
+@patch("accounts.views.stamp_session_id")
+def test_a_deactivated_account_cannot_sign_in(mock_stamp_session_id):
+    with _mock_user_lookup(_fake_user(is_active=False)):
+        response = _post_login()  # correct password
+
+    assert response.status_code == 400
+    assert "access" not in response.data
+    # Said only once the password has matched; a wrong password on a
+    # deactivated account reveals nothing (test_deactivation.py).
+    assert "deactivated" in response.data["detail"]
+    mock_stamp_session_id.assert_not_called()

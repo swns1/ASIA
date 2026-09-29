@@ -28,10 +28,70 @@ export const getDashboardSummary = (params = {}) =>
 export const getTeachersToday = (params = {}) =>
   enrollmentClient.get("/dashboard/teachers-today/", { params }).then((r) => r.data);
 
+// ── School years (the registry) ─────────────────────────────────────────────
+// Which years exist, each one's dates and state, and which is current. Reads
+// are open to staff; writes are super_admin/admin. `label` ("2026-2027") is
+// the key in every URL.
+export const listRegisteredSchoolYears = () =>
+  enrollmentClient.get("/school-years/").then((r) => r.data);
+
+export const getSchoolYear = (label) =>
+  enrollmentClient.get(`/school-years/${label}/`).then((r) => r.data);
+
+export const createSchoolYear = (data) =>
+  enrollmentClient.post("/school-years/", data).then((r) => r.data);
+
+export const updateSchoolYear = (label, data) =>
+  enrollmentClient.patch(`/school-years/${label}/`, data).then((r) => r.data);
+
+export const deleteSchoolYear = (label) =>
+  enrollmentClient.delete(`/school-years/${label}/`).then((r) => r.data);
+
+export const makeSchoolYearCurrent = (label) =>
+  enrollmentClient.post(`/school-years/${label}/make-current/`).then((r) => r.data);
+
+// Archiving makes a finished year's records read-only (payments excepted);
+// unarchiving reopens it for corrections.
+export const archiveSchoolYear = (label) =>
+  enrollmentClient.post(`/school-years/${label}/archive/`).then((r) => r.data);
+
+export const unarchiveSchoolYear = (label) =>
+  enrollmentClient.post(`/school-years/${label}/unarchive/`).then((r) => r.data);
+
+// The numbers behind a year's setup checklist: sections, advisers, calendar.
+export const getSchoolYearSetup = (label) =>
+  enrollmentClient.get(`/school-years/${label}/setup/`).then((r) => r.data);
+
+// Copy parts of an earlier year into this one. Never overwrites; `dry_run`
+// is the preview. Body: { from, parts: ["sections", "advisers"], dry_run }.
+export const carryOverSchoolYear = (label, data) =>
+  enrollmentClient.post(`/school-years/${label}/carry-over/`, data).then((r) => r.data);
+
+// Up to five years side by side (learners, sections, grades, attendance,
+// scholarships). Admin-only. Money comes from billing's financial summary.
+export const compareSchoolYears = (years) =>
+  enrollmentClient.get("/school-years/compare/", { params: { years: years.join(",") } }).then((r) => r.data);
+
+// ── Sections (per school year) ───────────────────────────────────────────────
+// Unpaginated. Filter with { school_year, grade_level?, school_level? }.
+// Writes: admin/registrar. A rename carries onto every enrollment and adviser
+// in the section; a delete is refused while anyone is filed under it.
+export const getSections = (params = {}) =>
+  enrollmentClient.get("/sections/", { params }).then((r) => r.data);
+
+export const createSection = (data) =>
+  enrollmentClient.post("/sections/", data).then((r) => r.data);
+
+export const updateSection = (id, data) =>
+  enrollmentClient.patch(`/sections/${id}/`, data).then((r) => r.data);
+
+export const deleteSection = (id) =>
+  enrollmentClient.delete(`/sections/${id}/`).then((r) => r.data);
+
 // ── Enrollments ───────────────────────────────────────────────────────────────
-// Every school year that has enrollments, newest first, with a count each —
-// plus the current year even when it's still empty. Replaces the old computed
-// window, which both invented years with no data and silently capped at five.
+// Every registered school year, newest first, with its enrollment count and
+// state (upcoming / current / open / archived), plus which one is current —
+// the list behind every year picker. Both come from the registry above.
 export const getSchoolYears = () =>
   enrollmentClient.get("/enrollments/school-years/").then((r) => r.data);
 

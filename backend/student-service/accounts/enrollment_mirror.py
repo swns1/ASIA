@@ -5,7 +5,7 @@ for them. Used by teacher_student_ids() (accounts/permissions.py) to scope
 a teacher's read access to students in their own section advisory, the same
 way enrollment-service scopes grades/attendance/dashboard -- see
 enrollment-service/accounts/permissions.py's teacher_student_ids for the
-original.
+original -- and by intake to check the school year an application is for.
 """
 from django.db import models
 
@@ -40,3 +40,17 @@ class SectionAdvisoryMirror(models.Model):
     class Meta:
         managed = False
         db_table = "section_advisories"
+
+
+class SchoolYearMirror(models.Model):
+    """The school year registry (enrollment-service's SchoolYear). Only the
+    columns intake reads: which years exist, which is current, and which
+    are archived."""
+    school_year_id = models.BigAutoField(primary_key=True)
+    label = models.CharField(max_length=20, unique=True)
+    is_current = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "school_years"

@@ -23,11 +23,14 @@ import { collect, required, email as emailCheck, minLength, hasErrors, focusFirs
 import { clearAuthSession, getCurrentUser, isAdminRole, isSuperAdminRole, setCurrentUser } from "../utils/auth";
 import PasswordInput from "../components/PasswordInput";
 import { MAX_SOURCE_BYTES, resizeImageFile } from "../utils/image";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import { getSectionAdvisories } from "../api/enrollmentApi";
 
 import {
   getUsers as _getUsers,
   createUser as _createUser,
   updateUser as _updateUser,
+  deleteUser as _deleteUser,
 } from "../api/identityApi";
 
 const ROLES = ["admin", "super_admin", "registrar", "accounting", "teacher", "guardian"];
@@ -45,14 +48,18 @@ const ROLE_FILTER_PARAM = {
   staff: "registrar,teacher,accounting",
 };
 
-function Avatar({ user, size = 36 }) {
-  const palette = getAvatarPalette(user.name);
+// A deactivated account's avatar goes grey, so the row reads as retired at a
+// glance even with the Inactive badge out of view.
+const INACTIVE_PALETTE = { bg: "var(--color-muted-50)", color: "var(--color-muted-500)" };
+
+function Avatar({ user, size = 36, dimmed = false }) {
+  const palette = dimmed ? INACTIVE_PALETTE : getAvatarPalette(user.name);
   if (user.profile_picture) {
     return (
       <img
         src={user.profile_picture}
         alt=""
-        className="shrink-0 rounded-full object-cover"
+        className={`shrink-0 rounded-full object-cover ${dimmed ? "opacity-60 grayscale" : ""}`}
         style={{ width: size, height: size }}
       />
     );
@@ -529,49 +536,126 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
 // parent's guardian link -- pointing at nobody. A deactivated account can't
 // sign in, but it still names them everywhere, and it can be brought back.
 
-function AccountStatusModal({ user, onClose, onChanged }) {
-  const deactivating = user.is_active !== false;
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+function DeleteUserModal({ user, currentUser, onClose, onDeleted }) {
+  const isSelf = currentUser?.id === user.user_id;
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState(() =>
+    isSelf ? "You can't delete your own account." : ""
+  );
 
-  async function handleConfirm() {
-    setSaving(true);
+  async function handleDelete() {
+    if (isSelf) return;
+    setDeleting(true);
     try {
-      const updated = await _updateUser(user.user_id, { is_active: !deactivating });
-      toast.success(deactivating ? `${user.name} can no longer sign in.` : `${user.name} can sign in again.`);
-      onChanged(updated);
+      await _deleteUser(user.user_id);
+      toast.success("User account deleted.");
+      onDeleted(user.user_id);
       onClose();
     } catch (err) {
-      setError(firstMessageFrom(err) || "We couldn't change this account. Please try again.");
+      setError(firstMessageFrom(err) || "We couldn't delete this account. Please try again.");
     } finally {
-      setSaving(false);
+      setDeleting(false);
     }
   }
 
   return (
     <ConfirmModal
-      icon={deactivating ? "ti-user-off" : "ti-user-check"}
-      danger={deactivating}
-      title={deactivating ? "Deactivate this account?" : "Reactivate this account?"}
-      message={deactivating ? (
+      icon="ti-trash"
+      title="Delete user account?"
+      message={
         <>
-          <strong className="text-neutral-900">{user.name}</strong> won&apos;t be able to sign in,
-          and any open session ends now. Their name stays on everything they did.
-          {user.role === "teacher" && " If they advise a section, give it a new adviser on Teacher Advisories."}
-          {" "}You can reactivate the account later.
+          <strong className="text-neutral-900">{user.name}</strong> will lose access to the
+          portal immediately. This cannot be undone.
         </>
-      ) : (
-        <>
-          <strong className="text-neutral-900">{user.name}</strong> will be able to sign in again
-          with their existing password.
-        </>
-      )}
+      }
       error={error}
-      loading={saving}
-      confirmLabel={deactivating ? "Deactivate" : "Reactivate"}
-      onConfirm={handleConfirm}
+      loading={deleting}
+      confirmDisabled={isSelf}
+      confirmLabel="Delete account"
+      onConfirm={handleDelete}
       onCancel={onClose}
     />
+  );
+}
+
+// ── Deactivate ────────────────────────────────────────────────────────────────
+
+// Someone who has left is deactivated rather than deleted: they can't sign in
+// and drop out of the staff pickers, but their past advisories, grades and
+// audit entries keep a name. A teacher's advisories from this year on are
+// listed, because they stay assigned until someone picks a replacement.
+function DeactivateUserModal({ user, onClose, onDeactivated }) {
+  const { currentYear } = useSchoolYear();
+  const [advisories, setAdvisories] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user.role !== "teacher") return undefined;
+    let live = true;
+    getSectionAdvisories({ teacher_user_id: user.user_id, page_size: 100 })
+      .then((data) => {
+        if (!live) return;
+        const rows = Array.isArray(data) ? data : data?.results ?? [];
+        // School year labels are "YYYY-YYYY", so they compare as text.
+        setAdvisories(rows.filter((a) => !currentYear || a.school_year >= currentYear));
+      })
+      // Only a heads-up: deactivating doesn't depend on it.
+      .catch(() => {});
+    return () => { live = false; };
+  }, [user.role, user.user_id, currentYear]);
+
+  async function handleConfirm() {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await _updateUser(user.user_id, { is_active: false });
+      toast.success(`${user.name} was deactivated and signed out.`);
+      onDeactivated(updated);
+    } catch (err) {
+      setError(firstMessageFrom(err) || "We couldn't deactivate this account. Please try again.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="sm"
+      icon="ti-user-off"
+      iconTone="danger"
+      title={`Deactivate ${user.name}?`}
+      description="Signed out right away, and can't sign in until reactivated. Past advisories, grades and audit entries keep the name. You can reactivate the account anytime."
+      loading={saving}
+      footer={
+        <div className="flex gap-2.5">
+          <Button variant="secondary" fullWidth disabled={saving} onClick={onClose} data-autofocus>
+            Cancel
+          </Button>
+          <Button variant="destructive" fullWidth loading={saving} onClick={handleConfirm}>
+            {saving ? "Working…" : "Deactivate account"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {advisories.length > 0 && (
+          <Alert variant="warning" title="Still advises">
+            <ul className="mt-1 space-y-0.5">
+              {advisories.map((a) => (
+                <li key={a.advisory_id}>
+                  S.Y. {a.school_year} · {a.grade_level} {a.section}{a.strand ? ` (${a.strand})` : ""}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5">
+              These stay assigned until you pick a new adviser on the School Years page.
+            </p>
+          </Alert>
+        )}
+        {error && <Alert variant="error">{error}</Alert>}
+      </div>
+    </Modal>
   );
 }
 
@@ -594,10 +678,14 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  // Opens on active accounts: staff who have left stay out of the way, one
+  // click from view.
+  const [statusFilter, setStatusFilter] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [statusTarget, setStatusTarget] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [deactivating, setDeactivating] = useState(null);
+  const [reactivatingId, setReactivatingId] = useState(null);
 
   // Search as you type, without a request per keystroke.
   useEffect(() => {
@@ -650,11 +738,16 @@ export default function UsersPage() {
   const applyRole = (value) => { setRoleFilter(value); setPage(1); };
   const applyStatus = (value) => { setStatusFilter(value); setPage(1); };
 
-  const hasActiveFilters = roleFilter !== "all" || statusFilter !== "all" || Boolean(search);
+  const hasActiveFilters = roleFilter !== "all" || statusFilter !== "active" || Boolean(search);
   const clearFilters = () => {
-    setRoleFilter("all"); setStatusFilter("all"); setSearch(""); setQuery(""); setPage(1);
+    setRoleFilter("all"); setStatusFilter("active"); setSearch(""); setQuery(""); setPage(1);
   };
+  const onlyInactiveFilter = statusFilter === "inactive" && roleFilter === "all" && !search;
   const totalPages = Math.max(1, Math.ceil(pageMeta.count / 25));
+  // Headline numbers are people who can use the portal; the counts cover
+  // every account the caller may see.
+  const inactiveCount = counts?.inactive ?? 0;
+  const activeCount = Math.max(0, (counts?.total ?? 0) - inactiveCount);
 
   const roleFilterOptions = [
     { value: "all", label: "All", tone: "brand", count: stats.total },
@@ -670,10 +763,23 @@ export default function UsersPage() {
   ];
 
   const statusFilterOptions = [
-    { value: "all", label: "All", tone: "brand" },
-    { value: "active", label: "Active", tone: "success", icon: "ti-user-check" },
-    { value: "inactive", label: "Deactivated", tone: "muted", icon: "ti-user-off", count: counts?.inactive ?? 0 },
+    { value: "active",   label: "Active",   tone: "success", dot: "#4caf50", count: activeCount },
+    { value: "inactive", label: "Inactive", tone: "muted",   dot: "#9e9e9e", count: inactiveCount },
+    { value: "all",      label: "All",      tone: "brand",   count: counts?.total ?? 0 },
   ];
+
+  async function handleReactivate(u) {
+    setReactivatingId(u.user_id);
+    try {
+      await _updateUser(u.user_id, { is_active: true });
+      toast.success(`${u.name} can sign in again.`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(firstMessageFrom(err) || "We couldn't reactivate this account. Please try again.");
+    } finally {
+      setReactivatingId(null);
+    }
+  }
 
   return (
     <>
@@ -683,7 +789,8 @@ export default function UsersPage() {
         subtitle={
           loading
             ? "Loading…"
-            : `${stats.total} account${stats.total === 1 ? "" : "s"}${counts?.inactive ? `, ${counts.inactive} deactivated` : ""}`
+            : `${activeCount} active account${activeCount === 1 ? "" : "s"}` +
+              (inactiveCount ? ` · ${inactiveCount} inactive` : "")
         }
         actions={
           isAdmin && (
@@ -760,7 +867,7 @@ export default function UsersPage() {
           </FilterRow>
           <FilterRow label="Status">
             <ChipGroup
-              label="Filter by account status"
+              label="Filter by status"
               options={statusFilterOptions}
               value={statusFilter}
               onChange={applyStatus}
@@ -779,11 +886,15 @@ export default function UsersPage() {
             skeletonRows={5}
             empty={{
               icon: "ti-users",
-              title: hasActiveFilters ? "No users match your filters" : "No users yet",
-              subtitle: hasActiveFilters
-                ? "Try a different role, status or search term."
-                : "Create the first account to get started.",
-              action: hasActiveFilters ? (
+              title: onlyInactiveFilter
+                ? "No inactive accounts"
+                : hasActiveFilters ? "No users match your filters" : "No users yet",
+              subtitle: onlyInactiveFilter
+                ? "Someone who leaves shows up here once deactivated."
+                : hasActiveFilters
+                  ? "Try a different role, status or search term."
+                  : "Create the first account to get started.",
+              action: onlyInactiveFilter ? null : hasActiveFilters ? (
                 <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
                   Clear filters
                 </Button>
@@ -807,17 +918,17 @@ export default function UsersPage() {
                 <TableRow key={u.user_id} className={inactive ? "opacity-60" : undefined}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar user={u} />
+                      <Avatar user={u} dimmed={inactive} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-bold text-neutral-900">
+                          <span className={`truncate text-sm font-bold ${inactive ? "text-neutral-500" : "text-neutral-900"}`}>
                             {u.name}
                           </span>
                           {isSelf && (
                             <Badge variant="success" size="sm">You</Badge>
                           )}
                           {inactive && (
-                            <Badge variant="muted" size="sm" icon="ti-user-off">Deactivated</Badge>
+                            <Badge variant="muted" size="sm" dot>Inactive</Badge>
                           )}
                         </div>
                         <div className="truncate text-xs text-neutral-500">{u.email}</div>
@@ -826,7 +937,11 @@ export default function UsersPage() {
                   </TableCell>
 
                   <TableCell>
-                    <Badge variant={meta?.variant ?? "muted"} icon={meta?.icon}>
+                    <Badge
+                      variant={meta?.variant ?? "muted"}
+                      icon={meta?.icon}
+                      className={inactive ? "opacity-60" : ""}
+                    >
                       {meta?.label ?? u.role}
                     </Badge>
                   </TableCell>
@@ -845,14 +960,32 @@ export default function UsersPage() {
                           onClick={() => setEditing(u)}
                         />
                       )}
+                      {canChangeStatus && !inactive && (
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-user-off"
+                          title="Deactivate account"
+                          aria-label={`Deactivate ${u.name}`}
+                          onClick={() => setDeactivating(u)}
+                        />
+                      )}
+                      {canChangeStatus && inactive && (
+                        <Button
+                          variant="ghost" size="sm" iconOnly icon="ti-user-check"
+                          title="Reactivate account"
+                          aria-label={`Reactivate ${u.name}`}
+                          className="text-success-500"
+                          loading={reactivatingId === u.user_id}
+                          disabled={reactivatingId === u.user_id}
+                          onClick={() => handleReactivate(u)}
+                        />
+                      )}
                       {canChangeStatus && (
                         <Button
-                          variant="ghost" size="sm" iconOnly
-                          icon={inactive ? "ti-user-check" : "ti-user-off"}
-                          title={inactive ? "Reactivate account" : "Deactivate account"}
-                          aria-label={`${inactive ? "Reactivate" : "Deactivate"} ${u.name}`}
-                          className={inactive ? undefined : "hover:bg-error-50 hover:text-error-500"}
-                          onClick={() => setStatusTarget(u)}
+                          variant="ghost" size="sm" iconOnly icon="ti-trash"
+                          title="Delete account"
+                          aria-label={`Delete ${u.name}`}
+                          className="hover:bg-error-50 hover:text-error-500"
+                          onClick={() => setDeleting(u)}
                         />
                       )}
                     </div>
@@ -900,12 +1033,26 @@ export default function UsersPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {statusTarget && (
-          <AccountStatusModal
-            user={statusTarget}
-            onClose={() => setStatusTarget(null)}
-            onChanged={() => {
-              setStatusTarget(null);
+        {deactivating && (
+          <DeactivateUserModal
+            user={deactivating}
+            onClose={() => setDeactivating(null)}
+            onDeactivated={() => {
+              setDeactivating(null);
+              fetchUsers();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deleting && (
+          <DeleteUserModal
+            user={deleting}
+            currentUser={currentUser}
+            onClose={() => setDeleting(null)}
+            onDeleted={() => {
+              setDeleting(null);
               fetchUsers();
             }}
           />

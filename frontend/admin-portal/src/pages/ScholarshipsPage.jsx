@@ -33,6 +33,8 @@ import {
   deleteEnrollmentScholarship as _deleteEnrollmentScholarship,
 } from "../api/enrollmentApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 
 const getEnrollmentScholarships   = (p = {}) => _getEnrollmentScholarships(p);
 const getScholarshipTypes         = ()       => _getScholarshipTypes({ is_active: true, page_size: 100 });
@@ -426,6 +428,7 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
 // ════════════════════════════════════════════════════════════════════════════
 // The year comes from the page (see ScholarshipsPage) rather than living here.
 function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yearIsDefault }) {
+  const isArchived = useArchivedYears();
   const [awards,      setAwards]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [toRevoke,    setToRevoke]    = useState(null);
@@ -663,6 +666,8 @@ function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yea
         </CollapsibleFilterRow>
       </FilterBar>
 
+      <ArchivedYearNotice schoolYear={schoolYear} records="scholarship awards" />
+
       {/* Awards table */}
       <Card padding="none" className="overflow-hidden">
         <Table
@@ -734,13 +739,15 @@ function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yea
                 </TableCell>
 
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon="ti-award-off"
-                    aria-label={`Revoke scholarship from ${name}`}
-                    onClick={() => setToRevoke(award)}
-                  />
+                  {!isArchived(en?.school_year) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="ti-award-off"
+                      aria-label={`Revoke scholarship from ${name}`}
+                      onClick={() => setToRevoke(award)}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             );
@@ -779,6 +786,7 @@ function ManualAwardsTab({ scholarshipTypes, schoolYear, onSchoolYearChange, yea
 // TAB 2: GRADE-BASED ELIGIBILITY
 // ════════════════════════════════════════════════════════════════════════════
 function EligibilityTab({ scholarshipTypes }) {
+  const isArchived = useArchivedYears();
   const [eligible,      setEligible]      = useState([]);
   const [loading,       setLoading]       = useState(false);
   // A scan covers one year's enrolled learners, so there's no "All years".
@@ -890,6 +898,8 @@ function EligibilityTab({ scholarshipTypes }) {
         )}
       </Panel>
 
+      <ArchivedYearNotice schoolYear={schoolYear} records="scholarship awards" />
+
       {/* Results */}
       <AnimatePresence>
         {scanned && (
@@ -913,7 +923,7 @@ function EligibilityTab({ scholarshipTypes }) {
                   S.Y. {schoolYear} · {PERIOD_LABELS[gradingPeriod]} · avg ≥ {ELIGIBILITY_THRESHOLD}%
                 </div>
               </div>
-              {eligible.length > 0 && (
+              {eligible.length > 0 && !isArchived(schoolYear) && (
                 <motion.button onClick={() => setApplyModal(true)}
                   whileHover={{ scale:1.02, boxShadow:"0 6px 20px rgba(46,107,13,0.32)" }}
                   whileTap={{ scale:0.97 }}
@@ -1010,6 +1020,9 @@ export default function ScholarshipsPage() {
   // Award Scholarship form searches the same year.
   const [awardsYear, setAwardsYear, awardsYearIsDefault] = useYearFilter();
   const { currentYear } = useSchoolYear();
+  // Awards go into the year on screen; an archived one takes none.
+  const isArchived = useArchivedYears();
+  const awardsYearArchived = isArchived(awardsYear || currentYear);
 
   useEffect(() => {
     getScholarshipTypes()
@@ -1035,7 +1048,9 @@ export default function ScholarshipsPage() {
             <Button variant="secondary" icon="ti-settings" onClick={() => navigate("/scholarship-types")}>
               Manage Types
             </Button>
-            <Button icon="ti-award" onClick={() => setAwardModal(true)}>
+            <Button icon={awardsYearArchived ? "ti-lock" : "ti-award"} disabled={awardsYearArchived}
+              title={awardsYearArchived ? `S.Y. ${awardsYear || currentYear} is archived` : undefined}
+              onClick={() => setAwardModal(true)}>
               Award Scholarship
             </Button>
           </>

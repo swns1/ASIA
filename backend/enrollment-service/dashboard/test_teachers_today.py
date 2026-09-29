@@ -8,6 +8,7 @@ exercised through validate() on the branches that never reach the database.
 """
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from rest_framework import serializers
@@ -220,6 +221,29 @@ class TestShapeTeachersToday:
         by = {s["strand"]: s["advisers"] for s in out["sections"]}
         assert by["ABM"] == ["Ben Cruz"]
         assert by["STEM"] == ["Ana Lim", "Ben Cruz"]
+
+    def test_a_deactivated_adviser_leaves_their_section_without_one(self):
+        rows = [
+            {"teacher_user_id": 7, "school_level": "elementary", "grade_level": "Grade 3",
+             "section": "Rizal", "strand": None},
+            {"teacher_user_id": 9, "school_level": "elementary", "grade_level": "Grade 3",
+             "section": "Mabini", "strand": None},
+            {"teacher_user_id": 12, "school_level": "elementary", "grade_level": "Grade 4",
+             "section": "Luna", "strand": None},
+        ]
+        with patch("dashboard.views.SectionAdvisory.objects") as advisories, \
+             patch("dashboard.views.User.objects") as users:
+            advisories.filter.return_value.values.return_value = rows
+            # 9 has been deactivated; 12's account is gone altogether.
+            users.filter.return_value.values_list.return_value = [
+                (7, "Ana Lim", True), (9, "Ben Reyes", False),
+            ]
+            advisers = TeachersTodayView._advisers("2026-2027")
+
+        assert advisers == {
+            section_key("elementary", "Grade 3", "Rizal", None): ["Ana Lim"],
+            section_key("elementary", "Grade 4", "Luna", None): ["Unknown teacher"],
+        }
 
     def test_sections_run_in_school_order(self):
         out = _shape(sections={

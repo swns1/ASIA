@@ -33,10 +33,10 @@ class EnrollmentMirror(models.Model):
 
 class ScholarshipTypeMirror(models.Model):
     scholarship_type_id = models.BigAutoField(primary_key=True)
-    # Read by services._is_voucher to tell a government voucher (ESC, SHS
-    # voucher) from a school scholarship. Missing here, every invoice for a
-    # learner with any scholarship failed with an AttributeError -> 500.
-    scholarship_code    = models.CharField(max_length=50, blank=True, null=True)
+    # services._fetch_enrollment_scholarships reads this to tell a government
+    # voucher (ESC..., VOUCHER..., QVR...) from a school scholarship. Without it
+    # every invoice for a learner with any scholarship raised AttributeError.
+    scholarship_code    = models.CharField(max_length=50, unique=True)
     scholarship_name    = models.CharField(max_length=150)
     discount_mode       = models.CharField(max_length=20)
     discount_value      = models.DecimalField(max_digits=10, decimal_places=2)
@@ -58,3 +58,16 @@ class EnrollmentScholarshipMirror(models.Model):
     class Meta:
         managed  = False
         db_table = "enrollment_scholarships"
+
+
+class SchoolYearMirror(models.Model):
+    """The school year registry (enrollment-service's SchoolYear): which years
+    exist and which are archived. Fee schedules belong to one."""
+    school_year_id = models.BigAutoField(primary_key=True)
+    label          = models.CharField(max_length=20, unique=True)
+    is_current     = models.BooleanField(default=False)
+    archived_at    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed  = False
+        db_table = "school_years"

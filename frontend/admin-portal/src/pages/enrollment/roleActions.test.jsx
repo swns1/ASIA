@@ -36,6 +36,7 @@ vi.mock("../../api/billingApi", () => ({
 }));
 vi.mock("../../api/studentApi", () => ({ updateStudentStatus: vi.fn() }));
 vi.mock("../../components/requirements/RequirementDocumentsPanel", () => ({ default: () => null }));
+vi.mock("../../context/SchoolYearContext", () => ({ useSchoolYear: () => ({ yearStates: {} }) }));
 
 const { default: EnrollmentDetailPage } = await import("../EnrollmentDetailPage");
 

@@ -48,6 +48,13 @@ class ApplicationInvite(models.Model):
     contact_email = models.EmailField(max_length=150, null=True, blank=True)
     contact_mobile = models.CharField(max_length=20, null=True, blank=True)
 
+    # The school year the applicant is applying for, chosen by the staff
+    # member issuing the invite; the application inherits it. A registered
+    # label (school_years.label) -- the foreign key is added in SQL by
+    # migration 0003, like enrollment-service's year columns, so the field
+    # stays a plain string. Null only on invites issued before it existed.
+    school_year = models.CharField(max_length=20, null=True, blank=True, db_index=True)
+
     issued_by_user_id = models.BigIntegerField(db_index=True)
     issued_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField(db_index=True)
@@ -157,6 +164,11 @@ class StudentApplication(models.Model):
     sex = models.CharField(max_length=10, null=True, blank=True)
     contact_email = models.EmailField(max_length=150, null=True, blank=True)
     contact_mobile = models.CharField(max_length=20, null=True, blank=True)
+
+    # Copied from the invite when the draft is created, so the review queue
+    # can filter by year without a join, and the enrolment it leads to opens
+    # on the right year. See ApplicationInvite.school_year.
+    school_year = models.CharField(max_length=20, null=True, blank=True, db_index=True)
 
     # {student:{}, household:{}|null, guardians:[], siblings:[],
     #  previous_schools:[], documents:[]}  -- documents is a reserved, always

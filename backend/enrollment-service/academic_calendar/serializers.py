@@ -5,9 +5,9 @@ from .models import CalendarEvent
 
 
 class CalendarEventSerializer(serializers.ModelSerializer):
-    # Same canonical "YYYY-YYYY" as every other school_year column; free text
-    # here filed an event under a year no screen ever selects.
-    school_year = SchoolYearField()
+    # A calendar belongs to a year someone set up; the foreign key enforces
+    # it, this says so in words.
+    school_year = SchoolYearField(registered=True)
 
     class Meta:
         model = CalendarEvent

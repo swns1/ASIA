@@ -185,9 +185,8 @@ class Command(BaseCommand):
     # ── fee schedules ───────────────────────────────────────────────────────
 
     def _ensure_fee_schedules(self, school_year):
-        """A complete, itemised fee schedule for every grade level, for the
-        school year being billed -- schedules belong to a year, and an invoice
-        is built from its own enrollment's year.
+        """A complete, itemised fee schedule for every grade level of the
+        seeded school year (fees are set per year).
 
         Four schedules existed and only one of them carried any items, so
         `generate_invoice_for_enrollment` raised "No active fee schedule for
@@ -201,7 +200,7 @@ class Command(BaseCommand):
         created = filled = 0
         for level, grade in LADDER:
             schedule, made = FeeSchedule.objects.get_or_create(
-                school_level=level, grade_level=grade, school_year=school_year,
+                school_year=school_year, school_level=level, grade_level=grade,
                 defaults={"is_active": True, "notes": "Seeded demo fee schedule."},
             )
             created += int(made)

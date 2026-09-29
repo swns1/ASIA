@@ -1,5 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import useYearFilter from "../hooks/useYearFilter";
+import useArchivedYears from "../hooks/useArchivedYears";
+import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -570,7 +572,7 @@ function EventCard({ event, onEdit, onDelete }) {
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {onEdit && <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               <motion.button onClick={() => onEdit(event)} title="Edit"
                 whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
                 whileTap={{ scale: 0.9 }}
@@ -583,7 +585,7 @@ function EventCard({ event, onEdit, onDelete }) {
                 style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
                 <i className="ti ti-trash" style={{ fontSize: 12 }} />
               </motion.button>
-            </div>
+            </div>}
           </div>
         </div>
       </div>
@@ -1158,7 +1160,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
             <i className="ti ti-calendar-off" style={{ fontSize: 26, color: "#8a6a6a" }} />
             <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>
               {events.length === 0
-                ? <>No events yet.<br />Click <strong>Add Event</strong> to get started.</>
+                ? (onEdit ? <>No events yet.<br />Click <strong>Add Event</strong> to get started.</> : "No events this year.")
                 : "No events match your filter."}
             </div>
           </div>
@@ -1211,7 +1213,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                                 <span style={{ fontSize: 10, color: "#8a6a6a" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                               </div>
                             </div>
-                            <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
+                            {onEdit && <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
                               <button onClick={() => onEdit(ev)} title="Edit"
                                 onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#855c5c"; }}
@@ -1224,7 +1226,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                                 style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", transition: "background-color 0.12s ease, color 0.12s ease" }}>
                                 <i className="ti ti-trash" style={{ fontSize: 11 }} />
                               </button>
-                            </div>
+                            </div>}
                           </div>
                         );
                       })}
@@ -1476,6 +1478,9 @@ export default function AcademicCalendarPage() {
   // A calendar is always one school year: its date bounds, month grid and
   // print headers are all derived from it.
   const [schoolYear,  setSchoolYear]  = useYearFilter({ allowAll: false });
+  // An archived year's calendar can be read, not changed.
+  const isArchived = useArchivedYears();
+  const readOnly = isArchived(schoolYear);
   const [events,      setEvents]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");
@@ -1579,15 +1584,19 @@ export default function AcademicCalendarPage() {
               onChange={(sy) => { setSchoolYear(sy); setSelectedDay(null); }}
             />
             <span className="h-5 w-px bg-neutral-300" aria-hidden="true" />
-            <Button variant="secondary" icon="ti-flag" onClick={() => setShowImport(true)}>
-              PH Holidays
-            </Button>
+            {!readOnly && (
+              <Button variant="secondary" icon="ti-flag" onClick={() => setShowImport(true)}>
+                PH Holidays
+              </Button>
+            )}
             <Button
               variant="secondary" iconOnly icon="ti-palette"
               title="Customize event colors" aria-label="Customize event colors"
               onClick={() => setShowColors(true)}
             />
-            <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+            <Button icon={readOnly ? "ti-lock" : "ti-plus"} disabled={readOnly}
+              title={readOnly ? `S.Y. ${schoolYear} is archived` : undefined}
+              onClick={() => setModal({ mode: "create" })}>
               Add Event
             </Button>
           </>
@@ -1607,6 +1616,8 @@ export default function AcademicCalendarPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ArchivedYearNotice schoolYear={schoolYear} records="calendar events" className="mx-6 mt-3.5" />
 
       {/* ── Body ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px", display: "flex", gap: 18, minHeight: 0 }}>
@@ -1780,7 +1791,11 @@ export default function AcademicCalendarPage() {
                 <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
                   {uniqueForDay.length === 0
                     ? <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
-                    : uniqueForDay.map((ev) => <EventCard key={ev.event_id} event={ev} onEdit={(e) => setModal({ mode: "edit", event: e })} onDelete={setToDelete} />)
+                    : uniqueForDay.map((ev) => (
+                      <EventCard key={ev.event_id} event={ev}
+                        onEdit={readOnly ? null : (e) => setModal({ mode: "edit", event: e })}
+                        onDelete={readOnly ? null : setToDelete} />
+                    ))
                   }
                 </div>
               </motion.div>
@@ -1805,8 +1820,8 @@ export default function AcademicCalendarPage() {
             events={events}
             loading={loading}
             schoolYear={schoolYear}
-            onEdit={(e) => setModal({ mode: "edit", event: e })}
-            onDelete={setToDelete}
+            onEdit={readOnly ? null : (e) => setModal({ mode: "edit", event: e })}
+            onDelete={readOnly ? null : setToDelete}
             onJumpMonth={(m) => setActiveMonth(m)}
           />
         </div>

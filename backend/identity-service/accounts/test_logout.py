@@ -34,6 +34,7 @@ def _fake_user(session_id, **overrides):
         role="teacher",
         profile_picture=None,
         current_session_id=session_id,
+        is_active=True,
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

@@ -100,6 +100,14 @@ class ScoreEntrySerializer(serializers.ModelSerializer):
         return 0
 
     def validate(self, attrs):
+        enrollment = attrs.get("enrollment", getattr(self.instance, "enrollment", None))
+        subject = attrs.get("subject", getattr(self.instance, "subject", None))
+        # Same rule as a grade: a score belongs to its enrollment's year's subject.
+        if enrollment is not None and subject is not None and subject.school_year != enrollment.school_year:
+            raise serializers.ValidationError(
+                {"subject": f"'{subject.subject_name}' is a S.Y. {subject.school_year} subject, "
+                            f"but this enrollment is in S.Y. {enrollment.school_year}."}
+            )
         # The table's CHECK constraints refuse all of these too, but a refusal
         # from the database is a 500 to the person typing the score.
         score = attrs.get("score", getattr(self.instance, "score", 0))

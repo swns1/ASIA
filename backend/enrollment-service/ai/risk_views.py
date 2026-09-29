@@ -44,6 +44,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import HasRole, teacher_student_ids
+from enrollments.archive import ensure_open
 from enrollments.models import Enrollment, Student
 
 from .models import RiskAssessmentRun, StudentRiskScore
@@ -239,6 +240,8 @@ class RiskAssessmentRunView(APIView):
             return Response({"detail": "school_year is required."}, status=status.HTTP_400_BAD_REQUEST)
         if not grading_period:
             return Response({"detail": "grading_period is required."}, status=status.HTTP_400_BAD_REQUEST)
+        # A run is filed under its year, and an archived year takes no new records.
+        ensure_open(school_year)
 
         weights = DEFAULT_WEIGHTS
         if weights_input is not None:

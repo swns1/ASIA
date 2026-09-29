@@ -4,11 +4,14 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import PageHeader from "../components/ui/PageHeader";
 import Tabs from "../components/ui/Tabs";
 import toast from "react-hot-toast";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import { listVariants, modalVariants, springTransition } from "../utils/motion";
-import { computeDefaultSchoolYear, buildSchoolYearOptions } from "../utils/schoolYear";
+import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
+import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import CarryOverModal from "../components/schoolYears/CarryOverModal";
 
 import {
   getSchoolSettings as _getSettings,
@@ -19,7 +22,6 @@ import {
   updateFeeScheduleItem as _updateItem,
   deleteFeeScheduleItem as _deleteItem,
   recalculateFeeSchedule as _recalculateSchedule,
-  copyFeeSchedulesToYear as _copyYear,
   getDiscountTypes as _getDiscountTypes,
   updateDiscountType as _updateDiscountType,
 } from "../api/billingApi";
@@ -321,9 +323,11 @@ function GeneralSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // The school year and its dates are not edited here any more: they belong
+  // to the School Years page, and the settings API treats them as read-only.
+  // This card shows what that page last made current.
   const [form, setForm] = useState({
-    school_name: "", current_school_year: "",
-    sy_start_date: "", sy_end_date: "",
+    school_name: "",
     early_bird_days: 7,
     school_address: "", contact_email: "", contact_phone: "",
   });
@@ -334,9 +338,6 @@ function GeneralSettingsTab() {
         setSettings(d);
         setForm({
           school_name:         d.school_name         ?? "",
-          current_school_year: d.current_school_year ?? "",
-          sy_start_date:       d.sy_start_date       ?? "",
-          sy_end_date:         d.sy_end_date         ?? "",
           early_bird_days:     d.early_bird_days     ?? 7,
           school_address:      d.school_address      ?? "",
           contact_email:       d.contact_email       ?? "",
@@ -353,9 +354,6 @@ function GeneralSettingsTab() {
     if (!settings) return false;
     return (
       form.school_name         !== (settings.school_name         ?? "") ||
-      form.current_school_year !== (settings.current_school_year ?? "") ||
-      form.sy_start_date       !== (settings.sy_start_date       ?? "") ||
-      form.sy_end_date         !== (settings.sy_end_date         ?? "") ||
       String(form.early_bird_days) !== String(settings.early_bird_days ?? 7) ||
       form.school_address      !== (settings.school_address      ?? "") ||
       form.contact_email       !== (settings.contact_email       ?? "") ||
@@ -365,19 +363,12 @@ function GeneralSettingsTab() {
 
   async function handleSave() {
     if (!form.school_name.trim())         { setError("School name is required."); return; }
-    if (!form.current_school_year.trim()) { setError("School year is required. Format: YYYY-YYYY"); return; }
-    if (!form.sy_start_date)              { setError("S.Y. start date is required."); return; }
-    if (!form.sy_end_date)                { setError("S.Y. end date is required."); return; }
-    if (form.sy_start_date >= form.sy_end_date) { setError("Start date must be before end date."); return; }
     if (!form.early_bird_days || parseInt(form.early_bird_days) < 1) { setError("Early bird days must be at least 1."); return; }
 
     setSaving(true); setError("");
     try {
       const updated = await _updateSettings(settings.setting_id, {
         school_name:         form.school_name.trim(),
-        current_school_year: form.current_school_year.trim(),
-        sy_start_date:       form.sy_start_date,
-        sy_end_date:         form.sy_end_date,
         early_bird_days:     parseInt(form.early_bird_days),
         school_address:      form.school_address.trim() || null,
         contact_email:       form.contact_email.trim()  || null,
@@ -492,21 +483,21 @@ function GeneralSettingsTab() {
               </div>
             ) : (
               <>
-                <Field label="Current School Year" required>
-                  <select className="settings-input" value={form.current_school_year} onChange={e => setF("current_school_year", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                    {buildSchoolYearOptions(form.current_school_year || computeDefaultSchoolYear()).map(sy => (
-                      <option key={sy} value={sy}>{sy}</option>
-                    ))}
-                  </select>
+                <Field label="Current School Year">
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: "-0.01em" }}>
+                    {settings?.current_school_year ? `S.Y. ${settings.current_school_year}` : "Not set"}
+                  </div>
                 </Field>
-                <SYProgress startDate={form.sy_start_date} endDate={form.sy_end_date} />
-                <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                  <Field label="S.Y. Start Date" required hint="Early bird counts from here">
-                    <input className="settings-input" type="date" value={form.sy_start_date} onChange={e => setF("sy_start_date", e.target.value)} style={inputStyle} />
-                  </Field>
-                  <Field label="S.Y. End Date" required>
-                    <input className="settings-input" type="date" value={form.sy_end_date} onChange={e => setF("sy_end_date", e.target.value)} style={inputStyle} />
-                  </Field>
+                <SYProgress startDate={settings?.sy_start_date} endDate={settings?.sy_end_date} />
+                <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
+                  Each invoice's installments and Early Bird window count from its own school year's start date.{" "}
+                  {STAFF_ADMIN.includes(getCurrentUser()?.role) ? (
+                    <Link to="/school-years" style={{ color: C.red, fontWeight: 700 }}>
+                      Manage school years <i className="ti ti-arrow-right" style={{ fontSize: 12 }} aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <>School years are managed by admins on the School Years page.</>
+                  )}
                 </div>
               </>
             )}
@@ -566,7 +557,9 @@ const SCHOOL_LEVELS = [
   { value: "nursery",           label: "Nursery",      color: "#be185d", bg: "#fde8f8", icon: "ti-baby-carriage",
     grades: ["Nursery"] },
   { value: "kindergarten",      label: "Kindergarten", color: "#854f0b", bg: "#fdf5e8", icon: "ti-star",
-    grades: ["Junior Kinder", "Senior Kinder"] },
+    // One Kindergarten, as on every other screen; "Senior Kinder" here meant
+    // a Kindergarten enrollment found no fee schedule.
+    grades: ["Kindergarten"] },
   { value: "elementary",        label: "Elementary",   color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-book",
     grades: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"] },
   { value: "junior_highschool", label: "Junior HS",    color: "#1455a0", bg: "#e3f0fd", icon: "ti-school",
@@ -608,7 +601,9 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
   const handleCreate = async () => {
     setSaving(true); setError("");
     try {
-      const created = await createFeeSchedule({ school_level: schoolLevel, grade_level: gradeLevel, school_year: schoolYear, is_active: true });
+      const created = await createFeeSchedule({
+        school_year: schoolYear, school_level: schoolLevel, grade_level: gradeLevel, is_active: true,
+      });
       toast.success("Fee schedule created.");
       onSaved(created);
       onClose();
@@ -639,7 +634,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>For SY {schoolYear} — select a level and grade</div>
+              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>For S.Y. {schoolYear}: select a level and grade</div>
             </div>
           </div>
           <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
@@ -713,7 +708,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
   );
 }
 
-function FeeItemRow({ item, onUpdated, onDeleted }) {
+function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
   const [editing, setEditing] = useState(false);
   const [name,    setName]    = useState(item.item_name);
   const [amount,  setAmount]  = useState(String(item.amount));
@@ -792,6 +787,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
         <>
           <span style={{ flex: 1, fontSize: 13, color: "#1a0a0a", fontWeight: 500 }}>{item.item_name}</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{fmt(item.amount)}</span>
+          {!readOnly && <>
           <motion.button onClick={() => setEditing(true)}
             whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
@@ -804,6 +800,7 @@ function FeeItemRow({ item, onUpdated, onDeleted }) {
             style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
             <i className="ti ti-trash" style={{ fontSize: 11 }} />
           </motion.button>
+          </>}
         </>
       )}
       <AnimatePresence>
@@ -880,7 +877,7 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
   );
 }
 
-function ScheduleDetail({ schedule, onUpdated }) {
+function ScheduleDetail({ schedule, readOnly, onUpdated }) {
   const lvl = SCHOOL_LEVELS.find((l) => l.value === schedule.school_level) ?? SCHOOL_LEVELS[2];
   const [recalcing, setRecalcing] = useState(false);
   const [recalcMsg, setRecalcMsg] = useState("");
@@ -938,7 +935,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
               </motion.span>
             )}
           </AnimatePresence>
-          <motion.button onClick={handleRecalculate} disabled={recalcing}
+          {!readOnly && <motion.button onClick={handleRecalculate} disabled={recalcing}
             whileHover={!recalcing ? { scale: 1.02 } : {}} whileTap={!recalcing ? { scale: 0.97 } : {}}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             {recalcing
@@ -946,7 +943,7 @@ function ScheduleDetail({ schedule, onUpdated }) {
               : <i className="ti ti-refresh" style={{ fontSize: 13 }} />
             }
             {recalcing ? "Updating…" : "Apply to Invoices"}
-          </motion.button>
+          </motion.button>}
         </div>
       </motion.div>
 
@@ -1004,11 +1001,11 @@ function ScheduleDetail({ schedule, onUpdated }) {
                 style={{ display: "flex", flexDirection: "column", gap: 6 }}
               >
                 {catItems.map((item) => (
-                  <FeeItemRow key={item.fee_schedule_item_id} item={item}
+                  <FeeItemRow key={item.fee_schedule_item_id} item={item} readOnly={readOnly}
                     onUpdated={onUpdated} onDeleted={onUpdated} />
                 ))}
               </motion.div>
-              <AddFeeItemForm scheduleId={schedule.fee_schedule_id} category={cat} onAdded={onUpdated} />
+              {!readOnly && <AddFeeItemForm scheduleId={schedule.fee_schedule_id} category={cat} onAdded={onUpdated} />}
             </div>
           </motion.div>
         );
@@ -1018,26 +1015,23 @@ function ScheduleDetail({ schedule, onUpdated }) {
 }
 
 function FeeSchedulesTab() {
-  // Fee schedules belong to a school year: next year's fees are their own
-  // schedules, so setting them never touches this year's invoices.
-  const { currentYear } = useSchoolYear();
-  const [year,         setYear]         = useState(currentYear);
   const [schedules,    setSchedules]    = useState([]);
   const [selected,     setSelected]     = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [levelFilter,  setLevelFilter]  = useState("all");
   const [showNewModal, setShowNewModal] = useState(false);
   const [copying,      setCopying]      = useState(false);
-  const yearOptions = buildSchoolYearOptions(currentYear, { past: 3, future: 1 });
-  const previousYear = (() => {
-    const start = parseInt(String(year).slice(0, 4), 10);
-    return Number.isNaN(start) ? "" : `${start - 1}-${start}`;
-  })();
+  // Fees are set per school year. Opens on the current year (or the one in
+  // the link, e.g. from a year's setup checklist); never "All years" -- a
+  // grade's fees only mean something within one year.
+  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
+  const { options: yearLabels, yearStates } = useSchoolYear();
+  const archived = yearStates[schoolYear] === "archived";
 
-  const fetchSchedules = useCallback(async (lvl = levelFilter, sy = year) => {
+  const fetchSchedules = useCallback(async (lvl = levelFilter) => {
     setLoading(true);
     try {
-      const params = { school_year: sy };
+      const params = { school_year: schoolYear };
       if (lvl !== "all") params.school_level = lvl;
       const data = await getFeeSchedules(params);
       const results = Array.isArray(data) ? data : data?.results ?? [];
@@ -1048,30 +1042,13 @@ function FeeSchedulesTab() {
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [levelFilter, selected, year]);
+  }, [levelFilter, selected, schoolYear]);
 
-  const changeYear = (sy) => {
-    setYear(sy);
-    setSelected(null);
-    fetchSchedules(levelFilter, sy);
-  };
-
-  async function copyFromPreviousYear() {
-    setCopying(true);
-    try {
-      const res = await _copyYear(previousYear, year);
-      toast.success(res.created
-        ? `Copied ${res.created} schedule${res.created !== 1 ? "s" : ""} from SY ${previousYear}. Adjust the amounts for SY ${year}.`
-        : `SY ${previousYear} has no schedules to copy.`);
-      fetchSchedules(levelFilter, year);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || e.message || "Couldn't copy the schedules.");
-    } finally { setCopying(false); }
-  }
-
+  // Another year's schedules are other rows entirely: drop the open one.
   useEffect(() => {
-    fetchSchedules("all"); // eslint-disable-line react-hooks/set-state-in-effect
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setSelected(null); // eslint-disable-line react-hooks/set-state-in-effect
+    fetchSchedules(levelFilter);
+  }, [schoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectSchedule = (sch) => setSelected(sch);
   const handleUpdated = () => fetchSchedules(levelFilter);
@@ -1082,18 +1059,26 @@ function FeeSchedulesTab() {
 
       {/* Mini header */}
       <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, fontWeight: 600 }}>
-            School year
-            <select aria-label="Fee schedule school year" value={year} onChange={(e) => changeYear(e.target.value)}
-              style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "5px 8px", fontSize: 12, background: "white", color: "#1a0a0a" }}>
-              {yearOptions.map((sy) => <option key={sy} value={sy}>{sy}{sy === currentYear ? " (current)" : ""}</option>)}
-            </select>
-          </label>
-          <span style={{ fontSize: 12, color: C.pale }}>
-            {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} configured`}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <SchoolYearPicker value={schoolYear} onChange={setSchoolYear} includeAllYears={false} counts={{}} />
+          <div style={{ fontSize: 12, color: C.pale }}>
+            {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} for S.Y. ${schoolYear}`}
+          </div>
+          {archived && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "#855c5c", background: "#f5f0f0", borderRadius: 99, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <i className="ti ti-archive" style={{ fontSize: 12 }} />Archived — read-only
+            </span>
+          )}
         </div>
+        {!archived && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <motion.button
+          whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => setCopying(true)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "white", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+          <i className="ti ti-copy" style={{ fontSize: 15 }} />Copy from an earlier year
+        </motion.button>
         <motion.button
           whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
           whileTap={{ scale: 0.96 }}
@@ -1101,6 +1086,8 @@ function FeeSchedulesTab() {
           style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
           <i className="ti ti-plus" style={{ fontSize: 15 }} />New Schedule
         </motion.button>
+        </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflow: "hidden", display: "grid", gridTemplateColumns: "300px 1fr" }}>
@@ -1149,15 +1136,9 @@ function FeeSchedulesTab() {
                 ? (
                   <div style={{ padding: "40px 16px", textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>
                     <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a", display: "block", marginBottom: 10 }} />
-                    No fee schedules for SY {year} yet.<br />
-                    <span style={{ fontSize: 12 }}>Start from last year&apos;s and adjust, or click &quot;New Schedule&quot;.</span>
-                    {previousYear && (
-                      <div style={{ marginTop: 12 }}>
-                        <button type="button" onClick={copyFromPreviousYear} disabled={copying}
-                          style={{ border: "1px solid #fca5a5", background: "#fff0f0", color: "#c92a2a", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: copying ? "not-allowed" : "pointer" }}>
-                          {copying ? "Copying…" : `Copy from SY ${previousYear}`}
-                        </button>
-                      </div>
+                    No fee schedules for S.Y. {schoolYear} yet.<br />
+                    {!archived && (
+                      <span style={{ fontSize: 12 }}>Copy an earlier year&apos;s and adjust, or click &quot;New Schedule&quot;.</span>
                     )}
                   </div>
                 )
@@ -1232,7 +1213,7 @@ function FeeSchedulesTab() {
                 initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
               >
-                <ScheduleDetail schedule={selected} onUpdated={handleUpdated} />
+                <ScheduleDetail schedule={selected} readOnly={archived} onUpdated={handleUpdated} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1243,9 +1224,23 @@ function FeeSchedulesTab() {
         {showNewModal && (
           <NewScheduleModal
             key="new-modal"
-            schoolYear={year}
+            schoolYear={schoolYear}
             onClose={() => setShowNewModal(false)}
             onSaved={(s) => { fetchSchedules(levelFilter); setSelected(s); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {copying && (
+          <CarryOverModal
+            key="copy-fees"
+            schoolYear={schoolYear}
+            years={yearLabels.map((label) => ({ label }))}
+            availableParts={["fees"]}
+            initialParts={["fees"]}
+            onClose={() => setCopying(false)}
+            onDone={() => fetchSchedules(levelFilter)}
           />
         )}
       </AnimatePresence>

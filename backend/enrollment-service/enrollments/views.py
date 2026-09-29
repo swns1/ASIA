@@ -8,40 +8,52 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import transaction
-from django.db.models import Q
+from django.db import IntegrityError, connection, transaction
+from django.db.models.deletion import ProtectedError
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
 from shared import school_year as school_year_rules
-from grading.deped import summarize_subjects
+from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
+from grading.deped import BLOCKING_REMARKS, summarize_subjects
 from accounts.permissions import (
     GRADE_READ_ROLES,
+    STAFF_FULL_WRITE_ROLES,
+    HasRole,
     IsAdminRegistrarOrReadOnly,
     IsAdvisoryTeacherOrStaff,
     IsStaffOrOwnerGuardianReadOnly,
     guardian_student_ids,
     teacher_student_ids,
 )
+from . import year_compare
+from .archive import ArchivedYearGuard, YearArchived, ensure_open
 from .models import (
     EmailDeliveryFailure,
     Enrollment,
     EnrollmentOverride,
     EnrollmentTransfer,
     GuardianResponse,
+    SchoolYear,
+    Section,
     SectionAdvisory,
     Student,
+    advisory_roster,
 )
 from .serializers import (
     EnrollmentSerializer,
     EnrollmentTransferSerializer,
     get_next_grade_level,
     promotion_grades,
+    school_level_for_grade,
+    SchoolYearSerializer,
     SectionAdvisorySerializer,
+    SectionSerializer,
     StudentSummarySerializer,
 )
 from .filters import EnrollmentFilter
-from .rules import ATTENDED_STATUSES, SCHOOL_LEVEL_OF_GRADE, date_outside_school_year
+from .rules import ATTENDED_STATUSES, GRADE_ORDER, SCHOOL_LEVEL_OF_GRADE, date_outside_school_year
 from . import promotion
 
 logger = logging.getLogger(__name__)
@@ -101,7 +113,7 @@ def _date_param(value, name):
     return parsed
 
 
-class SectionAdvisoryViewSet(viewsets.ModelViewSet):
+class SectionAdvisoryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/section-advisories/
 
@@ -181,15 +193,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
 
         results = []
         for advisory in advisories:
-            enrollment_qs = Enrollment.objects.filter(
-                school_year=advisory.school_year,
-                school_level=advisory.school_level,
-                grade_level=advisory.grade_level,
-                section=advisory.section,
-                enrollment_status="enrolled",
-            ).select_related("student")
-            if advisory.strand:
-                enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+            enrollment_qs = advisory_roster(advisory).select_related("student")
 
             students = []
             for e in enrollment_qs.order_by("student__last_name", "student__first_name"):
@@ -198,6 +202,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 students.append(student_data)
 
             subject_qs = Subject.objects.filter(
+                school_year=advisory.school_year,
                 school_level=advisory.school_level,
                 grade_level=advisory.grade_level,
             )
@@ -308,18 +313,11 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("grades", [])
             if not isinstance(entries, list) or not entries:
                 return Response(
@@ -432,18 +430,11 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("ratings", [])
             if not isinstance(entries, list) or not entries:
                 return Response(
@@ -548,18 +539,11 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         if request.method == "POST":
+            ensure_open(advisory.school_year)
             entries = request.data.get("records", [])
             valid_statuses = {"P", "A", "L", "E"}
             if not isinstance(entries, list) or not entries:
@@ -677,15 +661,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        ).select_related("student")
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory).select_related("student")
         enrollments_by_student = {e.student_id: e for e in enrollment_qs}
 
         records_qs = AttendanceRecord.objects.filter(
@@ -806,15 +782,7 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        enrollment_qs = Enrollment.objects.filter(
-            school_year=advisory.school_year,
-            school_level=advisory.school_level,
-            grade_level=advisory.grade_level,
-            section=advisory.section,
-            enrollment_status="enrolled",
-        )
-        if advisory.strand:
-            enrollment_qs = enrollment_qs.filter(strand=advisory.strand)
+        enrollment_qs = advisory_roster(advisory)
 
         grades_qs = Grade.objects.filter(enrollment__in=enrollment_qs)
 
@@ -843,7 +811,621 @@ class SectionAdvisoryViewSet(viewsets.ModelViewSet):
         })
 
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+def _sync_school_settings(year):
+    """
+    Copy the current year and its dates onto School Settings.
+
+    Transitional. The registry is the source now, but school_settings still
+    carries current_school_year / sy_start_date / sy_end_date and some readers
+    haven't moved yet (the settings API, SchoolFormsPage's default). Keeping
+    the row in step means none of them can disagree with the registry while
+    they move; once they have, those columns go. It's billing-service's table
+    -- a cross-service write on the shared database, in the same transaction
+    as the change it mirrors.
+    """
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE school_settings
+               SET current_school_year = %s, sy_start_date = %s, sy_end_date = %s,
+                   updated_at = now()
+             WHERE setting_id = (SELECT min(setting_id) FROM school_settings)
+            """,
+            [year.label, year.start_date, year.end_date],
+        )
+
+
+class SchoolYearViewSet(viewsets.ModelViewSet):
+    """
+    /api/school-years/                         GET list · POST create
+    /api/school-years/{label}/                 GET · PATCH (dates) · DELETE
+    /api/school-years/{label}/make-current/    POST
+    /api/school-years/{label}/archive/         POST
+    /api/school-years/{label}/unarchive/       POST
+    /api/school-years/compare/?years=a,b       GET  (admin-only)
+
+    The registry of school years: which exist, each one's dates, and which is
+    current. Every year picker reads it, so reads are open to all staff.
+    Writes are super_admin/admin only -- which year the whole school works in
+    is not a registrar decision.
+
+    Unpaginated: a school gains one year per year.
+    """
+
+    queryset = SchoolYear.objects.all()
+    serializer_class = SchoolYearSerializer
+    permission_classes = [HasRole]
+    required_roles = STAFF_FULL_WRITE_ROLES
+    read_roles = {"super_admin", "admin", "registrar", "teacher", "accounting"}
+    lookup_field = "label"
+    lookup_value_regex = r"\d{4}-\d{4}"
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    pagination_class = None
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["current_label"] = (
+            SchoolYear.objects.filter(is_current=True).values_list("label", flat=True).first()
+        )
+        return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        # The page shows how much each year holds, and whether it can still be
+        # deleted, without a second request per year.
+        counts = {
+            r["school_year"]: r["count"]
+            for r in Enrollment.objects.order_by().values("school_year").annotate(count=Count("pk"))
+        }
+        for row in response.data:
+            row["enrollment_count"] = counts.get(row["label"], 0)
+        return response
+
+    def perform_update(self, serializer):
+        if serializer.instance.archived_at:
+            raise YearArchived(
+                f"S.Y. {serializer.instance.label} is archived. Unarchive it to change its dates."
+            )
+        with transaction.atomic():
+            year = serializer.save()
+            if year.is_current:
+                _sync_school_settings(year)
+
+    def destroy(self, request, *args, **kwargs):
+        year = self.get_object()
+        if year.is_current:
+            return Response(
+                {"detail": f"S.Y. {year.label} is the current year. Make another year current first."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            with transaction.atomic():
+                year.delete()
+        except (IntegrityError, ProtectedError):
+            # The foreign keys from 0006 (and sections' own) refuse it while
+            # anything is filed under this year.
+            return Response(
+                {"detail": (
+                    f"S.Y. {year.label} still has records (sections, enrollments, "
+                    "advisers, calendar events or risk runs), so it can't be deleted."
+                )},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], url_path="make-current")
+    def make_current(self, request, label=None):
+        """
+        Make this the year every page opens on. One transaction: the old
+        current year is unset, this one set, School Settings synced. The old
+        year is NOT archived -- final grades and late payments still land in
+        it after the switch.
+        """
+        year = self.get_object()
+        if year.archived_at:
+            return Response(
+                {"detail": f"S.Y. {year.label} is archived, so it can't be made current."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        with transaction.atomic():
+            # Unset first: the partial unique index allows one current row at
+            # a time, checked per statement.
+            SchoolYear.objects.filter(is_current=True).exclude(pk=year.pk).update(
+                is_current=False, updated_at=timezone.now(),
+            )
+            if not year.is_current:
+                year.is_current = True
+                year.save(update_fields=["is_current", "updated_at"])
+            _sync_school_settings(year)
+        serializer = self.get_serializer(year, context={**self.get_serializer_context(), "current_label": year.label})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, label=None):
+        """
+        Close a finished year: everything filed under it becomes read-only
+        (enrollments/archive.py). Only a year that has ended can be archived
+        -- not the current one, which every page opens on, and not one still
+        to come. Payments against it still go through.
+
+        Doesn't wait for the year to be tidy: learners left "enrolled" or
+        "pending" stay that way, and the year page warns about them first.
+        """
+        year = self.get_object()
+        if year.archived_at:
+            return Response(self.get_serializer(year).data)
+        current_label = self.get_serializer_context()["current_label"]
+        if year.is_current:
+            return Response(
+                {"detail": f"S.Y. {year.label} is the current year. Make the next year current first."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if year.state(current_label) == "upcoming":
+            return Response(
+                {"detail": f"S.Y. {year.label} hasn't started yet, so there's nothing to archive."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        year.archived_at = timezone.now()
+        year.archived_by = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
+        year.save(update_fields=["archived_at", "archived_by", "updated_at"])
+        return Response(self.get_serializer(year).data)
+
+    @action(detail=True, methods=["post"])
+    def unarchive(self, request, label=None):
+        """Reopen an archived year for corrections. Archive it again after."""
+        year = self.get_object()
+        if year.archived_at:
+            year.archived_at = None
+            year.archived_by = None
+            year.save(update_fields=["archived_at", "archived_by", "updated_at"])
+        return Response(self.get_serializer(year).data)
+
+    @action(detail=False, methods=["get"])
+    def compare(self, request):
+        """
+        GET /api/school-years/compare/?years=2024-2025,2025-2026,2026-2027
+
+        Up to five registered years side by side, oldest first: learners,
+        sections, grades, attendance and scholarships (enrollments/
+        year_compare.py says what each number counts). Money is billing's;
+        the page reads it from /api/invoices/financial-summary/ per year.
+
+        Admin-only like the School Years pages: these are school-wide
+        figures, and the viewset's wider read_roles are for the year pickers.
+        """
+        if getattr(request.user, "role", None) not in STAFF_FULL_WRITE_ROLES:
+            return Response(
+                {"detail": "Your role does not have access to this action."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        raw = [part for part in (request.query_params.get("years") or "").split(",") if part.strip()]
+        if not raw:
+            return Response({"detail": "Pick at least one school year."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            labels = sorted({normalize_school_year(part) for part in raw})
+        except InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if len(labels) > year_compare.MAX_YEARS:
+            return Response(
+                {"detail": f"Compare up to {year_compare.MAX_YEARS} years at a time."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        registered = set(SchoolYear.objects.values_list("label", flat=True))
+        unknown = [label for label in labels if label not in registered]
+        if unknown:
+            return Response(
+                {"detail": f"S.Y. {', '.join(unknown)} isn't a registered year."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(year_compare.gather(labels, registered))
+
+    # In the order they're applied: advisers land in sections, so sections
+    # copied in the same run have to exist first.
+    CARRY_OVER_PARTS = ("sections", "advisers", "calendar", "subjects")
+
+    @action(detail=True, methods=["post"], url_path="carry-over")
+    def carry_over(self, request, label=None):
+        """
+        POST /api/school-years/{label}/carry-over/
+        Body: {"from": "2025-2026", "parts": ["sections", "advisers"], "dry_run": true}
+
+        Start this year from an earlier one: copy the chosen parts across so
+        that what didn't change needs no retyping. Any earlier year works,
+        not only the last.
+
+        Never overwrites. A section this year already has (same grade, same
+        name, any capitalisation) is skipped and reported; so is an adviser
+        whose section already has one here. Running it twice, or after
+        setting a few things up by hand, is safe. dry_run answers the same
+        question without writing -- the preview.
+
+        Parts: "sections", "advisers", "calendar", "subjects". Fees are billing's to copy
+        (POST /api/fee-schedules/carry-over/ on billing-service).
+        """
+        target = self.get_object()
+        source_label = (request.data.get("from") or "").strip()
+        parts = request.data.get("parts") or list(self.CARRY_OVER_PARTS)
+        dry_run = bool(request.data.get("dry_run", False))
+
+        unknown = [p for p in parts if p not in self.CARRY_OVER_PARTS]
+        if unknown:
+            return Response(
+                {"detail": f"Can't carry over {', '.join(unknown)} yet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target.archived_at:
+            return Response(
+                {"detail": f"S.Y. {target.label} is archived."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        source = SchoolYear.objects.filter(label=source_label).first()
+        if source is None:
+            return Response(
+                {"detail": f"S.Y. {source_label or '(none)'} isn't a registered year."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if source.pk == target.pk:
+            return Response(
+                {"detail": "Pick a different year to copy from."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = {"from": source.label, "to": target.label, "dry_run": dry_run}
+        # All or nothing: advisers placed into sections this same run created.
+        with transaction.atomic():
+            if "sections" in parts:
+                result["sections"] = self._carry_over_sections(source, target, dry_run)
+            if "advisers" in parts:
+                # On a dry run the copied sections don't exist yet, but the
+                # preview still has to count advisers going into them.
+                planned = result["sections"]["copied"] if dry_run and "sections" in parts else []
+                result["advisers"] = self._carry_over_advisers(source, target, dry_run, planned)
+            if "calendar" in parts:
+                result["calendar"] = self._carry_over_calendar(source, target, dry_run)
+            if "subjects" in parts:
+                result["subjects"] = self._carry_over_subjects(source, target, dry_run)
+        return Response(result)
+
+    def _carry_over_sections(self, source, target, dry_run):
+        existing = {
+            (grade, name.lower())
+            for grade, name in Section.objects.filter(school_year=target).values_list("grade_level", "name")
+        }
+        copied, skipped = [], []
+        for sec in Section.objects.filter(school_year=source).order_by("grade_level", "name"):
+            row = {"grade_level": sec.grade_level, "name": sec.name, "strand": sec.strand}
+            if (sec.grade_level, sec.name.lower()) in existing:
+                skipped.append(row)
+            else:
+                copied.append(row)
+        if copied and not dry_run:
+            Section.objects.bulk_create([
+                Section(
+                    school_year=target,
+                    school_level=school_level_for_grade(r["grade_level"]) or "elementary",
+                    grade_level=r["grade_level"],
+                    name=r["name"],
+                    strand=r["strand"],
+                )
+                for r in copied
+            ])
+        return {"copied": copied, "skipped": skipped}
+
+    def _carry_over_advisers(self, source, target, dry_run, planned_sections=()):
+        """
+        Each of the source year's advisers goes to the section of the same
+        name and grade here. Skipped, with a reason:
+          no_section   -- this year has no such section
+          already      -- they already advise it this year
+          has_adviser  -- someone else already does; not overwritten
+          not_a_teacher -- the account is gone or no longer a teacher
+          inactive     -- the teacher's account is deactivated (they left)
+        A section's co-advisers carry over together.
+        """
+        from accounts.models import User
+
+        sections = {
+            (s["grade_level"], s["name"].lower()): s
+            for s in Section.objects.filter(school_year=target).values("grade_level", "name", "strand")
+        }
+        for r in planned_sections:
+            sections.setdefault((r["grade_level"], r["name"].lower()), r)
+
+        advised = {}
+        for grade, name, teacher in (
+            SectionAdvisory.objects.filter(school_year=target.label)
+            .values_list("grade_level", "section", "teacher_user_id")
+        ):
+            advised.setdefault((grade, name.lower()), set()).add(teacher)
+
+        source_rows = list(
+            SectionAdvisory.objects.filter(school_year=source.label)
+            .order_by("grade_level", "section", "teacher_user_id")
+        )
+        teachers = {
+            user_id: (name, is_active)
+            for user_id, name, is_active in User.objects.filter(
+                user_id__in={a.teacher_user_id for a in source_rows}, role="teacher",
+            ).values_list("user_id", "name", "is_active")
+        }
+
+        copied, skipped = [], []
+        for adv in source_rows:
+            key = (adv.grade_level, adv.section.lower())
+            section = sections.get(key)
+            teacher = teachers.get(adv.teacher_user_id)
+            row = {
+                "teacher_user_id": adv.teacher_user_id,
+                "teacher_name":    teacher[0] if teacher else None,
+                "grade_level":     adv.grade_level,
+                "section":         section["name"] if section else adv.section,
+                "strand":          section["strand"] if section else adv.strand,
+            }
+            if teacher is None:
+                skipped.append({**row, "reason": "not_a_teacher"})
+            elif not teacher[1]:
+                skipped.append({**row, "reason": "inactive"})
+            elif section is None:
+                skipped.append({**row, "reason": "no_section"})
+            elif adv.teacher_user_id in advised.get(key, ()):
+                skipped.append({**row, "reason": "already"})
+            elif advised.get(key):
+                skipped.append({**row, "reason": "has_adviser"})
+            else:
+                copied.append(row)
+
+        if copied and not dry_run:
+            SectionAdvisory.objects.bulk_create([
+                SectionAdvisory(
+                    teacher_user_id=r["teacher_user_id"],
+                    school_year=target.label,
+                    school_level=school_level_for_grade(r["grade_level"]) or "elementary",
+                    grade_level=r["grade_level"],
+                    section=r["section"],
+                    strand=r["strand"],
+                )
+                for r in copied
+            ])
+        return {"copied": copied, "skipped": skipped}
+
+    def _carry_over_calendar(self, source, target, dry_run):
+        """
+        The source year's calendar, moved to the same day and month in the
+        target year (2025-2026 -> 2026-2027 is one year on). Right for fixed
+        holidays and a fair first draft of the rest; holidays that move
+        (Holy Week, Eid) and the quarter dates need checking, which the
+        preview says.
+
+        Skipped: an event this year already has (same type, same title, any
+        capitalisation), and a quarter this year already has dates for.
+        """
+        from academic_calendar.models import CalendarEvent
+
+        shift = int(target.label[:4]) - int(source.label[:4])
+
+        def moved(day):
+            try:
+                return day.replace(year=day.year + shift)
+            except ValueError:          # 29 February into a common year
+                return day.replace(year=day.year + shift, day=28)
+
+        existing = {
+            (event_type, title.lower())
+            for event_type, title in CalendarEvent.objects.filter(school_year=target.label)
+            .values_list("event_type", "title")
+        }
+        quarters = set(
+            CalendarEvent.objects.filter(school_year=target.label, grading_period__isnull=False)
+            .values_list("grading_period", flat=True)
+        )
+        copied, skipped = [], []
+        for event in CalendarEvent.objects.filter(school_year=source.label).order_by("start_date", "title"):
+            row = {
+                "title":          event.title,
+                "event_type":     event.event_type,
+                "grading_period": event.grading_period,
+                "start_date":     moved(event.start_date),
+                "end_date":       moved(event.end_date),
+                "description":    event.description,
+            }
+            if (event.event_type, event.title.lower()) in existing or event.grading_period in quarters:
+                skipped.append(row)
+            else:
+                copied.append(row)
+        if copied and not dry_run:
+            CalendarEvent.objects.bulk_create([
+                CalendarEvent(school_year=target.label, **row) for row in copied
+            ])
+        def listed(rows):
+            # The preview names each event; descriptions would only crowd it.
+            return [{k: v for k, v in r.items() if k != "description"} for r in rows]
+
+        return {"shift_years": shift, "copied": listed(copied), "skipped": listed(skipped)}
+
+    def _carry_over_subjects(self, source, target, dry_run):
+        """
+        The source year's curriculum as it stood: codes, names, grades,
+        strands, semesters and grading templates, ready to adjust for what
+        changed. Skipped: a subject this year already has (same code, any
+        capitalisation).
+        """
+        from subjects.models import Subject
+
+        existing = {
+            code.lower()
+            for code in Subject.objects.filter(school_year=target.label).values_list("subject_code", flat=True)
+        }
+        copied, skipped = [], []
+        for sub in Subject.objects.filter(school_year=source.label).order_by("grade_level", "subject_name"):
+            row = {
+                "subject_code":        sub.subject_code,
+                "subject_name":        sub.subject_name,
+                "school_level":        sub.school_level,
+                "grade_level":         sub.grade_level,
+                "strand":              sub.strand,
+                "semester":            sub.semester,
+                "grading_template_id": sub.grading_template_id,
+            }
+            (skipped if sub.subject_code.lower() in existing else copied).append(row)
+        if copied and not dry_run:
+            Subject.objects.bulk_create([Subject(school_year=target.label, **row) for row in copied])
+
+        def listed(rows):
+            return [{k: v for k, v in r.items() if k != "grading_template_id"} for r in rows]
+
+        return {"copied": listed(copied), "skipped": listed(skipped)}
+
+    @action(detail=True, methods=["get"], url_path="setup")
+    def setup(self, request, label=None):
+        """
+        GET /api/school-years/{label}/setup/
+
+        The numbers behind the year page's setup checklist: sections set up,
+        how many have an adviser, which grades have subjects and fees, and
+        whether the calendar has its quarter dates and holidays.
+
+        Fees are billing-service's table, read here the way billing reads
+        enrollments: raw SQL on the shared database, never written.
+        """
+        from academic_calendar.models import CalendarEvent
+        from subjects.models import Subject
+
+        year = self.get_object()
+        sections = Section.objects.filter(school_year=year)
+        section_keys = set(sections.values_list("grade_level", "name"))
+        advised = set(
+            SectionAdvisory.objects.filter(school_year=year.label)
+            .values_list("grade_level", "section")
+            .distinct()
+        )
+        events = CalendarEvent.objects.filter(school_year=year.label)
+        subjects = Subject.objects.filter(school_year=year.label)
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(DISTINCT grade_level) FROM fee_schedules WHERE school_year = %s AND is_active",
+                [year.label],
+            )
+            fee_grades = cur.fetchone()[0]
+        statuses = dict(
+            Enrollment.objects.filter(school_year=year.label).order_by()
+            .values_list("enrollment_status").annotate(n=Count("pk"))
+        )
+        return Response({
+            # Learners not yet finished for the year. Archiving leaves them
+            # as they are, so the archive confirm names them.
+            "enrollments": {
+                "total": sum(statuses.values()),
+                "unfinished": statuses.get("enrolled", 0) + statuses.get("pending", 0),
+            },
+            "sections": {
+                "count": len(section_keys),
+                "grades": len({grade for grade, _ in section_keys}),
+            },
+            "advisers": {
+                "sections": len(section_keys),
+                "with_adviser": len(section_keys & advised),
+            },
+            "subjects": {
+                "count": subjects.count(),
+                "grades": subjects.values("grade_level").distinct().count(),
+                "of": len(GRADE_ORDER),
+                # Grades can't be computed for these until one is picked.
+                "without_template": subjects.filter(grading_template__isnull=True).count(),
+            },
+            "fees": {"grades": fee_grades, "of": len(GRADE_ORDER)},
+            "calendar": {
+                "quarters_set": (
+                    events.filter(event_type="grading_period")
+                    .exclude(grading_period__isnull=True)
+                    .values("grading_period").distinct().count()
+                ),
+                "holidays": events.filter(event_type="holiday").count(),
+            },
+        })
+
+
+class SectionViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
+    """
+    /api/sections/?school_year=2026-2027[&grade_level=Grade 7][&school_level=...]
+
+    The sections of each school year. Reads are open to staff (every
+    placement picker lists them); writes are admin/registrar -- a registrar
+    enrolling a learner can add a missing section on the spot rather than
+    waiting for an admin.
+
+    Renaming cascades to every enrollment and advisory in the section (the
+    composite foreign key's ON UPDATE CASCADE). Deleting is refused while
+    any learner or adviser is filed under it.
+
+    Unpaginated: a year has tens of sections, not thousands.
+    """
+
+    queryset = Section.objects.all()
+    serializer_class = SectionSerializer
+    permission_classes = [IsAdminRegistrarOrReadOnly]
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ("grade_level", "school_level")
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        year = (self.request.query_params.get("school_year") or "").strip()
+        if year:
+            qs = qs.filter(school_year_id=year)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        years = set(queryset.values_list("school_year_id", flat=True))
+        context = {
+            **self.get_serializer_context(),
+            "enrollment_counts": self._counts(Enrollment.objects.exclude(enrollment_status="cancelled"), years),
+            "adviser_counts": self._counts(SectionAdvisory.objects.all(), years),
+        }
+        return Response(SectionSerializer(queryset, many=True, context=context).data)
+
+    @staticmethod
+    def _counts(qs, years):
+        rows = (
+            qs.filter(school_year__in=years).order_by()
+            .values("school_year", "grade_level", "section")
+            .annotate(n=Count("pk"))
+        )
+        return {(r["school_year"], r["grade_level"], r["section"]): r["n"] for r in rows}
+
+    def perform_update(self, serializer):
+        before = serializer.instance.strand
+        with transaction.atomic():
+            section = super().perform_update(serializer)
+            # The name cascades through the foreign key; the strand isn't part
+            # of it, so the learners and advisers in this section follow it here.
+            if section.strand != before:
+                placed = dict(
+                    school_year=section.school_year_id,
+                    grade_level=section.grade_level,
+                    section=section.name,
+                )
+                Enrollment.objects.filter(**placed).update(strand=section.strand)
+                SectionAdvisory.objects.filter(**placed).update(strand=section.strand)
+
+    def destroy(self, request, *args, **kwargs):
+        section = self.get_object()
+        try:
+            with transaction.atomic():
+                self.perform_destroy(section)
+        except IntegrityError:
+            return Response(
+                {"detail": (
+                    f"{section.grade_level} \u00b7 {section.name} still has learners or an adviser, "
+                    "so it can't be deleted. Move them to another section first."
+                )},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     """
     /api/enrollments/
 
@@ -868,18 +1450,23 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         GET /api/enrollments/school-years/
 
-        Every school year that actually has enrollments, newest first, with a
-        count each. The sidebar picker used to *compute* this list as a fixed
-        window (3 past + current + 1 future) around the settings' current year,
-        which had two failure modes: it offered years with no data at all, and
-        it silently capped at 5 entries — so once a school had six years of
-        history, the oldest became unreachable through the UI.
+        Every registered school year, newest first, with its enrollment count
+        and state, plus which one is current.
 
-        The current school year is always included even with a zero count:
-        at the start of a term nothing is enrolled yet, and that is precisely
-        the year a registrar needs to select in order to start enrolling.
+        The list and the current year both come from the school_years
+        registry. They used to come from whatever labels enrollments happened
+        to use, plus a year guessed from today's date on a July cutoff -- one
+        of four places that each decided "the current year" on their own.
+        The shape is unchanged ({"current", "results": [{"school_year",
+        "count"}]}) apart from the added `state`, because the external mobile
+        client reads it too.
+
+        A label on an enrollment that isn't registered can only exist before
+        migration 0006's foreign keys; it's still listed (state null) so no
+        record becomes unreachable. The date guess survives only for a school
+        that hasn't registered a current year at all.
         """
-        from django.db.models import Count
+        from shared.school_year import current as guess_current_year
 
         # The viewset's permission class lets guardians read, but these are
         # school-wide counts and the guardian portal has no picker to feed.
@@ -898,14 +1485,17 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
         counts = {r["school_year"]: r["count"] for r in rows}
 
-        today = timezone.localdate()
-        year = today.year if today.month >= 7 else today.year - 1
-        current = f"{year}-{year + 1}"
-        counts.setdefault(current, 0)
+        years = list(SchoolYear.objects.all())
+        current = next((y.label for y in years if y.is_current), None)
+        states = {y.label: y.state(current) for y in years}
 
+        if current is None:
+            current = guess_current_year(timezone.localdate())
+
+        labels = set(states) | set(counts) | {current}
         results = [
-            {"school_year": y, "count": counts[y]}
-            for y in sorted(counts, reverse=True)
+            {"school_year": y, "count": counts.get(y, 0), "state": states.get(y)}
+            for y in sorted(labels, reverse=True)
         ]
         return Response({"current": current, "results": results})
 
@@ -1080,7 +1670,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        enrollment = serializer.save()
+        enrollment = super().perform_create(serializer)
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
         # Give this student's guardians portal access once they're actually
@@ -1090,7 +1680,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         before = {f: getattr(serializer.instance, f, None) for f in self._MOVE_TRACKED_FIELDS}
-        enrollment = serializer.save()
+        enrollment = super().perform_update(serializer)
         if getattr(serializer, "_progression_override", False):
             self._save_override_audit(serializer, enrollment)
         self._log_internal_move_if_changed(serializer, before, enrollment)
@@ -1120,6 +1710,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
           }
         """
         enrollment = self.get_object()
+        ensure_open(enrollment.school_year)
 
         if enrollment.enrollment_status != "enrolled":
             return Response(
@@ -1193,6 +1784,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
           }
         """
         enrollment = self.get_object()
+        ensure_open(enrollment.school_year)
 
         # Recorded right after the learner's new enrollment is created, once.
         # It used to be accepted on any row any number of times -- two
@@ -1382,6 +1974,13 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "semester":          request.data.get("semester"),
             "enrollment_status": request.data.get("enrollment_status", "pending"),
         }
+
+        # Refused as a whole rather than learner by learner: every row would
+        # fail for the same reason.
+        try:
+            ensure_open(normalize_school_year(shared_fields["school_year"] or ""))
+        except InvalidSchoolYear:
+            pass  # the serializer reports a malformed year on each row
 
         created_records = []
         failed_records  = []
@@ -1622,6 +2221,22 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Promotion writes enrollments directly, past the serializer's
+        # registered-year check, so the target year is checked here: an
+        # unregistered year would otherwise fail every learner on the
+        # foreign key with a raw database error in the "failed" list.
+        if not SchoolYear.objects.filter(label=to_school_year).exists():
+            return Response(
+                {"detail": (
+                    f"S.Y. {to_school_year} hasn't been set up yet. "
+                    "An admin can add it under School Years first."
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Reading an archived year is fine -- last year's finished classes are
+        # exactly what gets promoted. Writing into one isn't.
+        ensure_open(to_school_year)
+
         to_grade_level = get_next_grade_level(from_grade_level)
         if to_grade_level is None:
             return Response(
@@ -1667,6 +2282,33 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # The destination is a section of next year's next grade, set up
+        # beforehand (usually carried over). It used to be free text that
+        # defaulted to the source section's name, whether or not such a
+        # section existed -- the same spelling-dependent link that decides a
+        # teacher's access. Checked up front for the same reason as the year:
+        # promotion writes enrollments directly, past the serializer.
+        to_section_row = (
+            Section.objects.filter(
+                school_year_id=to_school_year, grade_level=to_grade_level, name__iexact=to_section,
+            ).first()
+        )
+        if to_section_row is None:
+            return Response(
+                {"detail": (
+                    f"S.Y. {to_school_year} {to_grade_level} has no section named "
+                    f"\u201c{to_section}\u201d. Set it up first, or pick one of that grade's sections."
+                ),
+                 "reason": "unknown_section"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        to_section = to_section_row.name
+
+        # The new enrollment opens the destination year's 1st semester. It used
+        # to be created with no semester at all, which the enrollments CHECK
+        # refuses for Senior High -- every Grade 11 -> 12 promotion failed.
+        to_semester = "1st" if to_school_level == "senior_highschool" else None
+
         # Grade 11 is enrolled per semester, so a learner holds two rows in
         # the from-section. Promotion is judged at the end of the year: the
         # 2nd-semester row is the source, the 1st must also be completed, and
@@ -1708,6 +2350,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                     "to_grade_level":  to_grade_level,
                     "to_school_level": to_school_level,
                     "to_section":      to_section,
+                    "to_semester":     to_semester,
                     "to_school_year":  to_school_year,
                     "to_promote":      [],
                     "to_skip":         [],
@@ -1790,6 +2433,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 "to_grade_level":  to_grade_level,
                 "to_school_level": to_school_level,
                 "to_section":      to_section,
+                "to_semester":     to_semester,
                 "to_school_year":  to_school_year,
                 "to_promote": [
                     {k: v for k, v in s.items() if not k.startswith("_")}
@@ -1805,10 +2449,6 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
         for entry in to_promote:
             student_obj = entry["_student_obj"]
-            # Grade 11 -> 12 stays in senior high: the new row needs a
-            # semester (the enrollments CHECK constraint rejects SHS without
-            # one) and keeps the strand chosen in Grade 11.
-            shs = to_school_level == "senior_highschool"
             try:
                 with transaction.atomic():
                     enr = Enrollment.objects.create(
@@ -1817,8 +2457,9 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                         school_level=to_school_level,
                         grade_level=to_grade_level,
                         section=to_section,
-                        strand=entry["_source"].strand if shs else None,
-                        semester="1st" if shs else None,
+                        # A Senior High section carries its strand.
+                        strand=to_section_row.strand,
+                        semester=to_semester,
                         enrollment_status="pending",
                     )
                 created.append({
@@ -1840,6 +2481,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 "to_grade_level":  to_grade_level,
                 "to_school_level": to_school_level,
                 "to_section":      to_section,
+                "to_semester":     to_semester,
                 "to_school_year":  to_school_year,
                 "created":  created,
                 "skipped":  to_skip,
@@ -2020,7 +2662,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             outcomes = summarize_subjects(year_grades)
             failed_outcomes = [
                 o for o in outcomes.values()
-                if o["remarks"] in ("failed", "incomplete", "dropped")
+                if o["remarks"] in BLOCKING_REMARKS
             ]
             if failed_outcomes:
                 can_repeat = True

@@ -88,6 +88,16 @@ export const ROLE_MAP = {
   guardian:    { label: "Guardian",    variant: "muted",   icon: "ti-users" },
 };
 
+/** School years — the state derived by the school_years registry.
+ *  "open" is a finished year that hasn't been archived yet: it still takes
+ *  final grades and late payments, so it isn't styled as closed. */
+export const SCHOOL_YEAR_STATE_MAP = {
+  current:  { label: "Current",  variant: "success", icon: "ti-circle-check" },
+  upcoming: { label: "Upcoming", variant: "info",    icon: "ti-calendar-plus" },
+  open:     { label: "Open",     variant: "warning", icon: "ti-lock-open" },
+  archived: { label: "Archived", variant: "muted",   icon: "ti-archive" },
+};
+
 /** Fallback for an unrecognised status — shows the raw key, humanised, rather
  *  than rendering nothing. */
 export function fallbackStatus(status) {

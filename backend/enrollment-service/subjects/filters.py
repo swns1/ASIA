@@ -21,7 +21,7 @@ class SubjectFilter(filters.FilterSet):
 
     class Meta:
         model = Subject
-        fields = ("school_level", "grade_level", "strand", "semester")
+        fields = ("school_year", "school_level", "grade_level", "strand", "semester")
 
     def filter_for_strand(self, queryset, name, value):
         value = (value or "").strip()

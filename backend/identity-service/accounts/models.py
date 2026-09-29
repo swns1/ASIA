@@ -27,10 +27,9 @@ class User(models.Model):
     password = models.CharField(max_length=255)
     profile_picture = models.TextField(null=True, blank=True)  # ← this line must exist
     current_session_id = models.UUIDField(null=True, blank=True)
-    # False = deactivated: cannot sign in, but the account stays, so the
-    # person's name stays on everything that points at them (advisories,
-    # grades, overrides, guardian links) -- which a delete would orphan.
-    # Added by migration 0003_add_user_is_active.
+    # False once someone leaves: they can't sign in and drop out of every
+    # staff picker, but their past records keep their name. Column added by
+    # migration 0003; the other services mirror it.
     is_active = models.BooleanField(default=True)
 
     class Meta:

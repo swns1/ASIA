@@ -42,10 +42,11 @@ def enrollment(status="enrolled", level="elementary", grade="Grade 4", semester=
     )
 
 
-def subject(level="elementary", grade="Grade 4", semester=None, strand=None, template=1):
+def subject(level="elementary", grade="Grade 4", semester=None, strand=None, template=1,
+            year="2026-2027"):
     return SimpleNamespace(
         subject_id=3, subject_name="Mathematics", school_level=level, grade_level=grade,
-        semester=semester, strand=strand, grading_template_id=template,
+        semester=semester, strand=strand, grading_template_id=template, school_year=year,
     )
 
 
@@ -158,15 +159,15 @@ def test_attendance_rules(_today):
 # ── advisers ────────────────────────────────────────────────────────────────
 
 def _users_row(result):
-    connection = MagicMock()
-    connection.cursor.return_value.__enter__.return_value.fetchone.return_value = result
-    return patch("django.db.connection", connection)
+    users = MagicMock()
+    users.filter.return_value.values.return_value.first.return_value = result
+    return patch("accounts.models.User.objects", users)
 
 
 @pytest.mark.parametrize("result,message", [
-    (None, "No user account"),
-    (("guardian", True), "must be a teacher"),
-    (("teacher", False), "deactivated"),
+    (None, "Choose a teacher account"),
+    ({"role": "guardian", "is_active": True}, "Choose a teacher account"),
+    ({"role": "teacher", "is_active": False}, "inactive"),
 ])
 def test_an_adviser_is_an_active_teacher(result, message):
     with _users_row(result):
@@ -176,7 +177,7 @@ def test_an_adviser_is_an_active_teacher(result, message):
 
 
 def test_an_active_teacher_can_advise():
-    with _users_row(("teacher", True)):
+    with _users_row({"role": "teacher", "is_active": True}):
         assert SectionAdvisorySerializer().validate_teacher_user_id(34) == 34
 
 

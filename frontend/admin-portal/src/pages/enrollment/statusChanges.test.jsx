@@ -34,6 +34,9 @@ vi.mock("../../api/enrollmentApi", () => ({
   sendEnrollmentEmail: pass("sendEnrollmentEmail"),
   transferInEnrollment: vi.fn(),
   getEnrollments: vi.fn(() => Promise.resolve({ results: [] })),
+  // The section picker lists the year's sections (none needed here).
+  getSections: vi.fn(() => Promise.resolve([])),
+  createSection: vi.fn(),
 }));
 vi.mock("../../api/studentApi", () => ({
   getStudent: pass("getStudent"),
@@ -45,7 +48,8 @@ vi.mock("../../components/requirements/RequirementDocumentsPanel", () => ({ defa
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({
     schoolYear: "2026-2027", currentYear: "2026-2027",
-    options: ["2026-2027", "2025-2026"], counts: {}, setSchoolYear: () => {},
+    options: ["2026-2027", "2025-2026"], entryYears: ["2026-2027", "2025-2026"],
+    yearStates: {}, counts: {}, setSchoolYear: () => {},
   }),
 }));
 vi.mock("react-hot-toast", () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
