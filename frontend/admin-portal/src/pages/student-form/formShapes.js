@@ -55,25 +55,8 @@ export const STEPS = [
 ];
 
 // ─── style tokens ────────────────────────────────────────────────────────────
-export const C = {
-  red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
-  redMid: "#fde2de", dark: "#1a0a0a", muted: "#7a5050",
-  bg: "#fff8f6", white: "#ffffff", shadow: "0 4px 24px rgba(224,49,49,0.10)",
-};
-
-export const cardStyle = {
-  background: C.white, borderRadius: 16, border: `1px solid ${C.redMid}`,
-  padding: "24px 28px", boxShadow: C.shadow, marginBottom: 18,
-};
-
-export const btnGhost = {
-  background: C.redLight, color: C.red, border: "none", borderRadius: 8,
-  padding: "7px 16px", fontSize: 13, fontWeight: 600,
-  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
-};
-
-export const btnDanger = {
-  background: "transparent", color: "#b91c1c", border: "1px solid #fca5a5",
-  borderRadius: 8, padding: "5px 12px", fontSize: 12,
-  fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
-};
+// Gone. `C`, `cardStyle`, `btnGhost` and `btnDanger` were a second, private
+// copy of the app's palette, kept in sync with styles/tokens.css by hand and
+// drifting from it. The steps draw with Tailwind tokens now, via the shared
+// components in components/ui (FormSection, ToggleCard, SummaryList, StepBar,
+// WizardNav). Colours belong in tokens.css.

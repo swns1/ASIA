@@ -32,20 +32,21 @@ import {
 } from "../api/householdApi";
 import { bulkCreateStudent } from "../api/studentApi";
 import { ConfirmDialog } from "../components/ui/Modal";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import Alert from "../components/ui/Alert";
+import StepBar from "../components/ui/StepBar";
+import WizardNav from "../components/ui/WizardNav";
 
 import {
-  STEPS, C, cardStyle,
+  STEPS,
   nullify, emptyStudent, emptyHousehold,
 } from "./student-form/formShapes";
 import {
-  StepBar,
   StudentStep, HouseholdStep, GuardiansStep, SiblingsStep, SchoolsStep,
   ReviewStep,
 } from "./student-form/StudentFormSteps";
-
-// ─── Documents step helpers (mirrors RequirementsPage design) ────────────────
-
-
 
 
 
@@ -589,7 +590,6 @@ export default function StudentFormPage() {
   };
 
   const isLastStep = step === STEPS.length - 1;
-
   const isFirstRender = useIsFirstRender();
 
   const dir = stepDir;
@@ -599,215 +599,125 @@ export default function StudentFormPage() {
     exit:   { x: dir * -32, opacity: 0 },
   };
 
-  const sideNavBtn = {
-    position: "absolute", top: "50%", transform: "translateY(-50%)",
-    width: 44, height: 44, borderRadius: "50%", border: "none",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    cursor: "pointer", fontSize: 20, fontWeight: 700, zIndex: 10,
-    boxShadow: "0 4px 16px rgba(224,49,49,0.18)", transition: "opacity .2s, box-shadow .2s",
-  };
+  // Why Submit is unavailable, said out loud under the button. This used to
+  // live in the floating chevron's `title`, where a touch user never saw it
+  // and a keyboard user had to hover to find out.
+  const submitHint = isLastStep && !isFormValid
+    ? (validate()?.message ?? "Fill in the required fields before submitting.")
+    : undefined;
+
+  const title = id ? "Edit Student" : "New Student Registration";
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, padding: "28px 20px", fontFamily: "'DM Sans', sans-serif" }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .req-doc-card:hover { box-shadow: 0 4px 20px rgba(224,49,49,0.10) !important; transform: translateY(-1px); }
-      `}</style>
-
-      <div style={{ maxWidth: 780, margin: "0 auto", position: "relative" }}>
-        {/* Header */}
-        <div style={{ marginBottom: 28 }}>
-          <motion.button
-            initial={isFirstRender ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.2, delay: isFirstRender ? 0.06 : 0 }}
-            whileHover={{ x: -2 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => setLeaveConfirm(true)}
-            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
-          >
-            ← Back to Students
-          </motion.button>
-          <motion.div
-            initial={isFirstRender ? { opacity: 0, y: 10 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
-            style={{ display: "flex", alignItems: "center", gap: 14 }}
-          >
-            <h2 style={{ margin: 0, fontSize: 28, color: C.dark }}>
-              {id ? "Edit Student" : "New Student Registration"}
-            </h2>
+    <div className="min-h-screen bg-neutral-50">
+      <PageHeader
+        title={title}
+        icon={id ? "ti-pencil" : "ti-user-plus"}
+        subtitle={id
+          ? "Update this student's record, household, guardians and school history."
+          : "Register a new student record. Enrollment into a school year comes next."}
+        // "Students" goes back to the list, but through Cancel's confirm
+        // rather than straight away, so a stray click can't drop a
+        // half-filled form. `to` is kept so the crumb still carries a real
+        // href for middle-click and "open in new tab".
+        breadcrumbs={[
+          { label: "Students", to: "/students", onClick: () => setLeaveConfirm(true) },
+          { label: title },
+        ]}
+        actions={
+          <>
             {import.meta.env.DEV && !id && (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={fillDevData}
                 title="Auto-fill all fields with random valid test data"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "6px 14px", borderRadius: 8, border: "1.5px dashed #6366f1",
-                  background: "#eef2ff", color: "#4338ca", fontSize: 12, fontWeight: 700,
-                  fontFamily: "'DM Sans', sans-serif", cursor: "pointer", letterSpacing: ".02em",
-                }}
               >
-                <i className="ti ti-bolt" style={{ fontSize: 13 }} />
-                Dev Fill
-              </button>
+                <i className="ti ti-bolt text-xs" aria-hidden="true" /> Dev Fill
+              </Button>
             )}
-          </motion.div>
-        </div>
+            <Button variant="secondary" onClick={() => setLeaveConfirm(true)}>
+              Cancel
+            </Button>
+          </>
+        }
+      />
 
-        {/* Step bar */}
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-4 px-4 py-6 sm:px-6">
         <motion.div
           initial={isFirstRender ? { opacity: 0, y: 8 } : false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
         >
-        <StepBar current={step} onStepClick={(i) => {
-          setStepDir(i > step ? 1 : -1);
-          prevStepRef.current = step;
-          setStep(i);
-        }} />
+          <StepBar
+            steps={STEPS}
+            current={step}
+            onStepClick={(i) => {
+              setStepDir(i > step ? 1 : -1);
+              prevStepRef.current = step;
+              setStep(i);
+            }}
+          />
         </motion.div>
 
-        {/* Error */}
         <AnimatePresence>
-        {error && (
-          <motion.div
-            key="error-banner"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            style={{ overflow: "hidden" }}
-          >
-          <div style={{
-            background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10,
-            padding: "12px 16px", fontSize: 13, color: "#b91c1c", marginBottom: 20,
-            display: "flex", alignItems: "flex-start", gap: 10,
-          }}>
-            <i className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }} />
-            <span style={{ flex: 1 }}>{error}</span>
-            <button
-              type="button"
-              onClick={() => setError("")}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", padding: 0, lineHeight: 1, flexShrink: 0 }}
-              title="Dismiss"
-            >
-              <i className="ti ti-x" style={{ fontSize: 14 }} />
-            </button>
-          </div>
-          </motion.div>
-        )}
+          {error && (
+            <Alert key="error-banner" variant="error" dismissible onDismiss={() => setError("")}>
+              {error}
+            </Alert>
+          )}
         </AnimatePresence>
 
-        {/* Step content with side nav buttons */}
-        <div style={{ position: "relative" }}>
-
-          {/* Previous button — left of card */}
-          <motion.button
-            whileHover={step !== 0 ? { scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.22)" } : {}}
-            whileTap={step !== 0 ? { scale: 0.92 } : {}}
-            transition={{ duration: 0.12 }}
-            onClick={prev}
-            disabled={step === 0}
-            type="button"
-            title="Previous"
-            style={{
-              ...sideNavBtn, left: -60,
-              background: step === 0 ? "#f3e8e8" : C.white,
-              color: step === 0 ? C.redMid : C.red,
-              opacity: step === 0 ? 0.4 : 1,
-              cursor: step === 0 ? "not-allowed" : "pointer",
-            }}
-          >
-            <i className="ti ti-chevron-left" />
-          </motion.button>
-
-          {/* Next / Submit button — right of card */}
-          <AnimatePresence mode="wait">
-          {isLastStep ? (
-            <motion.button
-              key="submit"
-              initial={{ scale: 0.88, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.88, opacity: 0 }}
-              whileHover={isFormValid && !loading ? { scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.28)" } : {}}
-              whileTap={isFormValid && !loading ? { scale: 0.92 } : {}}
-              transition={{ duration: 0.12 }}
-              onClick={handleSubmit}
-              disabled={loading || !isFormValid}
-              type="button"
-              title={
-                loading ? "Submitting…"
-                : !isFormValid ? (validate()?.message ?? "Fill in required fields before submitting")
-                : (id ? "Update Student" : "Submit Registration")
-              }
-              style={{
-                ...sideNavBtn, right: -60,
-                background: !isFormValid ? "#e0c8c8" : C.red,
-                color: "#fff",
-                opacity: loading ? 0.6 : 1,
-                cursor: (loading || !isFormValid) ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? <i className="ti ti-loader-2" style={{ animation: "spin 0.8s linear infinite" }} /> : <i className="ti ti-check" />}
-            </motion.button>
-          ) : (
-            <motion.button
-              key="next"
-              initial={{ scale: 0.88, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.88, opacity: 0 }}
-              whileHover={{ scale: 1.1, boxShadow: "0 8px 28px rgba(224,49,49,0.28)" }}
-              whileTap={{ scale: 0.92 }}
-              transition={{ duration: 0.12 }}
-              onClick={next}
-              type="button"
-              title="Next"
-              style={{ ...sideNavBtn, right: -60, background: C.red, color: "#fff" }}
-            >
-              <i className="ti ti-chevron-right" />
-            </motion.button>
-          )}
-          </AnimatePresence>
-
-          <motion.div
-            layout
-            initial={isFirstRender ? { opacity: 0, y: 16 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.22 : 0, layout: { duration: 0.28, ease: "easeOut" } }}
-            style={{ ...cardStyle, padding: 0, overflow: "hidden" }}
-          >
-            <div style={{ height: 4, background: "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-            <div style={{ overflow: "hidden" }}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                variants={stepVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.18, ease: "easeOut" }}
-                style={{ padding: "24px 28px" }}
-              >
-              {step === 0 && <StudentStep data={student} onChange={setStudent} />}
-              {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
-              {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
-              {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
-              {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
-              {step === 5 && (
-                <ReviewStep
-                  student={student} household={household}
-                  guardians={guardians} siblings={siblings} schools={schools}
-                />
-              )}
-              </motion.div>
-            </AnimatePresence>
+        <motion.div
+          layout
+          initial={isFirstRender ? { opacity: 0, y: 16 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", layout: { duration: 0.28, ease: "easeOut" } }}
+        >
+          <Card padding="none" className="overflow-hidden">
+            {/* min-h keeps the animated step from collapsing to ~0px while a
+                slide is mid-flight — overflow:hidden on a motion.div with no
+                explicit height clips its content otherwise. */}
+            <div className="min-h-[320px] overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={step}
+                  variants={stepVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="p-6"
+                >
+                  {step === 0 && <StudentStep data={student} onChange={setStudent} />}
+                  {step === 1 && <HouseholdStep data={household} onChange={setHousehold} />}
+                  {step === 2 && <GuardiansStep data={guardians} onChange={handleGuardiansChange} />}
+                  {step === 3 && <SiblingsStep data={siblings} onChange={handleSiblingsChange} />}
+                  {step === 4 && <SchoolsStep data={schools} onChange={handleSchoolsChange} />}
+                  {step === 5 && (
+                    <ReviewStep
+                      student={student} household={household}
+                      guardians={guardians} siblings={siblings} schools={schools}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
-          </motion.div>
-        </div>
-      </div>
+          </Card>
+        </motion.div>
 
+        <WizardNav
+          onBack={prev}
+          onNext={next}
+          onSubmit={handleSubmit}
+          isLastStep={isLastStep}
+          backDisabled={step === 0}
+          submitDisabled={!isFormValid}
+          loading={loading}
+          submitLabel={id ? "Update Student" : "Submit Registration"}
+          hint={submitHint}
+        />
+      </div>
 
       <AnimatePresence>
         {leaveConfirm && (

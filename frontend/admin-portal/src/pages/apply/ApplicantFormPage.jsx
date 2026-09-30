@@ -12,6 +12,8 @@ import toast from "react-hot-toast";
 
 import Button from "../../components/ui/Button";
 import Alert from "../../components/ui/Alert";
+import Card from "../../components/ui/Card";
+import WizardNav from "../../components/ui/WizardNav";
 import FullPageMessage from "../../components/ui/FullPageMessage";
 import { ConfirmDialog } from "../../components/ui/Modal";
 import { Field, Input, Select } from "../../components/FormField";
@@ -110,8 +112,8 @@ function ApplyingForStep({ data, onChange }) {
 
   return (
     <div>
-      <h2 className="mb-1 text-base font-bold text-[#1a0a0a]">What are you enrolling into?</h2>
-      <p className="mb-4 text-sm text-[#7a5050]">
+      <h2 className="mb-1 text-base font-bold text-neutral-900">What are you enrolling into?</h2>
+      <p className="mb-4 text-sm text-neutral-700">
         The school will confirm the section after reviewing this form.
       </p>
 
@@ -160,7 +162,7 @@ const CONFETTI = [
 function KioskSuccessScreen({ reference, countdown, onDone, kiosk }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="relative w-full max-w-md rounded-3xl border border-[#fde2de] bg-white p-9 text-center shadow-2xl">
+      <div className="relative w-full max-w-md rounded-3xl border border-brand-border-soft bg-white p-9 text-center shadow-2xl">
         <div className="pointer-events-none absolute left-1/2 top-16">
           {CONFETTI.map((c, i) => (
             <motion.span
@@ -194,16 +196,16 @@ function KioskSuccessScreen({ reference, countdown, onDone, kiosk }) {
           </svg>
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-[#1a0a0a]">Application submitted</h1>
+        <h1 className="text-2xl font-bold text-neutral-900">Application submitted</h1>
         {kiosk ? (
           <>
-            <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
-              Reference <strong className="text-[#1a0a0a]">{reference}</strong>. Please hand the device back to a staff
+            <p className="mt-2.5 text-base leading-relaxed text-neutral-700">
+              Reference <strong className="text-neutral-900">{reference}</strong>. Please hand the device back to a staff
               member, who will review your application and follow up with next steps.
             </p>
 
             <div className="mt-6 flex flex-col items-center gap-2">
-              <p className="text-xs font-semibold text-[#7a5050]">Returning to the start in {countdown}s…</p>
+              <p className="text-xs font-semibold text-neutral-700">Returning to the start in {countdown}s…</p>
               <div className="h-1 w-40 overflow-hidden rounded-full bg-[#fde2de]">
                 <div
                   className="h-full rounded-full bg-[#e03131] transition-[width] duration-1000 ease-linear"
@@ -214,8 +216,8 @@ function KioskSuccessScreen({ reference, countdown, onDone, kiosk }) {
             </div>
           </>
         ) : (
-          <p className="mt-2.5 text-base leading-relaxed text-[#7a5050]">
-            Reference <strong className="text-[#1a0a0a]">{reference}</strong>. The Registrar will review your
+          <p className="mt-2.5 text-base leading-relaxed text-neutral-700">
+            Reference <strong className="text-neutral-900">{reference}</strong>. The Registrar will review your
             application and follow up with next steps. You can keep this screen as proof, then close this page.
           </p>
         )}
@@ -541,7 +543,7 @@ export default function ApplicantFormPage() {
   const stepId = APPLICANT_STEPS[step].id;
 
   return (
-    <div className="applicant-form min-h-screen w-full" style={{ background: "#fff8f6" }}>
+    <div className="applicant-form min-h-screen w-full bg-brand-50">
       <style>{`
         /* Touch-scale overrides for a shared, standing-height device.
            A scoped block rather than a Field size prop — Field's label is
@@ -558,17 +560,17 @@ export default function ApplicantFormPage() {
 
       {phase === "gate" && (
         <div className="flex min-h-screen items-center justify-center p-6">
-          <div className="w-full max-w-md rounded-3xl border border-[#fde2de] bg-white p-9 shadow-2xl">
+          <div className="w-full max-w-md rounded-3xl border border-brand-border-soft bg-white p-9 shadow-2xl">
             <div
               className="mb-6 text-center cursor-default select-none"
               onClick={handleHeaderTap}
               title=""
             >
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fff0f0]">
-                <i className="ti ti-school text-2xl text-[#e03131]" aria-hidden="true" />
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100">
+                <i className="ti ti-school text-2xl text-brand-500" aria-hidden="true" />
               </div>
-              <h1 className="text-xl font-bold text-[#1a0a0a]">Student Information Form</h1>
-              <p className="mt-1.5 text-sm text-[#7a5050]">
+              <h1 className="text-xl font-bold text-neutral-900">Student Information Form</h1>
+              <p className="mt-1.5 text-sm text-neutral-700">
                 Enter the access code a staff member gave you to begin.
               </p>
             </div>
@@ -582,7 +584,7 @@ export default function ApplicantFormPage() {
                   autoComplete="off"
                   autoCapitalize="characters"
                   autoFocus
-                  style={{ letterSpacing: "0.15em", textAlign: "center", fontSize: "1.25rem", fontWeight: 700 }}
+                  className="text-center text-xl font-bold tracking-[0.15em]"
                 />
               </Field>
               <Button type="submit" fullWidth loading={gateBusy} disabled={!code.trim()} className="mt-2">
@@ -590,7 +592,7 @@ export default function ApplicantFormPage() {
               </Button>
             </form>
 
-            <p className="mt-6 text-center text-xs text-[#7a5050]">
+            <p className="mt-6 text-center text-xs text-neutral-700">
               Don't have a code? Ask the school's front desk for help.
             </p>
           </div>
@@ -613,16 +615,16 @@ export default function ApplicantFormPage() {
       {phase === "form" && (
         <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
           <div className="mb-6 text-center" onClick={handleHeaderTap}>
-            <h1 className="text-lg font-bold text-[#1a0a0a]">Student Information Form</h1>
-            {applicantName && <p className="text-sm text-[#7a5050]">{applicantName}</p>}
-            {schoolYear && <p className="text-xs text-[#7a5050]">Applying for S.Y. {schoolYear}</p>}
+            <h1 className="text-lg font-bold text-neutral-900">Student Information Form</h1>
+            {applicantName && <p className="text-sm text-neutral-700">{applicantName}</p>}
+            {schoolYear && <p className="text-xs text-neutral-700">Applying for S.Y. {schoolYear}</p>}
           </div>
 
           <StepBar current={step} onStepClick={setStep} size="lg" steps={APPLICANT_STEPS} />
 
-          <div className="mb-3 flex items-center justify-end gap-1.5 text-xs text-[#7a5050]" aria-live="polite">
+          <div className="mb-3 flex items-center justify-end gap-1.5 text-xs text-neutral-700" aria-live="polite">
             {saveState === "saving" && (<><i className="ti ti-loader-2 animate-spin" /> Saving…</>)}
-            {saveState === "saved" && (<><i className="ti ti-check text-[#2e7d32]" /> Saved</>)}
+            {saveState === "saved" && (<><i className="ti ti-check text-success-500" /> Saved</>)}
           </div>
 
           {saveState === "error" && (
@@ -634,7 +636,7 @@ export default function ApplicantFormPage() {
             </div>
           )}
 
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fde2de", padding: "24px 28px", boxShadow: "0 4px 24px rgba(224,49,49,0.10)" }}>
+          <Card padding="none" className="p-6 sm:px-7">
             <AnimatePresence mode="wait">
               <motion.div
                 key={stepId}
@@ -646,7 +648,7 @@ export default function ApplicantFormPage() {
                 {stepId === "student" && (
                   <>
                     <ApplyingForStep data={applyingFor} onChange={setApplyingFor} />
-                    <div className="my-6 border-t border-[#fde2de]" />
+                    <div className="my-6 border-t border-brand-border-soft" />
                     <StudentStep data={student} onChange={setStudent} showStatus={false} lrnRequired={false} />
                   </>
                 )}
@@ -659,9 +661,9 @@ export default function ApplicantFormPage() {
                     {/* Not folded into ReviewStep: that component is shared
                         with the staff student form, which has nothing to do
                         with enrolling into a grade. */}
-                    <div className="mb-5 rounded-xl border border-[#fde2de] bg-[#fff8f6] px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#7a5050]">Enrolling into</p>
-                      <p className="mt-0.5 text-sm font-semibold text-[#1a0a0a]">
+                    <div className="mb-5 rounded-xl border border-brand-border-soft bg-brand-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-700">Enrolling into</p>
+                      <p className="mt-0.5 text-sm font-semibold text-neutral-900">
                         {applyingFor.grade_level || "Not selected"}
                         {applyingFor.strand ? ` — ${applyingFor.strand}` : ""}
                       </p>
@@ -670,14 +672,14 @@ export default function ApplicantFormPage() {
                       student={student} household={household} guardians={guardians}
                       siblings={siblings} schools={schools}
                     />
-                    <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[#fde2de] p-4">
+                    <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-brand-border-soft p-4">
                       <input
                         type="checkbox"
                         checked={confirmed}
                         onChange={(e) => setConfirmed(e.target.checked)}
-                        style={{ marginTop: 3, width: 20, height: 20, flexShrink: 0 }}
+                        className="mt-[3px] h-5 w-5 shrink-0"
                       />
-                      <span className="text-sm text-[#1a0a0a]">
+                      <span className="text-sm text-neutral-900">
                         I confirm the information above is accurate to the best of my knowledge.
                       </span>
                     </label>
@@ -686,26 +688,22 @@ export default function ApplicantFormPage() {
                 )}
               </motion.div>
             </AnimatePresence>
-          </div>
+          </Card>
 
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <Button variant="secondary" onClick={prev} disabled={step === 0}>
-              <i className="ti ti-chevron-left" /> Back
-            </Button>
-            {isLastStep ? (
-              <Button onClick={handleSubmit} loading={submitting} disabled={!confirmed}>
-                Submit Application <i className="ti ti-send" />
-              </Button>
-            ) : (
-              <Button onClick={next}>
-                Next <i className="ti ti-chevron-right" />
-              </Button>
-            )}
-          </div>
-
-          {validationError && step === APPLICANT_STEPS.length - 1 && (
-            <p className="mt-2 text-right text-xs text-[#c62828]">{validationError}</p>
-          )}
+          <WizardNav
+            className="mt-5"
+            onBack={prev}
+            onNext={next}
+            onSubmit={handleSubmit}
+            isLastStep={isLastStep}
+            backDisabled={step === 0}
+            submitDisabled={!confirmed}
+            loading={submitting}
+            submitLabel="Submit Application"
+            submitIcon="ti-send"
+            hint={isLastStep ? validationError : undefined}
+            hintTone="error"
+          />
         </div>
       )}
 

@@ -169,7 +169,8 @@ describe("Editing a student who has no household yet", { timeout: 20_000 }, () =
     });
     fireEvent.change(arrangement, { target: { name: "living_arrangement", value: "both_parents" } });
     fireEvent.click(screen.getByTitle("Go to Review"));
-    fireEvent.click(await screen.findByTitle("Update Student"));
+    // Submit carries a visible label now, not a tooltip on a bare chevron.
+    fireEvent.click(await screen.findByRole("button", { name: /Update Student/i }));
 
     await waitFor(() => expect(api.updateStudent).toHaveBeenCalledTimes(2));
     const [, link] = api.updateStudent.mock.calls[1];

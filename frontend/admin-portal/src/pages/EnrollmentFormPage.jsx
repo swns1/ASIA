@@ -1246,9 +1246,14 @@ export default function EnrollmentFormPage() {
         title={title}
         icon={isEdit ? "ti-pencil" : "ti-clipboard-plus"}
         subtitle={isEdit ? "Update class assignment, status, or term details." : "Enroll an existing student into a school year and section."}
-        // "Enrollments" is deliberately not a link: leaving goes through
-        // Cancel's confirm, so a stray click can't drop a half-filled form.
-        breadcrumbs={[{ label: "Enrollments" }, { label: title }]}
+        // "Enrollments" goes back to the list, but through Cancel's confirm
+        // rather than straight away, so a stray click can't drop a
+        // half-filled form. `to` is kept so the crumb still carries a real
+        // href for middle-click and "open in new tab".
+        breadcrumbs={[
+          { label: "Enrollments", to: "/enrollments", onClick: () => setLeaveConfirm(true) },
+          { label: title },
+        ]}
         actions={
           <Button variant="secondary" onClick={() => setLeaveConfirm(true)}>
             Cancel
