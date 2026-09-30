@@ -5,7 +5,8 @@
  * Pinned: which years it opens on (and that the URL can pick others), that a
  * year can be added or taken off, that a figure the server can't give reads
  * as "—" rather than 0, that fees line up by grade, and that billing failing
- * doesn't take the rest of the page with it.
+ * doesn't take the rest of the page with it. Then the charts, which it opens
+ * on: the view switch, the trend tiles, the learner bridge and its pairs.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
@@ -66,6 +67,9 @@ const FEES = {
     { grade_level: "Kindergarten", grand_total: "18000.00" },
   ],
 };
+
+// The tables are a click away from the charts the page opens on.
+const TABLES = "/school-years/compare?view=tables";
 
 function renderAt(url = "/school-years/compare") {
   return render(
@@ -128,7 +132,7 @@ describe("SchoolYearComparePage", () => {
   });
 
   it("shows each year's figure and its change from the year before", async () => {
-    renderAt();
+    renderAt(TABLES);
     const learners = await rowOf("Learners by year", "Learners");
     await waitFor(() => expect(within(learners).getByText("120")).toBeTruthy());
     expect(within(learners).getByText("+20")).toBeTruthy();   // 100 -> 120
@@ -139,7 +143,7 @@ describe("SchoolYearComparePage", () => {
   });
 
   it("reads a figure the server can't give as a dash, not a zero", async () => {
-    renderAt();
+    renderAt(TABLES);
     const cameBack = await rowOf("Learners by year", "Came back the next year");
     await waitFor(() => expect(within(cameBack).getAllByText("90.0%")).toHaveLength(2));
     expect(within(cameBack).getAllByText("45 of 50")).toHaveLength(2);
@@ -175,7 +179,7 @@ describe("SchoolYearComparePage", () => {
   });
 
   it("lines fees up by grade, in grade order, with the change in pesos and percent", async () => {
-    renderAt();
+    renderAt(TABLES);
     const kinder = await rowOf("Fees by grade and year", "Kindergarten");
     const grade1 = await rowOf("Fees by grade and year", "Grade 1");
     // Fees table: Kindergarten sorts before Grade 1.
@@ -187,7 +191,7 @@ describe("SchoolYearComparePage", () => {
 
   it("keeps learners and grades when billing can't be reached", async () => {
     api.getFinancialSummary.mockRejectedValue(new Error("Network Error"));
-    renderAt();
+    renderAt(TABLES);
     const learners = await rowOf("Learners by year", "Learners");
     await waitFor(() => expect(within(learners).getByText("120")).toBeTruthy());
     expect(await screen.findAllByText(/billing figures/)).not.toHaveLength(0);
@@ -198,5 +202,114 @@ describe("SchoolYearComparePage", () => {
     renderAt();
     expect(await screen.findByText("No school years yet")).toBeTruthy();
     expect(api.compareSchoolYears).not.toHaveBeenCalled();
+  });
+});
+
+describe("SchoolYearComparePage — charts", () => {
+  // yearData is only as consistent as the tables need. The learner bridge
+  // needs the server's arithmetic: whoever "came back" from one year is
+  // among the next year's returning learners.
+  const CONSISTENT = {
+    "2024-2025": { came_back: { count: 80, of: 88 } },   // 90 learners, 2 transferred out
+    "2025-2026": { came_back: { count: 95, of: 98 } },   // 100 learners: 80 returning + 20 new
+    "2026-2027": { new: 25, returning: 95 },             // 120 learners
+  };
+  const consistentYear = (label) => {
+    const y = yearData(label);
+    return { ...y, enrollment: { ...y.enrollment, ...CONSISTENT[label] } };
+  };
+  const views = () => screen.getByRole("group", { name: "View" });
+  const pressed = (group, name) => within(group).getByRole("button", { name }).getAttribute("aria-pressed");
+
+  beforeEach(() => {
+    api.compareSchoolYears.mockImplementation((years) => Promise.resolve({ years: years.map(consistentYear) }));
+  });
+
+  it("opens on the charts, and the view switch swaps in the tables", async () => {
+    renderAt();
+    expect(pressed(views(), "Charts")).toBe("true");
+    expect(await screen.findByText("Elementary added the most learners between S.Y. 2024-2025 and 2026-2027 (+30).")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Learners by year" })).toBeNull();
+
+    fireEvent.click(within(views()).getByRole("button", { name: "Tables" }));
+    expect(await screen.findByRole("table", { name: "Learners by year" })).toBeTruthy();
+    expect(pressed(views(), "Tables")).toBe("true");
+    expect(screen.queryByText(/added the most learners/)).toBeNull();
+  });
+
+  it("keeps the view when a year is added", async () => {
+    renderAt(TABLES);
+    const chooser = await screen.findByRole("group", { name: "School years to compare" });
+    await screen.findByRole("table", { name: "Learners by year" });
+
+    fireEvent.click(within(chooser).getByRole("button", { name: /2027-2028/ }));
+    await waitFor(() => expect(lastCall()).toEqual(["2024-2025", "2025-2026", "2026-2027", "2027-2028"]));
+    expect(screen.getByRole("table", { name: "Learners by year" })).toBeTruthy();
+    expect(pressed(views(), "Tables")).toBe("true");
+  });
+
+  it("tiles the latest year's figures with their change and trend", async () => {
+    renderAt();
+    expect(await screen.findByText("+20 from S.Y. 2025-2026")).toBeTruthy();   // learners 100 -> 120
+    // Average, attendance and collection rate hold still.
+    await waitFor(() => expect(screen.getAllByText("No change from S.Y. 2025-2026")).toHaveLength(3));
+    expect(screen.getAllByText("S.Y. 2026-2027 · trend across 3 years")).toHaveLength(4);
+  });
+
+  it("captions each chart with what its figures say", async () => {
+    renderAt();
+    expect(await screen.findByText("1 section in S.Y. 2026-2027 still needs an adviser.")).toBeTruthy();
+    expect(screen.getByText(
+      'Scale runs 85–100%. "Came back" needs the following year, so S.Y. 2026-2027 has no point yet. '
+      + "S.Y. 2026-2027 is still running, so its passing rate counts grades recorded so far.",
+    )).toBeTruthy();
+    expect(await screen.findByText("S.Y. 2026-2027 is still collecting: ₱20,000.00 is outstanding so far.")).toBeTruthy();
+    expect(screen.getByText("No grade has a fee in both S.Y. 2024-2025 and 2026-2027.")).toBeTruthy();
+  });
+
+  it("walks one year's learners to the next, the latest pair first", async () => {
+    renderAt();
+    expect(await screen.findByText(
+      "95 of 98 learners who finished S.Y. 2025-2026 came back (96.9%). With 25 new learners, S.Y. 2026-2027 is up 20.",
+    )).toBeTruthy();
+    const pairs = screen.getByRole("group", { name: "Years to show" });
+    expect(pressed(pairs, "2025-26 → 2026-27")).toBe("true");
+
+    fireEvent.click(within(pairs).getByRole("button", { name: "2024-25 → 2025-26" }));
+    expect(await screen.findByText(
+      "80 of 88 learners who finished S.Y. 2024-2025 came back (90.9%). With 20 new learners, S.Y. 2025-2026 is up 10.",
+    )).toBeTruthy();
+  });
+
+  it("puts the bridge back on the latest pair once a year of its pair is taken off", async () => {
+    renderAt();
+    fireEvent.click(within(await screen.findByRole("group", { name: "Years to show" }))
+      .getByRole("button", { name: "2024-25 → 2025-26" }));
+    const chooser = screen.getByRole("group", { name: "School years to compare" });
+
+    fireEvent.click(within(chooser).getByRole("button", { name: /2024-2025/ }));
+    await waitFor(() => expect(lastCall()).toEqual(["2025-2026", "2026-2027"]));
+    fireEvent.click(within(chooser).getByRole("button", { name: /2024-2025/ }));
+    await waitFor(() => expect(lastCall()).toEqual(["2024-2025", "2025-2026", "2026-2027"]));
+
+    // Both pairs are back, but the pick went with its year.
+    const pairs = await screen.findByRole("group", { name: "Years to show" });
+    await waitFor(() => expect(within(pairs).getAllByRole("button")).toHaveLength(2));
+    expect(pressed(pairs, "2025-26 → 2026-27")).toBe("true");
+  });
+
+  it("asks for neighbouring years when no two picked years are", async () => {
+    renderAt("/school-years/compare?years=2023-2024,2025-2026");
+    expect(await screen.findByText("Pick two neighbouring years to see how one became the next.")).toBeTruthy();
+  });
+
+  it("keeps the learner charts when billing can't be reached", async () => {
+    api.getFinancialSummary.mockRejectedValue(new Error("Network Error"));
+    renderAt();
+    expect(await screen.findByText(/added the most learners/)).toBeTruthy();
+    // Collected against billed, and fees by grade, say what failed ...
+    expect(await screen.findAllByText(/billing figures/)).toHaveLength(2);
+    // ... and so does the collection-rate tile, without a figure.
+    expect(screen.getByText("Couldn't be loaded")).toBeTruthy();
   });
 });

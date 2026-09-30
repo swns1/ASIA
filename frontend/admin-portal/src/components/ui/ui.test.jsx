@@ -9,6 +9,7 @@ import Table, { TableRow, TableCell } from "./Table";
 import Modal from "./Modal";
 import { StatusBadge } from "./Badge";
 import ChipGroup from "./ChipGroup";
+import SegmentedControl from "./SegmentedControl";
 import { Field, Input, Textarea } from "../FormField";
 import { STUDENT_STATUS_MAP } from "../../constants/statusMaps";
 
@@ -265,5 +266,22 @@ describe("ChipGroup", () => {
     expect(alpha.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(beta);
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("SegmentedControl", () => {
+  const OPTIONS = [
+    { value: "charts", label: "Charts", icon: "ti-chart-bar" },
+    { value: "tables", label: "Tables", icon: "ti-table" },
+  ];
+
+  it("marks the chosen option pressed and reports a new choice", () => {
+    const onChange = vi.fn();
+    render(<SegmentedControl label="View" options={OPTIONS} value="charts" onChange={onChange} />);
+    expect(screen.getByRole("group", { name: "View" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Charts" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Tables" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Tables" }));
+    expect(onChange).toHaveBeenCalledWith("tables");
   });
 });

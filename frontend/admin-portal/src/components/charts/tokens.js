@@ -22,6 +22,7 @@ const FALLBACKS = {
   "--color-neutral-50":  "#fdf8f6",
   "--color-neutral-200": "#f5eaea",
   "--color-neutral-300": "#f0e4e4",
+  "--color-neutral-400": "#cbb3b3",
   "--color-neutral-500": "#8a6a6a",
   "--color-neutral-600": "#855c5c",
   "--color-neutral-700": "#7a5050",
@@ -36,6 +37,12 @@ const FALLBACKS = {
   "--color-warning-500": "#854f0b",
   "--color-error-500":   "#9b2020",
   "--color-info-500":    "#1455a0",
+  // School levels: categorical, one hue each (see tokens.css).
+  "--color-nursery-500":      "#854f0b",
+  "--color-kindergarten-500": "#7c3aed",
+  "--color-elementary-500":   "#2563eb",
+  "--color-juniorhigh-500":   "#2e6b0d",
+  "--color-seniorhigh-500":   "#be185d",
 };
 
 const cache = new Map();

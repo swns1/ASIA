@@ -7,60 +7,50 @@ import Alert from "../components/ui/Alert";
 import ErrorState from "../components/ui/ErrorState";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
-import { defaultCompareYears } from "../components/schoolYears/yearHelpers";
+import SegmentedControl from "../components/ui/SegmentedControl";
+import CompareCharts from "../components/charts/compare/CompareCharts";
+import { defaultCompareYears, previousLabel } from "../components/schoolYears/yearHelpers";
+import { KINDS, changeBetween, fmtCount, num, share } from "../components/schoolYears/compareFigures";
 import { SCHOOL_YEAR_STATE_MAP } from "../constants/statusMaps";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
 import { GRADE_ORDER } from "../utils/grading";
-import { peso } from "../utils/format";
 import { listRegisteredSchoolYears, compareSchoolYears } from "../api/enrollmentApi";
 import { getFinancialSummary, getFeeSchedules } from "../api/billingApi";
 
 // Compare School Years — up to five registered years side by side, oldest on
-// the left, each column showing its change from the one before it.
+// the left, each column showing its change from the one before it. Charts
+// (the default) or Tables, from the same figures.
 //
 // Learners, classes, grades and attendance come from one enrollment-service
 // request (/school-years/compare/, which says what each number counts);
 // money and fees from billing, one request per year. The two load and fail
 // separately, so a billing hiccup leaves the rest of the page readable.
 //
-// The picked years live in the URL (?years=2025-2026,2026-2027), so a
-// comparison can be bookmarked or sent to someone.
+// The picked years and the view live in the URL
+// (?years=2025-2026,2026-2027&view=tables), so a comparison can be
+// bookmarked or sent to someone and open the way it was sent.
 
 const MAX_YEARS = 5;
+
+const VIEWS = [
+  { value: "charts", label: "Charts", icon: "ti-chart-bar" },
+  { value: "tables", label: "Tables", icon: "ti-table" },
+];
 
 // ── Values and changes ──────────────────────────────────────────────────────
 // Changes are neutral grey on purpose: more learners is good, more money
 // outstanding isn't, and a colour meaning "good" on one row and "bad" on the
 // next reads worse than none.
-const fmtCount = (n) => Number(n).toLocaleString("en-PH");
-const fmtOne = (n) => Number(n).toFixed(1);
-const share = (part, whole) => (whole ? (part * 100) / whole : null);
-const num = (v) => (v == null || v === "" ? null : Number(v));
-
-const KINDS = {
-  count:   { value: fmtCount,               change: (d) => fmtCount(Math.abs(d)),         same: 0 },
-  average: { value: fmtOne,                 change: (d) => fmtOne(Math.abs(d)),           same: 0.05 },
-  percent: { value: (n) => `${fmtOne(n)}%`, change: (d) => `${fmtOne(Math.abs(d))} pts`,  same: 0.05 },
-  money:   { value: peso,                   change: (d) => peso(Math.abs(d)),             same: 0.005 },
-  // A fee reads better with its percentage: "₱2,000.00 (5.0%)".
-  fee: {
-    value: peso,
-    change: (d, before) => `${peso(Math.abs(d))}${before ? ` (${fmtOne(Math.abs(d) * 100 / before)}%)` : ""}`,
-    same: 0.005,
-  },
-};
-
 function Change({ value, before, kind, since }) {
-  if (value == null || before == null) return null;
-  const d = value - before;
-  const k = KINDS[kind];
-  if (Math.abs(d) < k.same || d === 0) {
+  const change = changeBetween(value, before, kind);
+  if (!change) return null;
+  if (change.direction === "same") {
     return <div className="mt-0.5 text-[11.5px] text-neutral-400">No change</div>;
   }
   return (
     <div className="mt-0.5 inline-flex items-center gap-0.5 text-[11.5px] text-neutral-500">
-      <i className={`ti ${d > 0 ? "ti-arrow-up-right" : "ti-arrow-down-right"}`} aria-hidden="true" />
-      <span>{d > 0 ? "+" : "−"}{k.change(d, before)}</span>
+      <i className={`ti ${change.direction === "up" ? "ti-arrow-up-right" : "ti-arrow-down-right"}`} aria-hidden="true" />
+      <span>{change.text}</span>
       <span className="sr-only"> from S.Y. {since}</span>
     </div>
   );
@@ -310,13 +300,27 @@ export default function SchoolYearComparePage() {
     return [...new Set(picked)].sort().slice(-MAX_YEARS);
   }, [searchParams, labels, current]);
   const key = selected.join(",");
+  const view = searchParams.get("view") === "tables" ? "tables" : "charts";
+  // The later year of the pair the learner bridge shows; null for its default.
+  const [bridgeTo, setBridgeTo] = useState(null);
+
+  // Each control writes its own part of the URL and keeps the rest: picking a
+  // year mustn't switch the view, nor the reverse.
+  const setParam = (name, value) => setSearchParams((params) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(name, value);
+    else next.delete(name);
+    return next;
+  }, { replace: true });
 
   const toggle = (label) => {
     const next = selected.includes(label)
       ? selected.filter((y) => y !== label)
       : [...selected, label].sort();
     if (!next.length || next.length > MAX_YEARS) return;
-    setSearchParams({ years: next.join(",") }, { replace: true });
+    // Taking off either year of the bridge's pair puts it back to its default.
+    if (bridgeTo && !(next.includes(bridgeTo) && next.includes(previousLabel(bridgeTo)))) setBridgeTo(null);
+    setParam("years", next.join(","));
   };
 
   // Only the latest pick's answers land: switching years quickly mustn't let
@@ -385,6 +389,13 @@ export default function SchoolYearComparePage() {
     errorSubject: "billing figures",
   };
   const fees = feeRows(years, (y) => billing.fees[y]);
+  // The charts read the same answers the tables do, one source per chart.
+  const billingState = { loading: billingLoading, error: billing.error, onRetry: billingProps.onRetry };
+  const sources = {
+    school: { get: getSchool, loading: schoolLoading, error: school.error, onRetry: schoolProps.onRetry },
+    money: { ...billingState, get: (y) => billing.money[y] },
+    fees: { ...billingState, get: (y) => billing.fees[y] },
+  };
 
   return (
     <>
@@ -393,6 +404,14 @@ export default function SchoolYearComparePage() {
         icon="ti-arrows-left-right"
         breadcrumbs={breadcrumbs}
         subtitle={`Up to ${MAX_YEARS} years side by side. Each year shows its change from the one to its left.`}
+        actions={
+          <SegmentedControl
+            label="View"
+            options={VIEWS}
+            value={view}
+            onChange={(v) => setParam("view", v === "tables" ? "tables" : null)}
+          />
+        }
       />
 
       <div className="relative flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
@@ -411,32 +430,44 @@ export default function SchoolYearComparePage() {
               )}
             </Card>
 
-            <Panel title="Learners" icon="ti-users" padding="none">
-              <CompareTable caption="Learners by year" rows={learnerRows(years, getSchool)} {...schoolProps} />
-            </Panel>
+            {view === "charts" ? (
+              <CompareCharts
+                years={years}
+                states={states}
+                sources={sources}
+                bridgeTo={bridgeTo}
+                onBridgeTo={setBridgeTo}
+              />
+            ) : (
+              <>
+                <Panel title="Learners" icon="ti-users" padding="none">
+                  <CompareTable caption="Learners by year" rows={learnerRows(years, getSchool)} {...schoolProps} />
+                </Panel>
 
-            <Panel title="Classes" icon="ti-school" padding="none">
-              <CompareTable caption="Classes by year" rows={classRows(getSchool)} {...schoolProps} />
-            </Panel>
+                <Panel title="Classes" icon="ti-school" padding="none">
+                  <CompareTable caption="Classes by year" rows={classRows(getSchool)} {...schoolProps} />
+                </Panel>
 
-            <Panel title="Grades and attendance" icon="ti-certificate" padding="none">
-              <CompareTable caption="Grades and attendance by year" rows={academicRows(getSchool)} {...schoolProps} />
-            </Panel>
+                <Panel title="Grades and attendance" icon="ti-certificate" padding="none">
+                  <CompareTable caption="Grades and attendance by year" rows={academicRows(getSchool)} {...schoolProps} />
+                </Panel>
 
-            <Panel title="Money" icon="ti-cash" subtitle="Invoices for each year's enrollments, as of today" padding="none">
-              <CompareTable caption="Money by year" rows={moneyRows((y) => billing.money[y])} {...billingProps} />
-            </Panel>
+                <Panel title="Money" icon="ti-cash" subtitle="Invoices for each year's enrollments, as of today" padding="none">
+                  <CompareTable caption="Money by year" rows={moneyRows((y) => billing.money[y])} {...billingProps} />
+                </Panel>
 
-            <Panel title="Fees by grade" icon="ti-receipt" subtitle="Each grade's total fees for the year" padding="none">
-              {!billingLoading && !billing.error && fees.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-neutral-500">
-                  None of these years has a fee schedule yet. They're set up under{" "}
-                  <Link to="/settings?tab=fees" className="font-semibold text-brand-600 underline underline-offset-2">Billing Settings</Link>.
-                </p>
-              ) : (
-                <CompareTable caption="Fees by grade and year" rows={fees} {...billingProps} />
-              )}
-            </Panel>
+                <Panel title="Fees by grade" icon="ti-receipt" subtitle="Each grade's total fees for the year" padding="none">
+                  {!billingLoading && !billing.error && fees.length === 0 ? (
+                    <p className="px-5 py-4 text-sm text-neutral-500">
+                      None of these years has a fee schedule yet. They're set up under{" "}
+                      <Link to="/settings?tab=fees" className="font-semibold text-brand-600 underline underline-offset-2">Billing Settings</Link>.
+                    </p>
+                  ) : (
+                    <CompareTable caption="Fees by grade and year" rows={fees} {...billingProps} />
+                  )}
+                </Panel>
+              </>
+            )}
           </>
         )}
       </div>
