@@ -6,9 +6,9 @@ import { columnPath } from "../geometry";
 import { chartInk, token } from "../tokens";
 import { fmtOne, num, pesoCompact, share, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
-import ColumnPlot from "./ColumnPlot";
-import Legend from "./Legend";
-import { linearAxis } from "./scale";
+import ColumnPlot from "../ColumnPlot";
+import Legend from "../Legend";
+import { linearAxis } from "../scale";
 
 // 1e — what each year billed and how much of it has come in. The whole column
 // is the bill; the collected part fills it from the bottom, so the pale part

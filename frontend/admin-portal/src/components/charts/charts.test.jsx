@@ -177,6 +177,33 @@ describe("StackedBar", () => {
     { key: "high", label: "Needs attention", value: 2, color: "#ec835a" },
   ];
 
+  describe("across a whole page", () => {
+    // jsdom can't measure: stand in a ResizeObserver reporting a 1,100px card.
+    const original = globalThis.ResizeObserver;
+    beforeEach(() => {
+      globalThis.ResizeObserver = class {
+        constructor(callback) { this.callback = callback; }
+        observe() { this.callback([{ contentRect: { width: 1100, height: 100 } }]); }
+        disconnect() {}
+      };
+    });
+    afterEach(() => { globalThis.ResizeObserver = original; });
+
+    it("draws at the width it's given and keeps its height, when measured", async () => {
+      const { container } = render(<StackedBar segments={segs} title="t" height={100} measured />);
+      await waitFor(() => expect(container.querySelector("svg").getAttribute("viewBox")).toBe("0 0 1100 100"));
+      // The segments share the measured width, not the fixed 760: 6 of 8 is
+      // 825px, drawn as 2px of gap, a 4px rounded end, and the straight run.
+      const runs = [...container.querySelectorAll("path")].map((p) => Number(p.getAttribute("d").match(/h ([\d.]+)/)[1]));
+      expect(Math.round(runs[0] + 4 + 2)).toBe(825);
+    });
+
+    it("keeps its fixed, scaled viewBox otherwise", () => {
+      const { container } = render(<StackedBar segments={segs} title="t" height={100} />);
+      expect(container.querySelector("svg").getAttribute("viewBox")).toBe("0 0 760 100");
+    });
+  });
+
   it("renders one mark per non-zero segment", () => {
     const { container } = render(<StackedBar segments={segs} title="Risk mix" />);
     expect(container.querySelectorAll("path")).toHaveLength(2);

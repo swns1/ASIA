@@ -7,9 +7,9 @@ import { NoData } from "../ChartFrame";
 import useElementSize from "../useElementSize";
 import { fmtOne, num, pesoCompact, pesoWhole, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
-import Legend from "./Legend";
+import Legend from "../Legend";
 import { FEE_RANGE, yearRamp } from "./palette";
-import { niceStep } from "./scale";
+import { niceStep } from "../scale";
 
 // 1g — every grade's total fee as one dot per year on a shared peso scale, so
 // a grade's rise reads as how far its dots spread. Darker is later. On the

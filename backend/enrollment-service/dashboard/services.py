@@ -114,6 +114,26 @@ def shape_risk_bands(rows):
     }
 
 
+def shape_risk_by_level(rows):
+    """
+    rows: [{"school_level": "elementary", "risk_level": "high", "n": 3}, ...]
+
+    The same rollup as shape_risk_bands, once per school level, so the admin
+    home can show where the learners to follow up are concentrated. One entry
+    per level in SCHOOL_LEVELS order, every band zero-filled. A score whose
+    enrollment has no known level is left out here; the school-wide `bands`
+    still count it.
+    """
+    by_level = {level: [] for level in SCHOOL_LEVELS}
+    for row in rows:
+        if row["school_level"] in by_level:
+            by_level[row["school_level"]].append(row)
+    return [
+        {"level": level, "label": SCHOOL_LEVEL_LABELS[level], **shape_risk_bands(by_level[level])}
+        for level in SCHOOL_LEVELS
+    ]
+
+
 def shape_attendance_series(rows):
     """
     rows: [{"week": date(2025, 1, 6), "status": "P", "n": 412}, ...]

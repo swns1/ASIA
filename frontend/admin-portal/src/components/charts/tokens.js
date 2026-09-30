@@ -35,6 +35,7 @@ const FALLBACKS = {
   "--color-brand-600":   "#c92a2a",
   "--color-success-500": "#2e6b0d",
   "--color-warning-500": "#854f0b",
+  "--color-error-50":    "#fde8e8",
   "--color-error-500":   "#9b2020",
   "--color-info-500":    "#1455a0",
   // School levels: categorical, one hue each (see tokens.css).
@@ -90,6 +91,19 @@ export const chartInk = () => ({
   /** A threshold rule (passing mark, target). The only dashed line allowed. */
   threshold: token("--color-neutral-900"),
 });
+
+// ── School levels ───────────────────────────────────────────────────────────
+// Categorical: one hue per level, the one its filter chips use, so a level
+// reads the same in every chart that splits by level.
+const LEVEL_TOKENS = {
+  nursery: "--color-nursery-500",
+  kindergarten: "--color-kindergarten-500",
+  elementary: "--color-elementary-500",
+  junior_highschool: "--color-juniorhigh-500",
+  senior_highschool: "--color-seniorhigh-500",
+};
+
+export const levelColor = (level) => token(LEVEL_TOKENS[level]);
 
 // ── Mark geometry ───────────────────────────────────────────────────────────
 /** Surface gap between adjacent fills, so the background separates them. */

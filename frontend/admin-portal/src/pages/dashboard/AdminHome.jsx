@@ -7,13 +7,18 @@
 //   1. Start a task: find a student, enroll one, record a payment.
 //   2. Needs your attention: one row per queue with its own button, listing
 //      only queues that have something in them.
-//   3. Teachers today: a short preview (attendance taken, grades in, sections
-//      with no adviser). Clicking it opens every section with filters.
+//   3. Teachers today, beside it: one tile per section (attendance taken or
+//      not, no adviser) and grades in. Clicking it opens every section with
+//      filters.
 //   4. School at a glance: two headline numbers (present today, need
-//      follow-up), then this year against last for enrollees and for money
-//      (YearOverYear.jsx), with the year's Billing panel under the money one.
-//      No filter drawers; those stay on the list pages.
-//   5. Trends: the same three charts the staff dashboard uses.
+//      follow-up), then this year against last for enrollees and for
+//      collection pace (YearOverYear.jsx), with the year's Billing panel
+//      under the pair. No filter drawers; those stay on the list pages.
+//   5. Trends: learners to follow up by school level beside weekly
+//      attendance against target, then the enrollment pipeline.
+//
+// Two-card rows share one grid (TWO_UP): two equal columns where both fit,
+// one where they don't, and cards in a row end level.
 //
 // The page opens on the current school year, and the picker in the header can
 // switch it (next year during enrollment season, say). Every count follows the
@@ -39,8 +44,8 @@ import Meter from "../../components/charts/Meter";
 import { chartInk, token } from "../../components/charts/tokens";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import { Input } from "../../components/FormField";
-import { AttendanceBand, PipelineBand, RiskBand } from "./DashboardBands";
-import { BillingComparePanel, EnrolleesPanel } from "./YearOverYear";
+import { AttendanceTargetBand, PipelineBand, RiskByLevelBand } from "./DashboardBands";
+import { CollectionPacePanel, EnrolleesPanel } from "./YearOverYear";
 import useYearComparison from "./useYearComparison";
 
 import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api/enrollmentApi";
@@ -50,7 +55,14 @@ import { useSchoolYear } from "../../context/SchoolYearContext";
 import useYearFilter from "../../hooks/useYearFilter";
 import { getCurrentUser } from "../../utils/auth";
 import { pageVariants } from "../../utils/motion";
-import { attentionRows, dueLine, greeting, plural, sectionName, withYear } from "./adminHomeData";
+import {
+  attentionRows, dueLine, greeting, plural, sectionName, sectionShortName, sectionsByLevel, withYear,
+} from "./adminHomeData";
+
+// Two cards to a row: two equal columns while both get 420px or more, one
+// column below that -- and never three, however wide the screen. Cards in a
+// row stretch to the taller one's height.
+const TWO_UP = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,max(420px,calc(50%_-_8px))),1fr))] gap-4";
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -137,6 +149,9 @@ export default function AdminHome() {
         }
       />
 
+      {/* Every child of the scroller keeps its height (shrink-0), so the page
+          scrolls rather than squeezing a card -- a card that clips its
+          overflow would otherwise collapse to nothing. */}
       <motion.div
         variants={pageVariants.container}
         initial="hidden"
@@ -145,7 +160,7 @@ export default function AdminHome() {
       >
         <AnimatePresence>
           {partialError && !loading && (
-            <Alert variant="warning" title="Some of this page didn't load">
+            <Alert variant="warning" title="Some of this page didn't load" className="shrink-0">
               A few numbers may be missing.{" "}
               <button type="button" onClick={load} className="focus-ring rounded-sm font-semibold underline">
                 Try again
@@ -154,7 +169,7 @@ export default function AdminHome() {
           )}
         </AnimatePresence>
 
-        <motion.div variants={pageVariants.item}>
+        <motion.div variants={pageVariants.item} className="shrink-0">
           <QuickActions
             onFind={(term) => navigate(term ? `/students?search=${encodeURIComponent(term)}` : "/students")}
             onEnroll={() => navigate("/enrollments/new")}
@@ -162,7 +177,7 @@ export default function AdminHome() {
           />
         </motion.div>
 
-        <motion.div variants={pageVariants.item} className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+        <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
           <AttentionPanel data={data} loading={loading} schoolYear={year} onGo={navigate} />
           <TeachersTodayPreview
             teachers={teachers}
@@ -172,55 +187,60 @@ export default function AdminHome() {
           />
         </motion.div>
 
-        <motion.section variants={pageVariants.item} aria-labelledby="glance-heading" className="flex flex-col gap-3">
+        <motion.section
+          variants={pageVariants.item}
+          aria-labelledby="glance-heading"
+          className="flex shrink-0 flex-col gap-4"
+        >
           <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
           <Glance data={data} loading={loading} todayYear={todayYear} onGo={navigate} />
           {/* Both follow the page's year picker, so neither gets a year
               filter of its own; two year controls could disagree. Their links
               carry the year for the same reason every other link here does. */}
-          {/* Stretched, not items-start: both columns take the taller one's
-              height and their charts fill it, so the two end level. */}
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className={TWO_UP}>
             <EnrolleesPanel cmp={comparison} onGo={navigate} />
-            <div className="flex flex-col gap-3">
-              <BillingComparePanel
-                cmp={comparison}
-                showAmounts={showAmounts}
-                onToggleAmounts={() => setShowAmounts((v) => !v)}
-              />
-              {/* The year's own figures under the comparison. It reads the
-                  same summary, so a failed load shows once, above, with its
-                  retry -- not also here as a row of ₱0.00. No eye button of
-                  its own: the one above governs both. */}
-              {!comparison.money.error && (
-                <BillingPanel
-                  summary={comparison.money.current}
-                  loading={comparison.money.loading}
-                  schoolYear={year}
-                  showAmounts={showAmounts}
-                  onOpenInvoices={(link) => navigate(withYear(link, year))}
-                />
-              )}
-            </div>
+            <CollectionPacePanel
+              cmp={comparison}
+              today={now}
+              showAmounts={showAmounts}
+              onToggleAmounts={() => setShowAmounts((v) => !v)}
+            />
           </div>
+          {/* The year's own figures under the pair. It reads the same summary
+              as Collection pace, so a failed load shows once, there, with its
+              retry -- not also here as a row of ₱0.00. No eye button of its
+              own: the one on Collection pace governs both. */}
+          {!comparison.money.error && (
+            <BillingPanel
+              summary={comparison.money.current}
+              loading={comparison.money.loading}
+              schoolYear={year}
+              showAmounts={showAmounts}
+              onOpenInvoices={(link) => navigate(withYear(link, year))}
+            />
+          )}
         </motion.section>
 
-        <motion.section variants={pageVariants.item} aria-labelledby="trends-heading">
-          <h2 id="trends-heading" className="mb-2 text-sm font-bold text-neutral-900">Trends</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <PipelineBand pipeline={data.summary?.pipeline} loading={loading} schoolYear={year} compact />
-            <RiskBand
+        <motion.section
+          variants={pageVariants.item}
+          aria-labelledby="trends-heading"
+          className="flex shrink-0 flex-col gap-4"
+        >
+          <h2 id="trends-heading" className="text-sm font-bold text-neutral-900">Trends</h2>
+          <div className={TWO_UP}>
+            <RiskByLevelBand
               risk={data.summary?.risk}
               loading={loading}
-              compact
               onOpen={
                 <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/analytics")}>
                   Analytics
                 </Button>
               }
             />
-            <AttendanceBand series={data.summary?.attendance_series} loading={loading} compact />
+            <AttendanceTargetBand series={data.summary?.attendance_series} loading={loading} />
           </div>
+          {/* Full width, so drawn at its real size rather than scaled up. */}
+          <PipelineBand pipeline={data.summary?.pipeline} loading={loading} schoolYear={year} measured />
         </motion.section>
       </motion.div>
 
@@ -290,7 +310,14 @@ function AttentionPanel({ data, loading, schoolYear, onGo }) {
       : "Nothing is waiting on you";
 
   return (
-    <Panel title="Needs your attention" subtitle={subtitle} icon="ti-bell" padding="none">
+    <Panel
+      title="Needs your attention"
+      subtitle={subtitle}
+      icon="ti-bell"
+      padding="none"
+      className="min-w-0"
+      bodyClassName="flex flex-col"
+    >
       {loading ? (
         <div className="flex flex-col gap-3 p-5">
           {[0, 1, 2].map((i) => <Skeleton key={i} height={40} variant="pulse" />)}
@@ -303,14 +330,22 @@ function AttentionPanel({ data, loading, schoolYear, onGo }) {
           All caught up. New enrollments, applications and unpaid bills will show up here.
         </div>
       ) : (
-        <ul className="divide-y divide-neutral-200">
+        // Rows share out the height when Teachers today beside it is taller.
+        <ul className="flex flex-1 flex-col divide-y divide-neutral-200">
           {rows.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 px-5 py-3">
+            <li key={r.id} className="flex flex-1 items-center gap-3 px-5 py-3">
               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${ROW_TONES[r.tone]}`}>
                 <i className={`ti ${r.icon} text-lg`} aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-neutral-900">{r.text(r.count)}</span>
-              <Button variant="secondary" size="sm" onClick={() => onGo(r.to)} aria-label={`${r.action}: ${r.text(r.count)}`}>
+              {/* One width for "View" and "Review", so the buttons line up. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-w-[72px]"
+                onClick={() => onGo(r.to)}
+                aria-label={`${r.action}: ${r.text(r.count)}`}
+              >
                 {r.action}
               </Button>
             </li>
@@ -323,9 +358,10 @@ function AttentionPanel({ data, loading, schoolYear, onGo }) {
 
 // ── Teachers today ───────────────────────────────────────────────────────────
 //
-// A short preview on the page; everything else lives in the details window.
-// The long "not taken yet" list and the calendar reminder used to sit here,
-// which made this the tallest thing on the page.
+// A preview on the page; everything else lives in the details window. One
+// tile per section shows which sections still owe today's attendance, so the
+// admin knows whom to message without opening the window. The long lists, the
+// advisers' names and the calendar reminder stay in the window.
 
 const TEACHERS_SUBTITLE = "Attendance and grades, by section";
 
@@ -358,10 +394,61 @@ function MiniMeter({ label, value, max, color }) {
   );
 }
 
+// A section's tile: green once today's attendance is in, amber with an outline
+// until then, and marked when the section has no adviser to take it.
+function SectionTile({ section }) {
+  const taken = section.attendance_taken;
+  const noAdviser = !section.advisers?.length;
+  return (
+    <span
+      title={`${sectionName(section)} · attendance ${taken ? "taken" : "not taken yet"}${noAdviser ? " · no adviser" : ""}`}
+      className={[
+        "inline-flex h-6 min-w-10 items-center justify-center gap-0.5 rounded-[6px] border-[1.5px] px-[5px] text-xs font-semibold",
+        taken ? "border-success-50 bg-success-50 text-success-500" : "border-warning-dot bg-warning-50 text-warning-500",
+      ].join(" ")}
+    >
+      {noAdviser && <i className="ti ti-user-off text-[11px]" aria-hidden="true" />}
+      {sectionShortName(section)}
+    </span>
+  );
+}
+
+function SectionTiles({ sections, noAdviser }) {
+  const taken = sections.filter((s) => s.attendance_taken).length;
+  return (
+    <>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-neutral-600">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-success-dot" aria-hidden="true" />
+          Attendance taken <strong className="text-neutral-900">{taken.toLocaleString()}</strong>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-[3px] border-[1.5px] border-warning-dot bg-warning-50" aria-hidden="true" />
+          Not yet <strong className="text-neutral-900">{(sections.length - taken).toLocaleString()}</strong>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="ti ti-user-off text-warning-500" aria-hidden="true" />
+          No adviser <strong className="text-neutral-900">{noAdviser.toLocaleString()}</strong>
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {sectionsByLevel(sections).map((group) => (
+          <div key={group.level} className="grid grid-cols-[78px_minmax(0,1fr)] items-center gap-2.5">
+            <span className="text-xs font-semibold text-neutral-800">{group.label}</span>
+            <div className="flex flex-wrap gap-1">
+              {group.sections.map((s) => <SectionTile key={sectionName(s) + s.school_level} section={s} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
   if (loading || !teachers || !teachers.sections.length) {
     return (
-      <Panel title="Teachers today" subtitle={TEACHERS_SUBTITLE} icon="ti-user-check">
+      <Panel title="Teachers today" subtitle={TEACHERS_SUBTITLE} icon="ti-user-check" className="min-w-0">
         {loading ? (
           <div className="flex flex-col gap-3">
             <Skeleton height={14} variant="pulse" />
@@ -376,21 +463,21 @@ function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
     );
   }
 
-  const { attendance, grades, grading_period: period, no_classes: noClasses, sections } = teachers;
+  const { grades, grading_period: period, no_classes: noClasses, sections } = teachers;
   const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
   const noAdviser = noAdviserCount(sections);
 
   return (
-    <Card padding="none" className="overflow-hidden">
+    <Card padding="none" className="flex min-w-0 flex-col overflow-hidden">
       {/* The whole card is one button: it holds no other controls, so there
           is nothing to nest, and one big target suits the people using it. */}
       <button
         type="button"
         onClick={onOpen}
         aria-label="Teachers today: open details"
-        className="focus-ring block w-full text-left transition-colors hover:bg-brand-50/40"
+        className="focus-ring flex w-full flex-1 flex-col text-left transition-colors hover:bg-brand-50/40"
       >
-        <div className="flex items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
+        <div className="flex w-full items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
           <i className="ti ti-user-check text-brand-600" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-bold text-neutral-900">Teachers today</h3>
@@ -402,33 +489,33 @@ function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
             View details <i className="ti ti-arrow-right" aria-hidden="true" />
           </span>
         </div>
-        <div className="flex flex-col gap-2.5 px-5 py-3.5">
+        <div className="flex w-full flex-1 flex-col gap-3 p-5">
           {noClasses ? (
+            // No attendance is due, so no tiles: every one would read "not yet".
             <p className="text-xs text-neutral-700">
               <span className="font-semibold text-neutral-900">No classes today</span> · {noClasses.label}
             </p>
           ) : (
-            <MiniMeter
-              label="Attendance taken"
-              value={attendance.sections_taken}
-              max={attendance.sections_total}
-              color={token("--color-success-500")}
-            />
+            <SectionTiles sections={sections} noAdviser={noAdviser} />
           )}
-          {grades.sections_total > 0 ? (
-            <MiniMeter
-              label={`${period.label} grades in`}
-              value={grades.sections_complete}
-              max={grades.sections_total}
-              color={token("--color-info-500")}
-            />
-          ) : (
-            <p className="text-xs text-neutral-600">No subjects are set up for these grade levels yet.</p>
-          )}
-          {(due || noAdviser > 0) && (
+          <div className="border-t border-neutral-200 pt-3">
+            {grades.sections_total > 0 ? (
+              <MiniMeter
+                label={`${period.label} grades in`}
+                value={grades.sections_complete}
+                max={grades.sections_total}
+                color={token("--color-info-500")}
+              />
+            ) : (
+              <p className="text-xs text-neutral-600">No subjects are set up for these grade levels yet.</p>
+            )}
+          </div>
+          {/* Sections with no adviser are marked on their tiles; without
+              tiles, they're said here. */}
+          {(due || (noClasses && noAdviser > 0)) && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
               {due && <span className={due.late ? "text-error-500" : "text-neutral-600"}>{due.text}</span>}
-              {noAdviser > 0 && (
+              {noClasses && noAdviser > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-warning-500">
                   <i className="ti ti-alert-triangle" aria-hidden="true" />
                   {plural(noAdviser, "section has", "sections have")} no adviser

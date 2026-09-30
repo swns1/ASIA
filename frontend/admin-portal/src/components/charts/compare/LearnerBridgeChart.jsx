@@ -4,8 +4,8 @@ import { chartInk, token } from "../tokens";
 import { fmtCount, fmtOne, plural, share, shortYear, signedCount } from "../../schoolYears/compareFigures";
 import { bridgeFloor, bridgePairs, bridgeSteps } from "./bridge";
 import ChartCard, { Caption } from "./ChartCard";
-import ColumnPlot from "./ColumnPlot";
-import { linearAxis } from "./scale";
+import ColumnPlot from "../ColumnPlot";
+import { linearAxis } from "../scale";
 
 // 1c — how one year's learners became the next year's: who transferred out,
 // who finished and didn't come back, who's new. A waterfall between two

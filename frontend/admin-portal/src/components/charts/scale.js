@@ -1,4 +1,4 @@
-// compare/scale.js — the value axis the Compare charts share.
+// charts/scale.js — a value axis for the charts drawn on ColumnPlot.
 //
 // A round step (1, 2, 2.5 or 5 × 10ⁿ) sized for four intervals, then the
 // multiples of it that hold the data: 734 learners get a 0–800 axis in steps

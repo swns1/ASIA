@@ -5,7 +5,7 @@
  * something in them, links that open the list on the same year the count
  * came from, and which sections still owe attendance or grades.
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 
@@ -48,7 +48,9 @@ vi.mock("../../context/SchoolYearContext", () => ({
 }));
 
 const { default: DashboardPage } = await import("../DashboardPage");
-const { dueLine, attentionRows, withYear, yearChange, levelRows } = await import("./adminHomeData");
+const {
+  dueLine, attentionRows, withYear, yearChange, levelRows, sectionShortName, sectionsByLevel, collectionPace, monthSpans,
+} = await import("./adminHomeData");
 
 // What /school-years/compare/ and /invoices/financial-summary/ answer, per
 // year. 2026-2027 is the seed data's: 24 learners against 23 the year before.
@@ -59,9 +61,24 @@ const ENROLLMENT = {
   "2026-2027": { learners: 24, by_level: LEVELS(1, 2, 8, 7, 6), returning: 19, new: 5, transferred_out: 1, pending: 1, came_back: null },
   "2027-2028": { learners: 0, by_level: LEVELS(0, 0, 0, 0, 0), returning: 0, new: 0, transferred_out: 0, pending: 12, came_back: null },
 };
+// Collections run June to March. Last year had 60% in by the end of
+// September; this year 41.7% (225,522.70 of 540,666.40).
+const cumulative = (rows) => rows.map(([month, total]) => ({ month, collected: "0.00", cumulative: total }));
 const MONEY = {
-  "2025-2026": { net_billed: "600000.00", total_collected: "590000.00", outstanding: "10000.00", invoice_count: 24 },
-  "2026-2027": { net_billed: "540666.40", total_collected: "225522.70", outstanding: "315143.70", invoice_count: 23 },
+  "2025-2026": {
+    net_billed: "600000.00", total_collected: "590000.00", outstanding: "10000.00", invoice_count: 24,
+    collections_series: cumulative([
+      ["2025-06", "150000.00"], ["2025-07", "240000.00"], ["2025-08", "300000.00"], ["2025-09", "360000.00"],
+      ["2025-10", "420000.00"], ["2025-11", "470000.00"], ["2025-12", "510000.00"], ["2026-01", "550000.00"],
+      ["2026-02", "575000.00"], ["2026-03", "590000.00"],
+    ]),
+  },
+  "2026-2027": {
+    net_billed: "540666.40", total_collected: "225522.70", outstanding: "315143.70", invoice_count: 23,
+    collections_series: cumulative([
+      ["2026-06", "108133.28"], ["2026-07", "162199.92"], ["2026-08", "189233.24"], ["2026-09", "225522.70"],
+    ]),
+  },
   "2027-2028": { net_billed: "94300.00", total_collected: "10000.00", outstanding: "84300.00", invoice_count: 4 },
 };
 
@@ -194,13 +211,25 @@ describe("AdminHome — teachers today", () => {
   const openDetails = async () =>
     fireEvent.click(await screen.findByRole("button", { name: "Teachers today: open details" }));
 
-  it("previews attendance, grades and missing advisers without listing sections", async () => {
+  it("shows a tile per section for today's attendance, and grades in", async () => {
     renderAs("admin");
-    expect(await screen.findByRole("progressbar", { name: /Attendance taken: 1 of 3 sections/ })).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /2nd Quarter grades in: 2 of 3 sections/ })).toBeTruthy();
-    expect(screen.getByText("1 section has no adviser")).toBeTruthy();
-    // The section list lives in the details window, not on the page.
-    expect(screen.queryByText("Grade 3 · Rizal")).toBeNull();
+    const card = within(await screen.findByRole("button", { name: "Teachers today: open details" }));
+    const legend = (text) => card.getByText((_, el) => el?.tagName === "SPAN" && el.textContent === text);
+    expect(card.getByText("3-Rizal")).toBeTruthy();
+    expect(legend("Attendance taken 1")).toBeTruthy();
+    expect(legend("Not yet 2")).toBeTruthy();
+    expect(legend("No adviser 1")).toBeTruthy();
+    // Each tile says its whole status on hover.
+    expect(card.getByTitle("Grade 3 · Rizal · attendance not taken yet")).toBeTruthy();
+    expect(card.getByTitle("Grade 9 · Diamond · attendance not taken yet · no adviser")).toBeTruthy();
+    expect(card.getByTitle("Grade 10 · Ruby · attendance taken")).toBeTruthy();
+    // Grouped by level, youngest first.
+    const groups = card.getAllByText(/^(Elementary|Junior HS)$/).map((el) => el.textContent);
+    expect(groups).toEqual(["Elementary", "Junior HS"]);
+    expect(card.getByRole("progressbar", { name: /2nd Quarter grades in: 2 of 3 sections/ })).toBeTruthy();
+    // Advisers' names, grade counts and the calendar reminder stay in the window.
+    expect(screen.queryByText("Ana Lim")).toBeNull();
+    expect(screen.queryByText("60 of 240 grades in")).toBeNull();
     expect(screen.queryByText(/Add each quarter's dates/)).toBeNull();
   });
 
@@ -209,11 +238,13 @@ describe("AdminHome — teachers today", () => {
     expect(await screen.findByText(/^Due .*October 23 · \d+ days left$/)).toBeTruthy();
   });
 
-  it("says there are no classes on a holiday", async () => {
+  it("says there are no classes on a holiday, instead of tiles that all read not yet", async () => {
     getTeachersToday.mockResolvedValue(teachersToday({ no_classes: { label: "National Heroes Day" } }));
     renderAs("admin");
     expect(await screen.findByText("No classes today")).toBeTruthy();
-    expect(screen.queryByRole("progressbar", { name: /Attendance taken/ })).toBeNull();
+    expect(screen.queryByText("3-Rizal")).toBeNull();
+    // With no tiles to mark them, sections with no adviser are said in words.
+    expect(screen.getByText("1 section has no adviser")).toBeTruthy();
   });
 
   it("opens every section in the details window", async () => {
@@ -272,23 +303,56 @@ describe("AdminHome — school at a glance", () => {
     expect(compareSchoolYears).toHaveBeenCalledWith(["2025-2026", "2026-2027"]);
     expect(screen.getByText("Enrollees")).toBeTruthy();
     expect(screen.getByText("S.Y. 2026-2027 vs 2025-2026")).toBeTruthy();
-    expect(screen.getByText("+1 (4%) from S.Y. 2025-2026")).toBeTruthy();
+    // 23 -> 24: the change as a pill, then in learners.
+    expect(screen.getByText((_, el) =>
+      el?.tagName === "SPAN" && el.textContent === "+4.3%+1 from S.Y. 2025-2026")).toBeTruthy();
     expect(screen.getByText("19 returning · 5 new · 1 transferred out")).toBeTruthy();
   });
 
-  it("compares net billed with last year, with this year's Billing panel under it", async () => {
+  it("gives each level its count, change and percentage, in step down the panel", async () => {
     renderAs("admin");
-    expect(await screen.findByRole("button", { name: "₱540,666.40" })).toBeTruthy();
-    expect(screen.getByText("Billing · S.Y. 2026-2027 vs 2025-2026")).toBeTruthy();
-    expect(screen.getByText((_, el) =>
-      el?.tagName === "P" && el.textContent === "Net billed is down ₱59,334 (10%) from S.Y. 2025-2026.")).toBeTruthy();
-    // The year's own figures, as the Billing panel always showed them.
-    expect(screen.getByText("Billing · S.Y. 2026-2027")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "₱225,522.70" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "₱315,143.70" })).toBeTruthy();
-    expect(screen.getByText("42% collected")).toBeTruthy();
-    expect(getFinancialSummary).toHaveBeenCalledWith("2025-2026");
-    expect(getFinancialSummary).toHaveBeenCalledWith("2026-2027");
+    await screen.findByRole("button", { name: "24 learners" });
+    // Elementary 10 -> 8, Junior High 5 -> 7; Nursery holds at 1.
+    expect(screen.getByText("−20.0%")).toBeTruthy();
+    expect(screen.getByText("+40.0%")).toBeTruthy();
+    expect(screen.getByText("−2")).toBeTruthy();
+    expect(screen.getByTitle("Elementary: 8 in S.Y. 2026-2027, 10 in S.Y. 2025-2026")).toBeTruthy();
+    // Up is green with an arrow up, down red with an arrow down.
+    expect(screen.getByText("+40.0%").className).toContain("bg-success-50");
+    expect(screen.getByText("−20.0%").className).toContain("bg-error-50");
+    expect(screen.getByText("+40.0%").querySelector(".ti-arrow-up-right")).toBeTruthy();
+  });
+
+  describe("collection pace", () => {
+    // What counts as "the end of last month" is today's business.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 1, 9, 0));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("sets this year's share collected against last year's at the same month", async () => {
+      renderAs("admin");
+      expect(await screen.findByText("Collection pace · S.Y. 2026-2027 vs 2025-2026")).toBeTruthy();
+      expect(screen.getByText((_, el) => el?.tagName === "P" && el.textContent ===
+        "By end of September, 41.7% of this year's billing is collected, against 60.0% at the same point last year."))
+        .toBeTruthy();
+      expect(screen.getByText("−18.3 pts").className).toContain("bg-error-50");
+      expect(screen.getByText("behind last year's pace")).toBeTruthy();
+      expect(screen.getByText(/Last year finished at 98\.3%\./)).toBeTruthy();
+    });
+
+    it("keeps this year's Billing panel under the pair", async () => {
+      renderAs("admin");
+      expect(await screen.findByRole("button", { name: "₱540,666.40" })).toBeTruthy();
+      // The year's own figures, as the Billing panel always showed them.
+      expect(screen.getByText("Billing · S.Y. 2026-2027")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "₱225,522.70" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "₱315,143.70" })).toBeTruthy();
+      expect(screen.getByText("42% collected")).toBeTruthy();
+      expect(getFinancialSummary).toHaveBeenCalledWith("2025-2026");
+      expect(getFinancialSummary).toHaveBeenCalledWith("2026-2027");
+    });
   });
 
   it("gives the panels no year filter of their own", async () => {
@@ -314,7 +378,7 @@ describe("AdminHome — school at a glance", () => {
     renderAs("admin");
     await screen.findByRole("button", { name: "₱540,666.40" });
     await pickYearFrom("2027-2028");
-    await screen.findByText("Billing · S.Y. 2027-2028 vs 2026-2027");
+    await screen.findByText("Collection pace · S.Y. 2027-2028 vs 2026-2027");
     fireEvent.click(await screen.findByRole("button", { name: "₱84,300.00" }));
     expect(screen.getByTestId("location").textContent).toBe("/invoices?status=unpaid&school_year=2027-2028");
   });
@@ -350,9 +414,9 @@ describe("AdminHome — school at a glance", () => {
 });
 
 describe("yearChange", () => {
-  it("gives the difference and its whole percentage of last year", () => {
-    expect(yearChange(24, 23)).toEqual({ diff: 1, pct: 4 });
-    expect(yearChange("540666.40", "600000.00")).toEqual({ diff: -59333.6, pct: 10 });
+  it("gives the difference and its percentage of last year, to one decimal", () => {
+    expect(yearChange(24, 23)).toEqual({ diff: 1, pct: 4.3 });
+    expect(yearChange("540666.40", "600000.00")).toEqual({ diff: -59333.6, pct: 9.9 });
   });
 
   it("reads equal money strings as no change, not a float remainder", () => {
@@ -381,6 +445,77 @@ describe("levelRows", () => {
   it("leaves previous null without a last year", () => {
     expect(levelRows(LEVELS(1, 0, 0, 0, 0), null)).toEqual([
       { key: "nursery", label: "Nursery", current: 1, previous: null },
+    ]);
+  });
+});
+
+describe("sectionShortName / sectionsByLevel", () => {
+  it("fits a section's name on a tile", () => {
+    expect(sectionShortName({ grade_level: "Grade 3", section: "Rizal" })).toBe("3-Rizal");
+    expect(sectionShortName({ grade_level: "Kindergarten", section: "Sunflower" })).toBe("K-Sunflower");
+    expect(sectionShortName({ grade_level: "Nursery", section: "Rose" })).toBe("N-Rose");
+  });
+
+  it("adds a Senior High strand only when the section's name doesn't already carry it", () => {
+    expect(sectionShortName({ grade_level: "Grade 11", strand: "STEM", section: "STEM-A" })).toBe("11-STEM-A");
+    expect(sectionShortName({ grade_level: "Grade 12", strand: "ABM", section: "A" })).toBe("12-ABM-A");
+  });
+
+  it("groups sections by level, youngest first, keeping the server's order within one", () => {
+    const groups = sectionsByLevel(SECTIONS);
+    expect(groups.map((g) => [g.label, g.sections.map((s) => s.section)])).toEqual([
+      ["Elementary", ["Rizal"]],
+      ["Junior HS", ["Diamond", "Ruby"]],
+    ]);
+  });
+});
+
+describe("collectionPace", () => {
+  const OCT_1 = new Date(2026, 9, 1, 9, 0);
+  const pace = (today = OCT_1) => collectionPace("2026-2027", MONEY["2026-2027"], MONEY["2025-2026"], today);
+
+  it("reads each month against the same month last year", () => {
+    const { latest } = pace();
+    expect(latest.name).toBe("September");
+    expect(latest.now).toBeCloseTo(41.71, 2);
+    expect(latest.before).toBeCloseTo(60, 5);
+  });
+
+  it("counts only finished months: this one is still collecting", () => {
+    const { months } = pace();
+    expect(months.map((m) => m.short)).toEqual(["Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]);
+    expect(months[4].now).toBeNull();                       // October
+    expect(pace(new Date(2026, 9, 31)).months[4].now).toBeNull();
+    expect(pace(new Date(2026, 10, 1)).months[4].now).toBeCloseTo(41.71, 2);   // no payment in October: still 41.7%
+  });
+
+  it("counts money paid before June from June, where the line starts", () => {
+    // 10% paid at enrollment in May, nothing since.
+    const early = { ...MONEY["2026-2027"], collections_series: cumulative([["2026-05", "54066.64"]]) };
+    const { months } = collectionPace("2026-2027", early, null, OCT_1);
+    expect(months[0].short).toBe("Jun");
+    expect(months[0].now).toBeCloseTo(10, 5);
+    expect(months[3].now).toBeCloseTo(10, 5);
+  });
+
+  it("runs past March when either year collected later", () => {
+    const late = { ...MONEY["2025-2026"], collections_series: cumulative([["2026-04", "595000.00"]]) };
+    const { months, lastYearFinal } = collectionPace("2026-2027", MONEY["2026-2027"], late, OCT_1);
+    expect(months.at(-1).short).toBe("Apr");
+    expect(lastYearFinal).toBeCloseTo(99.17, 2);
+  });
+
+  it("has nothing to pace when nothing is billed", () => {
+    expect(collectionPace("2026-2027", { net_billed: "0.00", collections_series: [] }, null, OCT_1)).toBeNull();
+  });
+});
+
+describe("monthSpans", () => {
+  it("names each month once, over the weeks that start in it", () => {
+    const weeks = ["2026-08-24", "2026-08-31", "2026-09-07", "2026-09-14"].map((week) => ({ week }));
+    expect(monthSpans(weeks)).toEqual([
+      { key: "2026-08", label: "Aug", span: 2 },
+      { key: "2026-09", label: "Sep", span: 2 },
     ]);
   });
 });

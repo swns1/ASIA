@@ -3,9 +3,9 @@ import { linePath } from "../geometry";
 import { STROKE, token } from "../tokens";
 import { fmtOne, num, share, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
-import ColumnPlot from "./ColumnPlot";
-import Legend from "./Legend";
-import { linearAxis } from "./scale";
+import ColumnPlot from "../ColumnPlot";
+import Legend from "../Legend";
+import { linearAxis } from "../scale";
 
 // 1d — three rates on one percentage axis: came back the next year, passed
 // every subject, attendance. One axis because all three are shares of a

@@ -9,11 +9,11 @@ import { MemoryRouter } from "react-router-dom";
 import { clearTokenCache } from "../tokens";
 import { bridgeFloor, bridgePairs, bridgeSteps } from "./bridge";
 import CollectionChart from "./CollectionChart";
-import ColumnPlot from "./ColumnPlot";
+import ColumnPlot from "../ColumnPlot";
 import FeesByGradeChart from "./FeesByGradeChart";
 import LearnersByLevelChart from "./LearnersByLevelChart";
 import { yearRamp } from "./palette";
-import { linearAxis, niceStep } from "./scale";
+import { linearAxis, niceStep } from "../scale";
 
 beforeEach(() => {
   clearTokenCache();

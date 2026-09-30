@@ -11,10 +11,13 @@
 
 export { default as ChartFrame, ChartTooltip, NoData } from "./ChartFrame";
 export { default as BarChart } from "./BarChart";
+export { default as ColumnPlot } from "./ColumnPlot";
+export { default as Legend } from "./Legend";
 export { default as LineChart } from "./LineChart";
 export { default as Meter } from "./Meter";
 export { default as PairedColumnChart } from "./PairedColumnChart";
 export { default as Sparkline } from "./Sparkline";
 export { default as StackedBar } from "./StackedBar";
 export { barPath, columnPath, linePath, niceMax } from "./geometry";
+export { linearAxis, niceStep } from "./scale";
 export { GAP, MARKER, RADIUS, STROKE, SURFACE, chartInk, clearTokenCache, token } from "./tokens";

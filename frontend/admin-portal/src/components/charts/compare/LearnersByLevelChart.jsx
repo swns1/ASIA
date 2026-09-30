@@ -1,13 +1,12 @@
 import { LEVEL_LABELS } from "../../../constants/schoolLevels";
 import { NoData } from "../ChartFrame";
 import { columnPath } from "../geometry";
-import { GAP, chartInk } from "../tokens";
+import { GAP, chartInk, levelColor } from "../tokens";
 import { fmtCount, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
-import ColumnPlot from "./ColumnPlot";
-import Legend from "./Legend";
-import { levelColor } from "./palette";
-import { linearAxis } from "./scale";
+import ColumnPlot from "../ColumnPlot";
+import Legend from "../Legend";
+import { linearAxis } from "../scale";
 
 // 1b — each year's learners as one column, stacked by school level: Nursery
 // at the bottom, Senior High on top, the year's total above.

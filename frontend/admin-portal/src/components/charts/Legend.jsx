@@ -1,4 +1,4 @@
-// compare/Legend.jsx — a chart's key. Each swatch takes the shape of the mark
+// charts/Legend.jsx — a chart's key. Each swatch takes the shape of the mark
 // it stands for: a square for a column, a dot for a dot, a short rule for a
 // line. An item with no colour is a plain note ("Above each column: ...").
 

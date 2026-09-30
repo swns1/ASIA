@@ -1,8 +1,11 @@
-// DashboardBands — the four chart bands on the staff dashboard.
+// DashboardBands — the chart bands on the staff dashboard and the admin home.
 //
 // Kept out of DashboardPage.jsx, which is already 950 lines. Each band is a
 // self-contained Panel so the page composes them and decides which roles see
-// which, rather than threading chart props through the page body.
+// which, rather than threading chart props through the page body. Two are the
+// admin home's own takes on a staff band: RiskByLevelBand splits RiskBand's
+// one bar by school level, and AttendanceTargetBand marks the weeks that fell
+// below target on the same series AttendanceBand draws.
 //
 // Everything draws with components/charts/, the same language the Analytics
 // page uses. Nothing here invents a colour: risk bands come from
@@ -10,17 +13,23 @@
 // is a single brand hue from styles/tokens.css.
 
 import BarChart from "../../components/charts/BarChart";
+import { NoData } from "../../components/charts/ChartFrame";
+import ColumnPlot from "../../components/charts/ColumnPlot";
 import LineChart from "../../components/charts/LineChart";
 import Meter from "../../components/charts/Meter";
 import StackedBar from "../../components/charts/StackedBar";
+import { linePath } from "../../components/charts/geometry";
+import { linearAxis } from "../../components/charts/scale";
 import Skeleton from "../../components/ui/Skeleton";
 import { Panel } from "../../components/ui/Card";
-import { chartInk, token } from "../../components/charts/tokens";
+import { STROKE, chartInk, token } from "../../components/charts/tokens";
+import { LEVEL_LABELS, LEVEL_SHORT_LABELS } from "../../constants/schoolLevels";
 import {
   GOOD_ATTENDANCE,
   RISK_LEVELS,
   riskLevelMeta,
 } from "../analytics/riskVocabulary";
+import { monthSpans, plural } from "./adminHomeData";
 
 const ink = () => chartInk();
 
@@ -41,8 +50,17 @@ const PIPELINE_STEPS = [
   { key: "completed", label: "Completed", tokenName: "--color-success-500", blurb: "Finished the school year" },
 ];
 
-export function PipelineBand({ pipeline, loading, schoolYear, compact = false }) {
-  if (loading) return <Panel title="Enrollment Pipeline"><ChartSkeleton height={150} /></Panel>;
+// The bar's drawing box: the full-size band, the compact one for a narrow
+// card, and `measured` for one across a whole page, drawn at its real width
+// with no room above the bar (nothing sits there).
+const PIPELINE_GEOMETRY = {
+  full:     { height: 150, barY: 26, barH: 56 },
+  compact:  { height: 120, barY: 18, barH: 46 },
+  measured: { height: 100, barY: 8,  barH: 46 },
+};
+
+export function PipelineBand({ pipeline, loading, schoolYear, compact = false, measured = false }) {
+  if (loading) return <Panel title="Enrollment Pipeline"><ChartSkeleton height={measured ? 100 : 150} /></Panel>;
 
   const segments = PIPELINE_STEPS.map((step) => ({
     key: step.key,
@@ -63,9 +81,8 @@ export function PipelineBand({ pipeline, loading, schoolYear, compact = false })
       <StackedBar
         title={`Enrollment pipeline for school year ${schoolYear}`}
         segments={segments}
-        height={compact ? 120 : 150}
-        barY={compact ? 18 : 26}
-        barH={compact ? 46 : 56}
+        {...PIPELINE_GEOMETRY[measured ? "measured" : compact ? "compact" : "full"]}
+        measured={measured}
         emptyMessage="No enrollments recorded for this school year yet."
         caption={
           total
@@ -183,9 +200,9 @@ export function RiskBand({ risk, loading, onOpen, compact = false }) {
  * not separable by hue alone — two of them measure under 3:1 by design — so
  * the icon and the word are what actually carry the meaning.
  */
-function RiskLegend({ bands }) {
+function RiskLegend({ bands, className = "mb-2" }) {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 ${className}`}>
       {/* Reversed to match the bar's low -> critical order. RISK_LEVELS is
           declared critical-first for the Analytics tables, and reading the
           legend in one direction while the bar runs the other makes the two
@@ -201,6 +218,88 @@ function RiskLegend({ bands }) {
         );
       })}
     </div>
+  );
+}
+
+// ── At-risk students, by level (admin home) ──────────────────────────────────
+// RiskBand's bands split by school level: one bar per level, as long as the
+// level has learners assessed, so the eye goes to where the follow-ups are.
+// That is what an admin can act on; the school-wide count is already the
+// "Need follow-up" tile on the same page.
+
+const LOW_TO_CRITICAL = [...RISK_LEVELS].reverse();
+
+function assessedOn(risk) {
+  return risk?.computed_at
+    ? `Assessed ${new Date(risk.computed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}`
+    : undefined;
+}
+
+function RiskLevelRow({ row, longest }) {
+  const label = LEVEL_SHORT_LABELS[row.level] ?? row.label;
+  const segments = LOW_TO_CRITICAL
+    .map((level) => ({ level, n: row.bands[level] ?? 0, meta: riskLevelMeta(level) }))
+    .filter((s) => s.n > 0);
+  return (
+    <div className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-2.5">
+      <span className="text-[11.5px] font-semibold text-neutral-800">{label}</span>
+      <div
+        className="flex h-3.5 gap-0.5"
+        style={{ width: `${(row.total * 100) / longest}%` }}
+        role="img"
+        aria-label={`${label}: ${segments.map((s) => `${s.n} ${s.meta.label}`).join(", ")}`}
+      >
+        {segments.map((s) => (
+          <div
+            key={s.level}
+            title={`${label} · ${s.meta.label} · ${s.n}`}
+            className="h-full min-w-1 rounded-[2px]"
+            style={{ flex: `${s.n} 1 0`, background: s.meta.color }}
+          />
+        ))}
+      </div>
+      <span className="whitespace-nowrap text-right text-xs text-neutral-600">
+        <strong className="text-sm font-bold tabular-nums text-neutral-900">{row.flagged}</strong> to follow up
+      </span>
+    </div>
+  );
+}
+
+export function RiskByLevelBand({ risk, loading, onOpen }) {
+  const title = "Students needing attention, by level";
+  if (loading) return <Panel title={title}><ChartSkeleton height={150} /></Panel>;
+  // A summary from before it counted by level: the school-wide bar instead.
+  if (risk && !risk.by_level) return <RiskBand risk={risk} loading={false} onOpen={onOpen} compact />;
+
+  const rows = (risk?.by_level ?? []).filter((r) => r.total > 0);
+  const longest = Math.max(0, ...rows.map((r) => r.total));
+  const top = rows.reduce((best, r) => (r.flagged > (best?.flagged ?? 0) ? r : best), null);
+
+  return (
+    <Panel
+      title={title}
+      subtitle={assessedOn(risk)}
+      action={onOpen}
+      className="min-w-0"
+      bodyClassName="flex flex-col gap-3"
+    >
+      {!rows.length ? (
+        <NoData message="No risk assessment has been run for this school year yet." />
+      ) : (
+        <>
+          <RiskLegend bands={risk.bands ?? {}} className="" />
+          {/* Rows share out a stretched card's extra height. */}
+          <div className="flex flex-1 flex-col justify-evenly gap-2.5">
+            {rows.map((row) => <RiskLevelRow key={row.level} row={row} longest={longest} />)}
+          </div>
+          <p className="text-xs text-neutral-500">
+            {top
+              ? `${LEVEL_LABELS[top.level] ?? top.label} has the most learners to follow up (${top.flagged}).`
+              : "No level has learners to follow up."}
+          </p>
+        </>
+      )}
+    </Panel>
   );
 }
 
@@ -252,6 +351,133 @@ export function AttendanceBand({ series, loading, compact = false }) {
           targetText={`${GOOD_ATTENDANCE}% target`}
           color={latest >= GOOD_ATTENDANCE ? riskLevelMeta("low").color : riskLevelMeta("high").color}
         />
+      )}
+    </Panel>
+  );
+}
+
+// ── Attendance against target (admin home) ───────────────────────────────────
+// The same weekly series with the target drawn in: the latest week in large
+// type, how many weeks fell short, and each week that did marked where it
+// happened. Months name their weeks along the bottom, not one date per week.
+
+// About the width of one "88.4% · below target" note, so notes for weeks close
+// together don't pile up on each other. Every such week keeps its red point.
+const NOTE_W = 124;
+
+function AttendanceWeeks({ weeks, rates, measured }) {
+  const ink = chartInk();
+  const colors = { line: ink.bar, low: riskLevelMeta("critical").color, tint: token("--color-error-50") };
+  const below = (v) => v != null && v < GOOD_ATTENDANCE;
+  const axis = linearAxis(Math.min(80, Math.floor(Math.min(...measured) / 5) * 5), 100);
+  // A week is a Monday's date; read it as that calendar day, not UTC midnight.
+  const weekOf = (iso) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-xl font-bold tabular-nums text-neutral-900">{measured.at(-1)}%</span>
+        <span className="text-xs text-neutral-500">
+          latest week · {measured.filter(below).length} of {plural(measured.length, "week")} below target
+        </span>
+      </div>
+      <ColumnPlot
+        title="Weekly attendance rate against the target"
+        axis={axis}
+        formatTick={(v) => `${v}%`}
+        labels={monthSpans(weeks)}
+        labelStyle="ranges"
+        plotHeight={170}
+        gutter={40}
+        padTop={12}
+        overlay={(geo) => {
+          const noted = [];
+          rates.forEach((v, i) => {
+            if (below(v) && (!noted.length || geo.x(i) - geo.x(noted.at(-1).i) >= NOTE_W)) noted.push({ i, v });
+          });
+          return noted.map(({ i, v }) => {
+            const y = geo.y(v);
+            // Under the point, unless that would run past the plot's bottom.
+            const above = y + 34 > geo.base;
+            const x = Math.min(Math.max(geo.x(i), NOTE_W / 2), geo.width - NOTE_W / 2);
+            return (
+              <div
+                key={weeks[i].week}
+                className="absolute inline-flex items-center gap-[3px] whitespace-nowrap rounded-[6px] border border-brand-300 bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-error-500"
+                style={{
+                  left: `${(x * 100) / geo.width}%`,
+                  top: `${(y * 100) / geo.height}%`,
+                  transform: above ? "translate(-50%, calc(-100% - 10px))" : "translate(-50%, 10px)",
+                }}
+              >
+                <i className="ti ti-alert-octagon" aria-hidden="true" />
+                {v}% · below target
+              </div>
+            );
+          });
+        }}
+      >
+        {(geo) => (
+          <>
+            {/* Below the target, tinted; the dashed rule is the target itself. */}
+            <rect
+              x={geo.left} y={geo.y(GOOD_ATTENDANCE)}
+              width={geo.width - geo.left} height={geo.base - geo.y(GOOD_ATTENDANCE)}
+              fill={colors.tint} opacity={0.5}
+            />
+            <line
+              x1={geo.left} x2={geo.width} y1={geo.y(GOOD_ATTENDANCE)} y2={geo.y(GOOD_ATTENDANCE)}
+              stroke={ink.threshold} strokeDasharray="4,3" strokeWidth={1.5}
+            />
+            <text
+              x={geo.width} y={geo.y(GOOD_ATTENDANCE) - 5}
+              textAnchor="end" fontSize="10.5" fontWeight="600" fill={ink.threshold}
+            >
+              {GOOD_ATTENDANCE}% target
+            </text>
+            {/* A closed week (null) breaks the line rather than joining across it. */}
+            {linePath(rates.map((v, i) => (v == null ? null : { x: geo.x(i), y: geo.y(v) }))).map((d) => (
+              <path key={d} d={d} fill="none" stroke={colors.line} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+            {rates.map((v, i) => (v == null ? null : (
+              <circle
+                key={weeks[i].week}
+                cx={geo.x(i)} cy={geo.y(v)} r={below(v) ? 5 : 3}
+                fill={below(v) ? colors.low : "#fff"}
+                stroke={below(v) ? "#fff" : colors.line}
+                strokeWidth={2}
+              >
+                <title>{`Week of ${weekOf(weeks[i].week)} · ${v}%${below(v) ? " · below target" : ""}`}</title>
+              </circle>
+            )))}
+          </>
+        )}
+      </ColumnPlot>
+      <p className="text-xs text-neutral-500">Excused absences are not counted against the rate.</p>
+    </>
+  );
+}
+
+export function AttendanceTargetBand({ series, loading }) {
+  if (loading) return <Panel title="Attendance"><ChartSkeleton height={220} /></Panel>;
+
+  const weeks = series ?? [];
+  // Stored 0-1, read as a percentage. A week the school was closed stays null.
+  const rates = weeks.map((w) => (w.rate == null ? null : Math.round(w.rate * 1000) / 10));
+  const measured = rates.filter((v) => v != null);
+
+  return (
+    <Panel
+      title="Attendance"
+      subtitle={`Weekly rate against the ${GOOD_ATTENDANCE}% target`}
+      className="min-w-0"
+      bodyClassName="flex flex-col gap-3"
+    >
+      {!measured.length ? (
+        <NoData message="No attendance has been recorded in this period." />
+      ) : (
+        <AttendanceWeeks weeks={weeks} rates={rates} measured={measured} />
       )}
     </Panel>
   );

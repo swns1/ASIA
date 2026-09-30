@@ -8,6 +8,11 @@
 // This is the form for part-to-whole with ≤ ~6 segments. Not a pie: a pie
 // makes close values indistinguishable, and a two-slice pie is a stat tile
 // wearing a costume.
+//
+// It draws at a fixed 760-wide viewBox, scaled to its card, which suits a card
+// about that wide. `measured` draws it at the width it's given instead, in
+// real pixels and `height` tall -- for a bar across a whole page, which the
+// fixed viewBox would blow up to half again its size, text and all.
 
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -15,6 +20,7 @@ import { motion } from "framer-motion";
 import ChartFrame, { NoData } from "./ChartFrame";
 import { barPath } from "./geometry";
 import { GAP, RADIUS, chartInk } from "./tokens";
+import useElementSize from "./useElementSize";
 import { chartVariants } from "../../utils/motion";
 
 const W = 760;
@@ -29,9 +35,13 @@ export default function StackedBar({
   barH = 56,
   formatValue = (v) => String(v),
   legend = null,
+  measured = false,
 }) {
   const [tip, setTip] = useState(null);
+  const [plotEl, setPlotEl] = useState(null);
+  const size = useElementSize(measured ? plotEl : null);
   const ink = chartInk();
+  const w = size?.width ?? W;
 
   const shown = segments.filter((s) => (s.value ?? 0) > 0);
   const total = shown.reduce((sum, s) => sum + s.value, 0);
@@ -41,7 +51,7 @@ export default function StackedBar({
   // variable across a render, and each segment's x is just the sum of the
   // widths before it.
   const laid = shown.reduce((acc, seg) => {
-    const width = (seg.value / total) * W;
+    const width = (seg.value / total) * w;
     const prev = acc[acc.length - 1];
     acc.push({
       ...seg,
@@ -54,11 +64,12 @@ export default function StackedBar({
 
   return (
     <ChartFrame
-      viewBox={[W, height]}
+      viewBox={[w, height]}
       title={title}
       caption={caption}
       tip={tip}
       legend={legend}
+      {...(measured ? { fill: true, minPlotHeight: height, plotRef: setPlotEl } : {})}
     >
       <motion.g variants={chartVariants.container} initial="hidden" animate="visible">
       {laid.map((seg, i) => {

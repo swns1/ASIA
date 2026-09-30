@@ -29,7 +29,7 @@ it explicitly rather than relying on the (now safe) default.
 """
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 from rest_framework.response import Response
@@ -50,6 +50,7 @@ from .services import (
     shape_level_distribution,
     shape_pipeline,
     shape_risk_bands,
+    shape_risk_by_level,
 )
 from .teachers_today import (
     NO_CLASS_EVENT_TYPES,
@@ -164,16 +165,29 @@ class DashboardSummaryView(APIView):
         run = runs.first()  # Meta.ordering = ["-created_at"]
         if not run:
             return {"run_id": None, "computed_at": None,
-                    **shape_risk_bands([])}
+                    **shape_risk_bands([]), "by_level": shape_risk_by_level([])}
 
         scores = StudentRiskScore.objects.filter(run=run)
         if student_ids is not None:
             scores = scores.filter(student_id__in=student_ids)
         rows = scores.values("risk_level").annotate(n=Count("score_id"))
+        # The same counts split by school level. A score keeps only its
+        # enrollment's id (no foreign key), so the level comes from a subquery
+        # -- still one grouped query, no per-student rows in Python.
+        level_rows = (
+            scores.annotate(school_level=Subquery(
+                Enrollment.objects.filter(enrollment_id=OuterRef("enrollment_id"))
+                .values("school_level")[:1]
+            ))
+            .order_by()
+            .values("school_level", "risk_level")
+            .annotate(n=Count("score_id"))
+        )
         return {
             "run_id":      run.run_id,
             "computed_at": run.updated_at,
             **shape_risk_bands(rows),
+            "by_level":    shape_risk_by_level(level_rows),
         }
 
 

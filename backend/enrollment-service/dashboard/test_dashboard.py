@@ -25,6 +25,7 @@ from dashboard.services import (
     shape_level_distribution,
     shape_pipeline,
     shape_risk_bands,
+    shape_risk_by_level,
 )
 from dashboard.views import DASHBOARD_ROLES, DEFAULT_WEEKS, MAX_WEEKS, DashboardSummaryView
 
@@ -115,6 +116,33 @@ class TestShapeRiskBands:
         assert result["flagged"] == 0
         assert result["total"] == 0
         assert all(v == 0 for v in result["bands"].values())
+
+
+# ── shape_risk_by_level ─────────────────────────────────────────────────────
+class TestShapeRiskByLevel:
+    def test_one_rollup_per_level_in_school_order(self):
+        result = shape_risk_by_level([
+            {"school_level": "junior_highschool", "risk_level": "critical", "n": 2},
+            {"school_level": "elementary", "risk_level": "low", "n": 30},
+            {"school_level": "elementary", "risk_level": "high", "n": 4},
+            {"school_level": "junior_highschool", "risk_level": "low", "n": 20},
+        ])
+        assert [row["level"] for row in result] == SCHOOL_LEVELS
+        elementary = result[SCHOOL_LEVELS.index("elementary")]
+        assert elementary["bands"] == {"low": 30, "moderate": 0, "high": 4, "critical": 0}
+        assert (elementary["flagged"], elementary["total"]) == (4, 34)
+        assert result[SCHOOL_LEVELS.index("junior_highschool")]["flagged"] == 2
+
+    def test_a_level_nobody_was_assessed_in_reads_zero(self):
+        nursery = shape_risk_by_level([])[0]
+        assert nursery["level"] == "nursery"
+        assert nursery["label"] == "Nursery"
+        assert (nursery["flagged"], nursery["total"]) == (0, 0)
+        assert set(nursery["bands"]) == set(RISK_BANDS)
+
+    def test_a_score_with_no_known_level_is_left_out(self):
+        result = shape_risk_by_level([{"school_level": None, "risk_level": "high", "n": 3}])
+        assert sum(row["total"] for row in result) == 0
 
 
 # ── shape_attendance_series ─────────────────────────────────────────────────

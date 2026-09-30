@@ -3,10 +3,12 @@ import { render, screen } from "@testing-library/react";
 
 import {
   AttendanceBand,
+  AttendanceTargetBand,
   CollectionsBand,
   LevelBand,
   PipelineBand,
   RiskBand,
+  RiskByLevelBand,
 } from "./DashboardBands";
 
 // These fixtures are the actual responses captured from the live database
@@ -118,6 +120,86 @@ describe("RiskBand", () => {
   it("explains itself when no assessment has been run", () => {
     render(<RiskBand risk={{ bands: {}, flagged: 0, total: 0 }} loading={false} />);
     expect(screen.getByText(/No risk assessment has been run/i)).toBeTruthy();
+  });
+});
+
+describe("RiskByLevelBand", () => {
+  // RISK's fourteen learners, split by the level of their enrollment.
+  const zero = { low: 0, moderate: 0, high: 0, critical: 0 };
+  const BY_LEVEL = {
+    ...RISK,
+    by_level: [
+      { level: "nursery", label: "Nursery", bands: zero, flagged: 0, total: 0 },
+      { level: "elementary", label: "Elementary", bands: { low: 3, moderate: 1, high: 1, critical: 3 }, flagged: 4, total: 8 },
+      { level: "junior_highschool", label: "Junior High", bands: { low: 3, moderate: 1, high: 0, critical: 2 }, flagged: 2, total: 6 },
+    ],
+  };
+  const text = (content) => (_, el) => el?.tagName === "SPAN" && el.textContent === content;
+
+  it("gives each assessed level a bar as long as its learners, and its count to follow up", () => {
+    render(<RiskByLevelBand risk={BY_LEVEL} loading={false} />);
+    const elementary = screen.getByRole("img", { name: "Elementary: 3 On track, 1 Watch, 1 Needs attention, 3 Needs urgent help" });
+    const juniorHigh = screen.getByRole("img", { name: "Junior HS: 3 On track, 1 Watch, 2 Needs urgent help" });
+    expect(elementary.style.width).toBe("100%");
+    expect(juniorHigh.style.width).toBe("75%");
+    expect(screen.getByText(text("4 to follow up"))).toBeTruthy();
+    expect(screen.getByText(text("2 to follow up"))).toBeTruthy();
+    // Nobody assessed in Nursery: no row, rather than "0 to follow up".
+    expect(screen.queryByText("Nursery")).toBeNull();
+  });
+
+  it("names the level with the most learners to follow up", () => {
+    render(<RiskByLevelBand risk={BY_LEVEL} loading={false} />);
+    expect(screen.getByText("Elementary has the most learners to follow up (4).")).toBeTruthy();
+  });
+
+  it("keeps the legend, each band with its icon and school-wide count", () => {
+    const { container } = render(<RiskByLevelBand risk={BY_LEVEL} loading={false} />);
+    expect(screen.getByText(text("Needs urgent help5"))).toBeTruthy();
+    expect(container.querySelectorAll("i.ti").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("falls back to the school-wide bar for a summary with no counts by level", () => {
+    render(<RiskByLevelBand risk={RISK} loading={false} />);
+    expect(screen.getByText(/6 of 14 students need following up/i)).toBeTruthy();
+  });
+
+  it("explains itself when no assessment has been run", () => {
+    render(<RiskByLevelBand risk={{ bands: {}, flagged: 0, total: 0, by_level: [] }} loading={false} />);
+    expect(screen.getByText(/No risk assessment has been run/i)).toBeTruthy();
+  });
+});
+
+describe("AttendanceTargetBand", () => {
+  it("leads with the latest measured week and how many fell below target", () => {
+    render(<AttendanceTargetBand series={ATTENDANCE} loading={false} />);
+    // The headline, not the axis's own 100%.
+    expect(screen.getByText((_, el) => el?.tagName === "SPAN" && el.textContent === "100%")).toBeTruthy();
+    expect(screen.getByText("latest week · 2 of 3 weeks below target")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /weekly attendance rate against the target/i })).toBeTruthy();
+    expect(screen.getByText("90% target")).toBeTruthy();
+  });
+
+  it("marks a week below target, without piling notes on weeks side by side", () => {
+    const { container } = render(<AttendanceTargetBand series={ATTENDANCE} loading={false} />);
+    expect(screen.getByText("82.9% · below target")).toBeTruthy();
+    // The week after is below too, too close for a second note; its point
+    // still says so.
+    expect(screen.queryByText("78.3% · below target")).toBeNull();
+    const titles = [...container.querySelectorAll("circle title")].map((t) => t.textContent);
+    expect(titles).toContain("Week of Jun 15 · 78.3% · below target");
+    expect(titles).toContain("Week of Jul 6 · 100%");
+  });
+
+  it("names each month once along the bottom", () => {
+    render(<AttendanceTargetBand series={ATTENDANCE} loading={false} />);
+    expect(screen.getByText("Jun")).toBeTruthy();
+    expect(screen.getByText("Jul")).toBeTruthy();
+  });
+
+  it("shows an empty state when a period has no records at all", () => {
+    render(<AttendanceTargetBand series={[]} loading={false} />);
+    expect(screen.getByText(/No attendance has been recorded/i)).toBeTruthy();
   });
 });
 

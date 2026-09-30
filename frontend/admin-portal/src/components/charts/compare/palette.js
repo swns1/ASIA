@@ -3,17 +3,6 @@
 
 import { token } from "../tokens";
 
-const LEVEL_TOKENS = {
-  nursery: "--color-nursery-500",
-  kindergarten: "--color-kindergarten-500",
-  elementary: "--color-elementary-500",
-  junior_highschool: "--color-juniorhigh-500",
-  senior_highschool: "--color-seniorhigh-500",
-};
-
-/** A school level's own hue, the one its filter chips use. */
-export const levelColor = (level) => token(LEVEL_TOKENS[level]);
-
 // Two chart-only colours with no token, kept literal for the reason SURFACE
 // is: nothing else in the app uses them.
 //

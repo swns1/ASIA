@@ -10,6 +10,23 @@ export const LEVEL_LABELS = {
   senior_highschool: "Senior High School",
 };
 
+// For a narrow label column (a chart's row labels): the two long names cut to
+// fit beside an icon.
+export const LEVEL_SHORT_LABELS = {
+  ...LEVEL_LABELS,
+  junior_highschool: "Junior HS",
+  senior_highschool: "Senior HS",
+};
+
+// One icon per level, the ones the staff dashboard's enrollment list uses.
+export const LEVEL_ICONS = {
+  nursery: "ti-baby-carriage",
+  kindergarten: "ti-star",
+  elementary: "ti-book",
+  junior_highschool: "ti-school",
+  senior_highschool: "ti-certificate",
+};
+
 // GRADE_LEVELS_BY_LEVEL / SHS_STRANDS / schoolLevelForGrade —
 //
 // The canonical DepEd grade ladder. Promoted here out of EnrollmentFormPage

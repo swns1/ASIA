@@ -30,6 +30,8 @@ const DOTS = {
 const SIZES = {
   sm: "text-xs px-2 py-0.5 gap-1",
   md: "text-xs px-2.5 py-1 gap-1.5",
+  // Beside a headline figure, where an 11px pill looks like a footnote.
+  lg: "text-sm px-2.5 py-[3px] gap-1",
 };
 
 export default function Badge({
