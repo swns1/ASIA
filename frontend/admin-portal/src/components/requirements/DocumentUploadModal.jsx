@@ -4,7 +4,10 @@ import toast from "react-hot-toast";
 import { scanDocument } from "../../api/ocrApi";
 import { replaceRequirement, resolveMediaUrl, uploadRequirement } from "../../api/requirementApi";
 import DocumentCheckStrip from "./DocumentCheckStrip";
-import { C } from "./requirementMeta";
+import Modal from "../ui/Modal";
+import Button from "../ui/Button";
+import Alert from "../ui/Alert";
+import { Field, Textarea } from "../FormField";
 
 /**
  * Upload or replace one document, with an advisory OCR check.
@@ -17,6 +20,12 @@ import { C } from "./requirementMeta";
  *
  * The check never gates the upload. A registrar holding a valid but unusual
  * document has to be able to proceed.
+ *
+ * The dialog shell is ui/Modal, so this inherits the focus trap, Escape
+ * handling and restore-focus-on-close that the hand-rolled <div> overlay it
+ * used to draw had none of. Its header is left-aligned with the requirement
+ * name under it, which Modal's centred title block doesn't do — so the header
+ * is passed as content and Modal just supplies the shell and close button.
  */
 export default function DocumentUploadModal({ requirement, studentId, student, onClose, onSuccess }) {
   const [file, setFile] = useState(null);
@@ -106,139 +115,114 @@ export default function DocumentUploadModal({ requirement, studentId, student, o
     : null;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.45)", display: "flex",
-                  alignItems: "center", justifyContent: "center", zIndex: 998,
-                  backdropFilter: "blur(4px)", padding: 16 }}>
-      <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 500,
-                    boxShadow: "0 24px 64px rgba(224,49,49,0.15)", display: "flex",
-                    flexDirection: "column", maxHeight: "90vh", overflow: "hidden",
-                    animation: "slideUp 0.2s ease" }}>
-        <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex",
-                      alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-              {isReplace ? "Replace" : "Upload"} Document
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{requirement?.requirement_name}</div>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{ width: 32, height: 32, border: `1px solid ${C.border}`, borderRadius: 8,
-                     background: "white", cursor: "pointer", display: "flex", alignItems: "center",
-                     justifyContent: "center", color: C.muted }}
-          >
-            <i className="ti ti-x" style={{ fontSize: 14 }} />
-          </button>
-        </div>
-
-        <div style={{ padding: "20px 24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-          {currentImageUrl && !preview && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase",
-                            letterSpacing: "0.06em", marginBottom: 8 }}>Current File</div>
-              <img src={currentImageUrl} alt="current"
-                   style={{ width: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 10,
-                            border: `1px solid ${C.border}`, background: "#fafafa" }} />
-            </div>
-          )}
-
-          <div
-            onDrop={(e) => { e.preventDefault(); acceptFile(e.dataTransfer.files?.[0]); }}
-            onDragOver={(e) => e.preventDefault()}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ border: `2px dashed ${file ? C.redBorder : "#e0d0d0"}`, borderRadius: 12,
-                     padding: "24px 16px", textAlign: "center", cursor: "pointer",
-                     background: file ? C.redLight : "#fafafa", transition: "all 0.15s" }}
-          >
-            {/* capture="environment" lets a tablet at the counter photograph
-                the document instead of hunting for a file. Harmless on desktop. */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf"
-              capture="environment"
-              style={{ display: "none" }}
-              onChange={(e) => acceptFile(e.target.files?.[0])}
-            />
-            {preview ? (
-              <img src={preview} alt="preview"
-                   style={{ maxHeight: 180, maxWidth: "100%", objectFit: "contain", borderRadius: 8 }} />
-            ) : file ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-file-description" style={{ fontSize: 32, color: C.red }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{file.name}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>Click to change file</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <i className="ti ti-cloud-upload" style={{ fontSize: 32, color: "#8a6a6a" }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.muted }}>
-                  {isReplace ? "Drop new file or click to browse" : "Drop file here or click to browse"}
-                </div>
-                <div style={{ fontSize: 11, color: C.pale }}>Images (JPG, PNG, GIF) or PDF</div>
-              </div>
-            )}
-          </div>
-
-          <DocumentCheckStrip
-            state={checkState}
-            check={check}
-            requirementName={requirement?.requirement_name}
-            studentName={student ? `${student.first_name} ${student.last_name}` : ""}
-          />
-
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase",
-                            letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
-              Remarks <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span>
-            </label>
-            <textarea
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              rows={2}
-              placeholder="Add any notes about this document…"
-              style={{ width: "100%", border: "1.5px solid #f0ceca", borderRadius: 10, padding: "10px 12px",
-                       fontSize: 13, fontFamily: "'DM Sans',sans-serif", resize: "vertical", outline: "none",
-                       color: C.text, background: "#fffbfb", boxSizing: "border-box" }}
-            />
-          </div>
-
-          {error && (
-            <div style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10,
-                          padding: "10px 14px", fontSize: 13, color: "#b91c1c", display: "flex",
-                          alignItems: "center", gap: 8 }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-            </div>
-          )}
-        </div>
-
-        <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>
-          <button
-            onClick={onClose}
-            style={{ flex: 1, height: 42, border: `1px solid ${C.border}`, borderRadius: 10, background: "white",
-                     color: C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                     fontFamily: "'DM Sans',sans-serif" }}
-          >
+    <Modal
+      onClose={onClose}
+      size="md"
+      showClose
+      loading={uploading}
+      className="text-left"
+      footer={
+        <div className="flex gap-2.5">
+          <Button variant="secondary" className="flex-1" onClick={onClose} disabled={uploading}>
             Cancel
-          </button>
-          <button
+          </Button>
+          {/* Upload takes twice Cancel's width, as before — it's the action
+              the dialog exists for. */}
+          <Button
+            className="flex-[2]"
             onClick={handleSubmit}
-            disabled={uploading || (!file && !isReplace)}
-            style={{ flex: 2, height: 42, border: "none", borderRadius: 10,
-                     background: uploading ? "#f0dada" : `linear-gradient(135deg,${C.red},${C.redDark})`,
-                     color: uploading ? "#8a6a6a" : "white", fontSize: 13, fontWeight: 700,
-                     cursor: uploading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
-                     display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            loading={uploading}
+            disabled={!file && !isReplace}
+            icon="ti-upload"
           >
-            {uploading ? (
-              <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 0.8s linear infinite" }} />Uploading…</>
-            ) : (
-              <><i className="ti ti-upload" style={{ fontSize: 14 }} />{isReplace ? "Replace Document" : "Upload Document"}</>
-            )}
-          </button>
+            {uploading ? "Uploading…" : isReplace ? "Replace Document" : "Upload Document"}
+          </Button>
         </div>
+      }
+    >
+      <div className="mb-5">
+        <h2 className="text-md font-bold text-neutral-900">
+          {isReplace ? "Replace" : "Upload"} Document
+        </h2>
+        <p className="mt-0.5 text-xs text-neutral-700">{requirement?.requirement_name}</p>
       </div>
-    </div>
+
+      <div className="flex flex-col gap-4">
+        {currentImageUrl && !preview && (
+          <div>
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-700">
+              Current File
+            </div>
+            <img
+              src={currentImageUrl}
+              alt="current"
+              className="max-h-40 w-full rounded-lg border border-neutral-200 bg-neutral-50 object-contain"
+            />
+          </div>
+        )}
+
+        {/* The drop zone is a button so it's reachable by keyboard: it used to
+            be a div with onClick, so the only way to attach a file was a
+            mouse. */}
+        <button
+          type="button"
+          onDrop={(e) => { e.preventDefault(); acceptFile(e.dataTransfer.files?.[0]); }}
+          onDragOver={(e) => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+          className={`focus-ring w-full cursor-pointer rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors duration-150 ${
+            file ? "border-brand-300 bg-brand-100" : "border-neutral-300 bg-neutral-50 hover:border-brand-300"
+          }`}
+        >
+          {/* capture="environment" lets a tablet at the counter photograph
+              the document instead of hunting for a file. Harmless on desktop. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => acceptFile(e.target.files?.[0])}
+          />
+          {preview ? (
+            <img src={preview} alt="preview" className="mx-auto max-h-44 max-w-full rounded-lg object-contain" />
+          ) : file ? (
+            <div className="flex flex-col items-center gap-2">
+              <i className="ti ti-file-description text-3xl text-brand-500" aria-hidden="true" />
+              <div className="text-sm font-semibold text-neutral-900">{file.name}</div>
+              <div className="text-[11px] text-neutral-700">Click to change file</div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <i className="ti ti-cloud-upload text-3xl text-neutral-500" aria-hidden="true" />
+              <div className="text-sm font-semibold text-neutral-700">
+                {isReplace ? "Drop new file or click to browse" : "Drop file here or click to browse"}
+              </div>
+              <div className="text-[11px] text-neutral-500">Images (JPG, PNG, GIF) or PDF</div>
+            </div>
+          )}
+        </button>
+
+        <DocumentCheckStrip
+          state={checkState}
+          check={check}
+          requirementName={requirement?.requirement_name}
+          studentName={student ? `${student.first_name} ${student.last_name}` : ""}
+        />
+
+        <Field
+          label="Remarks"
+          hint="Optional — add any notes about this document."
+        >
+          <Textarea
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            rows={2}
+            placeholder="Add any notes about this document…"
+          />
+        </Field>
+
+        {error && <Alert variant="error">{error}</Alert>}
+      </div>
+    </Modal>
   );
 }

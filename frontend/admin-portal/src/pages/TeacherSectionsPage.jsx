@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { StatCard } from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import Button from "../components/ui/Button";
 import { Select } from "../components/FormField";
 import {
   getMySections,
@@ -127,64 +129,54 @@ function gradeColor(g) {
 }
 
 // ── Students tab: roster table with an inline read-only quick-view row ──────
+const ROSTER_COLUMNS = [
+  { key: "name",    label: "Name" },
+  { key: "lrn",     label: "LRN" },
+  { key: "number",  label: "Student No." },
+  { key: "sex",     label: "Sex" },
+  // The quick-view button's column: no heading to give it.
+  { key: "actions", label: "", align: "right" },
+];
+
 function StudentsTab({ students, todayAttendanceByStudent }) {
   const navigate = useNavigate();
   const [quickViewId, setQuickViewId] = useState(null);
 
-  if (students.length === 0) {
-    return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
-        No enrolled students in this section yet.
-      </div>
-    );
-  }
-
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-      <thead>
-        <tr style={{ background: "#fdfafa" }}>
-          {["Name", "LRN", "Student No.", "Sex", ""].map((label) => (
-            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-              {label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
+    <Table
+      columns={ROSTER_COLUMNS}
+      isEmpty={students.length === 0}
+      empty={{
+        icon: "ti-users",
+        title: "No enrolled students in this section yet",
+        subtitle: "Students appear here once they are enrolled into it.",
+      }}
+    >
         {students.map((s) => {
           const open = quickViewId === s.student_id;
           const today = todayAttendanceByStudent?.[s.student_id];
           const statusMeta = today ? ATTENDANCE_STATUSES.find((a) => a.value === today.status) : null;
           return (
             <Fragment key={s.student_id}>
-              <tr
-                className="student-row"
-                onClick={() => navigate(`/students/${s.student_id}`)}
-              >
-                <td className="row-name" style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
-                  {fullName(s)}
-                </td>
-                <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.lrn}</td>
-                <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.student_number}</td>
-                <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{s.sex}</td>
-                <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", textAlign: "right" }}>
-                  <button
+              <TableRow onClick={() => navigate(`/students/${s.student_id}`)}>
+                <TableCell className="font-semibold text-neutral-900">{fullName(s)}</TableCell>
+                <TableCell className="text-neutral-700">{s.lrn}</TableCell>
+                <TableCell className="text-neutral-700">{s.student_number}</TableCell>
+                <TableCell className="text-neutral-700">{s.sex}</TableCell>
+                <TableCell align="right">
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={(e) => { e.stopPropagation(); setQuickViewId(open ? null : s.student_id); }}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      border: "1.5px solid #f0e4e4", borderRadius: 7, background: "white",
-                      padding: "5px 10px", fontSize: 11.5, color: "#7a5050", cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
-                    }}
+                    icon="ti-info-circle"
                   >
-                    <i className="ti ti-info-circle" style={{ fontSize: 13 }} />
                     Quick view
-                  </button>
-                </td>
-              </tr>
+                  </Button>
+                </TableCell>
+              </TableRow>
               {open && (
                 <tr key={`${s.student_id}-quick`}>
-                  <td colSpan={5} style={{ padding: 0, borderBottom: "1px solid #f9f0f0", background: "#fdfafa" }}>
+                  <td colSpan={ROSTER_COLUMNS.length} className="border-b border-neutral-200 bg-neutral-50 p-0">
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 24, padding: "14px 26px" }}>
                       <div>
                         <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
@@ -229,45 +221,47 @@ function StudentsTab({ students, todayAttendanceByStudent }) {
             </Fragment>
           );
         })}
-      </tbody>
-    </table>
+    </Table>
   );
 }
 
 // ── Subjects tab ──────────────────────────────────────────────────────────────
+const SUBJECT_COLUMNS = [
+  { key: "code",     label: "Code" },
+  { key: "subject",  label: "Subject" },
+  { key: "semester", label: "Semester" },
+];
+
 function SubjectsTab({ subjects }) {
-  if (subjects.length === 0) {
-    return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
-        No subjects configured for this grade level yet.
-      </div>
-    );
-  }
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-      <thead>
-        <tr style={{ background: "#fdfafa" }}>
-          {["Code", "Subject", "Semester"].map((label) => (
-            <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-              {label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {subjects.map((sub) => (
-          <tr key={sub.subject_id}>
-            <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{sub.subject_code}</td>
-            <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>{sub.subject_name}</td>
-            <td style={{ padding: "11px 26px", borderBottom: "1px solid #f9f0f0", color: "#7a5050" }}>{sub.semester || "—"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <Table
+      columns={SUBJECT_COLUMNS}
+      isEmpty={subjects.length === 0}
+      empty={{
+        icon: "ti-book",
+        title: "No subjects configured for this grade level yet",
+        withAvatar: false,
+      }}
+    >
+      {subjects.map((sub) => (
+        <TableRow key={sub.subject_id}>
+          <TableCell className="text-neutral-700">{sub.subject_code}</TableCell>
+          <TableCell className="font-semibold text-neutral-900">{sub.subject_name}</TableCell>
+          <TableCell className="text-neutral-700">{sub.semester || "—"}</TableCell>
+        </TableRow>
+      ))}
+    </Table>
   );
 }
 
 // ── Grades tab: subject + period pickers, then an editable grade grid ────────
+const GRADE_ENTRY_COLUMNS = [
+  { key: "name",    label: "Name" },
+  { key: "grade",   label: "Grade" },
+  { key: "remarks", label: "Remarks" },
+  { key: "link",    label: "", align: "right" },
+];
+
 function GradesTab({ advisory, subjects }) {
   const navigate = useNavigate();
   const [subjectId, setSubjectId] = useState(subjects[0]?.subject_id ?? "");
@@ -401,74 +395,67 @@ function GradesTab({ advisory, subjects }) {
         <div style={{ padding: "20px 26px", display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
         </div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
-          No enrolled students in this section.
-        </div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#fdfafa" }}>
-              {["Name", "Grade", "Remarks", ""].map((label) => (
-                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+        <Table
+          columns={GRADE_ENTRY_COLUMNS}
+          isEmpty={rows.length === 0}
+          empty={{ icon: "ti-users", title: "No enrolled students in this section", withAvatar: false }}
+        >
             {rows.map((r) => {
               const sid = r.student.student_id;
               const draft = drafts[sid] ?? "";
               const gc = gradeColor(draft);
               return (
-                <tr key={sid}>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
+                <TableRow key={sid}>
+                  <TableCell className="font-semibold text-neutral-900">
                     {fullName(r.student)}
-                  </td>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0" }}>
+                  </TableCell>
+                  <TableCell>
                     <input
                       type="number"
                       min="0"
                       max="100"
                       value={draft}
+                      aria-label={`Grade for ${fullName(r.student)}`}
                       onChange={(e) => setDrafts((d) => ({ ...d, [sid]: e.target.value }))}
-                      style={{ width: 70, border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 8px", fontSize: 13, textAlign: "right", fontFamily: "'DM Sans',sans-serif", outline: "none" }}
+                      className="w-[70px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-right text-sm outline-none focus:border-brand-500"
                     />
-                  </td>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0" }}>
+                  </TableCell>
+                  <TableCell>
                     {draft !== "" && !Number.isNaN(parseFloat(draft)) && (
-                      <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 99, ...gc }}>
+                      <span
+                        className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
+                        style={gc}
+                      >
                         {parseFloat(draft) >= PASS_THRESHOLD ? "Passed" : "Failed"}
                       </span>
                     )}
-                  </td>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0", textAlign: "right" }}>
-                    <button
+                  </TableCell>
+                  <TableCell align="right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => navigate(`/grades?student=${sid}&tab=summary&enrollment=${r.enrollment_id}`)}
                       title="View full grade summary"
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: 5,
-                        background: "none", border: "none", cursor: "pointer",
-                        fontSize: 11.5, fontWeight: 600, color: "#c92a2a",
-                        fontFamily: "'DM Sans',sans-serif", padding: 0,
-                      }}
+                      className="text-brand-600"
                     >
                       Summary
-                      <i className="ti ti-arrow-up-right" style={{ fontSize: 12 }} />
-                    </button>
-                  </td>
-                </tr>
+                      <i className="ti ti-arrow-up-right text-xs" aria-hidden="true" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+        </Table>
       )}
     </div>
   );
 }
 
 // ── Narrative Report tab: per-student rating grid, one column per category ──
+// Keeps its own <table>: this is a student x category cross-tab whose columns
+// are data, not a fixed record list, so ui/Table's `columns` prop has nothing
+// to describe. Same reasoning as the gradebook matrix in GradesPage.
 function NarrativeTab({ advisory }) {
   const [period, setPeriod] = useState("");
   const [categories, setCategories] = useState([]);
@@ -664,6 +651,12 @@ function NarrativeTab({ advisory }) {
 }
 
 // ── Attendance tab: date nav + per-student status grid for that day ─────────
+const ATTENDANCE_ENTRY_COLUMNS = [
+  { key: "name",    label: "Name" },
+  { key: "status",  label: "Status" },
+  { key: "remarks", label: "Remarks" },
+];
+
 function AttendanceTab({ advisory, onTodayChange }) {
   const [date, setDate] = useState(todayISO());
   const [rows, setRows] = useState([]);
@@ -826,68 +819,61 @@ function AttendanceTab({ advisory, onTodayChange }) {
         <div style={{ padding: "20px 26px", display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3].map((i) => <Sk key={i} h={18} />)}
         </div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
-          No enrolled students in this section.
-        </div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#fdfafa" }}>
-              {["Name", "Status", "Remarks"].map((label) => (
-                <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+        <Table
+          columns={ATTENDANCE_ENTRY_COLUMNS}
+          isEmpty={rows.length === 0}
+          empty={{ icon: "ti-users", title: "No enrolled students in this section", withAvatar: false }}
+        >
             {rows.map((r) => {
               const sid = r.student.student_id;
               const draft = drafts[sid] ?? { status: "P", remarks: "" };
               return (
-                <tr key={sid}>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
+                <TableRow key={sid}>
+                  <TableCell className="font-semibold text-neutral-900">
                     {fullName(r.student)}
-                  </td>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0" }}>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {ATTENDANCE_STATUSES.map((s) => {
-                        const active = draft.status === s.value;
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {ATTENDANCE_STATUSES.map((st) => {
+                        const active = draft.status === st.value;
                         return (
                           <button
-                            key={s.value}
-                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: s.value } }))}
-                            title={s.label}
-                            style={{
-                              width: 30, height: 26, borderRadius: 7,
-                              border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
-                              background: active ? s.bg : "white",
-                              color: active ? s.color : "#855c5c",
-                              fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                              fontFamily: "'DM Sans',sans-serif",
-                            }}
+                            key={st.value}
+                            type="button"
+                            onClick={() => setDrafts((d) => ({ ...d, [sid]: { ...draft, status: st.value } }))}
+                            title={st.label}
+                            aria-pressed={active}
+                            aria-label={`${st.label} — ${fullName(r.student)}`}
+                            className="focus-ring h-[26px] w-[30px] rounded-md border-[1.5px] text-[11.5px] font-bold"
+                            // Each status carries its own reserved colour, so
+                            // the active tint is a value rather than a token.
+                            style={
+                              active
+                                ? { borderColor: st.color, background: st.bg, color: st.color }
+                                : undefined
+                            }
                           >
-                            {s.value}
+                            <span className={active ? "" : "text-neutral-600"}>{st.value}</span>
                           </button>
                         );
                       })}
                     </div>
-                  </td>
-                  <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0" }}>
+                  </TableCell>
+                  <TableCell>
                     <input
                       type="text"
                       value={draft.remarks}
                       placeholder="Optional remarks"
+                      aria-label={`Remarks for ${fullName(r.student)}`}
                       onChange={(e) => setDrafts((d) => ({ ...d, [sid]: { ...draft, remarks: e.target.value } }))}
-                      style={{ width: "100%", maxWidth: 220, border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 8px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", outline: "none" }}
+                      className="w-full max-w-[220px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
                     />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+        </Table>
       )}
     </div>
   );
@@ -999,40 +985,49 @@ function DailyBarChart({ daily }) {
   );
 }
 
+const ATTENDANCE_RATE_COLUMNS = [
+  { key: "name",   label: "Name" },
+  { key: "counts", label: "P / A / L / E" },
+  { key: "rate",   label: "Rate" },
+];
+
 function StudentRateRow({ row }) {
   const rate = row.attendance_rate;
+  // Meter colour is a threshold verdict, not a brand tone — kept as values.
   const meterColor = rate === null ? "#e0d0d0"
     : rate >= GRADE_OUTSTANDING ? "#2e6b0d"
     : rate >= GRADE_PASSING ? "#b45309"
     : "#9b2020";
   return (
-    <tr>
-      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a" }}>
-        {row.name}
-      </td>
-      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0" }}>
-        <div style={{ display: "flex", gap: 10, fontSize: 11.5 }}>
+    <TableRow>
+      <TableCell className="font-semibold text-neutral-900">{row.name}</TableCell>
+      <TableCell>
+        <div className="flex gap-2.5 text-[11.5px]">
           {ATTENDANCE_STATUSES.map((s) => {
             const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
             return (
-              <span key={s.value} style={{ color: s.color, fontWeight: 700 }}>
-                {row[key]}<span style={{ color: "#8a6a6a", fontWeight: 500 }}>{s.value}</span>
+              <span key={s.value} className="font-bold" style={{ color: s.color }}>
+                {row[key]}
+                <span className="font-medium text-neutral-500">{s.value}</span>
               </span>
             );
           })}
         </div>
-      </td>
-      <td style={{ padding: "10px 22px", borderBottom: "1px solid #f9f0f0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1, maxWidth: 120, height: 7, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ width: `${rate ?? 0}%`, height: "100%", background: meterColor, borderRadius: 99, transition: "width 0.4s ease" }} />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <div className="h-[7px] max-w-[120px] flex-1 overflow-hidden rounded-full bg-neutral-300">
+            <div
+              className="h-full rounded-full transition-[width] duration-400"
+              style={{ width: `${rate ?? 0}%`, background: meterColor }}
+            />
           </div>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: meterColor, minWidth: 42 }}>
+          <span className="min-w-[42px] text-[12.5px] font-bold" style={{ color: meterColor }}>
             {rate === null ? "—" : `${rate}%`}
           </span>
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -1179,28 +1174,15 @@ function StatsTab({ advisory }) {
                   ))}
                 </div>
               </div>
-              {perStudentSorted.length === 0 ? (
-                <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
-                  No attendance data in this range.
-                </div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "#fdfafa" }}>
-                      {["Name", "P / A / L / E", "Rate"].map((label) => (
-                        <th key={label} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 22px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {perStudentSorted.map((row) => (
-                      <StudentRateRow key={row.student_id} row={row} />
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              <Table
+                columns={ATTENDANCE_RATE_COLUMNS}
+                isEmpty={perStudentSorted.length === 0}
+                empty={{ icon: "ti-calendar-stats", title: "No attendance data in this range", withAvatar: false }}
+              >
+                {perStudentSorted.map((row) => (
+                  <StudentRateRow key={row.student_id} row={row} />
+                ))}
+              </Table>
             </div>
           </motion.div>
         </AnimatePresence>

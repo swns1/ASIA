@@ -86,6 +86,36 @@ export function SectionHeader({ icon, title, subtitle, action, className = "" })
 }
 
 /**
+ * ModalHeader — left-aligned icon chip + title + subtitle, for a dialog whose
+ * header is a heading rather than ui/Modal's centred title block (which suits
+ * a confirm, not a form). Used by the upload, fee-schedule, grading-template
+ * and calendar dialogs, which each drew this by hand.
+ *
+ * `tint` overrides the chip's colours ({ background, color, borderColor }) for
+ * a dialog whose accent is a value rather than a token — the calendar's event
+ * colours are user-chosen hex, so they can't be classes.
+ */
+export function ModalHeader({ icon, title, subtitle, tint, action, className = "" }) {
+  return (
+    <div className={`mb-5 flex items-center gap-3.5 ${className}`}>
+      <span
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
+          tint ? "" : "border-transparent bg-brand-100 text-brand-600"
+        }`}
+        style={tint}
+      >
+        <i className={`ti ${icon} text-xl`} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-bold text-neutral-900">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-[11px] text-neutral-500">{subtitle}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+/**
  * Divider — a labelled rule between field groups within a step.
  */
 export function Divider({ label, className = "" }) {

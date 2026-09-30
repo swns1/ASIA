@@ -6,7 +6,10 @@ import Tabs from "../components/ui/Tabs";
 import toast from "react-hot-toast";
 import { Link, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
-import { listVariants, modalVariants, springTransition } from "../utils/motion";
+import Modal from "../components/ui/Modal";
+import Button from "../components/ui/Button";
+import Alert from "../components/ui/Alert";
+import { listVariants } from "../utils/motion";
 import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
 import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
@@ -617,43 +620,35 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
   const inp = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box", cursor: "pointer" };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }}
-    >
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit"
-        transition={springTransition}
-        style={{ background: "white", borderRadius: 20, width: 420, boxShadow: "0 24px 64px rgba(224,49,49,0.18)", overflow: "hidden" }}
-      >
-        <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <i className="ti ti-cash" style={{ fontSize: 20, color: "#c92a2a" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>New Fee Schedule</div>
-              <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>For S.Y. {schoolYear}: select a level and grade</div>
-            </div>
-          </div>
-          <motion.button onClick={onClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", fontSize: 20, display: "flex", alignItems: "center" }}>
-            <i className="ti ti-x" />
-          </motion.button>
+    <Modal
+      onClose={onClose}
+      size="sm"
+      showClose
+      loading={saving}
+      className="text-left"
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreate} loading={saving} icon="ti-plus">
+            {saving ? "Creating…" : "Create"}
+          </Button>
         </div>
+      }
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
+          <i className="ti ti-cash text-xl" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-neutral-900">New Fee Schedule</h2>
+          <p className="text-[11px] text-neutral-500">For S.Y. {schoolYear}: select a level and grade</p>
+        </div>
+      </div>
 
-        <div style={{ padding: "22px 28px" }}>
           <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
-                style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
-              </motion.div>
-            )}
+            {error && <Alert key="sched-error" variant="error" className="mb-3.5">{error}</Alert>}
           </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
@@ -685,26 +680,8 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
               {lvl.grades.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
-        </div>
 
-        <div style={{ padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f5eaea" }}>
-          <motion.button onClick={onClose}
-            whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
-            style={{ background: "transparent", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 50, padding: "9px 22px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: "pointer" }}>
-            Cancel
-          </motion.button>
-          <motion.button onClick={handleCreate} disabled={saving}
-            whileHover={!saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
-            whileTap={!saving ? { scale: 0.96 } : {}}
-            style={{ background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "9px 24px", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />Creating…</>
-              : <><i className="ti ti-plus" style={{ fontSize: 13 }} />Create</>
-            }
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
+    </Modal>
   );
 }
 

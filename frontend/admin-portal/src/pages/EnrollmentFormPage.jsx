@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useRef, useId } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
-import { ConfirmDialog } from "../components/ui/Modal";
+import Modal, { ConfirmDialog } from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -15,7 +15,6 @@ import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { readinessChecks, canSwitchToPending } from "./enrollment/enrollmentReadiness";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_READ_ROLES } from "../utils/auth";
-import { modalVariants, springTransition } from "../utils/motion";
 
 // ── API calls ─────────────────────────────────────────────────────────────
 import {
@@ -1717,92 +1716,71 @@ function InvoicePromptModal({ enrollmentId, studentName, effectiveDate, onClose,
     }
   }
 
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        onClick={!generating ? onClose : undefined}
-        style={{ position: "absolute", inset: 0, background: "rgba(26,10,10,0.5)", backdropFilter: "blur(4px)" }}
+
+  // Two faces, one dialog: the plan picker, then the outcome. Both are
+  // centred title-and-description blocks, which is exactly Modal's own
+  // header, so each face just supplies title/description/footer.
+  if (done) {
+    return (
+      <Modal
+        onClose={onClose}
+        size="sm"
+        icon="ti-circle-check"
+        iconTone="brand"
+        title={alreadyInvoiced ? "Already Invoiced" : "Invoice Generated"}
+        description={
+          alreadyInvoiced
+            ? <><strong>{studentName}</strong> already has this school year&apos;s invoice, so no second one was made. {alreadyInvoiced}</>
+            : <>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</>
+        }
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="secondary" fullWidth onClick={onClose}>
+              Back to Enrollments
+            </Button>
+            <Button fullWidth onClick={onGoToInvoices}>
+              View Invoices
+            </Button>
+          </div>
+        }
       />
-      <motion.div
-        variants={modalVariants} initial="hidden" animate="visible" exit="exit" transition={springTransition}
-        style={{ position: "relative", background: "white", borderRadius: 16, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(224,49,49,0.18)", fontFamily: "'DM Sans', sans-serif" }}>
-        <AnimatePresence mode="wait">
-          {done ? (
-            <motion.div key="done" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
-              <div style={{ textAlign: "center", marginBottom: 20 }}>
-                <motion.div
-                  initial={{ scale: 0.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 22 }}
-                  style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
-                </motion.div>
-                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>{alreadyInvoiced ? "Already Invoiced" : "Invoice Generated"}</h3>
-                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
-                  {alreadyInvoiced
-                    ? <><strong>{studentName}</strong> already has this school year&apos;s invoice, so no second one was made. {alreadyInvoiced}</>
-                    : <>Invoice created for <strong>{studentName}</strong>. You can view it in the Invoices page.</>}
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                  onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  Back to Enrollments
-                </motion.button>
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                  onClick={onGoToInvoices} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  View Invoices
-                </motion.button>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div key="prompt" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
-              <div style={{ marginBottom: 20 }}>
-                <h3 style={{ margin: "0 0 6px", fontSize: 18, color: "#1a0a0a" }}>Generate Invoice?</h3>
-                <p style={{ margin: 0, fontSize: 14, color: "#7a5050" }}>
-                  <strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?
-                </p>
-                {effectiveDate && (
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#b45309", fontStyle: "italic" }}>
-                    Transfer-in student — the installment schedule will be prorated to start from {effectiveDate}.
-                  </p>
-                )}
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "#5a3a3a", display: "block", marginBottom: 6 }}>Payment Plan</label>
-                <select value={plan} onChange={(e) => setPlan(e.target.value)}
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #fca5a5", fontSize: 14, background: "#fff8f6", color: "#1a0a0a" }}>
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="semi_annual">Semi-Annual</option>
-                  <option value="annual">Annual (Full Year)</option>
-                </select>
-              </div>
-              <AnimatePresence>
-                {error && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
-                    style={{ color: "#c92a2a", fontSize: 13, marginBottom: 12 }}>{error}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-              <div style={{ display: "flex", gap: 10 }}>
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                  onClick={onClose} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: "#7a5050", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  Skip for Now
-                </motion.button>
-                <motion.button
-                  whileHover={!generating ? { scale: 1.03 } : {}}
-                  whileTap={!generating ? { scale: 0.96 } : {}}
-                  transition={{ duration: 0.12 }}
-                  onClick={handleGenerate} disabled={generating} style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: generating ? "#f0c4c4" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                  {generating ? "Generating…" : "Generate Invoice"}
-                </motion.button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </div>
+    );
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="sm"
+      loading={generating}
+      title="Generate Invoice?"
+      description={<><strong>{studentName}</strong> has been enrolled. Would you like to generate a billing invoice now?</>}
+      footer={
+        <div className="flex gap-2.5">
+          <Button variant="secondary" fullWidth onClick={onClose} disabled={generating}>
+            Skip for Now
+          </Button>
+          <Button fullWidth onClick={handleGenerate} loading={generating}>
+            {generating ? "Generating…" : "Generate Invoice"}
+          </Button>
+        </div>
+      }
+    >
+      {effectiveDate && (
+        <Alert variant="warning" className="mb-4">
+          Transfer-in student — the installment schedule will be prorated to start from {effectiveDate}.
+        </Alert>
+      )}
+
+      <Field label="Payment Plan">
+        <Select value={plan} onChange={(e) => setPlan(e.target.value)}>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="semi_annual">Semi-Annual</option>
+          <option value="annual">Annual (Full Year)</option>
+        </Select>
+      </Field>
+
+      {error && <Alert variant="error">{error}</Alert>}
+    </Modal>
   );
 }

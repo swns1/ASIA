@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import {
   getEnrollment,
   getEnrollmentEligibility,
@@ -12,6 +13,10 @@ import {
   sendEnrollmentEmail,
 } from "../api/enrollmentApi";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
+import Modal from "../components/ui/Modal";
+import Button from "../components/ui/Button";
+import Alert from "../components/ui/Alert";
+import { Field, Input, Textarea } from "../components/FormField";
 import { getInvoices, closeOutInvoiceForTransfer } from "../api/billingApi";
 
 import { updateStudentStatus } from "../api/studentApi";
@@ -510,6 +515,9 @@ export default function EnrollmentDetailPage() {
             {Object.keys(gradesBySubject).length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, color: C.muted }}>No grades recorded yet.</p>
             ) : (
+              /* Keeps its own <table>: a subject x grading-period cross-tab,
+                 whose columns come from the data rather than a fixed list, so
+                 ui/Table has nothing to describe. Same as GradesPage. */
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 480 }}>
                   <thead>
@@ -565,85 +573,94 @@ export default function EnrollmentDetailPage() {
       </div>
 
       {/* Mark Completed Confirm Modal */}
+      <AnimatePresence>
       {completeConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "white", borderRadius: 16, padding: 28, maxWidth: 400, width: "100%", boxShadow: "0 8px 40px rgba(20,85,160,0.15)", fontFamily: "'DM Sans', sans-serif" }}>
-            <h3 style={{ margin: "0 0 10px", color: C.dark }}>Mark as Completed?</h3>
-            <p style={{ margin: "0 0 16px", fontSize: 14, color: C.muted }}>
-              This will change enrollment status to <strong>Completed</strong> and unlock the next school year's enrollment eligibility for this student.
-            </p>
-            {completeError && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{completeError}</p>}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setCompleteConfirm(false); setCompleteError(""); }}
+        <Modal
+          onClose={() => { setCompleteConfirm(false); setCompleteError(""); }}
+          size="sm"
+          icon="ti-circle-check"
+          iconTone="neutral"
+          title="Mark as Completed?"
+          description={<>This will change enrollment status to <strong>Completed</strong> and unlock the next school year&apos;s enrollment eligibility for this student.</>}
+          loading={completing}
+          footer={
+            <div className="flex gap-2.5">
+              <Button
+                variant="secondary" fullWidth data-autofocus
+                onClick={() => { setCompleteConfirm(false); setCompleteError(""); }}
                 disabled={completing}
-                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #fca5a5", background: "transparent", color: C.muted, fontWeight: 600, cursor: "pointer" }}>
+              >
                 Cancel
-              </button>
-              <button onClick={handleMarkCompleted} disabled={completing}
-                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: completing ? "#9ab5d4" : "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", fontWeight: 700, cursor: completing ? "not-allowed" : "pointer" }}>
+              </Button>
+              <Button fullWidth onClick={handleMarkCompleted} loading={completing}>
                 {completing ? "Saving…" : "Confirm"}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          {completeError && <Alert variant="error">{completeError}</Alert>}
+        </Modal>
       )}
 
       {/* Transfer Out Confirm Modal */}
       {transferConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(26,10,10,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "white", borderRadius: 16, padding: 28, maxWidth: 440, width: "100%", boxShadow: "0 8px 40px rgba(122,74,8,0.15)", fontFamily: "'DM Sans', sans-serif" }}>
-            <h3 style={{ margin: "0 0 10px", color: C.dark }}>Transfer Out Student?</h3>
-            <p style={{ margin: "0 0 16px", fontSize: 14, color: C.muted }}>
-              This will change enrollment status to <strong>Transferred Out</strong> and mark the student's overall status as transferred. Grades and attendance already recorded are kept as-is.
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
-                Effective Date
-                <input
-                  type="date"
-                  value={transferEffectiveDate}
-                  onChange={(e) => setTransferEffectiveDate(e.target.value)}
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
-                />
-              </label>
-              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
-                Destination School <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
-                <input
-                  type="text"
-                  value={transferDestSchool}
-                  onChange={(e) => setTransferDestSchool(e.target.value)}
-                  placeholder="e.g. Cebu City National High School"
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
-                />
-              </label>
-              <label style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>
-                Reason
-                <textarea
-                  value={transferReason}
-                  onChange={(e) => setTransferReason(e.target.value)}
-                  rows={2}
-                  placeholder="Explain why the student is transferring out (e.g. family relocating)…"
-                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1.5px solid #f0e0d0", fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box", resize: "vertical" }}
-                />
-              </label>
-            </div>
-
-            {transferError && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{transferError}</p>}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setTransferConfirm(false); setTransferError(""); }}
+        <Modal
+          onClose={() => { setTransferConfirm(false); setTransferError(""); }}
+          size="md"
+          icon="ti-transfer-out"
+          iconTone="neutral"
+          title="Transfer Out Student?"
+          description={<>This will change enrollment status to <strong>Transferred Out</strong> and mark the student&apos;s overall status as transferred. Grades and attendance already recorded are kept as-is.</>}
+          loading={transferring}
+          footer={
+            <div className="flex gap-2.5">
+              <Button
+                variant="secondary" fullWidth
+                onClick={() => { setTransferConfirm(false); setTransferError(""); }}
                 disabled={transferring}
-                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid #f0e0d0", background: "transparent", color: C.muted, fontWeight: 600, cursor: "pointer" }}>
+              >
                 Cancel
-              </button>
-              <button onClick={handleTransferOut} disabled={transferring || !transferReason.trim() || !transferEffectiveDate}
-                style={{ flex: 1, padding: "10px 0", borderRadius: 50, border: "none", background: transferring ? "#f0c890" : "linear-gradient(135deg,#f0a830,#c97e08)", color: "white", fontWeight: 700, cursor: transferring ? "not-allowed" : "pointer" }}>
+              </Button>
+              <Button
+                fullWidth
+                onClick={handleTransferOut}
+                loading={transferring}
+                disabled={!transferReason.trim() || !transferEffectiveDate}
+              >
                 {transferring ? "Saving…" : "Confirm"}
-              </button>
+              </Button>
             </div>
+          }
+        >
+          <div className="text-left">
+            <Field label="Effective Date" required>
+              <Input
+                type="date"
+                value={transferEffectiveDate}
+                onChange={(e) => setTransferEffectiveDate(e.target.value)}
+              />
+            </Field>
+            <Field label="Destination School" hint="Optional.">
+              <Input
+                type="text"
+                value={transferDestSchool}
+                onChange={(e) => setTransferDestSchool(e.target.value)}
+                placeholder="e.g. Cebu City National High School"
+              />
+            </Field>
+            <Field label="Reason" required>
+              <Textarea
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                rows={2}
+                placeholder="Explain why the student is transferring out (e.g. family relocating)…"
+              />
+            </Field>
+            {transferError && <Alert variant="error">{transferError}</Alert>}
           </div>
-        </div>
+        </Modal>
       )}
+      </AnimatePresence>
     </>
   );
 }
