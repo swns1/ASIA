@@ -18,10 +18,14 @@ def _norm(value):
     return (value or "").strip().casefold()
 
 
-def find_matches(student_payload):
+def find_matches(student_payload, *, exclude_application_id=None):
     """Returns a list of {kind, strength, student_id|application_id,
     display_name, student_number|reference} dicts. Never raises; an empty
-    payload or missing fields just yields no matches."""
+    payload or missing fields just yields no matches.
+
+    `exclude_application_id`: the application being checked. A registrar
+    correcting one already in the queue would otherwise find it matching
+    itself as a pending duplicate."""
     lrn = _norm(student_payload.get("lrn"))
     first_name = _norm(student_payload.get("first_name"))
     last_name = _norm(student_payload.get("last_name"))
@@ -68,6 +72,8 @@ def find_matches(student_payload):
     pending_qs = StudentApplication.objects.filter(
         status__in=[StudentApplication.SUBMITTED, StudentApplication.IN_REVIEW],
     )
+    if exclude_application_id is not None:
+        pending_qs = pending_qs.exclude(pk=exclude_application_id)
     if lrn:
         for a in pending_qs.filter(lrn__iexact=lrn):
             matches.append({
