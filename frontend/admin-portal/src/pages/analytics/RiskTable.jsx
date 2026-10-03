@@ -261,16 +261,17 @@ export default function RiskTable({
           sortKey={sort.key}
           sortDir={sort.dir}
           onSort={handleSort}
+          // A search that matches nobody is never "Nobody needs following
+          // up": that reads as good news about students the search only hid.
           empty={{
-            icon: band === "flagged" ? "ti-mood-happy" : "ti-search",
-            title:
-              band === "flagged"
+            icon: band === "flagged" && !query ? "ti-mood-happy" : "ti-search",
+            title: query
+              ? "No students match that search"
+              : band === "flagged"
                 ? "Nobody needs following up"
-                : query
-                  ? "No students match that search"
-                  : "No students in this group",
+                : "No students in this group",
             subtitle:
-              band === "flagged"
+              band === "flagged" && !query
                 ? "No student in this selection crossed into Needs attention or Needs urgent help."
                 : "Try a different status filter or clear the search.",
             withAvatar: false,

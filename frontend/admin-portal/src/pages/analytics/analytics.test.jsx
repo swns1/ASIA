@@ -192,6 +192,13 @@ describe("RiskTable", () => {
     expect(screen.getByText("Nobody needs following up")).toBeTruthy();
   });
 
+  it("doesn't call a search that matches nobody good news", () => {
+    render(<RiskTable run={runWith([row()])} />);
+    fireEvent.change(screen.getByLabelText("Search students"), { target: { value: "zzz" } });
+    expect(screen.getByText("No students match that search")).toBeTruthy();
+    expect(screen.queryByText("Nobody needs following up")).toBeNull();
+  });
+
   it("sorts students with no recorded data last in both directions", () => {
     const run = runWith([
       row({ student_id: 1, student_name: "Aquino, Ana", average_grade: 91 }),

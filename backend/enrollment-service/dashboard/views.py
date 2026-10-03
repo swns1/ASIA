@@ -38,7 +38,7 @@ from rest_framework.views import APIView
 from academic_calendar.models import CalendarEvent
 from accounts.models import User
 from accounts.permissions import HasRole, teacher_student_ids
-from ai.models import RiskAssessmentRun, StudentRiskScore
+from ai.models import RiskAssessmentRun, StudentRiskScore, run_scope
 from attendance.models import AttendanceRecord
 from enrollments.models import Enrollment, SectionAdvisory
 from grades.models import Grade
@@ -158,8 +158,11 @@ class DashboardSummaryView(APIView):
         endpoint serializes every student's score with their reasons_json to
         produce the same rollup, which is the right shape for the Analytics
         page but far too heavy for a landing page that loads on every sign-in.
+
+        Whole-school runs only. The card splits its counts by school level,
+        so a run made for one level or grade would be shown as the school.
         """
-        runs = RiskAssessmentRun.objects.all()
+        runs = RiskAssessmentRun.objects.filter(**run_scope())
         if school_year:
             runs = runs.filter(school_year=school_year)
         run = runs.first()  # Meta.ordering = ["-created_at"]

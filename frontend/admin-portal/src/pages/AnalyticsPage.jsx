@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -404,6 +404,18 @@ export default function AnalyticsPage() {
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState(null);
 
+  // The newest request of each kind. An answer that arrives after a newer
+  // request was made is for a selection the reader has already left, and is
+  // dropped -- otherwise a slow response lands last and shows one year's
+  // numbers under another's filters. A cold load always asks twice (the
+  // fallback year, then the configured one), so this is not a rare race.
+  const riskRequest = useRef(0);
+  const trendRequest = useRef(0);
+  const groupsRequest = useRef(0);
+  // Set when a chart opens a student, so the detail panel is scrolled to: it
+  // sits under the follow-up list, which may not even include them.
+  const revealStudent = useRef(false);
+
   const TABS = useMemo(
     () =>
       [
@@ -422,18 +434,61 @@ export default function AnalyticsPage() {
   );
   const { active, direction, setActive } = useTabs(TABS);
 
+  // The open student, the last error and the groups all belong to the
+  // selection they were made for. Left in place, a new selection showed the
+  // old error over a valid result, a student who may not be in the new list,
+  // and groups computed for different filters with nothing saying so.
+  function clearGroups() {
+    groupsRequest.current += 1;
+    setGroups(null);
+    setGroupsError(null);
+  }
+
+  function closeStudent() {
+    trendRequest.current += 1;
+    setSelectedStudent(null);
+  }
+
+  function startNewSelection() {
+    setRiskError(null);
+    closeStudent();
+    clearGroups();
+  }
+
+  function changeSchoolYear(value) {
+    startNewSelection();
+    setSchoolYear(value);
+  }
+
+  function changeGradingPeriod(value) {
+    startNewSelection();
+    setGradingPeriod(value);
+  }
+
   // Changing a level invalidates the narrower selections beneath it. Done in
   // the handler rather than an effect so there is no intermediate render
   // showing a grade level that doesn't belong to the chosen school level.
   function changeSchoolLevel(value) {
+    startNewSelection();
     setSchoolLevel(value);
     setGradeLevel("");
     setSubjectId("");
   }
 
   function changeGradeLevel(value) {
+    startNewSelection();
     setGradeLevel(value);
     setSubjectId("");
+  }
+
+  function changeSubject(value) {
+    clearGroups();
+    setSubjectId(value);
+  }
+
+  function changeGroupCount(value) {
+    clearGroups();
+    setGroupCount(value);
   }
 
   const gradeOptions = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All grades"];
@@ -468,20 +523,25 @@ export default function AnalyticsPage() {
   // Show the last saved assessment on arrival so the page is never blank for
   // someone who only reads it (a teacher can't trigger a run at all).
   useEffect(() => {
+    const request = ++riskRequest.current;
     _getRiskAssessmentLatest(filters)
       .then((d) => {
+        if (request !== riskRequest.current) return;
         setRisk(d);
         setRiskIsLatest(true);
       })
       .catch(() => {
+        if (request !== riskRequest.current) return;
         setRisk(null);
         setRiskIsLatest(false);
       });
   }, [filters]);
 
   const runAssessment = useCallback(async () => {
+    const request = ++riskRequest.current;
     setRiskLoading(true);
     setRiskError(null);
+    trendRequest.current += 1;
     setSelectedStudent(null);
     try {
       const data = await _runRiskAssessment({
@@ -490,9 +550,11 @@ export default function AnalyticsPage() {
         school_level: schoolLevel || undefined,
         grade_level: gradeLevel || undefined,
       });
+      if (request !== riskRequest.current) return;
       setRisk(data);
       setRiskIsLatest(false);
     } catch (e) {
+      if (request !== riskRequest.current) return;
       setRiskError(e.response?.data?.detail || e.message || "Could not check students.");
     } finally {
       setRiskLoading(false);
@@ -500,6 +562,7 @@ export default function AnalyticsPage() {
   }, [schoolYear, gradingPeriod, schoolLevel, gradeLevel]);
 
   const loadGroups = useCallback(async () => {
+    const request = ++groupsRequest.current;
     setGroupsLoading(true);
     setGroupsError(null);
     try {
@@ -514,27 +577,46 @@ export default function AnalyticsPage() {
         // meant "3 groups" no matter what the data said.
         n_clusters: groupCount === "auto" ? "auto" : Number(groupCount),
       };
-      setGroups(await _getAiCluster(params));
+      const result = await _getAiCluster(params);
+      if (request === groupsRequest.current) setGroups(result);
     } catch (e) {
-      setGroupsError(e.response?.data?.error || e.message || "Could not group students.");
+      if (request === groupsRequest.current) {
+        setGroupsError(e.response?.data?.error || e.message || "Could not group students.");
+      }
     } finally {
       setGroupsLoading(false);
     }
   }, [schoolYear, gradingPeriod, schoolLevel, gradeLevel, subjectId, groupCount]);
 
+  // Clicking one student and then another before the first history arrives
+  // must not leave the first one's history under the second one's name.
   const selectStudent = useCallback((row) => {
+    const request = ++trendRequest.current;
     setSelectedStudent(row);
     setTrend(null);
     setTrendLoading(true);
     _getRiskAssessmentTrend(row.student_id)
-      .then(setTrend)
-      .catch(() => setTrend(null))
-      .finally(() => setTrendLoading(false));
+      .then((d) => {
+        if (request === trendRequest.current) setTrend(d);
+      })
+      .catch(() => {
+        if (request === trendRequest.current) setTrend(null);
+      })
+      .finally(() => {
+        if (request === trendRequest.current) setTrendLoading(false);
+      });
   }, []);
 
   function openStudentFromChart(row) {
+    revealStudent.current = true;
     setActive("students");
     selectStudent(row);
+  }
+
+  function scrollToStudent(el) {
+    if (!el || !revealStudent.current) return;
+    revealStudent.current = false;
+    el.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
   const counts = risk?.summary?.by_level ?? {};
@@ -567,7 +649,7 @@ export default function AnalyticsPage() {
           <Card>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Field label="School year" htmlFor="an-year">
-                <Select id="an-year" value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)}>
+                <Select id="an-year" value={schoolYear} onChange={(e) => changeSchoolYear(e.target.value)}>
                   {globalYearOptions.map((y) => (
                     <option key={y} value={y}>
                       {y}
@@ -576,7 +658,7 @@ export default function AnalyticsPage() {
                 </Select>
               </Field>
               <Field label="Grading period" htmlFor="an-period">
-                <Select id="an-period" value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)}>
+                <Select id="an-period" value={gradingPeriod} onChange={(e) => changeGradingPeriod(e.target.value)}>
                   {PERIOD_OPTIONS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}
@@ -735,6 +817,7 @@ export default function AnalyticsPage() {
                     {selectedStudent && (
                       <motion.div
                         key={`trend-${selectedStudent.student_id}`}
+                        ref={scrollToStudent}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 8 }}
@@ -745,7 +828,7 @@ export default function AnalyticsPage() {
                           subtitle="How this student's situation has changed across saved checks"
                           icon="ti-timeline"
                           action={
-                            <Button variant="ghost" size="sm" icon="ti-x" onClick={() => setSelectedStudent(null)}>
+                            <Button variant="ghost" size="sm" icon="ti-x" onClick={closeStudent}>
                               Close
                             </Button>
                           }
@@ -808,7 +891,7 @@ export default function AnalyticsPage() {
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div className="grid flex-1 gap-3 sm:grid-cols-2">
                         <Field label="Subject" hint="Leave on all subjects to group by overall performance" htmlFor="an-subject">
-                          <Select id="an-subject" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
+                          <Select id="an-subject" value={subjectId} onChange={(e) => changeSubject(e.target.value)}>
                             <option value="">All subjects</option>
                             {subjects.map((s) => (
                               <option key={s.subject_id} value={s.subject_id}>
@@ -818,7 +901,7 @@ export default function AnalyticsPage() {
                           </Select>
                         </Field>
                         <Field label="How many groups?" htmlFor="an-groups">
-                          <Select id="an-groups" value={groupCount} onChange={(e) => setGroupCount(e.target.value)}>
+                          <Select id="an-groups" value={groupCount} onChange={(e) => changeGroupCount(e.target.value)}>
                             {GROUP_COUNT_OPTIONS.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}

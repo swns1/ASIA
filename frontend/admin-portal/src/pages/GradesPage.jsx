@@ -44,6 +44,8 @@ import useYearFilter from "../hooks/useYearFilter";
 import useArchivedYears from "../hooks/useArchivedYears";
 import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
+import { OBSERVED_VALUES, observedMark } from "../constants/observedValues";
+import useLatestRequest from "../hooks/useLatestRequest";
 
 const getStudents            = (p = {}) => _getStudents(p);
 const getStudent              = (id)     => _getStudent(id);
@@ -988,12 +990,7 @@ function AddScoreForm({ componentId, enrollmentId, subjectId, gradingPeriod, onA
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
-// ── Narrative Rating constants ────────────────────────────────────────────────
-const NARRATIVE_RATINGS = [
-  { value: "outstanding",       label: "Outstanding",       color: "#1455a0", bg: "#e3f0fd" },
-  { value: "satisfactory",      label: "Satisfactory",      color: "#2e6b0d", bg: "#e8f5e0" },
-  { value: "needs_improvement", label: "Needs Improvement", color: "#854f0b", bg: "#faeeda" },
-];
+// Ratings are the DepEd Observed Values marks -- see constants/observedValues.js.
 
 function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, categories, reports, loading, savingStates, onRatingChange, readOnly = false }) {
   const reportMap = {};
@@ -1054,14 +1051,16 @@ function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, 
           {categories.map((cat) => {
             const existing      = reportMap[cat.category_id] ?? null;
             const currentRating = existing?.rating ?? null;
+            // An older row's word lights its mark, as SF9 prints it.
+            const currentMark   = observedMark(currentRating);
             const saving        = savingStates[cat.category_id] ?? false;
             return (
               <div key={cat.category_id}
                 className="flex items-center gap-3.5 rounded-[10px] border border-accent-50 bg-neutral-50 px-4 py-2.5 transition-colors duration-150 hover:border-accent-dot">
                 <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
-                  {NARRATIVE_RATINGS.map((r) => {
-                    const active = currentRating === r.value;
+                  {OBSERVED_VALUES.map((r) => {
+                    const active = currentMark === r.value;
                     return (
                       <motion.button key={r.value} onClick={() => !saving && !readOnly && onRatingChange(cat, existing, r.value)} disabled={saving || readOnly}
                         initial={false}
@@ -1172,18 +1171,26 @@ export default function GradesPage() {
       setEnrollments([]); setEnrollment(null);
       setSumGrades([]); setSumSubjects([]);
       setSubject(null); setEntSubjects([]);
+      setLoadingEnr(false);
       return;
     }
+    // Each loader below drops an answer for a student, enrollment or period
+    // the reader has already moved off. Landing last, it showed one record
+    // under another's name -- and the entry forms save against what they
+    // show, so a grade or rating could be filed on the wrong record.
+    let cancelled = false;
     setLoadingEnr(true);
     getEnrollments({ student: student.student_id, enrollment_status__in: ATTENDED_STATUSES, page_size: 20 })
-      .then((d) => setEnrollments(Array.isArray(d) ? d : d?.results ?? []))
-      .catch(() => setEnrollments([]))
-      .finally(() => setLoadingEnr(false));
+      .then((d) => { if (!cancelled) setEnrollments(Array.isArray(d) ? d : d?.results ?? []); })
+      .catch(() => { if (!cancelled) setEnrollments([]); })
+      .finally(() => { if (!cancelled) setLoadingEnr(false); });
+    return () => { cancelled = true; };
   }, [student]);
 
   // ── Summary: load grades + subjects when enrollment changes ───────────────
   useEffect(() => {
-    if (!enrollment) { setSumGrades([]); setSumSubjects([]); return; }
+    if (!enrollment) { setSumGrades([]); setSumSubjects([]); setLoadingSum(false); return; }
+    let cancelled = false;
     setLoadingSum(true);
     Promise.all([
       getGrades({ enrollment: enrollment.enrollment_id, page_size: 200 })
@@ -1191,26 +1198,31 @@ export default function GradesPage() {
       getSubjects(subjectParamsFor(enrollment))
         .then((d) => Array.isArray(d) ? d : d?.results ?? []),
     ])
-      .then(([g, s]) => { setSumGrades(g); setSumSubjects(s); })
+      .then(([g, s]) => { if (!cancelled) { setSumGrades(g); setSumSubjects(s); } })
       .catch(() => {})
-      .finally(() => setLoadingSum(false));
+      .finally(() => { if (!cancelled) setLoadingSum(false); });
+    return () => { cancelled = true; };
   }, [enrollment]);
 
   // ── Entry: load subjects when enrollment changes ──────────────────────────
   useEffect(() => {
     if (!enrollment) { setEntSubjects([]); setSubject(null); return; }
+    let cancelled = false;
     getSubjects(subjectParamsFor(enrollment))
-      .then((d) => setEntSubjects(Array.isArray(d) ? d : d?.results ?? []))
-      .catch(() => setEntSubjects([]));
+      .then((d) => { if (!cancelled) setEntSubjects(Array.isArray(d) ? d : d?.results ?? []); })
+      .catch(() => { if (!cancelled) setEntSubjects([]); });
     const periods = periodsFor(enrollment);
     setGradingPeriod(periods[0] ?? "");
     setSubject(null);
     setComputation(null);
+    return () => { cancelled = true; };
   }, [enrollment]);
 
   // ── Entry: load scores when subject/period changes ────────────────────────
+  const beginScoresLoad = useLatestRequest();
   const loadScores = useCallback(async () => {
     if (!enrollment || !subject || !gradingPeriod) return;
+    const isCurrent = beginScoresLoad();
     setLoadingScores(true);
     try {
       const data = await getScoreEntries({
@@ -1219,15 +1231,16 @@ export default function GradesPage() {
         grading_period: gradingPeriod,
         page_size:      200,
       });
-      setScoreEntries(Array.isArray(data) ? data : data?.results ?? []);
       const g = await getGrades({ enrollment: enrollment.enrollment_id, subject: subject.subject_id, grading_period: gradingPeriod });
+      if (!isCurrent()) return;
+      setScoreEntries(Array.isArray(data) ? data : data?.results ?? []);
       const existing = (Array.isArray(g) ? g : g?.results ?? [])[0] ?? null;
       setExistingGrade(existing);
       setComputation(null);
       setManualRemarks(existing?.remarks ?? "");
     } catch (e) { console.error(e); }
-    finally { setLoadingScores(false); }
-  }, [enrollment, subject, gradingPeriod]);
+    finally { if (isCurrent()) setLoadingScores(false); }
+  }, [enrollment, subject, gradingPeriod, beginScoresLoad]);
 
   useEffect(() => { loadScores(); }, [loadScores]);
 
@@ -1238,12 +1251,14 @@ export default function GradesPage() {
   }, []);
 
   useEffect(() => {
-    if (tab !== "entry" || !enrollment || !gradingPeriod) { setNarrativeReports([]); return; }
+    if (tab !== "entry" || !enrollment || !gradingPeriod) { setNarrativeReports([]); setLoadingNarrative(false); return; }
+    let cancelled = false;
     setLoadingNarrative(true);
     getNarrativeReports({ enrollment: enrollment.enrollment_id, grading_period: gradingPeriod, page_size: 100 })
-      .then((d) => setNarrativeReports(Array.isArray(d) ? d : d?.results ?? []))
+      .then((d) => { if (!cancelled) setNarrativeReports(Array.isArray(d) ? d : d?.results ?? []); })
       .catch(() => {})
-      .finally(() => setLoadingNarrative(false));
+      .finally(() => { if (!cancelled) setLoadingNarrative(false); });
+    return () => { cancelled = true; };
   }, [tab, enrollment, gradingPeriod]);
 
   const handleNarrativeRating = useCallback(async (category, existingReport, newRating) => {

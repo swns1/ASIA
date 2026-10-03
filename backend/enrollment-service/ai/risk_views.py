@@ -47,7 +47,7 @@ from accounts.permissions import HasRole, teacher_student_ids
 from enrollments.archive import ensure_open
 from enrollments.models import Enrollment, Student
 
-from .models import RiskAssessmentRun, StudentRiskScore
+from .models import RiskAssessmentRun, StudentRiskScore, run_scope
 from .services import (
     DEFAULT_WEIGHTS,
     RISK_LEVEL_THRESHOLDS,
@@ -337,7 +337,8 @@ class RiskAssessmentLatestView(APIView):
     GET /api/ai/risk-assessment/latest/
 
     Returns the most recent RiskAssessmentRun (optionally narrowed by
-    school_year/grading_period/school_level/grade_level) with its
+    school_year/grading_period) over exactly the given school_level and
+    grade_level -- none given means a whole-school run -- with its
     per-student scores. Read-only — does not recompute anything.
     """
 
@@ -356,16 +357,47 @@ class RiskAssessmentLatestView(APIView):
             runs = runs.filter(school_year=school_year)
         if grading_period:
             runs = runs.filter(grading_period=grading_period)
-        if school_level:
-            runs = runs.filter(school_level=school_level)
-        if grade_level:
-            runs = runs.filter(grade_level=grade_level)
+        # Always applied: no school_level means a whole-school run, not any run.
+        runs = runs.filter(**run_scope(school_level, grade_level))
 
         run = runs.first()  # Meta.ordering = ["-created_at"]
         if not run:
             return Response({"detail": "No risk assessment runs found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response(_serialize_run(run, allowed_student_ids=_visible_student_ids(request)))
+
+
+def _trend_points(scores):
+    """
+    One point per check: for each day, school year and grading period, the
+    last run made. `scores` must come oldest run first.
+
+    A student's score doesn't depend on who else is in the run, so checking
+    "All levels" and then "Junior High" for the same period on the same day
+    scores them twice, identically. Both used to become points, and the
+    history chart drew one check as two.
+    """
+    latest = {}
+    for sc in scores:
+        run = sc.run
+        latest[(timezone.localdate(run.created_at), run.school_year, run.grading_period)] = sc
+
+    return [
+        {
+            "run_id":               sc.run.run_id,
+            "created_at":           sc.run.created_at,
+            "school_year":          sc.run.school_year,
+            "grading_period":       sc.run.grading_period,
+            "risk_score":           sc.risk_score,
+            "risk_level":           sc.risk_level,
+            "grade_component":      sc.grade_component,
+            "attendance_component": sc.attendance_component,
+            "trend_component":      sc.trend_component,
+            "narrative_component":  sc.narrative_component,
+            "reasons":              sc.reasons_json or [],
+        }
+        for sc in sorted(latest.values(), key=lambda s: s.run.created_at)
+    ]
 
 
 class RiskAssessmentTrendView(APIView):
@@ -405,22 +437,7 @@ class RiskAssessmentTrendView(APIView):
             .order_by("run__created_at")
         )
 
-        points = [
-            {
-                "run_id":               sc.run.run_id,
-                "created_at":           sc.run.created_at,
-                "school_year":          sc.run.school_year,
-                "grading_period":       sc.run.grading_period,
-                "risk_score":           sc.risk_score,
-                "risk_level":           sc.risk_level,
-                "grade_component":      sc.grade_component,
-                "attendance_component": sc.attendance_component,
-                "trend_component":      sc.trend_component,
-                "narrative_component":  sc.narrative_component,
-                "reasons":              sc.reasons_json or [],
-            }
-            for sc in scores
-        ]
+        points = _trend_points(scores)
 
         student = Student.objects.filter(student_id=student_id).first()
 

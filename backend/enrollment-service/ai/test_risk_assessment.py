@@ -393,6 +393,43 @@ def test_reason_counts_behavior_concerns():
     assert "2 of 3 areas" in text
 
 
+@pytest.mark.parametrize("ratings,marks", [
+    (["NO", "NO", "SO"], "Not Observed"),
+    (["RO", "SO", "AO"], "Rarely Observed"),
+    (["needs_improvement", "RO", "AO"], "Needs Improvement or Rarely Observed"),
+])
+def test_deped_marks_raise_a_behavior_reason_too(ratings, marks):
+    # Every rating the school records is a DepEd mark. RO and NO already
+    # raised the score; they must also say so, or the student is flagged
+    # with no behavior reason at all.
+    text = next(
+        r["text"] for r in _score_one(
+            grade=90.0, attendance_rate=0.98, avg_narrative=1.5, narrative_ratings=ratings,
+        )["reasons"]
+        if r["code"] == "behavior_concern"
+    )
+    assert f"Behavior rated {marks}" in text
+
+
+def test_a_student_above_on_track_is_never_left_without_a_reason():
+    # An 80 average, full attendance and behavior Sometimes Observed: no
+    # single rule fires, but together they land in Watch.
+    result = _score_one(
+        grade=80.0, attendance_rate=1.0, avg_narrative=2.0, narrative_ratings=["SO"] * 4,
+    )
+    assert result["risk_level"] == "moderate"
+    [reason] = result["reasons"]
+    assert reason["code"] == "several_small_signs"
+    assert "average of 80.0" in reason["text"]
+    assert "behavior mostly Sometimes Observed" in reason["text"]
+    # Attendance contributed nothing, so it isn't named.
+    assert "missed" not in reason["text"]
+
+
+def test_an_on_track_student_gets_no_made_up_reason():
+    assert _codes(grade=92.0, attendance_rate=1.0, avg_narrative=3.0, narrative_ratings=["AO"]) == []
+
+
 def test_reasons_are_ordered_most_severe_first():
     reasons = _score_one(
         grade=72.0, failing=2, attendance_rate=0.93, grade_delta=-3.0,
@@ -519,3 +556,86 @@ class TestRiskAssessmentPermissions:
         request = factory.get("/")
         request.user = _anon()
         assert self.perm.has_permission(request, view_cls) is False
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Which run a reader gets, and the history built from runs.
+# ─────────────────────────────────────────────────────────────────────────
+
+class _RecordingRuns:
+    """Stands in for RiskAssessmentRun.objects: records the filters applied."""
+
+    def __init__(self):
+        self.filters = {}
+
+    def all(self):
+        return self
+
+    def filter(self, **kwargs):
+        self.filters.update(kwargs)
+        return self
+
+    def first(self):
+        return None
+
+
+@pytest.mark.parametrize("params,expected_scope", [
+    # "All levels" is a whole-school run, never whichever run came last.
+    ({}, {"school_level": None, "grade_level": None}),
+    ({"school_level": "", "grade_level": ""}, {"school_level": None, "grade_level": None}),
+    ({"school_level": "junior_highschool"}, {"school_level": "junior_highschool", "grade_level": None}),
+    ({"school_level": "junior_highschool", "grade_level": "Grade 7"},
+     {"school_level": "junior_highschool", "grade_level": "Grade 7"}),
+])
+def test_latest_run_matches_the_exact_scope(params, expected_scope):
+    from unittest.mock import patch
+    from rest_framework.test import force_authenticate
+
+    runs = _RecordingRuns()
+    request = factory.get("/", {"school_year": "2026-2027", "grading_period": "1st_quarter", **params})
+    # pk for the default user throttle, which the permission tests never reach.
+    force_authenticate(request, user=SimpleNamespace(role="registrar", user_id=1, pk=1, is_authenticated=True))
+    with patch.object(RiskAssessmentRun, "objects", runs):
+        response = RiskAssessmentLatestView.as_view()(request)
+
+    assert response.status_code == 404
+    assert {k: runs.filters[k] for k in expected_scope} == expected_scope
+
+
+def test_dashboard_counts_only_whole_school_runs():
+    from unittest.mock import patch
+    from dashboard.views import DashboardSummaryView
+
+    runs = _RecordingRuns()
+    with patch.object(RiskAssessmentRun, "objects", runs):
+        DashboardSummaryView()._risk("2026-2027", None)
+
+    assert runs.filters["school_level"] is None
+    assert runs.filters["grade_level"] is None
+
+
+def _trend_score(run_id, created_at, period="1st_quarter", score=40.0):
+    run = SimpleNamespace(
+        run_id=run_id, created_at=created_at, school_year="2026-2027", grading_period=period,
+    )
+    return SimpleNamespace(
+        run=run, risk_score=score, risk_level="moderate", grade_component=None,
+        attendance_component=None, trend_component=None, narrative_component=None,
+        reasons_json=[],
+    )
+
+
+def test_history_shows_one_check_once():
+    from datetime import datetime, timezone as dt_tz
+    from ai.risk_views import _trend_points
+
+    morning = datetime(2026, 9, 29, 1, 0, tzinfo=dt_tz.utc)
+    later = datetime(2026, 9, 29, 2, 0, tzinfo=dt_tz.utc)
+    next_week = datetime(2026, 10, 6, 1, 0, tzinfo=dt_tz.utc)
+    points = _trend_points([
+        _trend_score(1, morning),                       # "All levels"
+        _trend_score(2, later),                         # "Junior High", same day and period
+        _trend_score(3, later, period="2nd_quarter"),   # same day, another period: kept
+        _trend_score(4, next_week),                     # a later check: kept
+    ])
+    assert [p["run_id"] for p in points] == [2, 3, 4]

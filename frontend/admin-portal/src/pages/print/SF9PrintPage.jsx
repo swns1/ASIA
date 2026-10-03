@@ -20,28 +20,13 @@ import { PrintLetterhead } from "../../components/print/PrintLetterhead";
 import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
 import { SectionBar } from "../../components/print/SectionBar";
+import { observedValueMeta } from "../../constants/observedValues";
 
 // DO 8 s.2015 marks the Report on Learner's Observed Values AO / SO / RO / NO,
-// and the legend printed under this table spells those four out. The rating was
-// rendered raw, so a row entered through the app read "needs_improvement" under
-// a legend promising "RO": NarrativeReport accepts both vocabularies, but the
-// only UI that writes one (GradesPage, and TeacherSectionsPage's copy of the
-// same list) offers outstanding / satisfactory / needs_improvement, leaving the
-// DepEd set unreachable from the frontend entirely.
-//
-// Mapping on the way out means historical rows print correctly on the mandated
-// form without a data migration. Four marks onto three words is lossy in the
-// other direction, which is why this is a display mapping and not a rewrite:
-// "Sometimes Observed" is the honest reading of "satisfactory".
-const OBSERVED_MARKS = {
-  AO: "AO",
-  SO: "SO",
-  RO: "RO",
-  NO: "NO",
-  outstanding: "AO",
-  satisfactory: "SO",
-  needs_improvement: "RO",
-};
+// and the legend printed under this table spells those four out. Rows saved in
+// the app's older vocabulary (outstanding / satisfactory / needs_improvement)
+// print as their mark -- see constants/observedValues.js, which the entry
+// screens share so what a teacher picks is what prints.
 
 // Senior high is enrolled one semester at a time, but SF9 reports the year:
 // each semester's learning areas with a General Average for the semester.
@@ -60,9 +45,10 @@ function wholeMean(values) {
 
 const listOf = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 
-function observedMark(rating) {
+function printedMark(rating) {
   if (!rating) return "—";
-  return OBSERVED_MARKS[rating] ?? String(rating).toUpperCase().slice(0, 2);
+  const meta = observedValueMeta(rating);
+  return meta ? meta.value : String(rating).toUpperCase().slice(0, 2);
 }
 
 export default function SF9PrintPage() {
@@ -467,7 +453,7 @@ export default function SF9PrintPage() {
                 <td style={TD({ fontWeight: 600 })}>{v.name}</td>
                 {cfg.periods.map((p, i) => (
                   <td key={i} style={TD({ textAlign: "center", fontWeight: 700 })}>
-                    {observedMark(v.marks[p])}
+                    {printedMark(v.marks[p])}
                   </td>
                 ))}
               </tr>

@@ -94,6 +94,7 @@ export const REASON_LABELS = {
   frequent_absence: "Frequently absent",
   grades_dropping: "Grades dropping",
   behavior_concern: "Behavior concerns",
+  several_small_signs: "Several smaller signs together",
   limited_data: "Not enough records yet",
 };
 
@@ -231,7 +232,10 @@ export function buildRiskCSV(rows) {
 }
 
 export function downloadRiskCSV(rows, { schoolYear, gradingPeriod }) {
-  const blob = new Blob([buildRiskCSV(rows)], { type: "text/csv;charset=utf-8;" });
+  // The byte-order mark is what tells Excel the file is UTF-8. Without it,
+  // Excel on Windows reads it as ANSI: "Ñ" in a name and the "—" in nearly
+  // every reason come out as "Ã‘" and "â€”".
+  const blob = new Blob(["﻿", buildRiskCSV(rows)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
