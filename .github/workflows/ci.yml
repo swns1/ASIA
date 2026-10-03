@@ -9,6 +9,11 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     strategy:
+      # Let every service finish. With the default (fail-fast), the first
+      # failure cancels the rest, so a problem they all share -- a dependency
+      # advisory, say -- reads as one red job and three "Cancelled" ones, and
+      # you can't tell whether the others were fine.
+      fail-fast: false
       matrix:
         service: [identity-service, student-service, enrollment-service, billing-service]
     services:
@@ -94,9 +99,21 @@ jobs:
       - name: Dependency vulnerability scan
         # Now a hard gate. This was report-only while the 16 pre-existing
         # findings stood (axios and react-router-dom in runtime code, the rest
-        # transitive build/test-only); those are cleared, so the tree is at
-        # zero and the only way back above this line is a new dependency or a
-        # newly-published advisory — both of which are worth stopping for.
+        # transitive build/test-only); those were cleared, so the only way back
+        # above this line is a new dependency or a newly-published advisory —
+        # both of which are worth stopping for. (Two moderate vitest findings
+        # remain: clearing them takes a major-version bump of the test runner,
+        # and they sit below this threshold.)
+        #
+        # @tabler/icons-webfont is pinned to exactly 3.31.0 because of this
+        # gate. 3.32-3.36 depend on sharp (libvips advisories) and 3.37+ on
+        # svgtofont -> ... -> http-cache-semantics, which is affected in every
+        # published version. Neither is code the app runs -- they are the icon
+        # package's own font-build tooling, declared as runtime dependencies --
+        # but both land in node_modules, so the scan flags them. Lift the pin
+        # once `npm install @tabler/icons-webfont@latest` leaves this step
+        # green. (Newer releases also ship a smaller font: they moved the
+        # filled glyphs into a separate one.)
         #
         # If a fresh advisory lands against something with no fix available
         # yet, prefer a narrow `--exclude` over restoring continue-on-error:
@@ -140,6 +157,7 @@ jobs:
     # HTTPS redirect would fail every real deploy).
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false # same reason as the backend job above
       matrix:
         service: [identity, student, billing, enrollment]
     services:
