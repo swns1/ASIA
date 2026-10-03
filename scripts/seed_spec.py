@@ -451,6 +451,26 @@ HOUSEHOLDS = {
     151: ("married", "both_parents", False, None),
     155: ("married", "both_parents", False, None),
     156: ("married", "independent", False, None),
+    # ── Tier 2.5 households (157-176) ──
+    157: ("married", "both_parents", False, None),          # Rosales twins
+    159: ("married", "both_parents", False, None),
+    160: ("married", "both_parents", False, None),
+    161: ("married", "both_parents", False, None),
+    162: ("married", "both_parents", False, None),
+    163: ("single_parent", "mother_only", True, "4PS-SEED-009"),
+    164: ("married", "both_parents", False, None),
+    165: ("married", "relative", False, None),              # aunt is the guardian
+    166: ("married", "both_parents", False, None),
+    167: ("married", "both_parents", False, None),
+    168: ("married", "both_parents", False, None),
+    169: ("married", "both_parents", True, "4PS-SEED-010"),
+    170: ("separated", "mother_only", False, None),
+    171: ("married", "both_parents", False, None),
+    172: ("married", "both_parents", False, None),
+    173: ("married", "both_parents", False, None),
+    174: ("widowed", "mother_only", True, "4PS-SEED-011"),
+    175: ("married", "both_parents", False, None),
+    176: ("married", "both_parents", False, None),
 }
 
 REQUIRED_ALL = ["psa_birth_certificate", "health_record"]
@@ -738,8 +758,203 @@ PROFILES = [
       previous=[("Tañong National High School", "Tañong, Malabon City")], docs=["ncae_result"],
       guardians=[("mother", "Rosario Palma Guerrero", "Market Vendor", "rosario.guerrero.seed@gmail.com", "09791100049", True),
                  ("father", "Emilio Santos Guerrero", "Fisherman", None, "09801100049", False)]),
+
+    # ── Tier 2.5 (2025-2026 volume) ───────────────────────────────────────
+    # Twenty more learners for the finished year, aimed at the thin spots:
+    # Grade 7 Diamond had nobody at all, and six sections held one learner.
+    # Households 157-176; student_id 157-176 (LRN 136700000157..176).
+
+    # Nursery Rose. Twins sharing a household; both get the sibling discount.
+    P(key="althea", student_id=157, household_id=157, first="Althea", middle="Lumibao", last="Rosales", sex="female",
+      religion="Roman Catholic", birth="2021-07-19", status="active",
+      current="23 Camia St., Brgy. Holy Spirit, Quezon City",
+      siblings=[("Aldrin Lumibao Rosales", 4)],
+      guardians=[("mother", "Divina Lumibao Rosales", "Barangay Health Worker", "divina.rosales.seed@gmail.com", "09171100057", True),
+                 ("father", "Alberto Cruz Rosales", "Delivery Rider", None, "09181100057", False)]),
+    P(key="aldrin", student_id=158, household_id=157, first="Aldrin", middle="Lumibao", last="Rosales", sex="male",
+      religion="Roman Catholic", birth="2021-07-19", status="active",
+      current="23 Camia St., Brgy. Holy Spirit, Quezon City",
+      siblings=[("Althea Lumibao Rosales", 4)],
+      guardians=[("mother", "Divina Lumibao Rosales", "Barangay Health Worker", "divina.rosales.seed@gmail.com", "09171100057", True),
+                 ("father", "Alberto Cruz Rosales", "Delivery Rider", None, "09181100057", False)]),
+    # Kindergarten Sunflower.
+    P(key="elijah", student_id=159, household_id=159, first="Elijah", middle="Bermudez", last="Lazaro", sex="male",
+      religion="Born Again", birth="2020-05-02", status="active",
+      current="7 Ilang-Ilang St., Brgy. Bagumbayan, Taguig City",
+      previous=[("Bright Beginnings Child Care", "Brgy. Bagumbayan, Taguig City")], docs=["birth_certificate"],
+      guardians=[("mother", "Charity Bermudez Lazaro", "Call Center Agent", "charity.lazaro.seed@gmail.com", "09191100059", True),
+                 ("father", "Noel Pineda Lazaro", "Security Guard", None, "09201100059", False)]),
+    P(key="samantha", student_id=160, household_id=160, first="Samantha", middle="Ocampo", last="Prieto", sex="female",
+      religion="Roman Catholic", birth="2020-11-28", status="active",
+      current="Blk 9 Lot 14 Mabuhay Homes, Brgy. Santolan, Pasig City",
+      siblings=[("Sebastian Ocampo Prieto", 9)],
+      guardians=[("mother", "Rowena Ocampo Prieto", "Pharmacist", "rowena.prieto.seed@gmail.com", "09211100060", True),
+                 ("father", "Gerardo Lim Prieto", "Branch Manager", "gerardo.prieto.seed@gmail.com", "09221100060", False)]),
+    # Grade 1 Rizal.
+    P(key="lucas", student_id=161, household_id=161, first="Lucas", middle="Tiongson", last="Benitez", sex="male",
+      religion="Roman Catholic", birth="2019-08-14", status="active",
+      current="45 Acacia Lane, Brgy. Ugong, Valenzuela City",
+      previous=[("Valenzuela Learning Village", "Brgy. Ugong, Valenzuela City")], docs=["birth_certificate"],
+      guardians=[("mother", "Editha Tiongson Benitez", "Seamstress", "editha.benitez.seed@gmail.com", "09231100061", True),
+                 ("father", "Rolando Diaz Benitez", "Carpenter", None, "09241100061", False)]),
+    P(key="chloe", student_id=162, household_id=162, first="Chloe", middle="Sarmiento", last="Padilla", sex="female",
+      religion="Seventh-day Adventist", birth="2019-04-06", status="active",
+      current="12 Narra St., Brgy. Kapitolyo, Pasig City",
+      guardians=[("mother", "Grace Sarmiento Padilla", "Dentist", "grace.padilla.seed@gmail.com", "09251100062", True),
+                 ("father", "Emmanuel Reyes Padilla", "Architect", "emmanuel.padilla.seed@gmail.com", "09261100062", False)]),
+    # Grade 2 Bonifacio. 4Ps household, pays in arrears.
+    P(key="angelo", student_id=163, household_id=163, first="Angelo", middle="Bagtas", last="Mariano", sex="male",
+      religion="Roman Catholic", birth="2018-02-11", status="active",
+      current="Purok 3, Brgy. Bagong Silang, Caloocan City",
+      siblings=[("Angelica Bagtas Mariano", 12), ("Anton Bagtas Mariano", 6)],
+      previous=[("Bagong Silang Elementary School", "Brgy. Bagong Silang, Caloocan City")], docs=["form_138"],
+      guardians=[("mother", "Luzviminda Bagtas Mariano", "Laundrywoman", "luz.mariano.seed@gmail.com", "09271100063", True)]),
+    # Grade 3 Mabini.
+    P(key="trisha", student_id=164, household_id=164, first="Trisha", middle="Yabut", last="Carreon", sex="female",
+      religion="Roman Catholic", birth="2017-06-23", status="active",
+      current="88 Rizal Ave., Brgy. Concepcion, Marikina City",
+      siblings=[("Tristan Yabut Carreon", 14)],
+      previous=[("Concepcion Integrated School", "Brgy. Concepcion, Marikina City")], docs=["form_138"],
+      guardians=[("mother", "Maricel Yabut Carreon", "Bank Teller", "maricel.carreon.seed@gmail.com", "09281100064", True),
+                 ("father", "Dante Flores Carreon", "Mechanic", None, "09291100064", False)]),
+    # Grade 4 Luna. Guardian is an aunt; parents are both OFWs.
+    P(key="miguelito", student_id=165, household_id=165, first="Miguelito", middle="Agbayani", last="Ventura", sex="male",
+      suffix="Jr.", religion="Roman Catholic", birth="2016-10-30", status="active",
+      current="3 Lilac St., Brgy. Fairview, Quezon City",
+      permanent="Purok 5, Brgy. Lacub, Batac City, Ilocos Norte",
+      previous=[("Fairview Elementary School", "Brgy. Fairview, Quezon City")], docs=["form_138"],
+      guardians=[("guardian", "Soledad Ventura Agbayani", "Retired Teacher (aunt)", "soledad.agbayani.seed@gmail.com", "09301100065", True),
+                 ("father", "Miguelito Ventura Sr.", "OFW (Caregiver, Canada)", None, "09311100065", False)]),
+    # Grade 5 Silang. Honour student, pays annually.
+    P(key="danica", student_id=166, household_id=166, first="Danica", middle="Espiritu", last="Llanes", sex="female",
+      religion="Roman Catholic", birth="2015-12-05", email="danica.llanes.seed@gmail.com", mobile="09321234666",
+      status="active", current="19 Molave St., Brgy. Addition Hills, Mandaluyong City",
+      previous=[("Addition Hills Integrated School", "Brgy. Addition Hills, Mandaluyong City")], docs=["form_138"],
+      guardians=[("mother", "Imelda Espiritu Llanes", "Accountant", "imelda.llanes.seed@gmail.com", "09321100066", True),
+                 ("father", "Ferdinand Cruz Llanes", "IT Consultant", "ferdinand.llanes.seed@gmail.com", "09331100066", False)]),
+    # Grade 6 Aguinaldo.
+    P(key="kenneth", student_id=167, household_id=167, first="Kenneth", middle="Villaruel", last="Obispo", sex="male",
+      religion="Iglesia ni Cristo", birth="2014-03-17", status="active",
+      current="55 Sampaloc St., Brgy. Pinagkaisahan, Makati City",
+      siblings=[("Kathleen Villaruel Obispo", 16)],
+      previous=[("Pinagkaisahan Elementary School", "Brgy. Pinagkaisahan, Makati City")], docs=["form_138"],
+      guardians=[("father", "Reynaldo Santos Obispo", "Plumber", "reynaldo.obispo.seed@gmail.com", "09341100067", True),
+                 ("mother", "Juliet Villaruel Obispo", "Househelp", None, "09351100067", False)]),
+    # ── Grade 7 Diamond: the section nobody was enrolled in ──
+    P(key="francine", student_id=168, household_id=168, first="Francine", middle="Dimaano", last="Zulueta", sex="female",
+      religion="Roman Catholic", birth="2013-09-09", email="francine.zulueta.seed@gmail.com", mobile="09361234668",
+      status="active", current="21 Gumamela St., Brgy. Malanday, Marikina City",
+      previous=[("Malanday Elementary School", "Brgy. Malanday, Marikina City")], docs=["form_138"],
+      guardians=[("mother", "Perpetua Dimaano Zulueta", "Nurse", "perpetua.zulueta.seed@gmail.com", "09361100068", True),
+                 ("father", "Isagani Lopez Zulueta", "Radiologic Technologist", "isagani.zulueta.seed@gmail.com", "09371100068", False)]),
+    P(key="jerome", student_id=169, household_id=169, first="Jerome", middle="Pagaduan", last="Estolas", sex="male",
+      religion="Roman Catholic", birth="2013-11-21", status="active",
+      current="Blk 4 Lot 7 Riverside, Brgy. Nangka, Marikina City",
+      siblings=[("Jenny Pagaduan Estolas", 17), ("Jayson Pagaduan Estolas", 10)],
+      previous=[("Nangka Elementary School", "Brgy. Nangka, Marikina City")], docs=["form_138"],
+      guardians=[("mother", "Nenita Pagaduan Estolas", "Market Vendor", "nenita.estolas.seed@gmail.com", "09381100069", True),
+                 ("father", "Rodolfo Marquez Estolas", "Tricycle Driver", None, "09391100069", False)]),
+    P(key="shaina", student_id=170, household_id=170, first="Shaina", middle="Hernandez", last="Basco", sex="female",
+      religion="Roman Catholic", birth="2013-05-30", status="active",
+      current="66 Dao St., Brgy. Tandang Sora, Quezon City",
+      previous=[("Tandang Sora Elementary School", "Brgy. Tandang Sora, Quezon City")],
+      docs=["form_138", "clearance_previous_school"],
+      guardians=[("mother", "Analiza Hernandez Basco", "Beautician", "analiza.basco.seed@gmail.com", "09401100070", True)]),
+    P(key="dexter", student_id=171, household_id=171, first="Dexter", middle="Calimlim", last="Udarbe", sex="male",
+      religion="Roman Catholic", birth="2013-01-08", status="active",
+      current="9 Kalachuchi St., Brgy. San Roque, Antipolo City",
+      previous=[("San Roque Elementary School", "Brgy. San Roque, Antipolo City")], docs=["form_138"],
+      guardians=[("father", "Efren Calimlim Udarbe", "Welder", "efren.udarbe.seed@gmail.com", "09411100071", True),
+                 ("mother", "Loreta Bautista Udarbe", "Homemaker", None, "09421100071", False)]),
+    # Grade 8 Emerald. ESC grantee.
+    P(key="rowena", student_id=172, household_id=172, first="Rowena", middle="Alcantara", last="Delos Santos", sex="female",
+      religion="Roman Catholic", birth="2012-04-25", email="rowena.ds.seed@gmail.com", mobile="09431234672",
+      status="active", current="31 Mahogany St., Brgy. Commonwealth, Quezon City",
+      previous=[("Commonwealth High School", "Brgy. Commonwealth, Quezon City")],
+      docs=["form_138", "esc_transferee_qc"],
+      guardians=[("mother", "Vilma Alcantara Delos Santos", "Public School Teacher", "vilma.ds.seed@gmail.com", "09431100072", True),
+                 ("father", "Ricardo Cruz Delos Santos", "Barangay Councilor", None, "09441100072", False)]),
+    # Grade 9 Sapphire.
+    P(key="jayvee", student_id=173, household_id=173, first="Jayvee", middle="Rivera", last="Catapang", sex="male",
+      religion="Born Again", birth="2011-07-13", email="jayvee.catapang.seed@gmail.com", mobile="09451234673",
+      status="active", current="14 Bougainvillea St., Brgy. Pasong Putik, Quezon City",
+      siblings=[("Jewel Rivera Catapang", 8)],
+      previous=[("Pasong Putik National High School", "Brgy. Pasong Putik, Quezon City")], docs=["form_138"],
+      guardians=[("mother", "Corazon Rivera Catapang", "Sari-sari Store Owner", "corazon.catapang.seed@gmail.com", "09451100073", True),
+                 ("father", "Benito Lazaro Catapang", "Jeepney Operator", "benito.catapang.seed@gmail.com", "09461100073", False)]),
+    # Grade 10 Ruby. Failed Mathematics on the year: retained, so her
+    # 2026-2027 row repeats Grade 10 (no override needed to repeat).
+    P(key="maricel", student_id=174, household_id=174, first="Maricel", middle="Dizon", last="Fabros", sex="female",
+      religion="Roman Catholic", birth="2010-09-02", status="active",
+      current="Purok 2, Brgy. Payatas B, Quezon City",
+      siblings=[("Marvin Dizon Fabros", 19)],
+      previous=[("Payatas B National High School", "Brgy. Payatas B, Quezon City")], docs=["form_138"],
+      guardians=[("mother", "Teresita Dizon Fabros", "Scrap Dealer", "teresita.fabros.seed@gmail.com", "09471100074", True)]),
+    # Grade 11 STEM-A.
+    P(key="kiara", student_id=175, household_id=175, first="Kiara", middle="Montemayor", last="Salonga", sex="female",
+      religion="Roman Catholic", birth="2009-10-16", email="kiara.salonga.seed@gmail.com", mobile="09481234675",
+      status="active", current="5 Jasmine St., Brgy. Greenhills, San Juan City",
+      previous=[("San Juan National High School", "Brgy. Greenhills, San Juan City")],
+      docs=["form_138", "ncae_result"],
+      guardians=[("mother", "Cecilia Montemayor Salonga", "Dermatologist", "cecilia.salonga.seed@gmail.com", "09481100075", True),
+                 ("father", "Gilbert Reyes Salonga", "Civil Engineer", "gilbert.salonga.seed@gmail.com", "09491100075", False)]),
+    # Grade 12 ABM-A. Graduates at the end of 2025-2026, so no 2026-2027 row.
+    P(key="vincent", student_id=176, household_id=176, first="Vincent", middle="Panganiban", last="Herrera", sex="male",
+      religion="Roman Catholic", birth="2008-12-01", email="vincent.herrera.seed@gmail.com", mobile="09501234676",
+      status="graduated", current="40 Champaca St., Brgy. Project 6, Quezon City",
+      siblings=[("Veronica Panganiban Herrera", 15)],
+      previous=[("Project 6 National High School", "Brgy. Project 6, Quezon City")],
+      docs=["form_138", "ncae_result"],
+      guardians=[("father", "Armando Santos Herrera", "Logistics Supervisor", "armando.herrera.seed@gmail.com", "09501100076", True),
+                 ("mother", "Marilou Panganiban Herrera", "Insurance Agent", None, "09511100076", False)]),
 ]
 PROFILE = {p["key"]: p for p in PROFILES}
+
+# ════════════════════════════════════════════════════════════════════════════
+# PINNED STUDENT NUMBERS
+# These 31 learners (Tier 1 + Tier 2) are already loaded in the real database,
+# so their student_number is frozen here. Student numbers are otherwise handed
+# out in enrollment-date order, which means a newly added learner enrolling in
+# May 2025 would renumber everyone after them. Pinning keeps every existing
+# record's visible identifier stable; new learners continue after the highest
+# pinned number for their year.
+# Do NOT edit these. Add new learners without an entry and they get the next
+# free number.
+# ════════════════════════════════════════════════════════════════════════════
+PINNED_NUMBERS = {
+    "marco": "2025-0001",
+    "maria": "2025-0002",
+    "paolo": "2025-0003",
+    "daniel": "2025-0004",
+    "jiwoo": "2025-0005",
+    "bianca": "2025-0006",
+    "dominic": "2025-0007",
+    "natasha": "2025-0008",
+    "hannah": "2025-0009",
+    "ryan": "2025-0010",
+    "christine": "2025-0011",
+    "rica": "2025-0012",
+    "renz": "2025-0013",
+    "jasmine": "2025-0014",
+    "bea": "2025-0015",
+    "kristine": "2025-0016",
+    "jeremiah": "2025-0017",
+    "raphael": "2025-0018",
+    "gabriel": "2025-0019",
+    "mark": "2025-0020",
+    "patrick": "2025-0021",
+    "andrea": "2025-0022",
+    "carlos": "2025-0023",
+    "joshua": "2025-0024",
+    "nino": "2026-0001",
+    "sofia": "2026-0002",
+    "miguel": "2026-0003",
+    "abigail": "2026-0004",
+    "erica": "2026-0005",
+    "christian": "2026-0006",
+    "patricia": "2026-0007",
+}
+
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1031,6 +1246,165 @@ ENROLLMENTS = [
     E(key="erica", sy=SY2, eids=[425], inv=523, level="senior_highschool", grade="Grade 12", section="STEM-A",
       strand="STEM", enrolled_on="2026-06-03", entry="continuing", status="enrolled", ability=86, plan="monthly",
       pay=dict(method="card", style="early"), absences=(1, 0, 2)),
+
+    # ═════════════ Tier 2.5: more S.Y. 2025-2026 (finished) ═════════════
+    # enrollment_id 231-258, invoice_id 326-349.
+    # Nursery Rose: twins, both on the sibling discount (the second child).
+    E(key="althea", sy=SY1, eids=[231], inv=326, level="nursery", grade="Nursery", section="Rose",
+      enrolled_on="2025-05-26", entry="new", ability=87, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(5, 3, 4)),
+    E(key="aldrin", sy=SY1, eids=[232], inv=327, level="nursery", grade="Nursery", section="Rose",
+      enrolled_on="2025-05-26", entry="new", ability=85, plan="monthly",
+      scholarships=[("SIBLING", "2025-05-26", "Twin brother of Althea Lumibao Rosales (Nursery).")],
+      pay=dict(method="gcash", style="early"), absences=(6, 2, 5)),
+    # Kindergarten Sunflower.
+    E(key="elijah", sy=SY1, eids=[233], inv=328, level="kindergarten", grade="Kindergarten", section="Sunflower",
+      enrolled_on="2025-06-02", entry="new", ability=86, plan="quarterly",
+      pay=dict(method="cash", style="early"), absences=(3, 2, 2)),
+    E(key="samantha", sy=SY1, eids=[234], inv=329, level="kindergarten", grade="Kindergarten", section="Sunflower",
+      enrolled_on="2025-05-19", entry="new", ability=93, plan="annual",
+      pay=dict(method="bank_transfer", style="upfront"), absences=(1, 1, 2)),
+    # Grade 1 Rizal.
+    E(key="lucas", sy=SY1, eids=[235], inv=330, level="elementary", grade="Grade 1", section="Rizal",
+      enrolled_on="2025-05-30", entry="new", ability=83, plan="monthly",
+      pay=dict(method="gcash", style="late_some", late={4, 7}), absences=(6, 3, 4)),
+    E(key="chloe", sy=SY1, eids=[236], inv=331, level="elementary", grade="Grade 1", section="Rizal",
+      enrolled_on="2025-05-21", entry="new", ability=94, plan="semi_annual",
+      pay=dict(method="card", style="early"), absences=(2, 1, 1)),
+    # Grade 2 Bonifacio: 4Ps, chronic arrears, ends the year still owing.
+    E(key="angelo", sy=SY1, eids=[237], inv=332, level="elementary", grade="Grade 2", section="Bonifacio",
+      enrolled_on="2025-06-11", entry="transferee", ability=80, floor=75, plan="monthly",
+      scholarships=[("4PS", "2025-06-11", "4Ps household ID 4PS-SEED-009 (DSWD certification on file).")],
+      pay=dict(method="cash", style="arrears", through="2025-12-31",
+               partial=("2026-01-31", "2026-02-06", "800.00", "Partial; the balance after the next cash grant.")),
+      absences=(11, 4, 8)),
+    # Grade 3 Mabini.
+    E(key="trisha", sy=SY1, eids=[238], inv=333, level="elementary", grade="Grade 3", section="Mabini",
+      enrolled_on="2025-05-23", entry="transferee", ability=90, plan="quarterly",
+      pay=dict(method="bank_transfer", style="early"), absences=(2, 2, 1)),
+    # Grade 4 Luna: aunt pays by salary deduction is not applicable here, so
+    # a plain quarterly payer who settles each installment a few days early.
+    E(key="miguelito", sy=SY1, eids=[239], inv=334, level="elementary", grade="Grade 4", section="Luna",
+      enrolled_on="2025-06-06", entry="transferee", ability=82, plan="quarterly",
+      pay=dict(method="cash", style="early"), absences=(7, 3, 5)),
+    # Grade 5 Silang: honour student, annual plan paid in full up front.
+    E(key="danica", sy=SY1, eids=[240], inv=335, level="elementary", grade="Grade 5", section="Silang",
+      enrolled_on="2025-05-16", entry="transferee", ability=96, plan="annual",
+      scholarships=[("HONOR", "2025-05-16", "With Highest Honors, Grade 4 (Addition Hills Integrated School).")],
+      pay=dict(method="bank_transfer", style="upfront"), absences=(1, 0, 1)),
+    # Grade 6 Aguinaldo.
+    E(key="kenneth", sy=SY1, eids=[241], inv=336, level="elementary", grade="Grade 6", section="Aguinaldo",
+      enrolled_on="2025-06-04", entry="transferee", ability=84, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(4, 2, 3)),
+    # ── Grade 7 Diamond: four learners for the section that had none ──
+    E(key="francine", sy=SY1, eids=[242], inv=337, level="junior_highschool", grade="Grade 7", section="Diamond",
+      enrolled_on="2025-05-20", entry="transferee", ability=93, plan="semi_annual",
+      scholarships=[("HONOR", "2025-05-20", "With Honors, Grade 6 (Malanday Elementary School).")],
+      pay=dict(method="bank_transfer", style="early"), absences=(1, 1, 2)),
+    E(key="jerome", sy=SY1, eids=[243], inv=338, level="junior_highschool", grade="Grade 7", section="Diamond",
+      enrolled_on="2025-06-09", entry="transferee", ability=79, floor=75, plan="monthly",
+      scholarships=[("4PS", "2025-06-09", "4Ps household ID 4PS-SEED-010.")],
+      pay=dict(method="cash", style="arrears", through="2026-01-31"), absences=(13, 5, 9)),
+    E(key="shaina", sy=SY1, eids=[244], inv=339, level="junior_highschool", grade="Grade 7", section="Diamond",
+      enrolled_on="2025-05-27", entry="transferee", ability=88, plan="monthly",
+      pay=dict(method="gcash", style="late_some", late={3, 6, 9}), absences=(3, 2, 2)),
+    # Transferred out to Cagayan de Oro on 2026-02-06: Q1-Q3 graded, Q4 stops,
+    # the invoice is closed out and the remaining installments waived.
+    E(key="dexter", sy=SY1, eids=[245], inv=340, level="junior_highschool", grade="Grade 7", section="Diamond",
+      enrolled_on="2025-06-02", entry="transferee", ability=85, plan="monthly", status="transferred_out",
+      transfer_out=("2026-02-06", "Family relocating to Cagayan de Oro City.",
+                    "Cagayan de Oro City National High School", REGISTRAR),
+      pay=dict(method="cash", style="early"), absences=(4, 2, 3)),
+    # Grade 8 Emerald: ESC grantee (fixed 14,000 off tuition).
+    E(key="rowena", sy=SY1, eids=[246], inv=341, level="junior_highschool", grade="Grade 8", section="Emerald",
+      enrolled_on="2025-05-22", entry="transferee", ability=91, plan="quarterly",
+      scholarships=[("ESC", "2025-05-22", "ESC grantee; certificate from Commonwealth High School.")],
+      pay=dict(method="bank_transfer", style="early"), absences=(2, 1, 1)),
+    # Grade 9 Sapphire.
+    E(key="jayvee", sy=SY1, eids=[247], inv=342, level="junior_highschool", grade="Grade 9", section="Sapphire",
+      enrolled_on="2025-06-05", entry="transferee", ability=86, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(5, 2, 4)),
+    # Grade 10 Ruby: fails Mathematics on the year (average below 75), so she
+    # repeats Grade 10 in 2026-2027.
+    E(key="maricel", sy=SY1, eids=[248], inv=343, level="junior_highschool", grade="Grade 10", section="Ruby",
+      enrolled_on="2025-06-13", entry="transferee", ability=78, floor=75, plan="monthly",
+      overrides={"G10-MATH": {"1st_quarter": 72, "2nd_quarter": 74, "3rd_quarter": 73, "4th_quarter": 74}},
+      scholarships=[("4PS", "2025-06-13", "4Ps household ID 4PS-SEED-011.")],
+      pay=dict(method="cash", style="arrears", through="2026-02-28"), absences=(15, 3, 10)),
+    # Grade 11 STEM-A (two semester rows).
+    E(key="kiara", sy=SY1, eids=[249, 250], inv=344, level="senior_highschool", grade="Grade 11", section="STEM-A",
+      strand="STEM", enrolled_on="2025-05-19", entry="transferee", ability=94, plan="semi_annual",
+      scholarships=[("HONOR", "2025-05-19", "With High Honors, Grade 10 (San Juan National High School).")],
+      pay=dict(method="card", style="early"), absences=(1, 1, 1)),
+    # Grade 12 ABM-A: graduates at the end of the year.
+    E(key="vincent", sy=SY1, eids=[251, 252], inv=345, level="senior_highschool", grade="Grade 12", section="ABM-A",
+      strand="ABM", enrolled_on="2025-05-24", entry="transferee", ability=88, plan="quarterly", graduates=True,
+      pay=dict(method="bank_transfer", style="early"), absences=(3, 2, 2)),
+
+    # ═════════════ Tier 2.5: continuations into S.Y. 2026-2027 ═════════════
+    # enrollment_id 426-440, invoice_id 524-538. Fourteen of the twenty
+    # continue; Dexter transferred out, Vincent graduated, and four others
+    # did not come back (they count as leavers in the year comparison).
+    E(key="althea", sy=SY2, eids=[426], inv=524, level="kindergarten", grade="Kindergarten", section="Sunflower",
+      enrolled_on="2026-05-20", entry="continuing", status="enrolled", ability=88, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(2, 1, 1)),
+    E(key="aldrin", sy=SY2, eids=[427], inv=525, level="kindergarten", grade="Kindergarten", section="Sunflower",
+      enrolled_on="2026-05-20", entry="continuing", status="enrolled", ability=86, plan="monthly",
+      scholarships=[("SIBLING", "2026-05-20", "Twin brother of Althea Lumibao Rosales (Kindergarten).")],
+      pay=dict(method="gcash", style="early"), absences=(2, 2, 1)),
+    # Grade 1's 2026-2027 schedule has no items, so this is another P0 invoice.
+    E(key="elijah", sy=SY2, eids=[428], inv=526, level="elementary", grade="Grade 1", section="Rizal",
+      enrolled_on="2026-05-26", entry="continuing", status="enrolled", ability=87, plan="monthly",
+      pay=dict(method="cash", style="none"), absences=(1, 1, 1)),
+    E(key="samantha", sy=SY2, eids=[429], inv=527, level="elementary", grade="Grade 1", section="Rizal",
+      enrolled_on="2026-05-15", entry="continuing", status="enrolled", ability=93, plan="monthly",
+      pay=dict(method="bank_transfer", style="none"), absences=(0, 1, 1)),
+    E(key="lucas", sy=SY2, eids=[430], inv=528, level="elementary", grade="Grade 2", section="Bonifacio",
+      enrolled_on="2026-05-29", entry="continuing", status="enrolled", ability=84, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(2, 1, 2), today="L"),
+    E(key="chloe", sy=SY2, eids=[431], inv=529, level="elementary", grade="Grade 2", section="Bonifacio",
+      enrolled_on="2026-05-18", entry="continuing", status="enrolled", ability=94, plan="semi_annual",
+      pay=dict(method="card", style="early"), absences=(1, 0, 1)),
+    E(key="angelo", sy=SY2, eids=[432], inv=530, level="elementary", grade="Grade 3", section="Del Pilar",
+      enrolled_on="2026-06-12", entry="continuing", status="enrolled", ability=81, floor=76, plan="monthly",
+      scholarships=[("4PS", "2026-06-12", "4Ps household ID 4PS-SEED-009, re-verified for 2026-2027.")],
+      pay=dict(method="cash", style="custom", list=[("2026-06-12", None, "Downpayment upon enrollment.")]),
+      absences=(5, 2, 4), today="A"),
+    E(key="trisha", sy=SY2, eids=[433], inv=531, level="elementary", grade="Grade 4", section="Luna",
+      enrolled_on="2026-05-22", entry="continuing", status="enrolled", ability=91, plan="quarterly",
+      pay=dict(method="bank_transfer", style="early"), absences=(1, 1, 1)),
+    E(key="miguelito", sy=SY2, eids=[434], inv=532, level="elementary", grade="Grade 5", section="Silang",
+      enrolled_on="2026-06-05", entry="continuing", status="enrolled", ability=83, plan="quarterly",
+      pay=dict(method="cash", style="early"), absences=(3, 1, 2)),
+    E(key="danica", sy=SY2, eids=[435], inv=533, level="elementary", grade="Grade 6", section="Aguinaldo",
+      enrolled_on="2026-05-15", entry="continuing", status="enrolled", ability=96, plan="annual",
+      scholarships=[("HONOR", "2026-05-15", "With Highest Honors, Grade 5 (S.Y. 2025-2026).")],
+      pay=dict(method="bank_transfer", style="upfront"), absences=(0, 1, 0)),
+    E(key="kenneth", sy=SY2, eids=[436], inv=534, level="junior_highschool", grade="Grade 7", section="Diamond",
+      enrolled_on="2026-06-03", entry="continuing", status="enrolled", ability=85, plan="monthly",
+      pay=dict(method="gcash", style="early"), absences=(2, 1, 2)),
+    E(key="francine", sy=SY2, eids=[437], inv=535, level="junior_highschool", grade="Grade 8", section="Emerald",
+      enrolled_on="2026-05-19", entry="continuing", status="enrolled", ability=93, plan="semi_annual",
+      scholarships=[("HONOR", "2026-05-19", "With Honors, Grade 7 (S.Y. 2025-2026).")],
+      pay=dict(method="bank_transfer", style="early"), absences=(1, 0, 1)),
+    # Grade 8 Emerald. Enrolled late (mid-June) and straight into arrears:
+    # only the downpayment has been paid, so July onwards is overdue.
+    E(key="jerome", sy=SY2, eids=[438], inv=536, level="junior_highschool", grade="Grade 8", section="Emerald",
+      enrolled_on="2026-06-15", entry="continuing", status="enrolled", ability=80, floor=75, plan="monthly",
+      pay=dict(method="cash", style="custom", list=[("2026-06-15", None, "Downpayment upon enrollment.")]),
+      absences=(6, 2, 5)),
+    # Repeats Grade 10 after failing Mathematics in 2025-2026.
+    E(key="maricel", sy=SY2, eids=[439], inv=537, level="junior_highschool", grade="Grade 10", section="Ruby",
+      enrolled_on="2026-06-18", entry="continuing", status="enrolled", ability=80, floor=76, plan="monthly",
+      scholarships=[("4PS", "2026-06-18", "4Ps household ID 4PS-SEED-011.")],
+      pay=dict(method="cash", style="custom", list=[("2026-06-18", None, "Downpayment upon enrollment."),
+                                                    ("2026-08-21", "1500.00", "Partial payment for July.")]),
+      absences=(8, 2, 6)),
+    # Grade 11 STEM -> Grade 12 STEM, promoted from the completed 2nd semester.
+    E(key="kiara", sy=SY2, eids=[440], inv=538, level="senior_highschool", grade="Grade 12", section="STEM-A",
+      strand="STEM", enrolled_on="2026-05-21", entry="continuing", status="enrolled", ability=94, plan="semi_annual",
+      scholarships=[("HONOR", "2026-05-21", "With High Honors, Grade 11 (S.Y. 2025-2026).")],
+      pay=dict(method="card", style="early"), absences=(1, 1, 0)),
 ]
 
 
@@ -1067,6 +1441,26 @@ INVITES = [
          attempts=5, locked="2026-09-28 13:26:00"),
     dict(key="inv-active", first="Mia", last="Evangelista", email="myrna.evangelista.seed@gmail.com", mobile="09611100033",
          sy=SY2, by=REGISTRAR2, issued="2026-09-28 16:00:00", code="Q2FJ8RNK"),
+
+    # ── Tier 2.5 invites ──
+    dict(key="app-liam", first="Liam", last="Bautista", email="grace.bautista.seed@gmail.com", mobile="09521100081",
+         sy=SY2, by=REGISTRAR, issued="2026-09-25 09:15:00", code="A3KD7WQM"),
+    dict(key="app-nadine", first="Nadine", last="Coller", email="rosario.coller.seed@gmail.com", mobile="09531100082",
+         sy=SY2, by=REGISTRAR2, issued="2026-09-23 11:40:00", code="F8TG2XPV"),
+    dict(key="app-ezekiel", first="Ezekiel", last="Mangubat", email="pedro.mangubat.seed@gmail.com", mobile="09541100083",
+         sy=SY2, by=REGISTRAR, issued="2026-09-18 14:05:00", code="N5QW9BJR"),
+    dict(key="app-amara", first="Amara", last="Sitoy", email="jocelyn.sitoy.seed@gmail.com", mobile="09551100084",
+         sy=SY2, by=REGISTRAR2, issued="2026-09-14 08:50:00", code="L2VC6HDS"),
+    dict(key="app-rafaela", first="Rafaela", last="Lumanog", email="arturo.lumanog.seed@gmail.com", mobile="09561100085",
+         sy=SY2, by=REGISTRAR, issued="2026-06-02 10:20:00", code="Y7MB4KFT"),
+    dict(key="app-tobias", first="Tobias", last="Carandang", email="milagros.carandang.seed@gmail.com", mobile="09571100086",
+         sy=SY2, by=REGISTRAR2, issued="2026-09-29 09:05:00", code="D4JS8NRW"),
+    # Issued but never opened: expires tomorrow.
+    dict(key="inv-fresh", first="Beatriz", last="Olivares", email="consuelo.olivares.seed@gmail.com", mobile="09581100087",
+         sy=SY2, by=REGISTRAR, issued="2026-09-30 08:00:00", code="G6PX3VLC"),
+    # Second invite for a family whose first code expired unused.
+    dict(key="inv-stale", first="Emilio", last="Rubio", email=None, mobile="09591100088",
+         sy=SY2, by=REGISTRAR2, issued="2026-08-11 15:30:00", code="H9ZN5TQB"),
 ]
 
 APPLICATIONS = [
@@ -1137,4 +1531,96 @@ APPLICATIONS = [
                           age=None, sex="male", religion=None, birth_date=None, email=None, mobile_number=None,
                           current_address="", permanent_address=""),
              household=None, guardians=[], siblings=[], previous_schools=[])),
+
+    # ── Tier 2.5 applications ──
+    # submitted: Nursery applicant for the current year, nothing done yet.
+    dict(id=707, invite="app-liam", status="submitted", apply=("nursery", "Nursery", None),
+         submitted="2026-09-26 20:30:00",
+         payload=dict(
+             student=dict(lrn=None, first_name="Liam", middle_name="Perez", last_name="Bautista", suffix=None,
+                          age=4, sex="male", religion="Roman Catholic", birth_date="2022-03-04", email=None,
+                          mobile_number=None, current_address="18 Dalandan St., Brgy. Talon Dos, Las Piñas City",
+                          permanent_address="18 Dalandan St., Brgy. Talon Dos, Las Piñas City"),
+             household=dict(parent_marital_status="married", living_arrangement="both_parents",
+                            is_4ps_beneficiary=False, four_ps_id=None),
+             guardians=[dict(relationship="mother", full_name="Grace Perez Bautista", occupation="Bookkeeper",
+                             email_address="grace.bautista.seed@gmail.com", mobile_number="09521100081", is_primary_contact=True),
+                        dict(relationship="father", full_name="Noel Ramos Bautista", occupation="Warehouse Staff",
+                             email_address=None, mobile_number="09521100181", is_primary_contact=False)],
+             siblings=[], previous_schools=[])),
+    # in_review: Grade 4 transferee, registrar has opened it.
+    dict(id=708, invite="app-nadine", status="in_review", apply=("elementary", "Grade 4", None),
+         submitted="2026-09-24 19:05:00", reviewed_by=REGISTRAR, reviewed="2026-09-28 10:30:00",
+         payload=dict(
+             student=dict(lrn="136700000182", first_name="Nadine", middle_name="Ferrer", last_name="Coller", suffix=None,
+                          age=9, sex="female", religion="Roman Catholic", birth_date="2017-02-18", email=None,
+                          mobile_number=None, current_address="7 Ipil St., Brgy. Sto. Niño, Parañaque City",
+                          permanent_address="7 Ipil St., Brgy. Sto. Niño, Parañaque City"),
+             household=dict(parent_marital_status="separated", living_arrangement="mother_only",
+                            is_4ps_beneficiary=False, four_ps_id=None),
+             guardians=[dict(relationship="mother", full_name="Rosario Ferrer Coller", occupation="Flight Attendant",
+                             email_address="rosario.coller.seed@gmail.com", mobile_number="09531100082", is_primary_contact=True)],
+             siblings=[dict(full_name="Nathan Ferrer Coller", age=6)],
+             previous_schools=[dict(school_name="Sto. Niño Parochial School",
+                                    school_address="Brgy. Sto. Niño, Parañaque City")])),
+    # rejected: applied for Grade 11 STEM without the Grade 10 record.
+    dict(id=709, invite="app-ezekiel", status="rejected", apply=("senior_highschool", "Grade 11", "STEM"),
+         submitted="2026-09-19 21:10:00", reviewed_by=REGISTRAR2, reviewed="2026-09-21 09:00:00",
+         decided="2026-09-24 14:20:00", decided_by=REGISTRAR,
+         note="No Form 137 or certificate of completion for Grade 10 was attached, and the previous school could "
+              "not confirm enrollment. The family may re-apply once the records are released.",
+         payload=dict(
+             student=dict(lrn="136700000183", first_name="Ezekiel", middle_name="Obiena", last_name="Mangubat",
+                          suffix=None, age=16, sex="male", religion="Born Again", birth_date="2010-06-12",
+                          email="ezekiel.mangubat.seed@gmail.com", mobile_number="09541234683",
+                          current_address="92 Maharlika St., Brgy. Bagong Pag-asa, Quezon City",
+                          permanent_address="92 Maharlika St., Brgy. Bagong Pag-asa, Quezon City"),
+             household=dict(parent_marital_status="married", living_arrangement="both_parents",
+                            is_4ps_beneficiary=False, four_ps_id=None),
+             guardians=[dict(relationship="father", full_name="Pedro Obiena Mangubat", occupation="Taxi Driver",
+                             email_address="pedro.mangubat.seed@gmail.com", mobile_number="09541100083", is_primary_contact=True)],
+             siblings=[], previous_schools=[dict(school_name="(unconfirmed) Bagong Pag-asa High School",
+                                                 school_address="Brgy. Bagong Pag-asa, Quezon City")])),
+    # submitted: Kindergarten applicant, 4Ps household.
+    dict(id=710, invite="app-amara", status="submitted", apply=("kindergarten", "Kindergarten", None),
+         submitted="2026-09-15 18:45:00",
+         payload=dict(
+             student=dict(lrn=None, first_name="Amara", middle_name="Dagohoy", last_name="Sitoy", suffix=None,
+                          age=5, sex="female", religion="Roman Catholic", birth_date="2021-01-27", email=None,
+                          mobile_number=None, current_address="Purok 6, Brgy. Pinyahan, Quezon City",
+                          permanent_address="Purok 6, Brgy. Pinyahan, Quezon City"),
+             household=dict(parent_marital_status="single_parent", living_arrangement="mother_only",
+                            is_4ps_beneficiary=True, four_ps_id="4PS-SEED-012"),
+             guardians=[dict(relationship="mother", full_name="Jocelyn Dagohoy Sitoy", occupation="Street Sweeper",
+                             email_address="jocelyn.sitoy.seed@gmail.com", mobile_number="09551100084", is_primary_contact=True)],
+             siblings=[dict(full_name="Arvin Dagohoy Sitoy", age=11)], previous_schools=[])),
+    # draft abandoned in June: half filled in, never submitted.
+    dict(id=711, invite="app-rafaela", status="draft", apply=("elementary", "Grade 2", None),
+         created="2026-06-02 19:20:00",
+         payload=dict(
+             student=dict(lrn=None, first_name="Rafaela", middle_name="Sison", last_name="Lumanog", suffix=None,
+                          age=7, sex="female", religion="Roman Catholic", birth_date="2019-05-19", email=None,
+                          mobile_number=None, current_address="3 Mangga St., Brgy. Sangandaan, Caloocan City",
+                          permanent_address=""),
+             household=dict(parent_marital_status="married", living_arrangement="both_parents",
+                            is_4ps_beneficiary=False, four_ps_id=None),
+             guardians=[dict(relationship="father", full_name="Arturo Sison Lumanog", occupation="Baker",
+                             email_address="arturo.lumanog.seed@gmail.com", mobile_number="09561100085", is_primary_contact=True)],
+             siblings=[], previous_schools=[])),
+    # submitted yesterday: Grade 8 transferee whose LRN matches nobody.
+    dict(id=712, invite="app-tobias", status="submitted", apply=("junior_highschool", "Grade 8", None),
+         submitted="2026-09-29 22:05:00",
+         payload=dict(
+             student=dict(lrn="136700000186", first_name="Tobias", middle_name="Almeda", last_name="Carandang",
+                          suffix=None, age=13, sex="male", religion="Roman Catholic", birth_date="2013-03-28",
+                          email=None, mobile_number="09571234686",
+                          current_address="25 Guijo St., Brgy. Pansol, Quezon City",
+                          permanent_address="Purok 1, Brgy. Lumbang, Calauan, Laguna"),
+             household=dict(parent_marital_status="widowed", living_arrangement="mother_only",
+                            is_4ps_beneficiary=False, four_ps_id=None),
+             guardians=[dict(relationship="mother", full_name="Milagros Almeda Carandang", occupation="Nursing Aide",
+                             email_address="milagros.carandang.seed@gmail.com", mobile_number="09571100086", is_primary_contact=True)],
+             siblings=[dict(full_name="Trixie Almeda Carandang", age=16)],
+             previous_schools=[dict(school_name="Calauan National High School",
+                                    school_address="Brgy. Balayhangin, Calauan, Laguna")])),
 ]

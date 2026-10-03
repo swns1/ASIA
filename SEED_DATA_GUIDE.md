@@ -2,14 +2,15 @@
 
 The complete reference for ASIA's mock (seed) data: what exists today, how it is built, every rule the data has to satisfy, how to check it, and how to ask for more.
 
-- **Last verified:** 2026-09-30, loaded against the post-merge `matres` branch (school-year rework, per-year subjects, staff active status).
-- **Current tier:** Tier 2. 25 learners in S.Y. 2025-2026 (finished) + 25 learners in S.Y. 2026-2027 (current, filled up to 2026-09-30), 31 distinct learners (19 carry over both years). Supersedes Tier 1; the narrative in §9 below is Tier 1 and now historical — see §9.5 for what Tier 2 adds and how to get the full per-learner detail.
+- **Last verified:** 2026-10-02, loaded against the `matres` branch. Full §11 checklist passed, including the fresh-`schema.sql` load and all four test suites (1344 tests).
+- **Current tier:** Tier 2.5. **45 learners in S.Y. 2025-2026** (finished) + **40 in S.Y. 2026-2027** (current, filled up to 2026-09-30); 51 distinct, 94 enrollments. The narrative in §9.1-9.4 is Tier 1 and historical — **§9.5 (Tier 2) and §9.7 (Tier 2.5) are what is actually loaded.** Use `--report` for exact per-learner detail.
 - **Database:** `SLIS THESIS FINAL` (local PostgreSQL, user `postgres`).
 
 ---
 
 ## Contents
 
+0. [**Adding more learners — start here**](#0-adding-more-learners--start-here)
 1. [Quick facts](#1-quick-facts)
 2. [Ground rules](#2-ground-rules)
 3. [Files and where they live](#3-files-and-where-they-live)
@@ -18,7 +19,7 @@ The complete reference for ASIA's mock (seed) data: what exists today, how it is
 6. [Insert order (dependency graph)](#6-insert-order-dependency-graph)
 7. [Table-by-table rules](#7-table-by-table-rules)
 8. [Cross-cutting behaviour](#8-cross-cutting-behaviour)
-9. [What the current seed contains (Tier 1)](#9-what-the-current-seed-contains-tier-1)
+9. [What the current seed contains](#9-what-the-current-seed-contains-991-94--tier-1-history-995--tier-2-997--tier-25-current) — Tier 1 history §9.1-9.4; Tier 2 §9.5; **Tier 2.5 §9.7 is current**
 10. [Generator internals](#10-generator-internals)
 11. [Verification checklist](#11-verification-checklist)
 12. [Bugs the seed has found](#12-bugs-the-seed-has-found)
@@ -31,18 +32,64 @@ The complete reference for ASIA's mock (seed) data: what exists today, how it is
 
 ---
 
+## 0. Adding more learners — start here
+
+**Growing the learner population is ongoing work** (the user, 2026-10-02: "from this point forwards we'll most likely be creating more and more students"). If that is the request, this section is the fast path; read §9.7 for the current state and §11 before loading anything.
+
+**Everything lives in the repo** — nothing to hunt for:
+
+| | |
+|---|---|
+| All data | `scripts/seed_spec.py` — `PROFILES`, `HOUSEHOLDS`, `ENROLLMENTS`, `INVITES`, `APPLICATIONS`, `SECTIONS`, `STAFF`, `PINNED_NUMBERS` |
+| Logic | `scripts/generate_seed_data.py` — touch only for new mechanics |
+| Output | `seed_data.sql` at the repo root — **generated, never hand-edited** |
+| Regenerate | `cd scripts && ../venv/bin/python generate_seed_data.py --out ../seed_data.sql --report /tmp/r.json` |
+
+**Next free identifiers** (as of Tier 2.5; re-check the live DB before using them):
+
+| What | Used | Next free |
+|---|---|---|
+| student_id / household_id | 100-176 | **177+** |
+| enrollment_id | 200-258 (2025-2026), 400-440 (2026-2027) | **259+ / 441+** |
+| invoice_id | 300-349 (2025-2026), 500-538 (2026-2027) | **350+ / 539+** |
+| application_id | 700-712 | **713+** |
+| LRN, student_number | derived / auto-assigned | nothing to pick |
+
+**The rule that bites: `PINNED_NUMBERS`.** Student numbers are handed out in *enrollment-date order*, so a learner added with a May 2025 date would renumber every existing learner after them. `PINNED_NUMBERS` freezes the 31 Tier 1/2 learners on the numbers they hold in the live database.
+
+- Never edit an existing pin. A learner with no entry takes the next free number for their year, and the generator raises on a duplicate.
+- **After a tier is loaded into the real database, pin its new learners too** — otherwise the next tier renumbers them. Tier 2.5's twenty (`2025-0025..0044`) are **not yet pinned**; pin them before adding Tier 3.
+
+**The procedure:**
+
+1. Confirm scope with the user first (which years, continuations or not, which grades/sections, test-only or load). §17 has the template.
+2. Check the live database for the real starting point — counts, section occupancy, max IDs. A written-down number ages; the database does not.
+3. Edit `seed_spec.py` only: `HOUSEHOLDS` → `PROFILES` → `ENROLLMENTS` (→ intake if asked). Copy a neighbouring entry's shape; `P(...)` and `E(...)` fill the defaults.
+4. Validate the spec before generating: every enrollment key in `PROFILES`; every `(sy, grade, section)` in `SECTIONS`; `strand` matching the section; level matching the grade; eids and invoice ids unique; **grade progression step 0 or 1** per learner per year (a jump needs an override); ages within ±1 of `4 + ladder index`.
+5. Generate, then test on a throwaway copy of the live database — load, load **again** for idempotency, §11's SQL, the app-level checks, the test suites.
+6. Back up, load, re-verify read-only, then update this guide (a new §9.x, quick facts, roadmap, checklist counts, the `--report` printout) and report counts, logins and any app bug found. **Report bugs, don't fix them** — §2.
+
+**Two traps that have cost real time.** Both are flaws in *check scripts*, not in the data:
+
+1. The invoice reconciliation query must **exclude `voided` installments**. Transfer-out close-outs void the remainder, so summing all of them falsely flags every closed-out invoice.
+2. A grade check must **`quantize` the renormalised initial grade to 2 dp before transmuting**, exactly as `grading/views.compute_grade` does. Skipping it makes grades look off by one point at a band boundary (80.797 → 80.80 → 88, not 87). A partial period legitimately has encoded weight below 100.
+
+**Do not add subjects or fee schedules unless asked.** Both seeded years are complete, and the 2026-2027 Grade 1 (no items) and Grade 9 (no schedule) gaps are deliberate billing edge cases.
+
+---
+
 ## 1. Quick facts
 
 | | |
 |---|---|
-| Seeded year 1 | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; 25 learners. Not archived. |
-| Seeded year 2 | **S.Y. 2026-2027** (current). 25 learners, filled up to **2026-09-30** (`TODAY` in the generator). MATATAG subject changes applied (no Mother Tongue G1-3, EsP replaced by GMRC/Values Ed). |
-| Learners | 31 distinct (25 + 25, 19 carried over both years), 57 enrollments total (Senior High learners have one enrollment per semester) |
-| Sections | 2025-2026: one per grade plus G7 Pearl, STEM-A/ABM-A in G11-12. 2026-2027: renamed/reshuffled sections (see §9.5), G9 Sapphire has no adviser. |
+| Seeded year 1 | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; 45 learners. Not archived. |
+| Seeded year 2 | **S.Y. 2026-2027** (current). 40 learners, filled up to **2026-09-30** (`TODAY` in the generator). MATATAG subject changes applied (no Mother Tongue G1-3, EsP replaced by GMRC/Values Ed). |
+| Learners | 51 distinct (45 + 40, 34 carried over both years), 94 enrollments total (Senior High learners have one enrollment per semester) |
+| Sections | 2025-2026: one per grade plus G7 Diamond/Pearl, STEM-A/ABM-A in G11-12. **Every section is populated (2-4 learners each) since Tier 2.5.** 2026-2027: renamed/reshuffled sections (see §9.5), G9 Sapphire has no adviser. |
 | Subjects | 121 for 2025-2026; 118 for 2026-2027 (MATATAG-adjusted). |
-| Accounts | 72 users total (2 inactive/resigned teachers), plus 4 usable guardian logins. Password **`SlisDemo2026!`** for all active staff. |
-| Volumes | 6,206 score entries · 689 grades · 372 narratives · 5,835 attendance records · 145 documents (143 files) · 50 invoices · 200 payments · 349 installments · 11 invites · 7 applications |
-| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001..0024`, `2026-0001..0007` · enrollment IDs 200-230, 400-425 · invoice IDs 300-325, 500-523 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
+| Accounts | 97 users total (2 inactive/resigned teachers), plus 4 usable guardian logins. Password **`SlisDemo2026!`** for all active staff. |
+| Volumes | 11,376 score entries · 1,321 grades · 728 narratives · 10,582 attendance records · 233 documents (231 files) · 85 invoices · 349 payments · 582 installments · 19 invites · 13 applications |
+| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001..0044`, `2026-0001..0007` · enrollment IDs 200-258, 400-440 · invoice IDs 300-349, 500-538 · application IDs 700-712 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
 | Generator | `scripts/generate_seed_data.py` + `scripts/seed_spec.py`, **now in the repo** (moved 2026-09-30; see §3) |
 
 ---
@@ -108,13 +155,13 @@ All commands run from the repo root on macOS (zsh). The venv is the repo's `venv
 venv/bin/python scripts/generate_seed_data.py --out seed_data.sql \
   --media backend/enrollment-service/media \
   --media backend/student-service/media
-# prints: {'enrollments': 57, 'events_2025-2026': 39, 'events_2026-2027': 40,
-#          'guardian_accounts': 40, 'docs': 145, 'doc_files': 143, 'transfers': 6,
-#          'scholarships': 21, 'invoices': 50, 'payments': 200, 'installments': 349,
-#          'invites': 11, 'applications': 7, 'scores': 6206, 'grades': 689,
-#          'narratives': 372, 'attendance': 5835, 'exceptions': 311, 'learners': 31,
+# prints: {'enrollments': 94, 'events_2025-2026': 39, 'events_2026-2027': 40,
+#          'guardian_accounts': 65, 'docs': 233, 'doc_files': 231, 'transfers': 7,
+#          'scholarships': 35, 'invoices': 85, 'payments': 349, 'installments': 582,
+#          'invites': 19, 'applications': 13, 'scores': 11376, 'grades': 1321,
+#          'narratives': 728, 'attendance': 10582, 'exceptions': 600, 'learners': 51,
 #          'subjects': {'2025-2026': 121, '2026-2027': 118},
-#          'learners_per_year': {'2025-2026': 25, '2026-2027': 25}}
+#          'learners_per_year': {'2025-2026': 45, '2026-2027': 40}}
 ```
 
 Add `--report path/to/report.json` for a machine-readable dump of every learner, invoice and enrollment the run produced (useful for regenerating this guide's tables, or for scripted verification).
@@ -586,7 +633,7 @@ This mirrors `billing-service/billing/services.py`. The seed reproduces it exact
 
 ---
 
-## 9. What the current seed contains (Tier 1)
+## 9. What the current seed contains (§9.1-9.4 = Tier 1 history; §9.5 = Tier 2; §9.7 = Tier 2.5, current)
 
 ### 9.1 S.Y. 2025-2026 setup
 
@@ -771,14 +818,81 @@ Tier 2 **replaced** the "2026-2027 deliberately empty" setup that §9.1-9.4 desc
 
 The generator uses a per-learner RNG (`random.Random("slis-seed-tier2|<key>|<sy>|<purpose>")`), so adding another learner later does not reshuffle any existing learner's scores, attendance or payment dates — unlike Tier 1's single shared stream (§10's determinism caveat no longer applies to Tier 2 or later).
 
+### 9.7 Tier 2.5 (loaded 2026-10-02): twenty more learners in 2025-2026
+
+Tier 2.5 is a **volume-and-cross-reference pass on S.Y. 2025-2026 only**. It
+adds no curriculum and no fees: subjects (121 / 118) and fee schedules (14 for
+2025-2026, 13 for 2026-2027) are exactly as Tier 2 left them, including the two
+deliberate billing gaps (Grade 1's itemless schedule, Grade 9's missing one).
+
+**What it fixes.** 2025-2026 had 25 learners spread over 17 sections, so six
+sections held a single learner and **Grade 7 Diamond had none at all** — class
+lists, SF2 printing and year compare all read as unrealistic. Every section now
+holds 2-4 learners.
+
+- **+20 learners in 2025-2026** (25 → 45), student_id/household_id 157-176,
+  student numbers `2025-0025..0044`, enrollment IDs 231-258, invoice IDs 326-349.
+- **14 of them continue into 2026-2027** (25 → 40 learners), enrollment IDs
+  426-440, invoice IDs 524-538. Six do not: Dexter transfers out mid-year,
+  Vincent graduates, and four finish 2025-2026 without returning, so year
+  compare sees real movement (34 returning, 5 new, 9 leavers).
+- **+8 invites and +6 applications** (19 invites, 13 applications in all),
+  still covering every intake status: 4 submitted, 3 approved, 2 in_review,
+  2 rejected, 2 draft. Application IDs 700-712.
+- **+25 guardian accounts** (65 in all), provisioned the usual way — linked,
+  with unusable passwords. The four usable guardian logins are unchanged.
+
+**New edge cases.** A pair of twins sharing one household (both on the sibling
+discount, one guardian login for two children); a learner who fails
+Mathematics on the year and **repeats Grade 10**; a February transfer-out with
+an invoice close-out; a late-June enrollment whose downpayment is the only
+payment, so July onward is overdue; an ESC grantee and a QVR-free honour
+student on an annual plan paid up front; three more 4Ps households
+(`4PS-SEED-009/010/011`).
+
+**Student-number pinning (important).** Student numbers are assigned in
+enrollment-date order, so a learner added with a May 2025 date would renumber
+everyone after them. `PINNED_NUMBERS` in `seed_spec.py` freezes the 31 Tier 1/2
+learners on the numbers they already have in the live database; learners
+without an entry are numbered after the highest pinned number for their year.
+**Do not edit those pins.** Add a new learner with no entry and they get the
+next free number. The generator raises on a duplicate.
+
+**Verification (all on a throwaway copy, then read-only on the real DB).** This
+tier closed the two items Tier 2 skipped:
+
+- Loads clean with `ON_ERROR_STOP=1` on a copy of the live DB **and on a fresh
+  `schema.sql` database** (identical counts), and a second run is idempotent.
+- **1321/1321 grades** equal `grading/views.compute_grade`'s own math —
+  renormalise over the encoded weight, `quantize` to 2 dp, *then* `transmute`.
+  Skipping that quantize step makes ~10 grades look wrong by one point; it is
+  the check that is wrong, not the data.
+- **85/85 invoices** reconcile against billing-service's own functions
+  (`earns_early_bird`, live-installment reconciliation, payment bounds).
+- Document gate: **0** enrolled rows missing a required document; the only two
+  gaps are Tier 2's intentional pending/cancelled rows.
+- **94/94 enrollments** re-validate through `EnrollmentSerializer` with no
+  override needed (Tier 2 was 55/57).
+- Logins: 25 active staff accounts authenticate; the 2 resigned teachers are
+  correctly refused.
+- **Full test suites pass: 1344 tests** (billing 150, enrollment 704, identity
+  106, student 384) and `makemigrations --check` is clean in all three services.
+- `flag_overdue_installments` after the load flagged 10 more installments
+  (49 overdue in all).
+
+Backup before the load:
+`~/Documents/ASIA-db-backups/SLIS_THESIS_FINAL_2026-10-02_before-tier25-seed.dump`.
+
 ### 9.6 Reserved identifiers (don't reuse for other data)
 
 | What | Reserved |
 |---|---|
 | LRN | `136700000xxx` (seed learners use the last three digits = student_id) |
-| enrollment_id | 200-230 (2025-2026), 400-425 (2026-2027) |
-| invoice_id | 300-325 (2025-2026), 500-523 (2026-2027) |
-| student_number | `2025-0001..2025-0025`, `2026-0001..2026-0007` |
+| student_id / household_id | 100-176 |
+| application_id | 700-712 |
+| enrollment_id | 200-258 (2025-2026), 400-440 (2026-2027) |
+| invoice_id | 300-349 (2025-2026), 500-538 (2026-2027) |
+| student_number | `2025-0001..2025-0044`, `2026-0001..2026-0007` (the first 31 are pinned, see §9.7) |
 | Emails | `*@slis.test`, `*.seed@gmail.com` |
 | Legacy block (old seeders) | LRN `9900…` |
 
@@ -874,6 +988,8 @@ The embedded `DO $$ … RAISE EXCEPTION` checks make the whole file roll back if
 
 Run these on a throwaway database first, then read-only on the real one. Tier 1 passed all of them on 2026-09-29, including after the staff-active change.
 
+**Tier 2.5 status (2026-10-02): the whole list passed, including the two items Tier 2 skipped.** Load + idempotent re-run on a copy of the live DB, a fresh `schema.sql` load, the SQL invariants, 1321/1321 grades, 85/85 invoices, the document gate, 94/94 serializer re-validations, logins (25 active in / 2 inactive refused), `makemigrations --check` clean in all three services, and the full suites: billing 150, enrollment 704, identity 106, student 384 = **1344 passed**. Two cautions for whoever re-runs this: the invoice reconciliation query below must exclude `voided` installments (transfer-out close-outs void the remainder, so the version printed below reports three false positives), and a grade check must `quantize` the renormalised initial grade to 2 dp **before** transmuting, exactly as `grading/views.compute_grade` does.
+
 **Tier 2 status (2026-09-30):** most of this list was run on a throwaway copy before loading — deterministic output, idempotent load, the zero-row SQL checks, 689/689 grades matching the calculator, 50/50 invoices matching billing's own builder, 29/31 logins (the 2 inactive teachers correctly refused), the document gate, and EnrollmentSerializer re-validation on 55/57 enrollments (the 2 failures have overrides, as expected). **Skipped on the user's go-ahead** ("skip the testing, just create the required data"): the fresh-`schema.sql`-load test, and the remaining service-level smoke/regression suites (`makemigrations --check`, full billing/enrollment test suites). Re-run those before relying on this tier for anything beyond manual UI checks.
 
 **Load-level:**
@@ -889,11 +1005,14 @@ Run these on a throwaway database first, then read-only on the real one. Tier 1 
 SELECT count(*) FROM grades g JOIN enrollments e USING (enrollment_id)
   JOIN subjects s USING (subject_id) WHERE s.school_year <> e.school_year;           -- 0
 
--- invoices reconcile
+-- invoices reconcile. NOTE: only LIVE installments count -- a transfer-out
+-- close-out voids the remaining ones, so summing all of them reports a false
+-- mismatch on every closed-out invoice (§7.13 states the invariant).
 SELECT i.invoice_no FROM student_invoices i
  WHERE (SELECT sum(amount) FROM student_invoice_items x WHERE x.invoice_id=i.invoice_id)
      - (SELECT coalesce(sum(amount),0) FROM student_invoice_discounts x WHERE x.invoice_id=i.invoice_id)
-    <> (SELECT sum(amount) FROM invoice_installments x WHERE x.invoice_id=i.invoice_id);   -- none
+    <> (SELECT coalesce(sum(amount),0) FROM invoice_installments x
+          WHERE x.invoice_id=i.invoice_id AND x.status <> 'voided');   -- none
 
 -- no attendance on blocked days
 SELECT count(*) FROM attendance_records a JOIN enrollments e USING (enrollment_id)
@@ -908,12 +1027,12 @@ SELECT a.* FROM section_advisories a LEFT JOIN users u ON u.user_id=a.teacher_us
 
 **App-level** (Django shell against the test database, using the services' own functions):
 
-- [ ] All grades equal `grading.deped.transmute` of the initial grade computed from their score entries: 251/251.
+- [ ] All grades equal the app's own computation — renormalise over the encoded weight, `quantize` to 2 dp, then `grading.deped.transmute`: 1321/1321.
 - [ ] Document gate: `requirements.rules.missing_required` is empty for every enrollment.
-- [ ] Every invoice equals billing-service's computation: `compute_discount_waterfall`, `generate_installment_schedule` / `_prorated`, `earns_early_bird`, with the real scholarship lookup: 10/10.
+- [ ] Every invoice equals billing-service's computation: `compute_discount_waterfall`, `generate_installment_schedule` / `_prorated`, `earns_early_bird`, with the real scholarship lookup: 85/85.
 - [ ] Every seeded account logs in through `IdentityUserBackend.authenticate` with `SlisDemo2026!`, and every seeded teacher passes `SectionAdvisorySerializer.validate_teacher_user_id`.
 - [ ] A carry-over dry run into 2026-2027 reports what it would copy (subjects 121, sections 16, advisers 16).
-- [ ] After loading the real database: `makemigrations --check` is clean and the service test suites still pass (billing 115, enrollment 531 at last run).
+- [ ] After loading the real database: `makemigrations --check` is clean and the service test suites still pass (billing 150, enrollment 704, identity 106, student 384 = 1344 at last run, 2026-10-02).
 
 **UI (the user checks):** pick S.Y. 2025-2026 on each page. Look at a learner profile (every tab), Grades, Attendance, Invoices / ledger, Scholarships, School Year detail (setup checklist, advisers, carry-over into 2026-2027), and the guardian portal (maribel.reyes.seed@gmail.com).
 
@@ -980,7 +1099,8 @@ For each: the tables touched and the rules that bite.
 
 - **Add learners to an existing year.**
   - Pick unused IDs and LRNs inside the block. Add the household, student, guardians, previous schools and documents (per entry status), then the enrollment in an existing section, then scores/grades (subjects of *that year*), observed values, attendance (school days only), and the invoice (fee schedule of that year, waterfall, installments, payments).
-  - Add them to `LEARNERS`, `HOUSEHOLDS` and `PAYMENTS` in the generator. Note the RNG caveat in §10.
+  - Add them to `PROFILES`, `HOUSEHOLDS` and `ENROLLMENTS` in `scripts/seed_spec.py` (payment behaviour is the `pay=dict(...)` field on the enrollment; there is no separate `PAYMENTS` table in the spec any more). The per-learner RNG means existing learners are not reshuffled, so §10's determinism caveat does not apply.
+  - **Leave `PINNED_NUMBERS` alone** and let the new learners take the next free numbers — see §0.
 - **Seed the current year (2026-2027) up to today.**
   - Needs calendar events, sections, advisers and subjects for 2026-2027. That conflicts with keeping it empty for carry-over, so decide first (run carry-over, then seed on top; or seed a different current year).
   - Enrollments `enrolled`. Grades only for finished periods (Q1 ended in August). Scores for the running period without a grade row. Attendance up to today. Invoices with installments due before today paid or overdue.
@@ -1007,6 +1127,7 @@ These are proposals, not decisions; confirm them at each go-ahead.
 
 - ~~**Tier 1.5 (small, optional)**~~ — folded into Tier 2 below (resigned teachers, generator moved into the repo). `lock-demo` gap and README refresh are still open, tracked in §12.
 - **✅ Tier 2 — done, loaded 2026-09-30.** 25 learners in S.Y. 2025-2026 (finished), 25 in S.Y. 2026-2027 (current, up to 2026-09-30), 31 distinct. Per-learner RNG shipped. Edge cases delivered: failed year + override, transfer-out with close-out, cancel-then-re-enroll, missing documents, a section with no adviser, void/reissue, a ₱0 fee schedule, a grade with no fee schedule at all, MATATAG subject changes, full intake spread (11 invites, 7 applications across every status). See §9.5 for the summary and `--report` for full detail. **Not done from the original proposal:** 2023-2024 archived year and 2027-2028 upcoming year were not added — only two years were requested and built.
+- **✅ Tier 2.5 — done, loaded 2026-10-02.** +20 learners in S.Y. 2025-2026 (25 → 45), 14 of them continuing into 2026-2027 (25 → 40); 51 distinct, 94 enrollments. Every 2025-2026 section is now populated, Grade 7 Diamond included. +8 invites / +6 applications. No subjects or fees were added — those were already complete. Student-number pinning added so later tiers never renumber existing learners (§9.7). Closed Tier 2's skipped checks: fresh-`schema.sql` load and the full test suites (1344 tests).
 - **Tier 3 (volume), 200-500+ learners:**
   - 2-3 sections per grade; a realistic spread of abilities, attendance and payment behaviour;
   - enough learners for clustering and risk to be meaningful;

@@ -27,7 +27,7 @@ from pathlib import Path
 from seed_spec import (
     APPLICATIONS, CALENDARS, CURRENT_SY, D, DEMO_GUARDIANS, DISCOUNT_TYPES, DOC_NAMES, EARLY_BIRD_DAYS,
     ENROLLMENTS, FEE_NOTES, HOUSEHOLDS, INVITES, LADDER, LEVEL_OF, LRN_BLOCK, PASSWORD, PLAN_PCT,
-    PLAN_SHAPE, PLAN_TYPE, PROFILE, PROFILES, REGISTRAR, REQUIRED_ALL, REQUIRED_TRANSFEREE,
+    PINNED_NUMBERS, PLAN_SHAPE, PLAN_TYPE, PROFILE, PROFILES, REGISTRAR, REQUIRED_ALL, REQUIRED_TRANSFEREE,
     SCHOLARSHIP_TYPES, SECTION_CREATED, SECTIONS, STAFF, SY1, SY2, TODAY, d, fee_items,
     subject_catalogue,
 )
@@ -478,11 +478,27 @@ def build(hashes, media_dirs):
     for p in PROFILES:
         E0 = first_E[p["key"]]
         created_on[p["key"]] = approved_on.get(p["key"], d(E0["transfer_in"][0]) if E0.get("transfer_in") else d(E0["enrolled_on"]))
+    # PINNED_NUMBERS keeps the learners that are already loaded in a real
+    # database on the exact student_number they were given, so adding more
+    # learners never renumbers an existing record. Everyone else is numbered
+    # by creation date as before, continuing after the highest pinned number
+    # for their year.
     numbers, seq = {}, {}
+    for key, num in PINNED_NUMBERS.items():
+        yr_s, n_s = num.split("-")
+        seq[int(yr_s)] = max(seq.get(int(yr_s), 0), int(n_s))
+    for p in PROFILES:
+        if p["key"] in PINNED_NUMBERS:
+            numbers[p["key"]] = PINNED_NUMBERS[p["key"]]
     for p in sorted(PROFILES, key=lambda p: (created_on[p["key"]], p["student_id"])):
+        if p["key"] in numbers:
+            continue
         yr = created_on[p["key"]].year
         seq[yr] = seq.get(yr, 0) + 1
         numbers[p["key"]] = f"{yr}-{seq[yr]:04d}"
+    dupes = [n for n in numbers.values() if list(numbers.values()).count(n) > 1]
+    if dupes:
+        raise ValueError(f"duplicate student numbers: {sorted(set(dupes))}")
 
     # ---------- enrollment rows ----------
     rows = []          # one per enrollments row
