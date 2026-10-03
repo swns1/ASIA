@@ -96,6 +96,9 @@ export const closeOutInvoiceForTransfer = (invoiceId, payload) =>
 export const getPayments = (params = {}) =>
   billingClient.get("/payments/", { params }).then((r) => r.data);
 
+export const getPayment = (id) =>
+  billingClient.get(`/payments/${id}/`).then((r) => r.data);
+
 // Per-method totals across every matching payment, not just the page being
 // shown. Takes the same date/amount filters as the list; deliberately ignores
 // payment_method so selecting one tile doesn't zero out the rest.

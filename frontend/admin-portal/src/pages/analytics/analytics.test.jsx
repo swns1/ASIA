@@ -278,7 +278,39 @@ describe("RiskChart", () => {
     const { container } = render(<RiskChart view="grades" run={run} />);
     const fills = [...container.querySelectorAll("path")].map((p) => p.getAttribute("fill"));
     expect(fills).toEqual(expect.arrayContaining([riskLevelMeta("critical").color, riskLevelMeta("low").color]));
-    expect(screen.getByText("Passing (75 and up)")).toBeTruthy();
+    // Labelled in the plot, either side of the mark, rather than in a key.
+    expect(screen.getByText("Passing · 75 and up")).toBeTruthy();
+    expect(screen.getByText("Below passing")).toBeTruthy();
+  });
+
+  it("puts a perfect 100 in the top column rather than past the axis", () => {
+    const { container } = render(<RiskChart view="grades" run={runWith([row({ average_grade: 100 })])} />);
+    fireEvent.mouseEnter(container.querySelector("path"));
+    expect(screen.getByText("Averages 95 to 100")).toBeTruthy();
+  });
+
+  it("calls the first column 'under' when a grade fell below the axis floor", () => {
+    // 30 is below the 40 floor, so it is counted in the first column.
+    const { container } = render(<RiskChart view="grades" run={runWith([row({ average_grade: 30 })])} />);
+    fireEvent.mouseEnter(container.querySelector("path"));
+    expect(screen.getByText("Under 45")).toBeTruthy();
+  });
+
+  it("says how many students the grade spread leaves out for having no average", () => {
+    const partial = runWith([row(), row({ student_id: 2, average_grade: null })]);
+    render(<RiskChart view="grades" run={partial} />);
+    expect(screen.getByText("1 student has no average yet and isn't shown.")).toBeTruthy();
+  });
+
+  it("draws a very low grade at its real place on the map, not on the frame", () => {
+    const low = runWith([row({ average_grade: 47.7 }), row({ student_id: 2, risk_level: "low", average_grade: 91 })]);
+    const { container } = render(<RiskChart view="map" run={low} />);
+    const tickX = (label) => Number(screen.getByText(label).getAttribute("x"));
+    const dotX = Number(container.querySelector('circle[r="5"]').getAttribute("cx"));
+    // The axis now starts at 40, so 47.7 sits between the 40 and 50 ticks.
+    // With the old fixed floor of 60 it was pinned to the left edge.
+    expect(dotX).toBeGreaterThan(tickX("40"));
+    expect(dotX).toBeLessThan(tickX("50"));
   });
 
   it("says what is missing rather than drawing an empty chart", () => {
@@ -297,8 +329,11 @@ describe("RiskChart", () => {
   });
 
   it("marks the passing line on the grade spread", () => {
-    render(<RiskChart view="grades" run={run} />);
-    expect(screen.getByText("Passing mark (75)")).toBeTruthy();
+    const { container } = render(<RiskChart view="grades" run={run} />);
+    expect(screen.getByText("Below passing")).toBeTruthy();
+    expect(screen.getByText("Passing · 75 and up")).toBeTruthy();
+    // 72.5 is below the mark and 91 above it.
+    expect(container.textContent).toContain("1 of 2 students are below the passing mark");
   });
 
   it("leaves the thin-data reason out of the why-flagged chart", () => {

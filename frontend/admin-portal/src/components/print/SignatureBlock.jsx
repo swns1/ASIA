@@ -16,12 +16,19 @@ export function SignatureRow({ children }) {
   );
 }
 
+// Room to actually sign above the line — about 12mm on paper. It used to be
+// whatever happened to sit above the line: 12px of row padding on a block
+// with no heading, 22px under a "Prepared by:" heading. Neither fit a pen
+// signature, so signers wrote across the line or over the heading.
+const SIGNING_SPACE = 44;
+
 export function SignatureBlock({ heading, printedName, role, caption, width = 200 }) {
   return (
     <div style={{ textAlign: "center", fontSize: 11, color: PRINT_COLORS.muted }}>
       {heading && (
-        <div style={{ fontSize: 10, fontWeight: 600, textAlign: "left", marginBottom: 22 }}>{heading}</div>
+        <div style={{ fontSize: 10, fontWeight: 600, textAlign: "left" }}>{heading}</div>
       )}
+      <div style={{ height: SIGNING_SPACE }} />
       <div style={{ borderTop: `1px solid ${PRINT_COLORS.dark}`, width, margin: "0 auto 4px" }} />
       {printedName && <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLORS.dark }}>{printedName}</div>}
       <div>{role}</div>

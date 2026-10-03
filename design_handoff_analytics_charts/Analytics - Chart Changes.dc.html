@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',ui-sans-serif,system-ui,sans-serif;color:#1a0a0a;background:#fdf8f6;-webkit-font-smoothing:antialiased}
+a{color:#c92a2a;text-decoration:none}
+a:hover{color:#e03131;text-decoration:underline}
+</style>
+</helmet>
+<div style="max-width:1120px;margin:0 auto;padding:32px 24px 72px;display:flex;flex-direction:column;gap:36px">
+
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#8a6a6a">Analytics · chart changes</div>
+    <h1 style="font-size:28px;line-height:1.25;font-weight:700;letter-spacing:-0.01em">Four graphs change</h1>
+    <p style="max-width:760px;font-size:14px;line-height:1.6;color:#7a5050">Each card shows the graph after the change, in the page's real card and sizes, with sample data. Everything else on the Analytics page stays as built.</p>
+  </header>
+
+  <section id="4a" style="display:flex;flex-direction:column;gap:12px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:999px;background:#fff0f0;color:#c92a2a;font-size:11px;font-weight:700;padding:2px 8px">4a</span><h2 style="font-size:18px;font-weight:700;letter-spacing:-0.01em">How everyone is doing</h2></div>
+      <p style="margin-top:4px;max-width:820px;font-size:13px;line-height:1.55;color:#7a5050">Overview, default view. A headline carries the count and share, the title line is gone, the passing side is tinted and labelled in place of the key, the last column reads 95 to 100, students with no average are noted, and the count axis is dropped.</p>
+    </div>
+    <div style="border-radius:14px;border:1px solid #f5eaea;background:#fff;box-shadow:0 2px 12px rgba(224,49,49,0.06);overflow:hidden">
+      <div style="border-bottom:1px solid #f5eaea;padding:16px 20px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+          <sc-for list="{{ chipsA }}" as="c" hint-placeholder-count="6"><span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1.5px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11px;font-weight:600;white-space:nowrap"><i class="ti {{ c.i }}" style="font-size:13px"></i>{{ c.l }}</span></sc-for>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:#8a6a6a">Where everyone's average sits, and how many fall below the passing mark.</div>
+      </div>
+      <div style="max-width:1024px;margin:0 auto;padding:20px">
+        <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px">
+          <span style="font-size:20px;line-height:1.35;font-weight:700;color:#1a0a0a">17 of 187</span>
+          <span style="font-size:14px;color:#5a4040">students are below the passing mark</span>
+          <span style="border-radius:999px;background:#fde8e8;color:#9b2020;font-size:11px;font-weight:700;padding:2px 8px">9%</span>
+        </div>
+        <div ref="{{ refA }}" style="position:relative;width:100%">
+          <svg viewBox="0 0 {{ A.W }} 280" width="{{ A.W }}" height="280" role="img" aria-label="Students by average grade, 17 of 187 below the passing mark" style="display:block;max-width:100%;overflow:hidden;background:#fdfcfb;border-radius:10px">
+            <rect x="0" y="0" width="{{ A.passX }}" height="{{ A.base }}" fill="#fde8e8" fillOpacity="0.6"></rect>
+            <line x1="{{ A.L }}" x2="{{ A.xr }}" y1="{{ A.base }}" y2="{{ A.base }}" stroke="#f0e4e4"></line>
+            <sc-for list="{{ A.bars }}" as="b" hint-placeholder-count="1">
+              <path d="{{ b.d }}" fill="{{ b.fill }}"></path>
+              <text x="{{ b.lx }}" y="{{ b.ly }}" textAnchor="middle" fontSize="12" fontWeight="700" fill="#1a0a0a">{{ b.c }}</text>
+            </sc-for>
+            <sc-for list="{{ A.edges }}" as="e" hint-placeholder-count="1">
+              <text x="{{ e.x }}" y="{{ A.tickY }}" textAnchor="middle" fontSize="11" fill="{{ e.fill }}" fontWeight="{{ e.fw }}">{{ e.t }}</text>
+            </sc-for>
+            <line x1="{{ A.passX }}" x2="{{ A.passX }}" y1="32" y2="{{ A.base }}" stroke="#1a0a0a" strokeWidth="1.5" strokeDasharray="4,3"></line>
+            <text x="{{ A.passXL }}" y="24" textAnchor="end" fontSize="11" fontWeight="700" fill="#9b2020">Below passing</text>
+            <text x="{{ A.passXR }}" y="24" textAnchor="start" fontSize="11" fontWeight="700" fill="#2e6b0d">Passing · 75 and up</text>
+            <text x="{{ A.titleX }}" y="274" textAnchor="middle" fontSize="11" fill="#8a6a6a">Average grade</text>
+          </svg>
+        </div>
+        <p style="margin-top:8px;font-size:11px;color:#8a6a6a">Each column counts the students whose average falls in that range.</p>
+        <p style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:11px;color:#8a6a6a"><i class="ti ti-info-circle" style="font-size:13px"></i>6 students have no average yet and aren't shown.</p>
+        <p style="margin-top:12px;font-size:11px;color:#8a6a6a">Prefer the numbers? The <span style="font-weight:600;color:#c92a2a">Students to follow up</span> tab lists every student behind these charts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="4b" style="display:flex;flex-direction:column;gap:12px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:999px;background:#fff0f0;color:#c92a2a;font-size:11px;font-weight:700;padding:2px 8px">4b</span><h2 style="font-size:18px;font-weight:700;letter-spacing:-0.01em">Grades vs attendance</h2></div>
+      <p style="margin-top:4px;max-width:820px;font-size:13px;line-height:1.55;color:#7a5050">Overview. The axes take their floors from the data (40 and 30% here), so the weakest students sit at their true position instead of on the frame. Quadrant labels use the axis text colour.</p>
+    </div>
+    <div style="border-radius:14px;border:1px solid #f5eaea;background:#fff;box-shadow:0 2px 12px rgba(224,49,49,0.06);overflow:hidden">
+      <div style="border-bottom:1px solid #f5eaea;padding:16px 20px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+          <sc-for list="{{ chipsB }}" as="c" hint-placeholder-count="6"><span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1.5px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11px;font-weight:600;white-space:nowrap"><i class="ti {{ c.i }}" style="font-size:13px"></i>{{ c.l }}</span></sc-for>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:#8a6a6a">Grades against attendance, so a bright absentee and a struggling attender don't look alike.</div>
+      </div>
+      <div style="max-width:1024px;margin:0 auto;padding:20px">
+        <div style="margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:11px;color:#855c5c">
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-hexagon" style="font-size:13px;color:#d03b3b"></i>Needs urgent help<b style="font-weight:700;color:#1a0a0a">7</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-octagon" style="font-size:13px;color:#ec835a"></i>Needs attention<b style="font-weight:700;color:#1a0a0a">24</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-triangle" style="font-size:13px;color:#fab219"></i>Watch<b style="font-weight:700;color:#1a0a0a">46</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-shield-check" style="font-size:13px;color:#0ca30c"></i>On track<b style="font-weight:700;color:#1a0a0a">116</b></span>
+        </div>
+        <div ref="{{ refB }}" style="position:relative;width:100%">
+          <svg viewBox="0 0 {{ S.W }} 300" width="{{ S.W }}" height="300" role="img" aria-label="Grades against attendance, one dot per student" style="display:block;max-width:100%;overflow:hidden;background:#fdfcfb;border-radius:10px">
+            <line x1="{{ S.passX }}" x2="{{ S.passX }}" y1="{{ S.T }}" y2="{{ S.yb }}" stroke="#f0e4e4" strokeWidth="1.5"></line>
+            <line x1="{{ S.L }}" x2="{{ S.xr }}" y1="{{ S.goodY }}" y2="{{ S.goodY }}" stroke="#f0e4e4" strokeWidth="1.5"></line>
+            <line x1="{{ S.L }}" x2="{{ S.xr }}" y1="{{ S.yb }}" y2="{{ S.yb }}" stroke="#f0e4e4"></line>
+            <line x1="{{ S.L }}" x2="{{ S.L }}" y1="{{ S.T }}" y2="{{ S.yb }}" stroke="#f0e4e4"></line>
+            <sc-for list="{{ S.gx }}" as="g" hint-placeholder-count="1">
+              <text x="{{ g.x }}" y="{{ S.xly }}" textAnchor="middle" fontSize="11" fill="#8a6a6a">{{ g.t }}</text>
+            </sc-for>
+            <sc-for list="{{ S.gy }}" as="g" hint-placeholder-count="1">
+              <text x="{{ S.yl }}" y="{{ g.ty }}" textAnchor="end" fontSize="11" fill="#8a6a6a">{{ g.t }}</text>
+            </sc-for>
+            <text x="{{ S.midX }}" y="292" textAnchor="middle" fontSize="11" fill="#8a6a6a">Average grade</text>
+            <text x="14" y="{{ S.midY }}" textAnchor="middle" fontSize="11" fill="#8a6a6a" transform="rotate(-90 14 {{ S.midY }})">Attendance</text>
+            <sc-for list="{{ S.dots }}" as="d" hint-placeholder-count="1">
+              <circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="5" fill="{{ d.fill }}" stroke="#fdfcfb" strokeWidth="2"></circle>
+            </sc-for>
+            <sc-for list="{{ S.quads }}" as="q" hint-placeholder-count="1">
+              <text x="{{ q.x }}" y="{{ q.y }}" textAnchor="{{ q.a }}" fontSize="11" fontWeight="600" fill="#8a6a6a" stroke="#fdfcfb" strokeWidth="3" paintOrder="stroke">{{ q.t }}</text>
+            </sc-for>
+          </svg>
+        </div>
+        <p style="margin-top:8px;font-size:11px;color:#8a6a6a">Each dot is one student. Click a dot to open their follow-up details.</p>
+        <p style="margin-top:12px;font-size:11px;color:#8a6a6a">Prefer the numbers? The <span style="font-weight:600;color:#c92a2a">Students to follow up</span> tab lists every student behind these charts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="4c" style="display:flex;flex-direction:column;gap:12px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:999px;background:#fff0f0;color:#c92a2a;font-size:11px;font-weight:700;padding:2px 8px">4c</span><h2 style="font-size:18px;font-weight:700;letter-spacing:-0.01em">By grade level and By section</h2></div>
+      <p style="margin-top:4px;max-width:820px;font-size:13px;line-height:1.55;color:#7a5050">Overview. Bar length now shows how many students are in the group, so a small section looks small, matching dashboard 2d. The split by level and the order are unchanged. By section uses the same rows.</p>
+    </div>
+    <div style="border-radius:14px;border:1px solid #f5eaea;background:#fff;box-shadow:0 2px 12px rgba(224,49,49,0.06);overflow:hidden">
+      <div style="border-bottom:1px solid #f5eaea;padding:16px 20px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+          <sc-for list="{{ chipsC }}" as="c" hint-placeholder-count="6"><span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1.5px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11px;font-weight:600;white-space:nowrap"><i class="ti {{ c.i }}" style="font-size:13px"></i>{{ c.l }}</span></sc-for>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:#8a6a6a">Which year groups are carrying the most students who need help.</div>
+      </div>
+      <div style="max-width:1024px;margin:0 auto;padding:20px">
+        <div style="margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:11px;color:#855c5c">
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-hexagon" style="font-size:13px;color:#d03b3b"></i>Needs urgent help<b style="font-weight:700;color:#1a0a0a">7</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-octagon" style="font-size:13px;color:#ec835a"></i>Needs attention<b style="font-weight:700;color:#1a0a0a">24</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-alert-triangle" style="font-size:13px;color:#fab219"></i>Watch<b style="font-weight:700;color:#1a0a0a">46</b></span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><i class="ti ti-shield-check" style="font-size:13px;color:#0ca30c"></i>On track<b style="font-weight:700;color:#1a0a0a">116</b></span>
+        </div>
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+            <li style="display:grid;grid-template-columns:minmax(0,clamp(5.5rem,22%,13rem)) minmax(0,1fr) 8.5rem;align-items:center;gap:6px 16px">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:#5a4040">{{ r.name }}</span>
+              <span style="display:block;min-width:0"><span role="img" aria-label="{{ r.aria }}" style="display:flex;width:{{ r.w }};height:12px;gap:2px;overflow:hidden;border-radius:999px"><sc-for list="{{ r.segs }}" as="s" hint-placeholder-count="1"><span style="flex-grow:{{ s.n }};flex-basis:0;height:100%;background:{{ s.c }}"></span></sc-for></span></span>
+              <span style="text-align:right;font-size:11px;line-height:1.25;color:#8a6a6a"><span style="display:block;font-size:12.5px;font-weight:{{ r.fw }};color:{{ r.fc }}">{{ r.flag }}</span>{{ r.of }}</span>
+            </li>
+          </sc-for>
+        </ul>
+        <p style="margin-top:16px;font-size:11px;color:#8a6a6a">Each bar is one grade level's students, split by level. A longer bar is a bigger grade level. Ordered by how many need following up.</p>
+        <p style="margin-top:12px;font-size:11px;color:#8a6a6a">Prefer the numbers? The <span style="font-weight:600;color:#c92a2a">Students to follow up</span> tab lists every student behind these charts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="4d" style="display:flex;flex-direction:column;gap:12px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:999px;background:#fff0f0;color:#c92a2a;font-size:11px;font-weight:700;padding:2px 8px">4d</span><h2 style="font-size:18px;font-weight:700;letter-spacing:-0.01em">Student history</h2></div>
+      <p style="margin-top:4px;max-width:820px;font-size:13px;line-height:1.55;color:#7a5050">Students tab, after selecting a student. The vertical axis is named by the four bands, each with its own tint, in place of “Fine” and “Urgent”. Drawn at the card's measured width so the text keeps its size.</p>
+    </div>
+    <div style="border-radius:14px;border:1px solid #f5eaea;background:#fff;box-shadow:0 2px 12px rgba(224,49,49,0.06);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #f5eaea;padding:14px 20px">
+        <div style="display:flex;min-width:0;align-items:center;gap:10px"><i class="ti ti-timeline" style="color:#c92a2a"></i><div style="min-width:0"><h3 style="font-size:12.5px;font-weight:700;color:#1a0a0a">Dela Cruz, Ana</h3><p style="font-size:11px;color:#8a6a6a">How this student's situation has changed across saved checks</p></div></div>
+        <span style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 14px;border-radius:999px;font-size:11px;font-weight:600;color:#855c5c;white-space:nowrap"><i class="ti ti-x"></i>Close</span>
+      </div>
+      <div style="padding:20px">
+        <div style="max-width:1024px;margin:0 auto">
+          <div ref="{{ refD }}" style="position:relative;width:100%">
+            <svg viewBox="0 0 {{ D.W }} 220" width="{{ D.W }}" height="220" role="img" aria-label="Ana Dela Cruz moved from On track in June to Needs urgent help by September 28" style="display:block;max-width:100%;overflow:hidden;background:#fdfcfb;border-radius:10px">
+              <sc-for list="{{ D.zones }}" as="z" hint-placeholder-count="4">
+                <rect x="{{ D.L }}" y="{{ z.y }}" width="{{ D.zw }}" height="{{ z.h }}" fill="{{ z.fill }}"></rect>
+                <text x="{{ D.labX }}" y="{{ z.ty }}" textAnchor="end" fontSize="11" fontWeight="600" fill="#7a5050">{{ z.t }}</text>
+              </sc-for>
+              <sc-for list="{{ D.rules }}" as="r" hint-placeholder-count="3">
+                <line x1="{{ D.L }}" x2="{{ D.xr }}" y1="{{ r.y }}" y2="{{ r.y }}" stroke="#f0e4e4"></line>
+              </sc-for>
+              <line x1="{{ D.L }}" x2="{{ D.xr }}" y1="{{ D.base }}" y2="{{ D.base }}" stroke="#f0e4e4"></line>
+              <path d="{{ D.line }}" fill="none" stroke="#cbb3b3" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"></path>
+              <sc-for list="{{ D.pts }}" as="p" hint-placeholder-count="1">
+                <circle cx="{{ p.cx }}" cy="{{ p.cy }}" r="5.5" fill="{{ p.fill }}" stroke="#fdfcfb" strokeWidth="2.5"></circle>
+                <text x="{{ p.cx }}" y="{{ D.dateY }}" textAnchor="middle" fontSize="11" fill="#8a6a6a">{{ p.t }}</text>
+              </sc-for>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { wA: 984, wB: 984, wD: 984 };
+  ro = {};
+  watch = (key) => (el) => {
+    if (this.ro[key]) { this.ro[key].disconnect(); delete this.ro[key]; }
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const o = new ResizeObserver((es) => {
+      const w = Math.round(es[0].contentRect.width);
+      if (w > 0 && w !== this.state[key]) this.setState({ [key]: w });
+    });
+    o.observe(el);
+    this.ro[key] = o;
+  };
+  refA = this.watch('wA');
+  refB = this.watch('wB');
+  refD = this.watch('wD');
+  componentWillUnmount() { Object.values(this.ro).forEach((o) => o.disconnect()); }
+
+  counts = [1, 0, 1, 2, 4, 9, 26, 48, 51, 33, 12];
+
+  pts = (() => {
+    let s = 20261003;
+    const rnd = () => { s |= 0; s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const gauss = () => Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd());
+    const U = (lo, hi) => lo + (hi - lo) * rnd();
+    const cl = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const out = [];
+    const add = (n, f, lv) => { for (let i = 0; i < n; i++) { const [g, a] = f(); out.push({ g, a, lv }); } };
+    [[47.7, 58], [52.4, 71], [55, 44], [58.2, 62], [66, 38], [63.5, 66], [61, 80]].forEach(([g, a]) => out.push({ g, a, lv: 'critical' }));
+    [[70, 82], [72.5, 86], [68, 91]].forEach(([g, a]) => out.push({ g, a, lv: 'high' }));
+    add(21, () => [U(65.5, 74.8), U(62, 97)], 'high');
+    add(25, () => [U(75, 79.9), U(70, 99.5)], 'moderate');
+    add(20, () => [U(80, 95), U(66, 84.5)], 'moderate');
+    add(111, () => { const g = cl(90 + gauss() * 5, 80, 99.5); return [g, cl(94 + (g - 90) * 0.15 + gauss() * 3.5, 85.5, 99.8)]; }, 'low');
+    const rank = { low: 0, moderate: 1, high: 2, critical: 3 };
+    return out.sort((x, y) => rank[x.lv] - rank[y.lv]);
+  })();
+
+  col(x, y, w, h, r = 4) {
+    r = Math.max(0, Math.min(r, w / 2, h));
+    if (!r) return `M ${x} ${y} h ${w} v ${h} h ${-w} Z`;
+    return [`M ${x} ${y + r}`, `a ${r} ${r} 0 0 1 ${r} ${-r}`, `h ${w - 2 * r}`, `a ${r} ${r} 0 0 1 ${r} ${r}`, `v ${h - r}`, `h ${-w}`, 'Z'].join(' ');
+  }
+
+  hist(W) {
+    const H = 280, L = 12, R = 12, T = 40, B = 44;
+    const pw = W - L - R, ph = H - T - B, base = T + ph;
+    const C = this.counts, n = C.length, cw = pw / n, gap = Math.min(14, cw * 0.18), bw = cw - gap;
+    const top = Math.max(...C) * 1.08;
+    const yOf = (c) => base - (c / top) * ph;
+    const xOf = (g) => L + ((g - 45) / 55) * pw;
+    const bars = [];
+    C.forEach((c, i) => {
+      if (!c) return;
+      const from = 45 + i * 5, x = xOf(from) + gap / 2, y = yOf(c);
+      bars.push({ d: this.col(x, y, bw, base - y), fill: from + 5 <= 75 ? '#d03b3b' : '#0ca30c', lx: x + bw / 2, ly: y - 6, c: [String(c)] });
+    });
+    const edges = Array.from({ length: n + 1 }, (_, i) => {
+      const t = 45 + i * 5, b = t === 75;
+      return { x: xOf(t), t: [String(t)], fill: b ? '#1a0a0a' : '#8a6a6a', fw: b ? 700 : 400 };
+    });
+    const passX = xOf(75);
+    return { W, L, xr: W - R, base, passX, passXL: passX - 10, passXR: passX + 10, tickY: base + 16, titleX: L + pw / 2, bars, edges };
+  }
+
+  scat(W) {
+    const H = 300, L = 50, R = 20, T = 34, B = 44, pw = W - L - R, ph = H - T - B;
+    const X0 = 40, Y0 = 30;
+    const sx = (g) => L + ((g - X0) / (100 - X0)) * pw;
+    const sy = (p) => T + ph - ((p - Y0) / (100 - Y0)) * ph;
+    const COL = { low: '#0ca30c', moderate: '#fab219', high: '#ec835a', critical: '#d03b3b' };
+    return {
+      W, L, T, yl: L - 8, xr: W - R, yb: T + ph, xly: T + ph + 16, midX: W / 2, midY: T + ph / 2, passX: sx(75), goodY: sy(90),
+      dots: this.pts.map((p) => ({ cx: sx(p.g), cy: sy(p.a), fill: COL[p.lv] })),
+      gx: [40, 50, 60, 70, 75, 80, 90, 100].map((g) => ({ x: sx(g), t: [String(g)] })),
+      gy: [30, 50, 70, 90, 100].map((p) => ({ ty: sy(p) + 4, t: [p + '%'] })),
+      quads: [
+        { x: L + 8, y: T - 10, t: ['Attending, still struggling'], a: 'start' },
+        { x: W - R - 8, y: T - 10, t: ['Doing well'], a: 'end' },
+        { x: L + 8, y: T + ph - 8, t: ['Needs urgent help'], a: 'start' },
+        { x: W - R - 8, y: T + ph - 8, t: ['Passing but often absent'], a: 'end' },
+      ],
+    };
+  }
+
+  trend(W) {
+    const H = 220, L = 136, R = 24, T = 14, B = 36, pw = W - L - R, ph = H - T - B;
+    const yOf = (s) => T + ph - (s / 100) * ph;
+    const zones = [[0, 25, 'rgba(12,163,12,0.12)', 'On track'], [25, 50, 'rgba(250,178,25,0.16)', 'Watch'], [50, 75, 'rgba(236,131,90,0.16)', 'Needs attention'], [75, 100, 'rgba(208,59,59,0.14)', 'Needs urgent help']]
+      .map(([a, b, fill, t]) => ({ y: yOf(b), h: yOf(a) - yOf(b), fill, ty: (yOf(a) + yOf(b)) / 2 + 4, t: [t] }));
+    const D = [['Jun 22', 18, '#0ca30c'], ['Jul 20', 36, '#fab219'], ['Aug 24', 55, '#ec835a'], ['Sep 14', 68, '#ec835a'], ['Sep 28', 82.4, '#d03b3b']];
+    const x = (i) => L + 20 + (i / (D.length - 1)) * (pw - 40);
+    const pts = D.map(([d, s, c], i) => ({ cx: x(i), cy: yOf(s), fill: c, t: [d] }));
+    return {
+      W, L, xr: W - R, zw: pw, base: T + ph, labX: L - 12, dateY: T + ph + 20, zones, pts,
+      rules: [25, 50, 75].map((v) => ({ y: yOf(v) })),
+      line: pts.map((p, i) => `${i ? 'L' : 'M'} ${p.cx} ${p.cy}`).join(' '),
+    };
+  }
+
+  rows() {
+    const COL = { critical: '#d03b3b', high: '#ec835a', moderate: '#fab219', low: '#0ca30c' };
+    const data = [['Grade 9', 2, 5, 7, 12], ['Grade 4', 1, 5, 6, 12], ['Grade 10', 2, 3, 6, 11], ['Grade 7', 1, 3, 8, 15], ['Grade 2', 0, 3, 4, 13], ['Grade 11', 1, 2, 4, 11], ['Grade 5', 0, 2, 5, 14], ['Grade 12', 0, 1, 3, 11], ['Grade 1', 0, 0, 1, 9], ['Kindergarten', 0, 0, 2, 8]];
+    const max = Math.max(...data.map((d) => d[1] + d[2] + d[3] + d[4]));
+    return data.map(([name, c, h, m, l]) => {
+      const total = c + h + m + l, f = c + h;
+      return {
+        name, w: ((total / max) * 100).toFixed(1) + '%', aria: `${name}: ${f} of ${total} students need following up`,
+        segs: [['critical', c], ['high', h], ['moderate', m], ['low', l]].filter(([, n]) => n).map(([k, n]) => ({ n, c: COL[k] })),
+        flag: f ? `${f} need${f === 1 ? 's' : ''} follow-up` : 'None to follow up', fw: f ? 600 : 400, fc: f ? '#1a0a0a' : '#855c5c', of: `of ${total} students`,
+      };
+    });
+  }
+
+  chips(on) {
+    return [['ti-chart-histogram', 'How everyone is doing', 'grades'], ['ti-chart-pie-4', 'How many need help', 'mix'], ['ti-list-check', "Why they're flagged", 'reasons'], ['ti-school', 'By grade level', 'grade_level'], ['ti-users-group', 'By section', 'section'], ['ti-map-pin', 'Grades vs attendance', 'map']]
+      .map(([i, l, k]) => (k === on ? { i, l, bg: '#fff0f0', bd: '#e03131', fg: '#c92a2a' } : { i, l, bg: '#fff', bd: '#f0e4e4', fg: '#855c5c' }));
+  }
+
+  renderVals() {
+    return {
+      A: this.hist(this.state.wA), S: this.scat(this.state.wB), D: this.trend(this.state.wD), rows: this.rows(),
+      chipsA: this.chips('grades'), chipsB: this.chips('map'), chipsC: this.chips('grade_level'),
+      refA: this.refA, refB: this.refB, refD: this.refD,
+    };
+  }
+}
+</script>
+</body>
+</html>

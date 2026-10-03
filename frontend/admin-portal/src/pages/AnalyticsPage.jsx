@@ -16,6 +16,9 @@ import EmptyState from "../components/EmptyState";
 import Table, { TableCell, TableRow } from "../components/ui/Table";
 import { Field, Select } from "../components/FormField";
 import AIInsightPanel from "../components/AIInsightPanel";
+import ChartFrame from "../components/charts/ChartFrame";
+import { SURFACE, chartInk, token } from "../components/charts/tokens";
+import useElementSize from "../components/charts/useElementSize";
 
 import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
@@ -108,23 +111,41 @@ function formatWhen(iso) {
 // ── Risk over time ───────────────────────────────────────────────────────────
 // One student's concern level across every saved assessment. Point colour is
 // the band at that run, so the line reads as a sequence of states rather than
-// one flat series; the connecting line stays structural grey.
+// one flat series; the connecting line stays structural grey. The vertical
+// axis is named by the four bands themselves, each over its own tint, so a
+// point reads as "in Needs attention" rather than as a number to look up.
 
-function RiskTrendChart({ points }) {
-  const [hovered, setHovered] = useState(null);
+// Score edges of each band -- the backend's RISK_LEVEL_THRESHOLDS in
+// ai/services.py. Change them together.
+const TREND_BANDS = [
+  { level: "low", from: 0, to: 25 },
+  { level: "moderate", from: 25, to: 50 },
+  { level: "high", from: 50, to: 75 },
+  { level: "critical", from: 75, to: 100 },
+];
+
+function RiskTrendChart({ points, name }) {
+  const [tip, setTip] = useState(null);
+  const [plotEl, setPlotEl] = useState(null);
+  const size = useElementSize(plotEl);
   if (!points?.length) return null;
 
-  const W = 760;
-  const H = 190;
-  const PAD_L = 40;
-  const PAD_R = 20;
-  const PAD_T = 16;
-  const PAD_B = 34;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
+  const ink = chartInk();
+  // The card's own width, so the band names and dates stay their real size.
+  const W = size?.width ?? 760;
+  const H = 220;
+  const PAD_L = 136;  // room for the longest band name
+  const PAD_R = 24;
+  const PAD_T = 14;
+  const PAD_B = 36;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+  const baseY = PAD_T + plotH;
 
-  const scaleX = (i) => (points.length === 1 ? PAD_L + innerW / 2 : PAD_L + (i / (points.length - 1)) * innerW);
-  const scaleY = (score) => PAD_T + innerH - (score / 100) * innerH;
+  // 20px inset so the first and last points don't sit on the band edges.
+  const scaleX = (i) =>
+    points.length === 1 ? PAD_L + plotW / 2 : PAD_L + 20 + (i / (points.length - 1)) * (plotW - 40);
+  const scaleY = (score) => PAD_T + plotH - (score / 100) * plotH;
 
   const linePath = points
     .map((p, i) => `${i === 0 ? "M" : "L"} ${scaleX(i)} ${scaleY(p.risk_score)}`)
@@ -135,65 +156,75 @@ function RiskTrendChart({ points }) {
   // overlapping dates.
   const labelStep = Math.max(1, Math.ceil(points.length / 8));
 
+  const first = points[0];
+  const last = points[points.length - 1];
+  const at = (p) => `${riskLevelMeta(p.risk_level).label} on ${fmtDate(p.created_at)}`;
+  const title = points.length === 1 ? `${name}: ${at(first)}` : `${name}: ${at(first)} to ${at(last)}`;
+
   return (
-    <div className="relative mx-auto w-full max-w-5xl">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ background: "#fdfcfb", borderRadius: 10 }} role="img">
+    <div className="mx-auto w-full max-w-5xl">
+      <ChartFrame viewBox={[W, H]} tip={tip} plotRef={setPlotEl} title={title}>
+        {TREND_BANDS.map((band) => {
+          const meta = riskLevelMeta(band.level);
+          const top = scaleY(band.to);
+          const bottom = scaleY(band.from);
+          return (
+            <g key={band.level}>
+              <rect x={PAD_L} y={top} width={plotW} height={bottom - top} fill={meta.tint} />
+              <text
+                x={PAD_L - 12} y={(top + bottom) / 2 + 4}
+                textAnchor="end" fontSize="11" fontWeight="600" fill={token("--color-neutral-700")}
+              >
+                {meta.label}
+              </text>
+            </g>
+          );
+        })}
         {[25, 50, 75].map((mark) => (
-          <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke="#f0e4e4" />
+          <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke={ink.grid} />
         ))}
-        {[0, 50, 100].map((mark) => (
-          <text key={mark} x={PAD_L - 8} y={scaleY(mark) + 3} textAnchor="end" fontSize="10" fill="#8a6a6a">
-            {mark === 0 ? "Fine" : mark === 100 ? "Urgent" : ""}
-          </text>
-        ))}
-        <line x1={PAD_L} x2={W - PAD_R} y1={H - PAD_B} y2={H - PAD_B} stroke="#f0e4e4" />
-        <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={H - PAD_B} stroke="#f0e4e4" />
+        <line x1={PAD_L} x2={W - PAD_R} y1={baseY} y2={baseY} stroke={ink.grid} />
 
         {points.map((p, i) =>
           i % labelStep === 0 ? (
-            <text key={p.run_id} x={scaleX(i)} y={H - PAD_B + 16} textAnchor="middle" fontSize="10" fill="#8a6a6a">
+            <text key={p.run_id} x={scaleX(i)} y={baseY + 20} textAnchor="middle" fontSize="11" fill={ink.axis}>
               {fmtDate(p.created_at)}
             </text>
           ) : null
         )}
 
-        <path d={linePath} fill="none" stroke="#cbb3b3" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={linePath} fill="none"
+          stroke={token("--color-neutral-400")} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+        />
 
         {points.map((p, i) => {
           const meta = riskLevelMeta(p.risk_level);
+          const cx = scaleX(i);
+          const cy = scaleY(p.risk_score);
           return (
             <g key={p.run_id}>
-              <circle cx={scaleX(i)} cy={scaleY(p.risk_score)} r={5.5} fill={meta.color} stroke="#fdfcfb" strokeWidth={2.5} />
+              <circle cx={cx} cy={cy} r={5.5} fill={meta.color} stroke={SURFACE} strokeWidth={2.5} />
               <circle
-                cx={scaleX(i)}
-                cy={scaleY(p.risk_score)}
+                cx={cx}
+                cy={cy}
                 r={12}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
-                onMouseEnter={() => setHovered({ ...p, i })}
-                onMouseLeave={() => setHovered(null)}
+                onMouseEnter={() =>
+                  setTip({
+                    x: cx,
+                    y: cy,
+                    title: formatWhen(p.created_at),
+                    lines: [`${meta.label} · ${periodLabel(p.grading_period)}`],
+                  })
+                }
+                onMouseLeave={() => setTip(null)}
               />
             </g>
           );
         })}
-      </svg>
-
-      {hovered && (
-        <div
-          className="pointer-events-none absolute z-10 w-max max-w-[240px] rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-xs shadow-lg"
-          style={{
-            left: `${(scaleX(hovered.i) / W) * 100}%`,
-            top: `${(scaleY(hovered.risk_score) / H) * 100}%`,
-            transform: `translate(${hovered.i > points.length * 0.62 ? "-100%" : "0"}, calc(-100% - 8px))`,
-          }}
-          role="tooltip"
-        >
-          <div className="font-bold text-neutral-900">{formatWhen(hovered.created_at)}</div>
-          <div className="mt-0.5 text-neutral-600">
-            {riskLevelMeta(hovered.risk_level).label} · {periodLabel(hovered.grading_period)}
-          </div>
-        </div>
-      )}
+      </ChartFrame>
     </div>
   );
 }
@@ -648,20 +679,17 @@ export default function AnalyticsPage() {
                   </div>
 
                   <Card padding="none" className="overflow-hidden">
+                    {/* The selected chip already names the chart, so no
+                        title line repeats it above the chips. */}
                     <div className="border-b border-neutral-200 px-5 py-4">
-                      <div className="font-bold text-neutral-900">
-                        {CHART_OPTIONS.find((o) => o.value === chartView)?.label}
-                      </div>
-                      <div className="mt-0.5 text-xs text-neutral-500">{chartBlurb(chartView)}</div>
-                      <div className="mt-3">
-                        <ChipGroup
-                          options={CHART_OPTIONS}
-                          value={chartView}
-                          onChange={setChartView}
-                          label="Choose a chart"
-                          size="sm"
-                        />
-                      </div>
+                      <ChipGroup
+                        options={CHART_OPTIONS}
+                        value={chartView}
+                        onChange={setChartView}
+                        label="Choose a chart"
+                        size="sm"
+                      />
+                      <div className="mt-2.5 text-xs text-neutral-500">{chartBlurb(chartView)}</div>
                     </div>
                     <div className="mx-auto w-full max-w-5xl p-5">
                       {viewUsesBands(chartView) && <RiskLegend counts={counts} className="mb-4" />}
@@ -749,7 +777,10 @@ export default function AnalyticsPage() {
                           {trendLoading && <p className="py-6 text-center text-sm text-neutral-500">Loading history…</p>}
                           {!trendLoading && trend?.points?.length > 0 && (
                             <>
-                              <RiskTrendChart points={trend.points} />
+                              <RiskTrendChart
+                                points={trend.points}
+                                name={selectedStudent.student_name ?? `Student #${selectedStudent.student_id}`}
+                              />
                               {trend.points.length === 1 && (
                                 <p className="mt-2 text-xs text-neutral-500">
                                   Only one check saved so far — run another later to see whether this improves.
