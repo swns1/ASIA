@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import PageHeader from "../components/ui/PageHeader";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
 import Skeleton from "../components/ui/Skeleton";
 import { getSections, getSectionAdvisories, getMySections, getEnrollments } from "../api/enrollmentApi";
@@ -279,8 +280,8 @@ function UnadvisedSection({ section, schoolYear, canManage }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function SectionsPage() {
   usePageTitle("Sections");
-  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
-  const { yearStates } = useSchoolYear();
+  const [schoolYear, setSchoolYear, yearIsDefault] = useYearFilter({ allowAll: false });
+  const { currentYear, yearStates } = useSchoolYear();
 
   const canManage = hasAnyRole(getCurrentUser(), STAFF_ADMIN);
   const archived = yearStates?.[schoolYear] === "archived";
@@ -370,7 +371,23 @@ export default function SectionsPage() {
         icon="ti-layout-grid"
         subtitle={subtitle}
         actions={
-          <SchoolYearPicker value={schoolYear} onChange={setSchoolYear} includeAllYears={false} align="end" />
+          // Same year control as the admin home.
+          <div className="flex items-center gap-2">
+            {!yearIsDefault && (
+              <Button variant="ghost" size="sm" icon="ti-arrow-back-up" onClick={() => setSchoolYear(null)}>
+                Back to {currentYear}
+              </Button>
+            )}
+            <SchoolYearPicker
+              value={schoolYear}
+              onChange={setSchoolYear}
+              includeAllYears={false}
+              // Red only while it narrows to a year other than the current one.
+              active={!yearIsDefault}
+              // The pill is at the page's right edge; open the panel leftward.
+              align="end"
+            />
+          </div>
         }
       />
       <div className="flex flex-1 overflow-hidden">
