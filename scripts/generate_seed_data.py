@@ -355,6 +355,11 @@ def payment_plan_for(E, inv, first, r):
     out = []
     if style == "none":
         return out
+    # A fee schedule with no items (2026-2027 Grade 1) gives a P0.00 invoice and
+    # P0.00 installments. student_payments has CHECK (amount_paid > 0), so a
+    # zero-total invoice carries no payment rows at all.
+    if inv["grand"] == 0:
+        return out
     if style == "upfront":
         return [(first, inv["grand"], "Full payment upon enrollment (annual plan).")]
     if style == "custom":
@@ -364,7 +369,7 @@ def payment_plan_for(E, inv, first, r):
             elif amount == "INST2":
                 amount = sched[1]["amount"]
             out.append((d(when), D(amount), note))
-        return [p for p in out if p[0] <= TODAY]
+        return [p for p in out if p[0] <= TODAY and p[1] > 0]
     for s in sched:
         seq, due, amount = s["seq"], s["due"], s["amount"]
         if seq == 1:
@@ -394,7 +399,7 @@ def payment_plan_for(E, inv, first, r):
             out.append((max(first, dt.date(due.year, due.month, 15)), amount, "Salary deduction (payroll)."))
         else:
             raise ValueError(style)
-    return [p for p in out if p[0] <= TODAY]
+    return [p for p in out if p[0] <= TODAY and p[1] > 0]
 
 
 def payment_rows(inv, plan_rows, E, r, counters):

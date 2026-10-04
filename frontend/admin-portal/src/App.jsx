@@ -61,6 +61,7 @@ const SchoolYearsPage       = lazyRoute(() => import("./pages/SchoolYearsPage"))
 const SchoolYearDetailPage  = lazyRoute(() => import("./pages/SchoolYearDetailPage"));
 const SchoolYearComparePage = lazyRoute(() => import("./pages/SchoolYearComparePage"));
 const TeacherSectionsPage   = lazyRoute(() => import("./pages/TeacherSectionsPage"));
+const SectionsPage          = lazyRoute(() => import("./pages/SectionsPage"));
 const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
 const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
 const StudentApplicationsPage = lazyRoute(() => import("./pages/StudentApplicationsPage"));
@@ -161,6 +162,7 @@ export default function App() {
           <Route path="/school-years/compare"   element={<P roles={STAFF_ADMIN}><SchoolYearComparePage /></P>} />
           <Route path="/school-years/:label"    element={<P roles={STAFF_ADMIN}><SchoolYearDetailPage /></P>} />
           <Route path="/my-sections"            element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
+          <Route path="/sections"               element={<P roles={ACADEMIC_STAFF}><SectionsPage /></P>} />
           <Route path="/student-applications"   element={<P roles={ACADEMIC_STAFF}><StudentApplicationsPage /></P>} />
         </Route>
 

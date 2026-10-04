@@ -138,7 +138,7 @@ const ROSTER_COLUMNS = [
   { key: "actions", label: "", align: "right" },
 ];
 
-function StudentsTab({ students, todayAttendanceByStudent }) {
+export function StudentsTab({ students, todayAttendanceByStudent }) {
   const navigate = useNavigate();
   const [quickViewId, setQuickViewId] = useState(null);
 
@@ -262,7 +262,7 @@ const GRADE_ENTRY_COLUMNS = [
   { key: "link",    label: "", align: "right" },
 ];
 
-function GradesTab({ advisory, subjects }) {
+function GradesTab({ advisory, subjects, readOnly = false }) {
   const navigate = useNavigate();
   const [subjectId, setSubjectId] = useState(subjects[0]?.subject_id ?? "");
   const [period, setPeriod] = useState("");
@@ -376,19 +376,21 @@ function GradesTab({ advisory, subjects }) {
             <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
           ))}
         </select>
-        <button
-          onClick={handleSaveAll}
-          disabled={saving || loading}
-          style={{
-            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-            background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
-            borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
-            cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
-          }}
-        >
-          <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
-          {saving ? "Saving…" : "Save Grades"}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleSaveAll}
+            disabled={saving || loading}
+            style={{
+              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+              background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+              borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
+              cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
+            }}
+          >
+            <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
+            {saving ? "Saving…" : "Save Grades"}
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -411,15 +413,19 @@ function GradesTab({ advisory, subjects }) {
                     {fullName(r.student)}
                   </TableCell>
                   <TableCell>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={draft}
-                      aria-label={`Grade for ${fullName(r.student)}`}
-                      onChange={(e) => setDrafts((d) => ({ ...d, [sid]: e.target.value }))}
-                      className="w-[70px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-right text-sm outline-none focus:border-brand-500"
-                    />
+                    {readOnly ? (
+                      <span className="text-sm font-semibold text-neutral-800">{draft || "—"}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={draft}
+                        aria-label={`Grade for ${fullName(r.student)}`}
+                        onChange={(e) => setDrafts((d) => ({ ...d, [sid]: e.target.value }))}
+                        className="w-[70px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-right text-sm outline-none focus:border-brand-500"
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     {draft !== "" && !Number.isNaN(parseFloat(draft)) && (
@@ -456,7 +462,7 @@ function GradesTab({ advisory, subjects }) {
 // Keeps its own <table>: this is a student x category cross-tab whose columns
 // are data, not a fixed record list, so ui/Table's `columns` prop has nothing
 // to describe. Same reasoning as the gradebook matrix in GradesPage.
-function NarrativeTab({ advisory }) {
+function NarrativeTab({ advisory, readOnly = false }) {
   const [period, setPeriod] = useState("");
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -573,19 +579,21 @@ function NarrativeTab({ advisory }) {
             <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
           ))}
         </select>
-        <button
-          onClick={handleSaveAll}
-          disabled={saving}
-          style={{
-            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-            background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
-            borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
-            cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
-          }}
-        >
-          <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
-          {saving ? "Saving…" : "Save Ratings"}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleSaveAll}
+            disabled={saving}
+            style={{
+              marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+              background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+              borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
+              cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
+            }}
+          >
+            <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
+            {saving ? "Saving…" : "Save Ratings"}
+          </button>
+        )}
       </div>
 
       {rows.length === 0 ? (
@@ -621,21 +629,30 @@ function NarrativeTab({ advisory }) {
                       const rc = narrativeRatingColor(value);
                       return (
                         <td key={c.category_id} style={{ padding: "9px 16px", borderBottom: "1px solid #f9f0f0" }}>
-                          <select
-                            value={value}
-                            onChange={(e) => setRating(sid, c.category_id, e.target.value)}
-                            style={{
-                              border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 10px",
-                              fontSize: 12, fontFamily: "'DM Sans',sans-serif", outline: "none",
-                              color: rc.color, background: value ? rc.bg : "#fffbfb",
-                              fontWeight: value ? 700 : 400,
-                            }}
-                          >
-                            <option value="">—</option>
-                            {NARRATIVE_RATINGS.map((nr) => (
-                              <option key={nr.value} value={nr.value}>{nr.label}</option>
-                            ))}
-                          </select>
+                          {readOnly ? (
+                            <span
+                              className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
+                              style={value ? { color: rc.color, background: rc.bg } : { color: "#8a6a6a" }}
+                            >
+                              {NARRATIVE_RATINGS.find((nr) => nr.value === value)?.label ?? "—"}
+                            </span>
+                          ) : (
+                            <select
+                              value={value}
+                              onChange={(e) => setRating(sid, c.category_id, e.target.value)}
+                              style={{
+                                border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 10px",
+                                fontSize: 12, fontFamily: "'DM Sans',sans-serif", outline: "none",
+                                color: rc.color, background: value ? rc.bg : "#fffbfb",
+                                fontWeight: value ? 700 : 400,
+                              }}
+                            >
+                              <option value="">—</option>
+                              {NARRATIVE_RATINGS.map((nr) => (
+                                <option key={nr.value} value={nr.value}>{nr.label}</option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                       );
                     })}
@@ -657,7 +674,7 @@ const ATTENDANCE_ENTRY_COLUMNS = [
   { key: "remarks", label: "Remarks" },
 ];
 
-function AttendanceTab({ advisory, onTodayChange }) {
+function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
   const [date, setDate] = useState(todayISO());
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({}); // student_id -> { status, remarks }
@@ -674,7 +691,9 @@ function AttendanceTab({ advisory, onTodayChange }) {
       const nextDrafts = {};
       list.forEach((r) => {
         nextDrafts[r.student.student_id] = {
-          status: r.attendance?.status ?? "P",
+          // The editor pre-fills Present so a teacher only marks exceptions;
+          // a viewer sees what was actually recorded, so unmarked stays null.
+          status: r.attendance?.status ?? (readOnly ? null : "P"),
           remarks: r.attendance?.remarks ?? "",
         };
       });
@@ -686,7 +705,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
     } finally {
       setLoading(false);
     }
-  }, [advisory.advisory_id, date]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [advisory.advisory_id, date, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -730,9 +749,10 @@ function AttendanceTab({ advisory, onTodayChange }) {
   };
 
   const counts = useMemo(() => {
-    const c = { P: 0, A: 0, L: 0, E: 0 };
+    const c = { P: 0, A: 0, L: 0, E: 0, none: 0 };
     rows.forEach((r) => {
-      const status = drafts[r.student.student_id]?.status ?? "P";
+      const draft = drafts[r.student.student_id];
+      const status = draft ? draft.status ?? "none" : "P";
       if (c[status] !== undefined) c[status] += 1;
     });
     return c;
@@ -777,6 +797,7 @@ function AttendanceTab({ advisory, onTodayChange }) {
             </button>
             <span style={{ fontSize: 12, color: "#8a6a6a", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
           </div>
+          {!readOnly && (
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
               onClick={handleMarkAllPresent}
@@ -806,12 +827,16 @@ function AttendanceTab({ advisory, onTodayChange }) {
               {saving ? "Saving…" : "Save Attendance"}
             </button>
           </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>{counts.P} present</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#fde8e8", color: "#9b2020" }}>{counts.A} absent</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#fef3e2", color: "#b45309" }}>{counts.L} late</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#e3f0fd", color: "#1455a0" }}>{counts.E} excused</span>
+          {counts.none > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>{counts.none} not marked</span>
+          )}
         </div>
       </div>
 
@@ -834,6 +859,16 @@ function AttendanceTab({ advisory, onTodayChange }) {
                     {fullName(r.student)}
                   </TableCell>
                   <TableCell>
+                    {readOnly ? (() => {
+                      const st = ATTENDANCE_STATUSES.find((a) => a.value === draft.status);
+                      return st ? (
+                        <span className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold" style={{ background: st.bg, color: st.color }}>
+                          {st.label}
+                        </span>
+                      ) : (
+                        <span className="text-[12.5px] text-neutral-500">Not marked</span>
+                      );
+                    })() : (
                     <div className="flex gap-1">
                       {ATTENDANCE_STATUSES.map((st) => {
                         const active = draft.status === st.value;
@@ -859,16 +894,21 @@ function AttendanceTab({ advisory, onTodayChange }) {
                         );
                       })}
                     </div>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <input
-                      type="text"
-                      value={draft.remarks}
-                      placeholder="Optional remarks"
-                      aria-label={`Remarks for ${fullName(r.student)}`}
-                      onChange={(e) => setDrafts((d) => ({ ...d, [sid]: { ...draft, remarks: e.target.value } }))}
-                      className="w-full max-w-[220px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
-                    />
+                    {readOnly ? (
+                      <span className="text-[12.5px] text-neutral-700">{draft.remarks || "—"}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        value={draft.remarks}
+                        placeholder="Optional remarks"
+                        aria-label={`Remarks for ${fullName(r.student)}`}
+                        onChange={(e) => setDrafts((d) => ({ ...d, [sid]: { ...draft, remarks: e.target.value } }))}
+                        className="w-full max-w-[220px] rounded-md border-[1.5px] border-brand-border-soft px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -1192,7 +1232,10 @@ function StatsTab({ advisory }) {
 }
 
 // ── Section detail panel: header + tab bar + active tab content ─────────────
-function SectionDetail({ entry }) {
+// Also rendered by the staff Sections page, which passes `adviserName` (a
+// teacher never needs to be told they advise their own section) and
+// `readOnly` for the registrar and archived years.
+export function SectionDetail({ entry, adviserName, readOnly = false }) {
   const { advisory, student_count, students, subjects } = entry;
   // Keyed by advisory_id at the call site, so a fresh mount (and a reset
   // to the Students tab) happens automatically when the section changes.
@@ -1202,7 +1245,8 @@ function SectionDetail({ entry }) {
   const levelColors = SCHOOL_LEVEL_COLORS[advisory.school_level] ?? SCHOOL_LEVEL_COLORS.elementary;
 
   const presentToday = useMemo(() => {
-    const values = Object.values(todayAttendance);
+    // Read-only attendance leaves unmarked learners null, so they don't count.
+    const values = Object.values(todayAttendance).filter((v) => v.status);
     if (values.length === 0) return null;
     const present = values.filter((v) => v.status === "P" || v.status === "L").length;
     return Math.round((present / values.length) * 100);
@@ -1235,6 +1279,16 @@ function SectionDetail({ entry }) {
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#e3f0fd", color: "#1455a0" }}>
             {student_count} student{student_count === 1 ? "" : "s"}
           </span>
+          {adviserName && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>
+              <i className="ti ti-user-check" style={{ fontSize: 12 }} />Adviser: {adviserName}
+            </span>
+          )}
+          {readOnly && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>
+              <i className="ti ti-eye" style={{ fontSize: 12 }} />View only
+            </span>
+          )}
           {presentToday !== null && (
             <span style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>
               {presentToday}% present today
@@ -1268,9 +1322,9 @@ function SectionDetail({ entry }) {
       <div style={{ flex: 1, overflowY: "auto" }}>
         {tab === "students" && <StudentsTab students={students} todayAttendanceByStudent={todayAttendance} />}
         {tab === "subjects" && <SubjectsTab subjects={subjects} />}
-        {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} />}
-        {tab === "narrative" && <NarrativeTab advisory={advisory} />}
-        {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} />}
+        {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} readOnly={readOnly} />}
+        {tab === "narrative" && <NarrativeTab advisory={advisory} readOnly={readOnly} />}
+        {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} readOnly={readOnly} />}
         {tab === "stats" && <StatsTab advisory={advisory} />}
       </div>
     </div>
@@ -1527,7 +1581,15 @@ export default function TeacherSectionsPage() {
         ) : (
           <>
             <SectionRail sections={sections} selectedKey={selectedKey} onSelect={setSelectedKey} />
-            {selectedEntry && <SectionDetail key={selectedEntry.advisory.advisory_id} entry={selectedEntry} />}
+            {/* The registrar can open this by URL; the backend refuses their
+                writes, so don't offer the save buttons. */}
+            {selectedEntry && (
+              <SectionDetail
+                key={selectedEntry.advisory.advisory_id}
+                entry={selectedEntry}
+                readOnly={currentUser?.role === "registrar"}
+              />
+            )}
           </>
         )}
       </div>

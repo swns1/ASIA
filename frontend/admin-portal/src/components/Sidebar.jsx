@@ -31,7 +31,10 @@ const NAV = [
     section: "Academics",
     items: [
       { label: "Applications",      icon: "ti-user-plus",         path: "/student-applications", allowedRoles: ACADEMIC_STAFF },
-      { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: GRADE_ROLES },
+      // Staff see every section on /sections; My Sections is the teacher's
+      // own list (the route still takes staff, for old links).
+      { label: "Sections",          icon: "ti-layout-grid",       path: "/sections",           allowedRoles: ACADEMIC_STAFF },
+      { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: ["teacher"] },
       { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },
       { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
       { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
