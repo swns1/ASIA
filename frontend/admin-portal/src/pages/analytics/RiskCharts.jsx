@@ -2,8 +2,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 
 import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
-import { columnPath, niceMax } from "../../components/charts/geometry";
-import { SURFACE, chartInk } from "../../components/charts/tokens";
+import { columnPath } from "../../components/charts/geometry";
+import { SURFACE, chartInk, token } from "../../components/charts/tokens";
 import useElementSize from "../../components/charts/useElementSize";
 import {
   GOOD_ATTENDANCE,
@@ -155,14 +155,16 @@ function RiskMixChart({ summary, total }) {
 
 // ── 2 & 3 · By grade level / by section ──────────────────────────────────────
 // One row per group, ordered by how many need following up. Each bar is that
-// group's own students split by level, so a small section's picture is as
-// readable as a big one's; how many students that is sits in words beside it.
+// group's own students split by level, and its length is the group's size
+// against the biggest one shown -- so a section of 8 looks small beside a
+// section of 40, as on the dashboard, and the split still reads within it.
 
 const MAX_GROUPS = 12;
 
 function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
   if (!rows?.length) return <NoData message={emptyMessage} />;
   const visible = rows.slice(0, MAX_GROUPS);
+  const maxTotal = Math.max(...visible.map((r) => r.total), 1);
 
   return (
     <div>
@@ -172,23 +174,26 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
             <span className="truncate text-sm font-semibold text-neutral-800" title={row.name}>
               {row.name}
             </span>
-            <span
-              className={`${BAR_CELL} flex h-3 gap-[2px] overflow-hidden rounded-full`}
-              role="img"
-              aria-label={`${row.name}: ${row.flagged} of ${students(row.total)} need following up`}
-            >
-              {RISK_LEVELS.filter((level) => row.by_level?.[level]).map((level) => {
-                const meta = riskLevelMeta(level);
-                const count = row.by_level[level];
-                return (
-                  <span
-                    key={level}
-                    className="h-full"
-                    style={{ flexGrow: count, flexBasis: 0, background: meta.color }}
-                    title={`${meta.label}: ${count} of ${row.total}`}
-                  />
-                );
-              })}
+            <span className={`${BAR_CELL} block min-w-0`}>
+              <span
+                className="flex h-3 gap-[2px] overflow-hidden rounded-full"
+                style={{ width: `${(row.total / maxTotal) * 100}%`, minWidth: 10 }}
+                role="img"
+                aria-label={`${row.name}: ${row.flagged} of ${students(row.total)} need following up`}
+              >
+                {RISK_LEVELS.filter((level) => row.by_level?.[level]).map((level) => {
+                  const meta = riskLevelMeta(level);
+                  const count = row.by_level[level];
+                  return (
+                    <span
+                      key={level}
+                      className="h-full"
+                      style={{ flexGrow: count, flexBasis: 0, background: meta.color }}
+                      title={`${meta.label}: ${count} of ${row.total}`}
+                    />
+                  );
+                })}
+              </span>
             </span>
             <span className="text-right text-xs leading-tight tabular-nums text-neutral-500">
               {row.flagged ? (
@@ -204,7 +209,8 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
         ))}
       </ul>
       <p className="mt-4 text-xs text-neutral-500">
-        Each bar is one {unitLabel}&apos;s students, split by level. Ordered by how many need following up.
+        Each bar is one {unitLabel}&apos;s students, split by level. A longer bar is a bigger {unitLabel}. Ordered
+        by how many need following up.
         {rows.length > visible.length && ` Showing the top ${visible.length} of ${rows.length}.`}
       </p>
     </div>
@@ -250,9 +256,11 @@ function ReasonChart({ summary, total }) {
 
 // ── 5 · How everyone is doing ────────────────────────────────────────────────
 // The most intuitive view for anyone who has never read a chart before: where
-// the class sits, and how much of it falls left of the passing mark. Passing
-// ranges are the on-track green and failing ones the urgent red, with a key,
-// so the split reads before a single number does.
+// the class sits, and how much of it falls left of the passing mark. The
+// headline says the count before the reader looks at a column; the failing
+// side of the plot is tinted and labelled in place, so there is no key to
+// match colours against. Each column carries its own count, so there is no
+// count axis either.
 
 const GRADE_H = 280;
 
@@ -262,6 +270,7 @@ function GradeDistributionChart({ scores }) {
   const size = useElementSize(plotEl);
   const graded = scores.filter((s) => s.average_grade != null);
   if (!graded.length) return <NoData message="No grades recorded for this selection yet." />;
+  const ungraded = scores.length - graded.length;
 
   const BIN_SIZE = 5;
   const MAX = 100;
@@ -285,20 +294,18 @@ function GradeDistributionChart({ scores }) {
 
   const W = size?.width ?? 760;
   const H = GRADE_H;
-  const PAD_L = 36;
+  const PAD_L = 12;
   const PAD_R = 12;
-  const PAD_T = 30;   // room for the passing-mark label
+  const PAD_T = 40;   // room for the two labels either side of the passing mark
   const PAD_B = 44;   // grade ticks, then the axis title
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
   const baseY = PAD_T + plotH;
 
-  // Whole-number steps: these are counts of students.
+  // No count axis: every column is labelled with its own count. The 8% of
+  // headroom keeps the tallest column's label clear of the passing labels.
   const most = Math.max(...bins.map((b) => b.count), 1);
-  const step = Math.max(1, niceMax(most / 4));
-  const top = Math.ceil(most / step) * step;
-  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
-  const yOf = (n) => baseY - (n / top) * plotH;
+  const yOf = (n) => baseY - (n / (most * 1.08)) * plotH;
   const xOf = (grade) => PAD_L + ((grade - MIN) / (MAX - MIN)) * plotW;
 
   const colW = plotW / binCount;
@@ -309,102 +316,124 @@ function GradeDistributionChart({ scores }) {
   const passing = riskLevelMeta("low").color;
   const failing = riskLevelMeta("critical").color;
   const belowPassing = graded.filter((s) => Number(s.average_grade) < PASSING_GRADE).length;
+  // A grade under the floor was clamped into the first column, so that
+  // column is "under" its upper edge rather than a closed range.
+  const binTitle = (bin, i) =>
+    i === 0 && lowest < MIN ? `Under ${MIN + BIN_SIZE}` : `Averages ${bin.from} to ${bin.to}`;
 
-  const key = (
-    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      {[
-        { color: passing, text: `Passing (${PASSING_GRADE} and up)` },
-        { color: failing, text: `Below the passing mark` },
-      ].map((k) => (
-        <span key={k.text} className="inline-flex items-center gap-1.5 text-xs text-neutral-600">
-          <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: k.color }} aria-hidden="true" />
-          {k.text}
-        </span>
-      ))}
+  const headline = (
+    <div className="mb-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      {belowPassing ? (
+        <>
+          {/* Spaces between the pieces so they read as one sentence to a
+              screen reader; a flex row drops them from the layout. */}
+          <span className="text-xl font-bold text-neutral-900 tabular-nums">
+            {belowPassing} of {graded.length}
+          </span>{" "}
+          <span className="text-base text-neutral-800">students are below the passing mark</span>{" "}
+          <span className="rounded-full bg-error-50 px-2 py-0.5 text-xs font-bold text-error-500 tabular-nums">
+            {pct(belowPassing, graded.length)}%
+          </span>
+        </>
+      ) : (
+        <span className="text-base text-neutral-800">No students are below the passing mark</span>
+      )}
     </div>
   );
 
   return (
-    <ChartFrame
-      viewBox={[W, H]}
-      tip={tip}
-      legend={key}
-      plotRef={setPlotEl}
-      title={`Students by average grade, ${belowPassing} of ${graded.length} below the passing mark`}
-      caption={`${belowPassing} of ${students(graded.length)} sit below the ${PASSING_GRADE} passing mark. Each column counts the students whose average falls in that range.`}
-    >
-      {/* Hairline grid — solid, one shade off the surface */}
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={PAD_L} x2={W - PAD_R} y1={yOf(t)} y2={yOf(t)} stroke={ink().grid} />
-          <text x={PAD_L - 8} y={yOf(t) + 3.5} textAnchor="end" fontSize="10" fill={ink().axis}>
-            {t}
-          </text>
-        </g>
-      ))}
+    <div>
+      <ChartFrame
+        viewBox={[W, H]}
+        tip={tip}
+        legend={headline}
+        plotRef={setPlotEl}
+        title={`Students by average grade, ${belowPassing} of ${graded.length} below the passing mark`}
+        caption="Each column counts the students whose average falls in that range."
+      >
+        {/* The failing side, tinted and named in place of a key */}
+        <rect x={0} y={0} width={passX} height={baseY} fill={token("--color-error-50")} fillOpacity={0.6} />
+        <line x1={PAD_L} x2={W - PAD_R} y1={baseY} y2={baseY} stroke={ink().grid} />
 
-      {bins.map((bin) => {
-        const x = xOf(bin.from) + gap / 2;
-        const w = colW - gap;
-        const y = yOf(bin.count);
-        // Bins are 5 wide and the mark is a multiple of 5, so a bin is wholly
-        // one side of it.
-        const below = bin.to <= PASSING_GRADE;
-        return (
-          <g
-            key={bin.from}
-            onMouseEnter={() =>
-              setTip({
-                x: x + w / 2,
-                y,
-                title: `Averages ${bin.from} to under ${bin.to}`,
-                lines: [students(bin.count), below ? "Below the passing mark" : "Passing"],
-              })
-            }
-            onMouseLeave={() => setTip(null)}
-            style={{ cursor: "pointer" }}
-          >
-            <rect x={xOf(bin.from)} y={PAD_T} width={colW} height={plotH} fill="transparent" />
-            {bin.count > 0 && (
-              <>
-                <path d={columnPath(x, y, w, baseY - y)} fill={below ? failing : passing} />
-                <text
-                  x={x + w / 2} y={y - 6}
-                  textAnchor="middle" fontSize="12" fontWeight="700" fill={ink().ink}
-                  className="tabular-nums"
-                >
-                  {bin.count}
-                </text>
-              </>
-            )}
-          </g>
-        );
-      })}
+        {bins.map((bin, i) => {
+          const x = xOf(bin.from) + gap / 2;
+          const w = colW - gap;
+          const y = yOf(bin.count);
+          // Bins are 5 wide and the mark is a multiple of 5, so a bin is wholly
+          // one side of it.
+          const below = bin.to <= PASSING_GRADE;
+          return (
+            <g
+              key={bin.from}
+              onMouseEnter={() =>
+                setTip({
+                  x: x + w / 2,
+                  y,
+                  title: binTitle(bin, i),
+                  lines: [students(bin.count), below ? "Below the passing mark" : "Passing"],
+                })
+              }
+              onMouseLeave={() => setTip(null)}
+              style={{ cursor: "pointer" }}
+            >
+              <rect x={xOf(bin.from)} y={PAD_T} width={colW} height={plotH} fill="transparent" />
+              {bin.count > 0 && (
+                <>
+                  <path d={columnPath(x, y, w, baseY - y)} fill={below ? failing : passing} />
+                  <text
+                    x={x + w / 2} y={y - 6}
+                    textAnchor="middle" fontSize="12" fontWeight="700" fill={ink().ink}
+                    className="tabular-nums"
+                  >
+                    {bin.count}
+                  </text>
+                </>
+              )}
+            </g>
+          );
+        })}
 
-      {/* Grades sit on the edges between ranges, where they belong. */}
-      {bins.concat({ from: MAX }).map((bin) => (
-        <text
-          key={`tick-${bin.from}`}
-          x={xOf(bin.from)} y={baseY + 16}
-          textAnchor="middle" fontSize="10" fill={ink().axis}
-          className="tabular-nums"
-        >
-          {bin.from}
+        {/* Grades sit on the edges between ranges, where they belong. */}
+        {bins.concat({ from: MAX }).map((bin) => {
+          const isPass = bin.from === PASSING_GRADE;
+          return (
+            <text
+              key={`tick-${bin.from}`}
+              x={xOf(bin.from)} y={baseY + 16}
+              textAnchor="middle" fontSize="11"
+              fontWeight={isPass ? 700 : 400}
+              fill={isPass ? ink().ink : ink().axis}
+              className="tabular-nums"
+            >
+              {bin.from}
+            </text>
+          );
+        })}
+
+        {/* The only dashed line on the page — an actual threshold, not a grid */}
+        <line
+          x1={passX} x2={passX} y1={32} y2={baseY}
+          stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5}
+        />
+        <text x={passX - 10} y={24} textAnchor="end" fontSize="11" fontWeight="700" fill={token("--color-error-500")}>
+          Below passing
         </text>
-      ))}
-
-      {/* The only dashed line on the page — an actual threshold, not a grid */}
-      <line
-        x1={passX} x2={passX} y1={PAD_T - 8} y2={baseY}
-        stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5}
-      />
-      <text x={passX} y={PAD_T - 14} textAnchor="middle" fontSize="11" fontWeight="700" fill={ink().ink}>
-        Passing mark ({PASSING_GRADE})
-      </text>
-      <text x={PAD_L + plotW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={ink().axis}>
-        Average grade
-      </text>
-    </ChartFrame>
+        <text x={passX + 10} y={24} textAnchor="start" fontSize="11" fontWeight="700" fill={token("--color-success-500")}>
+          Passing · {PASSING_GRADE} and up
+        </text>
+        <text x={PAD_L + plotW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={ink().axis}>
+          Average grade
+        </text>
+      </ChartFrame>
+      {ungraded > 0 && (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+          <i className="ti ti-info-circle text-[13px]" aria-hidden="true" />
+          {ungraded === 1
+            ? "1 student has no average yet and isn't shown."
+            : `${ungraded} students have no average yet and aren't shown.`}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -428,22 +457,38 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
   // The card's own width, so the axis text stays its real size.
   const W = size?.width ?? 760;
   const H = 300;
-  const PAD_L = 44;
+  const PAD_L = 50;   // y ticks clear of the rotated axis title
   const PAD_R = 20;
-  const PAD_T = 18;
+  const PAD_T = 34;   // the two top quadrant labels sit above the plot
   const PAD_B = 44;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
 
-  const X_MIN = 60;
+  // Floors come from the data. Fixed floors of 60 and 50% pinned the weakest
+  // students to the frame -- a 47.7 average drew at 60, looking no worse than
+  // a borderline student. Capped so the passing and attendance lines always
+  // keep a readable share of the plot.
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const lowestGrade = Math.min(...plotted.map((s) => Number(s.average_grade)));
+  const lowestAttendance = Math.min(...plotted.map((s) => Number(s.attendance_rate) * 100));
+  const X_MIN = clamp(Math.floor(lowestGrade / 10) * 10, 0, 60);
   const X_MAX = 100;
-  const Y_MIN = 50;
+  const Y_MIN = clamp(Math.floor(lowestAttendance / 10) * 10, 0, 50);
   const Y_MAX = 100;
-  const scaleX = (g) => PAD_L + ((Math.min(X_MAX, Math.max(X_MIN, g)) - X_MIN) / (X_MAX - X_MIN)) * plotW;
-  const scaleY = (p) => PAD_T + plotH - ((Math.min(Y_MAX, Math.max(Y_MIN, p)) - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
+  const scaleX = (g) => PAD_L + ((clamp(g, 0, 100) - X_MIN) / (X_MAX - X_MIN)) * plotW;
+  const scaleY = (p) => PAD_T + plotH - ((clamp(p, 0, 100) - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
 
   const passX = scaleX(PASSING_GRADE);
   const goodY = scaleY(GOOD_ATTENDANCE);
+
+  const xTicks = [...new Set([
+    ...Array.from({ length: Math.floor((X_MAX - X_MIN) / 10) + 1 }, (_, i) => X_MIN + i * 10),
+    PASSING_GRADE,
+    X_MAX,
+  ])].sort((a, b) => a - b);
+  const yTicks = [...new Set([Y_MIN, 50, 70, GOOD_ATTENDANCE, Y_MAX])]
+    .filter((p) => p >= Y_MIN)
+    .sort((a, b) => a - b);
 
   // Deterministic spiral offset so students on identical figures (very common
   // at this school's scale) stay individually clickable instead of stacking
@@ -462,9 +507,11 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
     };
   });
 
+  // The top two sit above the plot, out of the dot field; the bottom two stay
+  // inside it, where the corners are emptiest.
   const QUADRANTS = [
-    { x: PAD_L + 8, y: PAD_T + 16, text: "Attending, still struggling", anchor: "start" },
-    { x: W - PAD_R - 8, y: PAD_T + 16, text: "Doing well", anchor: "end" },
+    { x: PAD_L + 8, y: PAD_T - 10, text: "Attending, still struggling", anchor: "start" },
+    { x: W - PAD_R - 8, y: PAD_T - 10, text: "Doing well", anchor: "end" },
     { x: PAD_L + 8, y: PAD_T + plotH - 8, text: "Needs urgent help", anchor: "start" },
     { x: W - PAD_R - 8, y: PAD_T + plotH - 8, text: "Passing but often absent", anchor: "end" },
   ];
@@ -474,36 +521,23 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
       viewBox={[W, H]}
       tip={tip}
       plotRef={setPlotEl}
+      title="Grades against attendance, one dot per student"
       caption="Each dot is one student. Click a dot to open their follow-up details."
     >
       {/* Quadrant guides — solid hairlines at the two lines the school acts on */}
       <line x1={passX} x2={passX} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().grid} strokeWidth={1.5} />
       <line x1={PAD_L} x2={W - PAD_R} y1={goodY} y2={goodY} stroke={ink().grid} strokeWidth={1.5} />
 
-      {QUADRANTS.map((q) => (
-        <text
-          key={q.text}
-          x={q.x}
-          y={q.y}
-          textAnchor={q.anchor}
-          fontSize="11"
-          fontWeight="600"
-          fill="#a89494"
-        >
-          {q.text}
-        </text>
-      ))}
-
       {/* Axes */}
       <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke={ink().grid} />
       <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={PAD_T + plotH} stroke={ink().grid} />
-      {[60, 70, PASSING_GRADE, 80, 90, 100].map((g) => (
-        <text key={g} x={scaleX(g)} y={PAD_T + plotH + 16} textAnchor="middle" fontSize="10" fill={ink().axis}>
+      {xTicks.map((g) => (
+        <text key={g} x={scaleX(g)} y={PAD_T + plotH + 16} textAnchor="middle" fontSize="11" fill={ink().axis}>
           {g}
         </text>
       ))}
-      {[50, 70, GOOD_ATTENDANCE, 100].map((p) => (
-        <text key={p} x={PAD_L - 8} y={scaleY(p) + 4} textAnchor="end" fontSize="10" fill={ink().axis}>
+      {yTicks.map((p) => (
+        <text key={p} x={PAD_L - 8} y={scaleY(p) + 4} textAnchor="end" fontSize="11" fill={ink().axis}>
           {p}%
         </text>
       ))}
@@ -547,6 +581,26 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
           </g>
         );
       })}
+
+      {/* After the dots, with a surface halo, so a dot under a label never
+          hides it. Pointer-transparent so the dots stay clickable. */}
+      {QUADRANTS.map((q) => (
+        <text
+          key={q.text}
+          x={q.x}
+          y={q.y}
+          textAnchor={q.anchor}
+          fontSize="11"
+          fontWeight="600"
+          fill={ink().axis}
+          stroke={SURFACE}
+          strokeWidth={3}
+          paintOrder="stroke"
+          pointerEvents="none"
+        >
+          {q.text}
+        </text>
+      ))}
     </ChartFrame>
   );
 }
@@ -563,7 +617,7 @@ export default function RiskChart({ view, run, onSelectStudent }) {
       return (
         <GroupedBandChart
           rows={summary?.by_grade_level}
-          unitLabel="students in this grade level"
+          unitLabel="grade level"
           emptyMessage="No grade levels to compare for this selection."
         />
       );
@@ -571,7 +625,7 @@ export default function RiskChart({ view, run, onSelectStudent }) {
       return (
         <GroupedBandChart
           rows={summary?.by_section}
-          unitLabel="students in this section"
+          unitLabel="section"
           emptyMessage="No sections to compare for this selection."
         />
       );

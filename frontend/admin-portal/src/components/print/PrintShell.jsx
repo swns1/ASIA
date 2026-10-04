@@ -76,6 +76,14 @@ export function PrintShell({
             padding: 0 !important;
           }
         }
+        /* html2canvas finds each font's baseline by appending a hidden <img> beside a
+           line of text on the live page and measuring where it lands. Tailwind's
+           preflight makes every img display:block, which drops the probe below the
+           text, so every line in an exported PDF was drawn several pixels too low —
+           sitting on table rules and cutting through bordered labels. Restoring the
+           browser default for the duration of the export fixes the measurement; the
+           letterhead logos are flex items, which ignore it. */
+        body.force-print-layout img { display: inline; }
         body.force-print-layout .print-shell-backdrop { background: white !important; padding: 0 !important; min-height: 0 !important; }
         body.force-print-layout #${id} {
           max-width: 100% !important;

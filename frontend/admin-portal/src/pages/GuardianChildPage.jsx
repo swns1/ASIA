@@ -20,6 +20,7 @@ import Badge, { StatusBadge } from "../components/ui/Badge";
 import GuardianHero from "../components/GuardianHero";
 import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
+import useLatestRequest from "../hooks/useLatestRequest";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { initialsFrom } from "../utils/avatarPalette";
@@ -550,27 +551,42 @@ export default function GuardianChildPage() {
   const [ledger, setLedger] = useState(SECTION_INIT);
   const [reqs, setReqs]     = useState(SECTION_INIT);
 
+  const beginLoad = useLatestRequest();
   const load = useCallback(async () => {
+    // Only this load's answers may land. A parent switching between children
+    // on a slow connection otherwise got a page mixing the two: one child's
+    // report card with the other's attendance or bills.
+    const isCurrent = beginLoad();
+    const only = (set) => (value) => {
+      if (isCurrent()) set(value);
+    };
+
     // Clearing up front matters when `enrollmentId` changes under a mounted
     // component: without it the previous child's grades, attendance, bills and
-    // documents stay on screen looking freshly loaded.
+    // documents stay on screen looking freshly loaded. Bills and documents
+    // were missed here, so the new child's Billing tab showed the previous
+    // child's ledger until the report card came back.
     setLoading(true);
     setError("");
     setReport(null);
+    setLedger(SECTION_INIT);
+    setReqs(SECTION_INIT);
 
     // Attendance is keyed off the enrollment we already have, so it starts
     // straight away — it never needed the report card at all.
-    runSection(getAttendanceSummary({ enrollment: enrollmentId }), setAtt);
+    runSection(getAttendanceSummary({ enrollment: enrollmentId }), only(setAtt));
 
     let studentId;
     try {
       const rc = await getReportCard(enrollmentId);
+      if (!isCurrent()) return;
       setReport(rc);
       studentId = rc?.student?.student_id;
     } catch (e) {
+      if (!isCurrent()) return;
       setError(e.message || "Failed to load this child's records.");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
 
     // Billing and documents are keyed off student_id, which only the report
@@ -578,13 +594,13 @@ export default function GuardianChildPage() {
     // They still have to leave their loading state, which is exactly what the
     // old control flow skipped.
     if (studentId) {
-      runSection(getStudentLedger(studentId), setLedger);
-      runSection(fetchRequirementSummary(studentId), setReqs);
+      runSection(getStudentLedger(studentId), only(setLedger));
+      runSection(fetchRequirementSummary(studentId), only(setReqs));
     } else {
       setLedger(SECTION_UNAVAILABLE);
       setReqs(SECTION_UNAVAILABLE);
     }
-  }, [enrollmentId]);
+  }, [enrollmentId, beginLoad]);
 
   useEffect(() => {
     load(); // eslint-disable-line react-hooks/set-state-in-effect

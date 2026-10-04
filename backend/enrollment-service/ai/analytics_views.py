@@ -12,7 +12,7 @@ Features used for clustering:
     data for (or the single subject's grade if subject_id is given) — one
     feature, not one column per subject; see "Design notes" below for why.
   - Attendance rate for the full school year  (non-absent / total days)
-  - Average narrative report score            (1=Needs Improvement, 2=Satisfactory, 3=Outstanding)
+  - Average narrative report score            (DepEd Observed Values: 1=NO, 1.5=RO, 2=SO, 3=AO)
     averaged across all rated categories for the selected grading period
     (or all periods when grading_period="overall")
 
@@ -28,8 +28,9 @@ Design notes (methodological limitations, deliberate not accidental):
     StandardScaler. This keeps grades / attendance / behavior weighted as
     three roughly equal signals, trading away per-subject granularity
     (use `subject_id` for that) to do it.
-  - Narrative ratings are ordinal categories (Needs Improvement /
-    Satisfactory / Outstanding) mapped to 1/2/3 and averaged as if
+  - Narrative ratings are ordinal marks (NO / RO / SO / AO, or the older
+    Needs Improvement / Satisfactory / Outstanding) mapped onto 1-3 (see
+    services.NARRATIVE_SCORE) and averaged as if
     continuous — the same simplification GPA makes. `avg_narrative` is
     the averaged score; `narrative_distribution` on each cluster exposes
     the raw category counts so the average doesn't hide the underlying
@@ -57,7 +58,7 @@ Returns:
       "max_grade": 79.5,
       "avg_attendance": 0.82,
       "avg_narrative": 1.9,
-      "narrative_distribution": {"outstanding": 2, "satisfactory": 7, "needs_improvement": 3},
+      "narrative_distribution": {"AO": 2, "SO": 7, "RO": 3, "NO": 0},
       "students": [
         {
           "student_id": 1,
@@ -97,7 +98,7 @@ from accounts.permissions import HasRole
 from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
 from subjects.models import Subject
 
-from .services import build_student_features
+from .services import LEGACY_RATING_MARKS, build_student_features
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ Context:
 - DepEd grade scale: 90-100 Outstanding, 85-89 Very Satisfactory, 80-84 Satisfactory,
   75-79 Fairly Satisfactory, Below 75 Did Not Meet Expectations
 - Attendance rate: proportion of school days attended (1.00 = perfect, 0.00 = never attended)
-- Narrative score: 1=Needs Improvement, 2=Satisfactory, 3=Outstanding (averaged across all rated categories)
+- Narrative score: DepEd Observed Values, 3=Always Observed, 2=Sometimes Observed, 1.5=Rarely Observed, 1=Not Observed (averaged across all rated categories)
 - Cluster separation quality (silhouette score, -1 to 1, higher = better separated): {silhouette_score}
 """
 
@@ -521,17 +522,18 @@ class ClusterAnalyticsView(APIView):
             narr_str = f"{avg_narr:.2f}" if avg_narr is not None else "N/A"
 
             # Raw rating counts behind avg_narrative. Narrative ratings are
-            # ordinal categories (Needs Improvement/Satisfactory/Outstanding)
-            # averaged into a 1-3 score as a deliberate, bounded
+            # ordinal marks averaged into a 1-3 score as a deliberate, bounded
             # simplification (the same convention GPA uses) — this exposes
             # the underlying distribution so the averaged number doesn't
-            # hide it.
+            # hide it. Counted by DepEd mark, the older words folded into the
+            # mark SF9 prints for them: counting only the older words read
+            # all zeros once the school's ratings were the DepEd marks.
             raw_dist = narrative_dist_map.get(old_cluster_id, {})
-            narrative_distribution = {
-                "outstanding":       raw_dist.get("outstanding", 0),
-                "satisfactory":      raw_dist.get("satisfactory", 0),
-                "needs_improvement": raw_dist.get("needs_improvement", 0),
-            }
+            narrative_distribution = {mark: 0 for mark in ("AO", "SO", "RO", "NO")}
+            for rating, count in raw_dist.items():
+                mark = LEGACY_RATING_MARKS.get(rating, rating)
+                if mark in narrative_distribution:
+                    narrative_distribution[mark] += count
 
             summary = {
                 "cluster_id":     new_id,

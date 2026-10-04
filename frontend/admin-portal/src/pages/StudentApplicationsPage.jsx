@@ -23,6 +23,7 @@ import { useSchoolYear } from "../context/SchoolYearContext";
 import { yearOptionsForEntry } from "../utils/schoolYear";
 import { Field, Input, Select, Textarea } from "../components/FormField";
 import { ReviewStep } from "./student-form/StudentFormSteps";
+import ApplicationDetailsEditor from "./apply/ApplicationDetailsEditor";
 import { STUDENT_APPLICATION_STATUS_MAP } from "../constants/statusMaps";
 import { collect, required, hasErrors } from "../utils/validation";
 import { isLocalOnlyUrl, isPrivateNetworkUrl, resolveApplyUrl } from "../utils/applyLink";
@@ -324,6 +325,7 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
   const [showReject, setShowReject] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
   const [actionError, setActionError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,6 +411,18 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
     }
   };
 
+  // The corrected application replaces the one on screen, and the queue
+  // reloads so its row shows the corrected name. An LRN typed into the box
+  // below but left out of the correction is kept rather than wiped.
+  const handleSaved = (updated) => {
+    setApplication(updated);
+    setLrn((typed) => updated.payload_json?.student?.lrn || typed);
+    setEditing(false);
+    setActionError("");
+    toast.success("Corrections saved.");
+    onDecided?.();
+  };
+
   const handleReject = async () => {
     if (!rejectNote.trim()) return;
     setRejecting(true);
@@ -455,6 +469,16 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
           <Textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="e.g. Missing required household information" />
         </Field>
       </Modal>
+    );
+  }
+
+  if (editing && application) {
+    return (
+      <ApplicationDetailsEditor
+        application={application}
+        onCancel={() => setEditing(false)}
+        onSaved={handleSaved}
+      />
     );
   }
 
@@ -520,11 +544,19 @@ function ReviewApplicationModal({ applicationId, onClose, onDecided }) {
               <Field label="LRN" required hint="Structurally required to create the student record.">
                 <Input value={lrn} onChange={(e) => setLrn(e.target.value)} placeholder="12-digit LRN" />
               </Field>
-              <div className="flex justify-end gap-2.5">
-                <Button variant="secondary" onClick={() => setShowReject(true)}>Reject</Button>
-                <Button onClick={handleApprove} loading={approving} disabled={!lrn.trim()}>
-                  Approve &amp; create student
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                {/* Wrong details are corrected here, before approval, rather
+                    than on the student record afterwards: the record is
+                    created from them, and the duplicate check runs on them. */}
+                <Button variant="secondary" icon="ti-pencil" onClick={() => setEditing(true)} disabled={approving}>
+                  Edit details
                 </Button>
+                <div className="flex gap-2.5">
+                  <Button variant="secondary" onClick={() => setShowReject(true)}>Reject</Button>
+                  <Button onClick={handleApprove} loading={approving} disabled={!lrn.trim()}>
+                    Approve &amp; create student
+                  </Button>
+                </div>
               </div>
             </div>
           )}

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { pageVariants } from "../utils/motion";
 import { describeApiError } from "../utils/apiError";
+import { localISODate } from "../utils/format";
 import { getCurrentUser, hasAnyRole, GRADE_ROLES } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 
@@ -182,7 +183,7 @@ export default function SchoolFormsPage() {
   // SF2
   const [sf2GradeLevel, setSf2GradeLevel] = useState("");
   const [sf2Section,    setSf2Section]    = useState("");
-  const [sf2Month,      setSf2Month]      = useState(new Date().toISOString().slice(0, 7));
+  const [sf2Month,      setSf2Month]      = useState(() => localISODate(new Date()).slice(0, 7));
   const [sf2Adviser,    setSf2Adviser]    = useState("");
   const [sf2Division,   setSf2Division]   = useState("");
   const [sf2Region,     setSf2Region]     = useState("");

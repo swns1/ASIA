@@ -273,7 +273,7 @@ class StudentApplicationDetailSerializer(StudentApplicationListSerializer):
 
     class Meta(StudentApplicationListSerializer.Meta):
         fields = StudentApplicationListSerializer.Meta.fields + (
-            "payload_json", "duplicate_matches_json",
+            "payload_json", "duplicate_matches_json", "revision",
             "reviewed_by_user_id", "decided_by_user_id", "decision_note",
             "created_student_id", "created_at", "updated_at",
         )
@@ -291,6 +291,15 @@ class ApplicationApproveSerializer(serializers.Serializer):
     guardians = serializers.ListField(required=False)
     siblings = serializers.ListField(required=False)
     previous_schools = serializers.ListField(required=False)
+
+
+class ApplicationDetailsSerializer(serializers.Serializer):
+    """Input for PATCH .../details/ -- staff correcting what the family
+    submitted. `payload` is the whole bundle, in the shape the applicant's
+    form sends; intake/services.py::validated_payload checks it exactly as
+    submit does. `revision` is the one the client loaded (see the view)."""
+    revision = serializers.IntegerField(min_value=0)
+    payload = serializers.DictField()
 
 
 class ApplicationRejectSerializer(serializers.Serializer):

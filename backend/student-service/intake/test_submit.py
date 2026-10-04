@@ -225,7 +225,7 @@ class TestApplySubmitView:
 
         with patch("intake.invites.StudentApplication.objects.select_related") as select_related, \
              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update, \
-             patch("intake.views.duplicates.find_matches", return_value=[]), \
+             patch("intake.duplicates.find_matches", return_value=[]), \
              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter, \
              patch("intake.views.transaction.atomic", return_value=nullcontext()):
             select_related.return_value.get.return_value = application
@@ -270,7 +270,7 @@ class TestApplySubmitView:
             request = self._post_with_token(invite, application)
             with patch("intake.invites.StudentApplication.objects.select_related") as select_related, \
                  patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update, \
-                 patch("intake.views.duplicates.find_matches", return_value=matches), \
+                 patch("intake.duplicates.find_matches", return_value=matches), \
                  patch("intake.views.ApplicationInvite.objects.filter") as invite_filter, \
                  patch("intake.views.transaction.atomic", return_value=nullcontext()):
                 select_related.return_value.get.return_value = application
@@ -325,7 +325,7 @@ class TestApplyingFor:
         token = issue_session_token(invite, application)
         request = factory.post(f"/api/apply/{invite.pk}/submit/", HTTP_X_APPLICANT_TOKEN=token)
 
-        with patch("intake.invites.StudentApplication.objects.select_related") as select_related,              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update,              patch("intake.views.duplicates.find_matches", return_value=[]),              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter,              patch("intake.views.transaction.atomic", return_value=nullcontext()):
+        with patch("intake.invites.StudentApplication.objects.select_related") as select_related,              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update,              patch("intake.duplicates.find_matches", return_value=[]),              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter,              patch("intake.views.transaction.atomic", return_value=nullcontext()):
             select_related.return_value.get.return_value = application
             select_for_update.return_value.get.return_value = application
             application.save = MagicMock()

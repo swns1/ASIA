@@ -1,6 +1,19 @@
 from django.db import models
 
 
+def run_scope(school_level=None, grade_level=None):
+    """
+    Filter kwargs for the runs that covered exactly this scope.
+
+    A run made with no level or grade filter stores both as null, so "all
+    levels" has to match null. Leaving the filter off instead matched every
+    run, and whichever check was pressed last came back as the whole
+    school's -- a Grade 7-only check would fill the "All levels" view and
+    the dashboard with Grade 7's numbers alone.
+    """
+    return {"school_level": school_level or None, "grade_level": grade_level or None}
+
+
 class RiskAssessmentRun(models.Model):
     """
     One row per time an at-risk assessment is computed. Unlike the ephemeral

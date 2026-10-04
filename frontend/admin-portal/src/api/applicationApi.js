@@ -71,6 +71,19 @@ export async function changeApplicationSchoolYear(id, schoolYear) {
   return res.data;
 }
 
+// Correct what the family submitted, until the application is decided.
+// `payload` is the whole bundle ({student, household, guardians, siblings,
+// previous_schools, applying_for}), checked server-side exactly as the
+// applicant's submit was. `revision` is the one loaded with the application:
+// if someone else saved in between, this is a 409 rather than an overwrite.
+export async function updateApplicationDetails(id, payload, revision) {
+  const res = await applicationClient.patch(`/student-applications/${id}/details/`, {
+    payload,
+    revision,
+  });
+  return res.data;
+}
+
 export async function claimStudentApplication(id) {
   const res = await applicationClient.patch(`/student-applications/${id}/claim/`);
   return res.data;

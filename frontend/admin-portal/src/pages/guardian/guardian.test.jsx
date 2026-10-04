@@ -449,3 +449,42 @@ describe("GuardianHomePage — next school year", () => {
     expect(screen.getByText(/Will Bianca return/)).toBeTruthy();
   });
 });
+
+describe("GuardianChildPage — switching children", () => {
+  it("never shows one child's records under another's", async () => {
+    // Maria's report card is slow; the parent moves on to Jose before it
+    // arrives, and it lands last.
+    let resolveMaria;
+    const JOSE = {
+      ...REPORT_CARD,
+      student: { ...REPORT_CARD.student, student_id: 101, first_name: "Jose", middle_name: null },
+    };
+    getReportCard.mockImplementation((id) =>
+      String(id) === "200" ? new Promise((res) => { resolveMaria = res; }) : Promise.resolve(JOSE)
+    );
+
+    const { useNavigate } = await import("react-router-dom");
+    function SwitchChild() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate("/guardian/child/300")}>Open Jose</button>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/guardian/child/200"]}>
+        <SwitchChild />
+        <Routes>
+          <Route path="/guardian/child/:enrollmentId" element={<GuardianChildPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Jose" }));
+    expect(await screen.findAllByText(/Jose/)).not.toHaveLength(0);
+
+    resolveMaria(REPORT_CARD);
+    await waitFor(() => expect(getStudentLedger).toHaveBeenCalledWith(101));
+    // Give Maria's answer every chance to land.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryAllByText(/Maria/)).toHaveLength(0);
+    expect(getStudentLedger).not.toHaveBeenCalledWith(100);
+  });
+});

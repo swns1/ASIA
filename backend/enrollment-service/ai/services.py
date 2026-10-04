@@ -25,7 +25,7 @@ the 10% chronic-absence line, DepEd Order 8 s.2015's 20% rule — is what
 makes the bands fire.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 
 import numpy as np
@@ -661,17 +661,74 @@ def _trend_reasons(sd):
     }]
 
 
+# Display names for every rating NarrativeReport accepts, both vocabularies.
+RATING_LABELS = {
+    "AO": "Always Observed",
+    "SO": "Sometimes Observed",
+    "RO": "Rarely Observed",
+    "NO": "Not Observed",
+    "outstanding": "Outstanding",
+    "satisfactory": "Satisfactory",
+    "needs_improvement": "Needs Improvement",
+}
+
+# The mark SF9 prints for each older word -- the same mapping as the
+# frontend's constants/observedValues.js.
+LEGACY_RATING_MARKS = {
+    "outstanding": "AO",
+    "satisfactory": "SO",
+    "needs_improvement": "RO",
+}
+
+# The marks that are a concern in their own right, in either vocabulary. Only
+# needs_improvement used to count -- but the ratings the school actually
+# records are the DepEd marks, so RO and NO raised the score (they sit at the
+# bottom of NARRATIVE_SCORE) while this reason never fired for anyone.
+CONCERN_RATINGS = ("needs_improvement", "RO", "NO")
+
+
 def _narrative_reasons(sd):
     ratings = sd.get("narrative_ratings") or []
-    needs = [r for r in ratings if r == "needs_improvement"]
-    if not needs:
+    concerns = [r for r in ratings if r in CONCERN_RATINGS]
+    if not concerns:
         return []
+    marks = " or ".join(RATING_LABELS[r] for r in CONCERN_RATINGS if r in concerns)
     return [{
         "code": "behavior_concern",
-        "text": f"Behavior rated Needs Improvement in {len(needs)} of {len(ratings)} "
+        "text": f"Behavior rated {marks} in {len(concerns)} of {len(ratings)} "
                 f"{_plural(len(ratings), 'area')}",
-        "severity": "high" if len(needs) > 1 else "medium",
+        "severity": "high" if len(concerns) > 1 else "medium",
     }]
+
+
+def _combined_reason(sd, components):
+    """
+    For a student placed above On track whom no single rule explains. Each
+    rule fires only past a line the school acts on, so a student a little
+    short on everything -- an 80 average, behavior Sometimes Observed -- was
+    put in Watch with an empty "Why" beside it. This names what added up.
+    Only called when the score is above the lowest band, so at least one
+    component is non-zero.
+    """
+    parts = []
+    if components.get("grade"):
+        parts.append(f"average of {float(sd['grade']):.1f}")
+    if components.get("attendance"):
+        parts.append(f"missed {_absence_pct(sd['attendance_rate']):.0f}% of school days")
+    if components.get("trend"):
+        parts.append(f"average down {abs(float(sd['grade_delta'])):.1f} points")
+    if components.get("narrative"):
+        ratings = sd.get("narrative_ratings") or []
+        common = Counter(ratings).most_common(1)[0][0] if ratings else None
+        parts.append(
+            f"behavior mostly {RATING_LABELS.get(common, common)}" if common
+            else f"behavior averaging {float(sd['avg_narrative']):.1f} of 3"
+        )
+    return {
+        "code": "several_small_signs",
+        "text": "No single warning sign, but several smaller ones add up: " + ", ".join(parts),
+        "severity": "medium",
+    }
 
 
 def _build_reasons(sd, components):
@@ -755,8 +812,11 @@ def score_students(student_data, weights=None):
             risk_score = sum(components[k] * weights.get(k, 0) for k in available) / weight_sum
 
         risk_score = round(risk_score, 2)
+        risk_level = _risk_level(risk_score)
         signals_present = len(available)
         reasons = _build_reasons(sd, components)
+        if not reasons and risk_level != "low":
+            reasons = [_combined_reason(sd, components)]
         if signals_present <= 1:
             reasons.append({
                 "code": "limited_data",
@@ -770,7 +830,7 @@ def score_students(student_data, weights=None):
             "trend_component":      components["trend"],
             "narrative_component":  components["narrative"],
             "risk_score":           risk_score,
-            "risk_level":           _risk_level(risk_score),
+            "risk_level":           risk_level,
             "reasons":              reasons,
             "signals_present":      signals_present,
             "data_confidence":      _data_confidence(signals_present),

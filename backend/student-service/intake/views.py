@@ -8,6 +8,7 @@ Staff-facing (Bearer-authenticated, HasRole {super_admin, admin, registrar}):
     GET       /api/student-applications/[{id}/]
     PATCH     /api/student-applications/{id}/claim/
     PATCH     /api/student-applications/{id}/school-year/
+    PATCH     /api/student-applications/{id}/details/
     POST      /api/student-applications/{id}/approve/
     POST      /api/student-applications/{id}/reject/
 
@@ -49,12 +50,12 @@ from rest_framework.views import APIView
 
 from accounts.permissions import HasRole
 
-from . import duplicates, invites, services
+from . import invites, services
 from .invites import InvalidApplicantToken
 from .models import ApplicationInvite, StudentApplication
 from .serializers import (
-    ApplicantSubmissionSerializer,
     ApplicationApproveSerializer,
+    ApplicationDetailsSerializer,
     ApplicationInviteIssueSerializer,
     ApplicationInviteSerializer,
     ApplicationRejectSerializer,
@@ -237,6 +238,55 @@ class StudentApplicationViewSet(
             application.school_year = payload.validated_data["school_year"]
             application.updated_at = timezone.now()
             application.save(update_fields=["school_year", "updated_at"])
+        return Response(StudentApplicationDetailSerializer(application).data)
+
+    @action(detail=True, methods=["patch"])
+    def details(self, request, pk=None):
+        """
+        Correct what the family typed -- a misspelled name, a wrong birth
+        date, a guardian's number -- before the application is decided. Takes
+        the whole bundle, validated exactly as the applicant's submit was, and
+        re-derives the queue's columns and duplicate flags from it.
+
+        `revision` is the one the client loaded, so two staff correcting the
+        same application can't silently overwrite each other: the second save
+        is a 409, as the applicant's own autosave does. Not once approved --
+        the student record made from it is what to correct then -- and not
+        once rejected, which was a decision on what the family submitted.
+        """
+        body = ApplicationDetailsSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        # Validated before taking the lock: it is the slow part, and it needs
+        # nothing from the row.
+        payload = services.validated_payload(body.validated_data["payload"])
+        get_object_or_404(StudentApplication, pk=pk)
+        with transaction.atomic():
+            application = StudentApplication.objects.select_for_update().get(pk=pk)
+            if application.status == StudentApplication.APPROVED:
+                return Response(
+                    {"detail": "This application is approved. Correct the student record made from it."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if application.status not in (StudentApplication.SUBMITTED, StudentApplication.IN_REVIEW):
+                return Response(
+                    {"detail": f"An application that is '{application.status}' can't be corrected."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if application.revision != body.validated_data["revision"]:
+                return Response(
+                    {"detail": "Someone else saved changes to this application. Reload it and make your corrections again.",
+                     "code": "stale_revision"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            services.store_payload(application, payload)
+            application.revision += 1
+            application.updated_at = timezone.now()
+            application.save(update_fields=[
+                "payload_json", "lrn", "first_name", "last_name", "birth_date", "sex",
+                "contact_email", "contact_mobile",
+                "duplicate_matches_json", "duplicate_of_student_id",
+                "revision", "updated_at",
+            ])
         return Response(StudentApplicationDetailSerializer(application).data)
 
     @action(detail=True, methods=["post"])
@@ -456,43 +506,10 @@ class ApplySubmitView(APIView):
                     "submitted_at": application.submitted_at,
                 })
 
-            serializer = ApplicantSubmissionSerializer(data=application.payload_json)
-            serializer.is_valid(raise_exception=True)
-            validated_view = serializer.data  # JSON-safe (dates -> strings), see intake/services.py
-
-            student_data = validated_view.get("student", {})
-            matches = duplicates.find_matches(student_data)
-
-            # ApplicantSubmissionSerializer declares only the five keys that go
-            # on to become real records, so `serializer.data` does not carry
-            # `applying_for` -- and assigning it wholesale below used to destroy
-            # the grade level the applicant chose. That key is the only piece of
-            # enrolment intent the kiosk collects, and StudentApplicationsPage
-            # reads it back on approval to prefill the enrolment form, so losing
-            # it here silently emptied that prefill.
-            #
-            # Re-whitelisted through the same allow-list the draft PATCH uses,
-            # so submit is no more permissive than autosave. It cannot reach a
-            # student record: intake/services.py re-whitelists to the student
-            # keys again before create_student_bundle.
-            from .serializers import ALLOWED_APPLYING_FOR_FIELDS, whitelist
-            applying_for = whitelist(
-                (application.payload_json or {}).get("applying_for"),
-                ALLOWED_APPLYING_FOR_FIELDS,
-            )
-            if applying_for:
-                validated_view["applying_for"] = applying_for
-
-            application.payload_json = validated_view
-            application.lrn = (student_data.get("lrn") or "").strip() or None
-            application.first_name = student_data.get("first_name", "")
-            application.last_name = student_data.get("last_name", "")
-            application.birth_date = student_data.get("birth_date") or None
-            application.sex = student_data.get("sex")
-            application.contact_email = student_data.get("email") or application.invite.contact_email
-            application.contact_mobile = student_data.get("mobile_number") or application.invite.contact_mobile
-            application.duplicate_matches_json = matches
-            application.duplicate_of_student_id = duplicates.strongest_student_id(matches)
+            # Validates, keeps the applicant's grade choice, and derives the
+            # queue's columns and duplicate flags -- shared with a registrar's
+            # correction (StudentApplicationViewSet.details).
+            services.store_payload(application, services.validated_payload(application.payload_json or {}))
             # A draft opened before applications carried a year takes the
             # invite's now.
             application.school_year = application.school_year or application.invite.school_year

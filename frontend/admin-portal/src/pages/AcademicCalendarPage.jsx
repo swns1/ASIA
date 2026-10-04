@@ -54,7 +54,8 @@ function exportCSV(events, schoolYear) {
       ev.school_year,
     ]);
   const csv = [header, ...rows].map((r) => r.map(quoteCSV).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  // BOM so Excel reads UTF-8 (see riskVocabulary.js downloadRiskCSV).
+  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href = url; a.download = `academic-calendar-SY${schoolYear}.csv`;

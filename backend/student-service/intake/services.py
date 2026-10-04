@@ -19,13 +19,16 @@ from students.serializers import (
 )
 from students.services import create_student_bundle
 
+from . import duplicates
 from .models import StudentApplication
 from .serializers import (
+    ALLOWED_APPLYING_FOR_FIELDS,
     ALLOWED_GUARDIAN_FIELDS,
     ALLOWED_HOUSEHOLD_FIELDS,
     ALLOWED_PREVIOUS_SCHOOL_FIELDS,
     ALLOWED_SIBLING_FIELDS,
     ALLOWED_STUDENT_FIELDS,
+    ApplicantSubmissionSerializer,
     whitelist,
 )
 
@@ -89,6 +92,83 @@ def transition(application, to_status, *, actor=None):
     if to_status == StudentApplication.IN_REVIEW and application.reviewed_by_user_id is None:
         application.reviewed_by_user_id = getattr(actor, "user_id", None) or getattr(actor, "id", None)
     application.save(update_fields=["status", "reviewed_by_user_id", "updated_at"])
+    return application
+
+
+def _named(row, key):
+    return isinstance(row, dict) and bool(str(row.get(key) or "").strip())
+
+
+def _without_blank_rows(raw_payload):
+    """Siblings and previous schools as the form leaves them, made valid.
+
+    The age box is optional on the form but the serializer took its empty
+    value ("") as a malformed number, so a family who added a sibling without
+    knowing the age could not submit -- and was told only "A valid integer is
+    required." An added-but-untouched row failed the same way on its blank
+    name. A row without a name carries nothing worth keeping (approval never
+    saved one), so it's dropped; a blank age is no age. Guardians are left
+    alone: a nameless guardian may still hold a phone number, so that one is
+    for the person filling the form to fix."""
+    payload = dict(raw_payload)
+    siblings = payload.get("siblings")
+    if isinstance(siblings, list):
+        payload["siblings"] = [
+            {**s, "age": None if s.get("age") == "" else s.get("age")}
+            for s in siblings if _named(s, "full_name")
+        ]
+    schools = payload.get("previous_schools")
+    if isinstance(schools, list):
+        payload["previous_schools"] = [p for p in schools if _named(p, "school_name")]
+    return payload
+
+
+def validated_payload(raw_payload):
+    """`raw_payload` strictly validated, in its JSON-safe form (dates as
+    strings). Raises ValidationError. The one check both an applicant's
+    submit and a registrar's correction go through, so a corrected
+    application is held to exactly what a submitted one was.
+
+    ApplicantSubmissionSerializer declares only the five keys that go on to
+    become real records, so `serializer.data` does not carry `applying_for`
+    -- and taking it wholesale used to destroy the grade level the applicant
+    chose. That key is the only piece of enrolment intent the form collects,
+    and StudentApplicationsPage reads it back on approval to prefill the
+    enrolment form. Re-whitelisted through the same allow-list the draft
+    PATCH uses, so this is no more permissive than autosave. It cannot reach
+    a student record: _whitelisted_bundle drops it before
+    create_student_bundle."""
+    if not isinstance(raw_payload, dict):
+        raise serializers.ValidationError({"payload": "payload must be an object."})
+    serializer = ApplicantSubmissionSerializer(data=_without_blank_rows(raw_payload))
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.data
+    applying_for = whitelist(raw_payload.get("applying_for"), ALLOWED_APPLYING_FOR_FIELDS)
+    if applying_for:
+        payload["applying_for"] = applying_for
+    return payload
+
+
+def store_payload(application, payload):
+    """Puts a validated bundle (see validated_payload) on `application`,
+    with the columns derived from it: the identity the review queue filters
+    and sorts on, and the duplicate flags. Derived here, never taken from
+    the client, so the payload and the columns can't disagree -- and in one
+    place, so submit and a correction can't derive them differently.
+    Doesn't save."""
+    student = payload.get("student", {})
+    matches = duplicates.find_matches(student, exclude_application_id=application.pk)
+
+    application.payload_json = payload
+    application.lrn = (student.get("lrn") or "").strip() or None
+    application.first_name = student.get("first_name", "")
+    application.last_name = student.get("last_name", "")
+    application.birth_date = student.get("birth_date") or None
+    application.sex = student.get("sex")
+    application.contact_email = student.get("email") or application.invite.contact_email
+    application.contact_mobile = student.get("mobile_number") or application.invite.contact_mobile
+    application.duplicate_matches_json = matches
+    application.duplicate_of_student_id = duplicates.strongest_student_id(matches)
     return application
 
 

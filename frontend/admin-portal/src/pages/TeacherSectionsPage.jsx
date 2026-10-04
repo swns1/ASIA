@@ -24,6 +24,8 @@ import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
 import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 import { localISODate, todayISO } from "../utils/format";
+import { OBSERVED_VALUES, observedMark, observedValueMeta } from "../constants/observedValues";
+import useLatestRequest from "../hooks/useLatestRequest";
 
 const SCHOOL_LEVEL_LABELS = {
   nursery: "Nursery",
@@ -64,16 +66,10 @@ const PERIOD_LABELS = {
 
 const PASS_THRESHOLD = GRADE_PASSING;
 
-// Same palette as GradesPage.jsx's NarrativeSection, so a rating reads the
-// same color whether it's set here or on the per-student Grades page.
-const NARRATIVE_RATINGS = [
-  { value: "outstanding",       label: "Outstanding",       color: "#1455a0", bg: "#e3f0fd" },
-  { value: "satisfactory",      label: "Satisfactory",      color: "#2e6b0d", bg: "#e8f5e0" },
-  { value: "needs_improvement", label: "Needs Improvement", color: "#854f0b", bg: "#faeeda" },
-];
-
+// The DepEd Observed Values marks, shared with GradesPage.jsx and SF9 (see
+// constants/observedValues.js), so a rating reads the same everywhere.
 function narrativeRatingColor(value) {
-  const r = NARRATIVE_RATINGS.find((x) => x.value === value);
+  const r = observedValueMeta(value);
   return r ? { color: r.color, bg: r.bg } : { color: "#7a5050", bg: "#fffbfb" };
 }
 
@@ -277,8 +273,12 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
     setPeriod(periods[0] ?? "");
   }, [advisory.school_level]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Only the newest load fills the grid: an older subject's or period's grades
+  // landing last would otherwise be saved under the one now selected.
+  const beginLoad = useLatestRequest();
   const loadGrid = useCallback(async () => {
     if (!subjectId || !period) return;
+    const isCurrent = beginLoad();
     setLoading(true);
     try {
       const data = await getSectionGrades({
@@ -287,6 +287,7 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
         grading_period: period,
         teacher_user_id: advisory.teacher_user_id,
       });
+      if (!isCurrent()) return;
       const list = Array.isArray(data) ? data : [];
       setRows(list);
       const nextDrafts = {};
@@ -295,12 +296,13 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
       });
       setDrafts(nextDrafts);
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(e.message || "Failed to load grades.");
       setRows([]);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [advisory.advisory_id, subjectId, period]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [advisory.advisory_id, subjectId, period, beginLoad]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -484,8 +486,11 @@ function NarrativeTab({ advisory, readOnly = false }) {
       .finally(() => setCategoriesLoading(false));
   }, []);
 
+  // Only the newest load fills the grid (see the grades tab).
+  const beginLoad = useLatestRequest();
   const loadGrid = useCallback(async () => {
     if (!period) return;
+    const isCurrent = beginLoad();
     setLoading(true);
     try {
       const data = await getSectionNarrativeReports({
@@ -493,20 +498,26 @@ function NarrativeTab({ advisory, readOnly = false }) {
         grading_period: period,
         teacher_user_id: advisory.teacher_user_id,
       });
+      if (!isCurrent()) return;
       const list = Array.isArray(data) ? data : [];
       setRows(list);
       const nextDrafts = {};
+      // Older rows' words become their marks here, so the grid shows and
+      // "Save all" stores the mark SF9 prints for them.
       list.forEach((r) => {
-        nextDrafts[r.student.student_id] = { ...r.ratings };
+        nextDrafts[r.student.student_id] = Object.fromEntries(
+          Object.entries(r.ratings ?? {}).map(([category, rating]) => [category, observedMark(rating)])
+        );
       });
       setDrafts(nextDrafts);
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(e.message || "Failed to load narrative reports.");
       setRows([]);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [advisory.advisory_id, advisory.teacher_user_id, period]);
+  }, [advisory.advisory_id, advisory.teacher_user_id, period, beginLoad]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -582,12 +593,14 @@ function NarrativeTab({ advisory, readOnly = false }) {
         {!readOnly && (
           <button
             onClick={handleSaveAll}
-            disabled={saving}
+            // Not while loading: the grid still holds the previous period's
+            // ratings, and saving would file them under the period just picked.
+            disabled={saving || loading}
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-              background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+              background: saving || loading ? "#e87474" : "#e03131", color: "white", border: "none",
               borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
-              cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
+              cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
             }}
           >
             <i className="ti ti-device-floppy" style={{ fontSize: 13 }} />
@@ -634,7 +647,7 @@ function NarrativeTab({ advisory, readOnly = false }) {
                               className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
                               style={value ? { color: rc.color, background: rc.bg } : { color: "#8a6a6a" }}
                             >
-                              {NARRATIVE_RATINGS.find((nr) => nr.value === value)?.label ?? "—"}
+                              {observedValueMeta(value)?.label ?? "—"}
                             </span>
                           ) : (
                             <select
@@ -648,8 +661,8 @@ function NarrativeTab({ advisory, readOnly = false }) {
                               }}
                             >
                               <option value="">—</option>
-                              {NARRATIVE_RATINGS.map((nr) => (
-                                <option key={nr.value} value={nr.value}>{nr.label}</option>
+                              {OBSERVED_VALUES.map((nr) => (
+                                <option key={nr.value} value={nr.value}>{nr.value} — {nr.label}</option>
                               ))}
                             </select>
                           )}
@@ -681,11 +694,17 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Only the newest load fills the grid. Stepping through dates faster than
+  // the server answers could land an earlier day's marks under the date now
+  // shown, and "Save all" would then write them onto it.
+  const beginLoad = useLatestRequest();
   const loadGrid = useCallback(async () => {
     if (!date) return;
+    const isCurrent = beginLoad();
     setLoading(true);
     try {
       const data = await getSectionAttendance({ advisory_id: advisory.advisory_id, date, teacher_user_id: advisory.teacher_user_id });
+      if (!isCurrent()) return;
       const list = Array.isArray(data) ? data : [];
       setRows(list);
       const nextDrafts = {};
@@ -700,12 +719,13 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
       setDrafts(nextDrafts);
       if (date === todayISO() && onTodayChange) onTodayChange(nextDrafts);
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(e.message || "Failed to load attendance.");
       setRows([]);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [advisory.advisory_id, date, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [advisory.advisory_id, date, readOnly, beginLoad]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -1453,22 +1473,28 @@ export default function TeacherSectionsPage() {
       });
   }, [isTeacher]);
 
+  // Picking one teacher and then another must not leave the first one's
+  // sections under the second one's name.
+  const beginFetch = useLatestRequest();
   const fetchSections = useCallback(async (teacherUserId) => {
+    const isCurrent = beginFetch();
     setLoading(true);
     try {
       const params = teacherUserId ? { teacher_user_id: teacherUserId } : {};
       const data = await getMySections(params);
+      if (!isCurrent()) return;
       const list = Array.isArray(data) ? data : [];
       setSections(list);
       setSelectedKey(list[0]?.advisory?.advisory_id ?? null);
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(e.message || "Failed to load sections.");
       setSections([]);
       setSelectedKey(null);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [beginFetch]);
 
   useEffect(() => {
 
@@ -1477,11 +1503,12 @@ export default function TeacherSectionsPage() {
     } else if (selectedTeacherId) {
       fetchSections(selectedTeacherId);
     } else {
+      beginFetch(); // drops a teacher's sections still on the way
       setSections([]);
       setSelectedKey(null);
       setLoading(false);
     }
-  }, [isTeacher, selectedTeacherId, fetchSections, navigate]);
+  }, [isTeacher, selectedTeacherId, fetchSections, navigate, beginFetch]);
 
   const selectedEntry = useMemo(
     () => sections.find((e) => e.advisory.advisory_id === selectedKey) ?? null,

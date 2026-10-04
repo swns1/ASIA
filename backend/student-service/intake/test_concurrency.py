@@ -142,7 +142,7 @@ class TestInviteSingleConsumption:
 
         with patch("intake.invites.StudentApplication.objects.select_related") as select_related, \
              patch("intake.views.StudentApplication.objects.select_for_update") as select_for_update, \
-             patch("intake.views.duplicates.find_matches", return_value=[]), \
+             patch("intake.duplicates.find_matches", return_value=[]), \
              patch("intake.views.ApplicationInvite.objects.filter") as invite_filter, \
              patch("intake.views.transaction.atomic", return_value=nullcontext()):
             select_related.return_value.get.return_value = application

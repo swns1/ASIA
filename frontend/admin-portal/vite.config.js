@@ -52,17 +52,21 @@ function assertApiUrlsConfigured(mode) {
 /**
  * @tabler/icons-webfont declares one @font-face listing woff2, woff and ttf.
  * A browser downloads only the first format it supports — so in practice every
- * user fetches the 457 kB woff2 — but the build still *emits* all three,
+ * user fetches the 820 kB woff2 — but the build still *emits* all three,
  * putting 3.6 MB of dead weight into dist/ that has to be uploaded, stored and
  * served on the off-chance a browser from 2015 arrives. woff2 has been
  * supported everywhere since then, and this app targets React 19 + ES modules,
  * which rules out anything that would need the fallbacks anyway.
  *
- * Done as a transform rather than by vendoring a trimmed copy of the CSS so a
- * `npm update @tabler/icons-webfont` still picks up new glyphs; there is no
- * second copy to fall out of sync. `enforce: 'pre'` matters — this has to run
- * before vite:css resolves the url() references, or the woff and ttf get
- * emitted as assets before we drop them.
+ * Done as a transform rather than by vendoring a trimmed copy of the CSS so
+ * bumping @tabler/icons-webfont still picks up new glyphs; there is no second
+ * copy to fall out of sync. `enforce: 'pre'` matters — this has to run before
+ * vite:css resolves the url() references, or the woff and ttf get emitted as
+ * assets before we drop them.
+ *
+ * The package is pinned to exactly 3.31.0 (see the dependency scan in
+ * .github/workflows/ci.yml for why). That is also why the woff2 is 820 kB and
+ * not the 457 kB of 3.44+, which moved the filled glyphs into a separate font.
  */
 function tablerIconsWoff2Only() {
   return {

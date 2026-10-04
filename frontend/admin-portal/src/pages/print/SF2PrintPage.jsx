@@ -80,7 +80,7 @@ export default function SF2PrintPage() {
   const school_year = sp.get("school_year") || "";
   const grade_level = sp.get("grade_level") || "";
   const section     = sp.get("section")     || "";
-  const month       = sp.get("month")       || new Date().toISOString().slice(0, 7);
+  const month       = sp.get("month")       || localISODate(new Date()).slice(0, 7);
   const adviser     = sp.get("adviser")     || "";
   const division    = sp.get("division")    || "";
   const region      = sp.get("region")      || "";

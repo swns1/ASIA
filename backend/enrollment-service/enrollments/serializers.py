@@ -102,10 +102,16 @@ class SchoolYearSerializer(serializers.ModelSerializer):
                 overlap = overlap.exclude(pk=self.instance.pk)
             clash = overlap.first()
             if clash is not None:
+                # Not "%-d": that unpadded-day flag is glibc-only, and on the
+                # Windows server strftime raises on it -- the overlap answered
+                # 500 instead of saying which year it clashes with.
+                def day(d):
+                    return f"{d:%b} {d.day}, {d.year}"
+
                 raise serializers.ValidationError({
                     "start_date": (
                         f"These dates overlap S.Y. {clash.label} "
-                        f"({clash.start_date:%b %-d, %Y} – {clash.end_date:%b %-d, %Y})."
+                        f"({day(clash.start_date)} – {day(clash.end_date)})."
                     ),
                 })
         return attrs

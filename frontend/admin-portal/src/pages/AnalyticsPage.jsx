@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -16,6 +16,9 @@ import EmptyState from "../components/EmptyState";
 import Table, { TableCell, TableRow } from "../components/ui/Table";
 import { Field, Select } from "../components/FormField";
 import AIInsightPanel from "../components/AIInsightPanel";
+import ChartFrame from "../components/charts/ChartFrame";
+import { SURFACE, chartInk, token } from "../components/charts/tokens";
+import useElementSize from "../components/charts/useElementSize";
 
 import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
@@ -108,23 +111,41 @@ function formatWhen(iso) {
 // ── Risk over time ───────────────────────────────────────────────────────────
 // One student's concern level across every saved assessment. Point colour is
 // the band at that run, so the line reads as a sequence of states rather than
-// one flat series; the connecting line stays structural grey.
+// one flat series; the connecting line stays structural grey. The vertical
+// axis is named by the four bands themselves, each over its own tint, so a
+// point reads as "in Needs attention" rather than as a number to look up.
 
-function RiskTrendChart({ points }) {
-  const [hovered, setHovered] = useState(null);
+// Score edges of each band -- the backend's RISK_LEVEL_THRESHOLDS in
+// ai/services.py. Change them together.
+const TREND_BANDS = [
+  { level: "low", from: 0, to: 25 },
+  { level: "moderate", from: 25, to: 50 },
+  { level: "high", from: 50, to: 75 },
+  { level: "critical", from: 75, to: 100 },
+];
+
+function RiskTrendChart({ points, name }) {
+  const [tip, setTip] = useState(null);
+  const [plotEl, setPlotEl] = useState(null);
+  const size = useElementSize(plotEl);
   if (!points?.length) return null;
 
-  const W = 760;
-  const H = 190;
-  const PAD_L = 40;
-  const PAD_R = 20;
-  const PAD_T = 16;
-  const PAD_B = 34;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
+  const ink = chartInk();
+  // The card's own width, so the band names and dates stay their real size.
+  const W = size?.width ?? 760;
+  const H = 220;
+  const PAD_L = 136;  // room for the longest band name
+  const PAD_R = 24;
+  const PAD_T = 14;
+  const PAD_B = 36;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+  const baseY = PAD_T + plotH;
 
-  const scaleX = (i) => (points.length === 1 ? PAD_L + innerW / 2 : PAD_L + (i / (points.length - 1)) * innerW);
-  const scaleY = (score) => PAD_T + innerH - (score / 100) * innerH;
+  // 20px inset so the first and last points don't sit on the band edges.
+  const scaleX = (i) =>
+    points.length === 1 ? PAD_L + plotW / 2 : PAD_L + 20 + (i / (points.length - 1)) * (plotW - 40);
+  const scaleY = (score) => PAD_T + plotH - (score / 100) * plotH;
 
   const linePath = points
     .map((p, i) => `${i === 0 ? "M" : "L"} ${scaleX(i)} ${scaleY(p.risk_score)}`)
@@ -135,65 +156,75 @@ function RiskTrendChart({ points }) {
   // overlapping dates.
   const labelStep = Math.max(1, Math.ceil(points.length / 8));
 
+  const first = points[0];
+  const last = points[points.length - 1];
+  const at = (p) => `${riskLevelMeta(p.risk_level).label} on ${fmtDate(p.created_at)}`;
+  const title = points.length === 1 ? `${name}: ${at(first)}` : `${name}: ${at(first)} to ${at(last)}`;
+
   return (
-    <div className="relative mx-auto w-full max-w-5xl">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ background: "#fdfcfb", borderRadius: 10 }} role="img">
+    <div className="mx-auto w-full max-w-5xl">
+      <ChartFrame viewBox={[W, H]} tip={tip} plotRef={setPlotEl} title={title}>
+        {TREND_BANDS.map((band) => {
+          const meta = riskLevelMeta(band.level);
+          const top = scaleY(band.to);
+          const bottom = scaleY(band.from);
+          return (
+            <g key={band.level}>
+              <rect x={PAD_L} y={top} width={plotW} height={bottom - top} fill={meta.tint} />
+              <text
+                x={PAD_L - 12} y={(top + bottom) / 2 + 4}
+                textAnchor="end" fontSize="11" fontWeight="600" fill={token("--color-neutral-700")}
+              >
+                {meta.label}
+              </text>
+            </g>
+          );
+        })}
         {[25, 50, 75].map((mark) => (
-          <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke="#f0e4e4" />
+          <line key={mark} x1={PAD_L} x2={W - PAD_R} y1={scaleY(mark)} y2={scaleY(mark)} stroke={ink.grid} />
         ))}
-        {[0, 50, 100].map((mark) => (
-          <text key={mark} x={PAD_L - 8} y={scaleY(mark) + 3} textAnchor="end" fontSize="10" fill="#8a6a6a">
-            {mark === 0 ? "Fine" : mark === 100 ? "Urgent" : ""}
-          </text>
-        ))}
-        <line x1={PAD_L} x2={W - PAD_R} y1={H - PAD_B} y2={H - PAD_B} stroke="#f0e4e4" />
-        <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={H - PAD_B} stroke="#f0e4e4" />
+        <line x1={PAD_L} x2={W - PAD_R} y1={baseY} y2={baseY} stroke={ink.grid} />
 
         {points.map((p, i) =>
           i % labelStep === 0 ? (
-            <text key={p.run_id} x={scaleX(i)} y={H - PAD_B + 16} textAnchor="middle" fontSize="10" fill="#8a6a6a">
+            <text key={p.run_id} x={scaleX(i)} y={baseY + 20} textAnchor="middle" fontSize="11" fill={ink.axis}>
               {fmtDate(p.created_at)}
             </text>
           ) : null
         )}
 
-        <path d={linePath} fill="none" stroke="#cbb3b3" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={linePath} fill="none"
+          stroke={token("--color-neutral-400")} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+        />
 
         {points.map((p, i) => {
           const meta = riskLevelMeta(p.risk_level);
+          const cx = scaleX(i);
+          const cy = scaleY(p.risk_score);
           return (
             <g key={p.run_id}>
-              <circle cx={scaleX(i)} cy={scaleY(p.risk_score)} r={5.5} fill={meta.color} stroke="#fdfcfb" strokeWidth={2.5} />
+              <circle cx={cx} cy={cy} r={5.5} fill={meta.color} stroke={SURFACE} strokeWidth={2.5} />
               <circle
-                cx={scaleX(i)}
-                cy={scaleY(p.risk_score)}
+                cx={cx}
+                cy={cy}
                 r={12}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
-                onMouseEnter={() => setHovered({ ...p, i })}
-                onMouseLeave={() => setHovered(null)}
+                onMouseEnter={() =>
+                  setTip({
+                    x: cx,
+                    y: cy,
+                    title: formatWhen(p.created_at),
+                    lines: [`${meta.label} · ${periodLabel(p.grading_period)}`],
+                  })
+                }
+                onMouseLeave={() => setTip(null)}
               />
             </g>
           );
         })}
-      </svg>
-
-      {hovered && (
-        <div
-          className="pointer-events-none absolute z-10 w-max max-w-[240px] rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-xs shadow-lg"
-          style={{
-            left: `${(scaleX(hovered.i) / W) * 100}%`,
-            top: `${(scaleY(hovered.risk_score) / H) * 100}%`,
-            transform: `translate(${hovered.i > points.length * 0.62 ? "-100%" : "0"}, calc(-100% - 8px))`,
-          }}
-          role="tooltip"
-        >
-          <div className="font-bold text-neutral-900">{formatWhen(hovered.created_at)}</div>
-          <div className="mt-0.5 text-neutral-600">
-            {riskLevelMeta(hovered.risk_level).label} · {periodLabel(hovered.grading_period)}
-          </div>
-        </div>
-      )}
+      </ChartFrame>
     </div>
   );
 }
@@ -373,6 +404,18 @@ export default function AnalyticsPage() {
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState(null);
 
+  // The newest request of each kind. An answer that arrives after a newer
+  // request was made is for a selection the reader has already left, and is
+  // dropped -- otherwise a slow response lands last and shows one year's
+  // numbers under another's filters. A cold load always asks twice (the
+  // fallback year, then the configured one), so this is not a rare race.
+  const riskRequest = useRef(0);
+  const trendRequest = useRef(0);
+  const groupsRequest = useRef(0);
+  // Set when a chart opens a student, so the detail panel is scrolled to: it
+  // sits under the follow-up list, which may not even include them.
+  const revealStudent = useRef(false);
+
   const TABS = useMemo(
     () =>
       [
@@ -391,18 +434,61 @@ export default function AnalyticsPage() {
   );
   const { active, direction, setActive } = useTabs(TABS);
 
+  // The open student, the last error and the groups all belong to the
+  // selection they were made for. Left in place, a new selection showed the
+  // old error over a valid result, a student who may not be in the new list,
+  // and groups computed for different filters with nothing saying so.
+  function clearGroups() {
+    groupsRequest.current += 1;
+    setGroups(null);
+    setGroupsError(null);
+  }
+
+  function closeStudent() {
+    trendRequest.current += 1;
+    setSelectedStudent(null);
+  }
+
+  function startNewSelection() {
+    setRiskError(null);
+    closeStudent();
+    clearGroups();
+  }
+
+  function changeSchoolYear(value) {
+    startNewSelection();
+    setSchoolYear(value);
+  }
+
+  function changeGradingPeriod(value) {
+    startNewSelection();
+    setGradingPeriod(value);
+  }
+
   // Changing a level invalidates the narrower selections beneath it. Done in
   // the handler rather than an effect so there is no intermediate render
   // showing a grade level that doesn't belong to the chosen school level.
   function changeSchoolLevel(value) {
+    startNewSelection();
     setSchoolLevel(value);
     setGradeLevel("");
     setSubjectId("");
   }
 
   function changeGradeLevel(value) {
+    startNewSelection();
     setGradeLevel(value);
     setSubjectId("");
+  }
+
+  function changeSubject(value) {
+    clearGroups();
+    setSubjectId(value);
+  }
+
+  function changeGroupCount(value) {
+    clearGroups();
+    setGroupCount(value);
   }
 
   const gradeOptions = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All grades"];
@@ -437,20 +523,25 @@ export default function AnalyticsPage() {
   // Show the last saved assessment on arrival so the page is never blank for
   // someone who only reads it (a teacher can't trigger a run at all).
   useEffect(() => {
+    const request = ++riskRequest.current;
     _getRiskAssessmentLatest(filters)
       .then((d) => {
+        if (request !== riskRequest.current) return;
         setRisk(d);
         setRiskIsLatest(true);
       })
       .catch(() => {
+        if (request !== riskRequest.current) return;
         setRisk(null);
         setRiskIsLatest(false);
       });
   }, [filters]);
 
   const runAssessment = useCallback(async () => {
+    const request = ++riskRequest.current;
     setRiskLoading(true);
     setRiskError(null);
+    trendRequest.current += 1;
     setSelectedStudent(null);
     try {
       const data = await _runRiskAssessment({
@@ -459,9 +550,11 @@ export default function AnalyticsPage() {
         school_level: schoolLevel || undefined,
         grade_level: gradeLevel || undefined,
       });
+      if (request !== riskRequest.current) return;
       setRisk(data);
       setRiskIsLatest(false);
     } catch (e) {
+      if (request !== riskRequest.current) return;
       setRiskError(e.response?.data?.detail || e.message || "Could not check students.");
     } finally {
       setRiskLoading(false);
@@ -469,6 +562,7 @@ export default function AnalyticsPage() {
   }, [schoolYear, gradingPeriod, schoolLevel, gradeLevel]);
 
   const loadGroups = useCallback(async () => {
+    const request = ++groupsRequest.current;
     setGroupsLoading(true);
     setGroupsError(null);
     try {
@@ -483,27 +577,46 @@ export default function AnalyticsPage() {
         // meant "3 groups" no matter what the data said.
         n_clusters: groupCount === "auto" ? "auto" : Number(groupCount),
       };
-      setGroups(await _getAiCluster(params));
+      const result = await _getAiCluster(params);
+      if (request === groupsRequest.current) setGroups(result);
     } catch (e) {
-      setGroupsError(e.response?.data?.error || e.message || "Could not group students.");
+      if (request === groupsRequest.current) {
+        setGroupsError(e.response?.data?.error || e.message || "Could not group students.");
+      }
     } finally {
       setGroupsLoading(false);
     }
   }, [schoolYear, gradingPeriod, schoolLevel, gradeLevel, subjectId, groupCount]);
 
+  // Clicking one student and then another before the first history arrives
+  // must not leave the first one's history under the second one's name.
   const selectStudent = useCallback((row) => {
+    const request = ++trendRequest.current;
     setSelectedStudent(row);
     setTrend(null);
     setTrendLoading(true);
     _getRiskAssessmentTrend(row.student_id)
-      .then(setTrend)
-      .catch(() => setTrend(null))
-      .finally(() => setTrendLoading(false));
+      .then((d) => {
+        if (request === trendRequest.current) setTrend(d);
+      })
+      .catch(() => {
+        if (request === trendRequest.current) setTrend(null);
+      })
+      .finally(() => {
+        if (request === trendRequest.current) setTrendLoading(false);
+      });
   }, []);
 
   function openStudentFromChart(row) {
+    revealStudent.current = true;
     setActive("students");
     selectStudent(row);
+  }
+
+  function scrollToStudent(el) {
+    if (!el || !revealStudent.current) return;
+    revealStudent.current = false;
+    el.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
   const counts = risk?.summary?.by_level ?? {};
@@ -536,7 +649,7 @@ export default function AnalyticsPage() {
           <Card>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Field label="School year" htmlFor="an-year">
-                <Select id="an-year" value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)}>
+                <Select id="an-year" value={schoolYear} onChange={(e) => changeSchoolYear(e.target.value)}>
                   {globalYearOptions.map((y) => (
                     <option key={y} value={y}>
                       {y}
@@ -545,7 +658,7 @@ export default function AnalyticsPage() {
                 </Select>
               </Field>
               <Field label="Grading period" htmlFor="an-period">
-                <Select id="an-period" value={gradingPeriod} onChange={(e) => setGradingPeriod(e.target.value)}>
+                <Select id="an-period" value={gradingPeriod} onChange={(e) => changeGradingPeriod(e.target.value)}>
                   {PERIOD_OPTIONS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}
@@ -648,20 +761,17 @@ export default function AnalyticsPage() {
                   </div>
 
                   <Card padding="none" className="overflow-hidden">
+                    {/* The selected chip already names the chart, so no
+                        title line repeats it above the chips. */}
                     <div className="border-b border-neutral-200 px-5 py-4">
-                      <div className="font-bold text-neutral-900">
-                        {CHART_OPTIONS.find((o) => o.value === chartView)?.label}
-                      </div>
-                      <div className="mt-0.5 text-xs text-neutral-500">{chartBlurb(chartView)}</div>
-                      <div className="mt-3">
-                        <ChipGroup
-                          options={CHART_OPTIONS}
-                          value={chartView}
-                          onChange={setChartView}
-                          label="Choose a chart"
-                          size="sm"
-                        />
-                      </div>
+                      <ChipGroup
+                        options={CHART_OPTIONS}
+                        value={chartView}
+                        onChange={setChartView}
+                        label="Choose a chart"
+                        size="sm"
+                      />
+                      <div className="mt-2.5 text-xs text-neutral-500">{chartBlurb(chartView)}</div>
                     </div>
                     <div className="mx-auto w-full max-w-5xl p-5">
                       {viewUsesBands(chartView) && <RiskLegend counts={counts} className="mb-4" />}
@@ -707,6 +817,7 @@ export default function AnalyticsPage() {
                     {selectedStudent && (
                       <motion.div
                         key={`trend-${selectedStudent.student_id}`}
+                        ref={scrollToStudent}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 8 }}
@@ -717,7 +828,7 @@ export default function AnalyticsPage() {
                           subtitle="How this student's situation has changed across saved checks"
                           icon="ti-timeline"
                           action={
-                            <Button variant="ghost" size="sm" icon="ti-x" onClick={() => setSelectedStudent(null)}>
+                            <Button variant="ghost" size="sm" icon="ti-x" onClick={closeStudent}>
                               Close
                             </Button>
                           }
@@ -749,7 +860,10 @@ export default function AnalyticsPage() {
                           {trendLoading && <p className="py-6 text-center text-sm text-neutral-500">Loading history…</p>}
                           {!trendLoading && trend?.points?.length > 0 && (
                             <>
-                              <RiskTrendChart points={trend.points} />
+                              <RiskTrendChart
+                                points={trend.points}
+                                name={selectedStudent.student_name ?? `Student #${selectedStudent.student_id}`}
+                              />
                               {trend.points.length === 1 && (
                                 <p className="mt-2 text-xs text-neutral-500">
                                   Only one check saved so far — run another later to see whether this improves.
@@ -777,7 +891,7 @@ export default function AnalyticsPage() {
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div className="grid flex-1 gap-3 sm:grid-cols-2">
                         <Field label="Subject" hint="Leave on all subjects to group by overall performance" htmlFor="an-subject">
-                          <Select id="an-subject" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
+                          <Select id="an-subject" value={subjectId} onChange={(e) => changeSubject(e.target.value)}>
                             <option value="">All subjects</option>
                             {subjects.map((s) => (
                               <option key={s.subject_id} value={s.subject_id}>
@@ -787,7 +901,7 @@ export default function AnalyticsPage() {
                           </Select>
                         </Field>
                         <Field label="How many groups?" htmlFor="an-groups">
-                          <Select id="an-groups" value={groupCount} onChange={(e) => setGroupCount(e.target.value)}>
+                          <Select id="an-groups" value={groupCount} onChange={(e) => changeGroupCount(e.target.value)}>
                             {GROUP_COUNT_OPTIONS.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}

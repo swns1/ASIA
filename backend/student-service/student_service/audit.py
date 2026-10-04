@@ -94,6 +94,8 @@ class AuditLogMiddleware(BaseAuditLogMiddleware):
             return "Rejected student application"
         if "/claim/" in request.path:
             return "Claimed student application"
+        if "/details/" in request.path:
+            return "Corrected student application"
         return super().action_label(request)
 
     def detail_message(self, request, response):
@@ -107,6 +109,9 @@ class AuditLogMiddleware(BaseAuditLogMiddleware):
         if "/claim/" in request.path:
             return ("Application was claimed for review." if success
                     else "Application could not be claimed.")
+        if "/details/" in request.path:
+            return ("Application details were corrected." if success
+                    else "Application details could not be saved. Please review the corrected details.")
         return super().detail_message(request, response)
 
     def identify_user(self, request):
