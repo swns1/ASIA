@@ -26,7 +26,7 @@ from pathlib import Path
 
 from seed_spec import (
     APPLICATIONS, CALENDARS, CURRENT_SY, D, DEMO_GUARDIANS, DISCOUNT_TYPES, DOC_NAMES, EARLY_BIRD_DAYS,
-    ENROLLMENTS, FEE_NOTES, HOUSEHOLDS, INVITES, LADDER, LEVEL_OF, LRN_BLOCK, PASSWORD, PLAN_PCT,
+    ENROLLMENTS, FEE_NOTES, HOUSEHOLDS, INVITES, LADDER, LEVEL_OF, LRN_BLOCK, LRN_LIKE, LRN_WIDTH, PASSWORD, PLAN_PCT,
     PINNED_NUMBERS, PLAN_SHAPE, PLAN_TYPE, PROFILE, PROFILES, REGISTRAR, REQUIRED_ALL, REQUIRED_TRANSFEREE,
     SCHOLARSHIP_TYPES, SECTION_CREATED, SECTIONS, STAFF, SY1, SY2, TODAY, d, fee_items,
     subject_catalogue,
@@ -462,7 +462,7 @@ def pdf_bytes(lines):
 # BUILD
 # ════════════════════════════════════════════════════════════════════════════
 def lrn_of(p):
-    return f"{LRN_BLOCK}{p['student_id']:03d}"
+    return f"{LRN_BLOCK}{p['student_id']:0{LRN_WIDTH}d}"
 
 
 def full_name(p):
@@ -797,7 +797,7 @@ def build(hashes, media_dirs):
         "Rows for any other learner are never touched. Shared set-up (years,\n"
         "subjects, sections, calendar, fees, accounts) is insert-if-missing below."))
     w(f"""CREATE TEMP TABLE seed_learner_ids ON COMMIT DROP AS
-  SELECT student_id FROM students WHERE lrn LIKE '{LRN_BLOCK}%';
+  SELECT student_id FROM students WHERE lrn LIKE '{LRN_LIKE}';
 CREATE TEMP TABLE seed_enrollment_ids ON COMMIT DROP AS
   SELECT enrollment_id FROM enrollments WHERE student_id IN (SELECT student_id FROM seed_learner_ids);
 
@@ -1130,7 +1130,7 @@ END $$;
       + values(grade_rows, "    ") + "\n  ) AS v(eid, code, period, grade, remarks, rec)\n"
       "  JOIN enrollments e ON e.enrollment_id = v.eid\n"
       "  JOIN subjects sub ON sub.subject_code = v.code AND sub.school_year = e.school_year;\n")
-    w(f"DO $$\nBEGIN\n  IF (SELECT count(*) FROM grades WHERE enrollment_id IN (SELECT enrollment_id FROM enrollments e JOIN students s USING (student_id) WHERE s.lrn LIKE '{LRN_BLOCK}%')) <> {len(grade_rows)} THEN\n"
+    w(f"DO $$\nBEGIN\n  IF (SELECT count(*) FROM grades WHERE enrollment_id IN (SELECT enrollment_id FROM enrollments e JOIN students s USING (student_id) WHERE s.lrn LIKE '{LRN_LIKE}')) <> {len(grade_rows)} THEN\n"
       "    RAISE EXCEPTION 'grades did not all resolve to a subject';\n  END IF;\nEND $$;\n")
     w("INSERT INTO narrative_reports (enrollment_id, category_id, grading_period, rating, recorded_at) VALUES\n"
       + values(narrative_rows) + ";\n")
@@ -1227,7 +1227,7 @@ BEGIN
   SELECT count(*) INTO bad
     FROM student_invoices i
    WHERE i.enrollment_id IN (SELECT e.enrollment_id FROM enrollments e JOIN students s USING (student_id)
-                              WHERE s.lrn LIKE '""" + LRN_BLOCK + """%')
+                              WHERE s.lrn LIKE '""" + LRN_LIKE + """')
      AND (  (SELECT COALESCE(sum(amount), 0) FROM student_invoice_items x WHERE x.invoice_id = i.invoice_id)
           - (SELECT COALESCE(sum(amount), 0) FROM student_invoice_discounts x WHERE x.invoice_id = i.invoice_id))
          <> (SELECT COALESCE(sum(amount), 0) FROM invoice_installments x WHERE x.invoice_id = i.invoice_id AND x.status <> 'voided')

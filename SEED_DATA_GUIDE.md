@@ -3,7 +3,7 @@
 The complete reference for ASIA's mock (seed) data: what exists today, how it is built, every rule the data has to satisfy, how to check it, and how to ask for more.
 
 - **Last verified:** 2026-10-04. Tiers 3 and 4 are **loaded in the live database**; both passed a copy-load, an idempotent second load and the SQL invariants. The full app-level checks and test suites have **not** been re-run since Tier 2.5 (2026-10-02, 1344 tests).
-- **Current tier:** Tier 4, loaded. **145 learners in S.Y. 2025-2026** (finished) + **200 in S.Y. 2026-2027** (current, filled up to 2026-09-30); 251 distinct, 374 enrollments, 33 sections per year. The narrative in §9.1-9.4 is Tier 1 and historical — **§9.5 (Tier 2), §9.7 (Tier 2.5), §9.8 (Tier 3) and §9.9 (Tier 4) are what is loaded.** Use `--report` for exact per-learner detail.
+- **Current tier:** Tier 7, loaded. **315 learners in S.Y. 2025-2026** (finished) + **442 in S.Y. 2026-2027** (current, filled up to 2026-09-30); 551 distinct, 819 enrollments, 33 sections per year holding 7-18 learners each. The narrative in §9.1-9.4 is Tier 1 and historical — **§9.5, §9.7-§9.12 are what is loaded.** The LRN suffix is now 4 digits (§9.12). Use `--report` for exact per-learner detail.
 - **Database:** `SLIS THESIS FINAL` (local PostgreSQL, user `postgres`).
 
 ---
@@ -49,9 +49,14 @@ The complete reference for ASIA's mock (seed) data: what exists today, how it is
 
 | What | Used | Next free |
 |---|---|---|
-| student_id / household_id | 100-376 | **377+** |
-| enrollment_id | 200-378 (2025-2026), 400-600 (2026-2027) | **379+ / 601+** |
-| invoice_id | 300-453 (2025-2026), 500-698 (2026-2027) | **454+ / 699+** |
+| student_id / household_id | 100-676 (**cap 9999** since §9.12 widened the LRN suffix) | **677+** (~9,300 left) |
+| enrollment_id | …1600-1652, 2000-2069 (2025-2026); …1700-1784, 2600-2672 (2026-2027) | **2100+ / 2700+** |
+| invoice_id | …1800-1851, 3000-3069 (2025-2026); …1900-1984, 3600-3672 (2026-2027) | **3100+ / 3700+** |
+
+**The original 200-399 / 400-599 enrollment blocks (and 300-499 / 500-699 for
+invoices) are FULL.** Tier 5 moved to 1200+/1400+; continue in that high space
+rather than hunting for gaps. Check both the max id *and* the next block's
+floor before picking a range (§9.10).
 | application_id | 700-712 | **713+** |
 | LRN, student_number | derived / auto-assigned | nothing to pick |
 
@@ -61,7 +66,7 @@ must stay below 1000. Past 999 the LRN scheme needs widening.
 **The rule that bites: `PINNED_NUMBERS`.** Student numbers are handed out in *enrollment-date order*, so a learner added with a May 2025 date would renumber every existing learner after them. `PINNED_NUMBERS` freezes the 31 Tier 1/2 learners on the numbers they hold in the live database.
 
 - Never edit an existing pin. A learner with no entry takes the next free number for their year, and the generator raises on a duplicate.
-- **After a tier is loaded into the real database, pin its new learners too** — otherwise the next tier renumbers them. **All 251 learners through Tier 4 are pinned**, so a Tier 5 can be added safely. Pin Tier 5's learners once it is loaded.
+- **After a tier is loaded into the real database, pin its new learners too** — otherwise the next tier renumbers them. **All 551 learners through Tier 7 are pinned.** Pin the next tier's learners once it is loaded.
 
 **The procedure:**
 
@@ -85,14 +90,14 @@ must stay below 1000. Past 999 the LRN scheme needs widening.
 
 | | |
 |---|---|
-| Seeded year 1 | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; 145 learners. Not archived. |
-| Seeded year 2 | **S.Y. 2026-2027** (current). 200 learners, filled up to **2026-09-30** (`TODAY` in the generator). MATATAG subject changes applied (no Mother Tongue G1-3, EsP replaced by GMRC/Values Ed). |
-| Learners | 251 distinct (145 + 200, 94 carried over both years), 374 enrollments total (Senior High learners have one enrollment per semester) |
-| Sections | **33 per year since Tier 3** — two per grade (three in G7), four in G11-12 across STEM/ABM. **Every section holds 3-9 learners since Tier 4.** 2026-2027 has renamed/reshuffled sections (see §9.5) and G9 Sapphire has no adviser. |
+| Seeded year 1 | **S.Y. 2025-2026** (2025-06-01 to 2026-03-31). Finished; 315 learners. Not archived. |
+| Seeded year 2 | **S.Y. 2026-2027** (current). 442 learners, filled up to **2026-09-30** (`TODAY` in the generator). MATATAG subject changes applied (no Mother Tongue G1-3, EsP replaced by GMRC/Values Ed). |
+| Learners | 551 distinct (315 + 442, 206 carried over both years), 819 enrollments total (Senior High learners have one enrollment per semester) |
+| Sections | **33 per year since Tier 3** — two per grade (three in G7), four in G11-12 across STEM/ABM. **Headcount per section is 7-11 (2025-2026) and 10-18 (2026-2027) since Tier 7.** 2026-2027 has renamed/reshuffled sections (see §9.5) and G9 Sapphire has no adviser. |
 | Subjects | 121 for 2025-2026; 118 for 2026-2027 (MATATAG-adjusted). |
-| Accounts | 43 staff (2 inactive/resigned teachers) + 335 guardian accounts, plus 4 usable guardian logins. Password **`SlisDemo2026!`** for all active staff. |
-| Volumes | 39,695 score entries · 4,464 grades · 2,464 narratives · 37,225 attendance records · 1,209 documents (1,203 files) · 342 invoices · 1,105 payments · 2,249 installments · 19 invites · 13 applications |
-| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001..0147`, `2026-0001..0109` · enrollment IDs 200-378, 400-600 · invoice IDs 300-453, 500-698 · application IDs 700-712 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
+| Accounts | 43 staff (2 inactive/resigned teachers) + 727 guardian accounts, plus 4 usable guardian logins. Password **`SlisDemo2026!`** for all active staff. |
+| Volumes | 87,054 score entries · 9,727 grades · 5,332 narratives · 80,946 attendance records · 2,704 documents (2,682 files) · 741 invoices · 2,303 payments · 4,692 installments · 19 invites · 13 applications |
+| Identifier block | LRNs `136700000xxx` · student numbers `2025-0001..0245`, `2026-0001..0209` · enrollment IDs 200-438 + 1200-1259 + 1600-1652, 400-600 + 1400-1483 + 1700-1784 · invoice IDs 300-505 + 1300-1351 + 1800-1851, 500-698 + 1500-1583 + 1900-1984 · application IDs 700-712 · staff emails `@slis.test` · guardian emails `*.seed@gmail.com` |
 | Generator | `scripts/generate_seed_data.py` + `scripts/seed_spec.py`, **now in the repo** (moved 2026-09-30; see §3) |
 
 ---
@@ -1071,18 +1076,206 @@ Backup: `~/Documents/ASIA-db-backups/SLIS_THESIS_FINAL_2026-10-04_before-tier4-s
 through 4, all read out of the live database. A Tier 5 can be added without
 renumbering anything.
 
+### 9.10 Tier 5 (loaded 2026-10-04): the last hundred, and the ID blocks ran out
+
+Tier 5 is the final volume pass, built like Tier 4: **no new sections or
+staff**, just more learners in the 66 sections that exist. Classes now run
+**5-10 (2025-2026)** and **5-13 (2026-2027)**.
+
+| | |
+|---|---|
+| Learners | **+100** (251 → 351). student_id / household_id **377-476** |
+| S.Y. 2025-2026 | 145 → **195** learners. Enrollments **1200-1259**, invoices **1300-1351** |
+| S.Y. 2026-2027 | 200 → **284** learners. Enrollments **1400-1483**, invoices **1500-1583** |
+| Continuations | 34 of the 50 new 2025-2026 learners return; 50 are brand-new 2026-2027 entrants |
+| Student numbers | `2025-0143..`, `..2026-0159` |
+| 4Ps households | **+17** (`4PS-SEED-051` … `4PS-SEED-067`) |
+| Mobiles | `091997/8/9 00000+` |
+
+Totals now: **351 learners · 518 enrollments · 473 invoices · 1,471 payments ·
+6,087 grades · 54,304 scores · 50,852 attendance records · 518 users.**
+
+**The original ID blocks are full — this is the important part.** The historical
+layout reserved **200-399 for 2025-2026 enrollments and 400-599 for 2026-2027**
+(invoices **300-499** and **500-699**). After Tier 4 those were nearly
+exhausted: 2025-2026 had only 21 enrollment ids and 46 invoice ids left, far
+short of what fifty learners need, and the first Tier 5 attempt silently ran
+2025-2026's enrollments into 2026-2027's block before the validator caught the
+duplicates.
+
+**Tier 5 therefore moved to a fresh, clearly separated range:**
+
+| | 2025-2026 | 2026-2027 |
+|---|---|---|
+| enrollment_id | **1200-1259** | **1400-1483** |
+| invoice_id | **1300-1351** | **1500-1583** |
+
+A Tier 6 should continue in this high space (1600+ / 1700+), not try to squeeze
+into the old blocks. Always check **both** the max id *and* the next block's
+floor before picking a range.
+
+**One more generator constraint learned:** a **re-issued invoice may only move
+to a plan with fewer or equally many installments.** The original invoice's
+first installment is paid as a downpayment and then carried onto the
+replacement, so re-issuing quarterly → monthly makes the moved amount larger
+than the new first installment and `apply_payments` asserts an overpayment.
+Quarterly → annual is fine; quarterly → monthly is not.
+
+**Verification.** Backed up, loaded on a throwaway copy with
+`ON_ERROR_STOP=1`, loaded a **second** time for idempotency (identical counts),
+then loaded live. All clean: invoice reconciliation, no zero/negative payments,
+no out-of-range grades, no duplicate student numbers or LRNs, every
+enrollment's section exists, one live enrollment per learner per year, document
+gate 0, no weekend/holiday/future attendance. The 251 already-loaded learners
+**kept every student number**. `flag_overdue_installments` flagged 91 more.
+
+Backup: `~/Documents/ASIA-db-backups/SLIS_THESIS_FINAL_2026-10-04_before-tier5-seed.dump`.
+
+**All 351 learners are pinned.**
+
+### 9.11 Tier 6 (loaded 2026-10-04): a hundred more, weighted toward the thin sections
+
+Tier 6 is the first tier that does **not** spread evenly. Tiers 4 and 5 filled
+by round-robin into the least-loaded section, which kept the starting gaps
+intact: by the end of Tier 5, Grade 7 averaged **5.3** learners per section and
+Grade 11 **6.0**, while Kindergarten, Grade 8 and Grade 10 were already at 12+.
+This tier weights the intake per grade to close that gap.
+
+| | |
+|---|---|
+| Learners | **+100** (351 → 451). student_id / household_id **477-576** |
+| S.Y. 2025-2026 | 195 → **245** learners. Enrollments **1600-1652**, invoices **1800-1851** |
+| S.Y. 2026-2027 | 284 → **369** learners. Enrollments **1700-1784**, invoices **1900-1984** |
+| Continuations | 35 of the 50 new 2025-2026 learners return; 50 are brand-new 2026-2027 entrants |
+| Student numbers | `2025-0193..`, `..2026-0209` |
+| 4Ps households | **+20** (`4PS-SEED-068` … `4PS-SEED-087`) |
+| Mobiles | `091667/8/9 00000+` |
+| Sections / staff | **unchanged** (66 sections, 43 staff) |
+
+Totals now: **451 learners · 656 enrollments · 601 invoices · 1,880 payments ·
+7,788 grades · 69,587 scores · 64,596 attendance records · 641 users.**
+
+**The weighting.** 2026-2027's intake went 9 into Grade 7, 8 into Grade 11,
+7 into Grade 9 and 5 into Grade 12, against 1 each for Kindergarten, Grade 8
+and Grade 10. The result closes the spread rather than widening it:
+
+| | before Tier 6 | after |
+|---|---|---|
+| 2025-2026 per section | 5-10 (avg 7.1) | **7-12 (avg 8.7)** |
+| 2026-2027 per section | 5-13 (avg 8.6) | **8-15 (avg 11.2)** |
+| 2026-2027 Grade 7 | 5.3 | **9.3** |
+| 2026-2027 Grade 11 | 6.0 | **8.5** |
+
+The thinnest section in either year is now **7** (2025-2026) and **8**
+(2026-2027), against 5 before.
+
+**How to weight a tier.** Read per-grade occupancy first —
+`select school_year, grade_level, sum(n), count(*) from (… group by year, grade,
+section) group by 1,2` — and set `SY1_PLAN` / `SY2_PLAN` in the builder from the
+*average per section*, not the grade total. A grade with four sections (G11/G12
+across STEM/ABM) needs roughly twice the intake of a two-section grade to move
+its average by the same amount.
+
+**Verification.** Backed up, loaded on a throwaway copy with
+`ON_ERROR_STOP=1`, loaded a **second** time for idempotency (identical counts),
+then loaded live. All clean: invoice reconciliation, no zero/negative payments,
+no out-of-range grades, no duplicate student numbers or LRNs, every
+enrollment's section exists, one live enrollment per learner per year, document
+gate 0, no weekend/holiday/future attendance. The 351 already-loaded learners
+**kept every student number**. `flag_overdue_installments` flagged 117 more.
+
+Backup: `~/Documents/ASIA-db-backups/SLIS_THESIS_FINAL_2026-10-04_before-tier6-seed.dump`.
+
+**All 451 learners are pinned.**
+
+### 9.12 Tier 7 (loaded 2026-10-05): the LRN cap lifted, and a hundred more
+
+Two things happened in this tier: the **LRN scheme was widened** so the seed can
+keep growing, and another hundred learners went in, weighted by each grade's
+shortfall against a 20-per-section target.
+
+**The LRN change (do not skip this).** An LRN is **exactly 12 digits** —
+enforced by `students.validators.validate_lrn_format` and applied on every
+write path (counter form, bulk bundle, public intake). The seed built its LRNs
+as `LRN_BLOCK` + a **3-digit** student_id, so `student_id` could never exceed
+**999**, which capped the whole dataset at ~900 learners. Tier 7 rebased:
+
+| | block | suffix | total | cap |
+|---|---|---|---|---|
+| before | `136700000` (9) | 3 digits | 12 ✓ | student_id ≤ 999 |
+| after | `13670000` (8) | **4 digits** | 12 ✓ | **student_id ≤ 9999** |
+
+This is a **no-op for every existing learner**: `"13670000" + "0576"` is the
+same string as `"136700000" + "576"`. Verified — zero LRN values changed across
+all 451 learners loaded at the time, and every LRN is still 12 digits.
+
+`seed_spec.py` now carries `LRN_WIDTH = 4` and `LRN_LIKE`. **`LRN_LIKE` matters:**
+the seed's cleanup used `LIKE '136700000%'` to find its own rows, and the bare
+8-digit prefix would be one digit broader, so a real learner numbered
+`136700001234` could be swept up by a re-run. `LRN_LIKE` is
+`LRN_BLOCK + "_" * LRN_WIDTH` (`13670000____`), which matches the seed's rows
+and nothing else — stricter than the old pattern, not looser. All four cleanup
+and verification sites use it.
+
+**The learners.**
+
+| | |
+|---|---|
+| Learners | **+100** (451 → 551). student_id / household_id **577-676** |
+| S.Y. 2025-2026 | 245 → **315** learners. Enrollments **2000-2069**, invoices **3000-3069** |
+| S.Y. 2026-2027 | 369 → **442** learners. Enrollments **2600-2672**, invoices **3600-3672** |
+| Split | **70 into the finished year, 30 brand-new in the current one** |
+| Student numbers | `2025-0246..`, `..2026-0239` |
+| 4Ps households | **+20** (`4PS-SEED-088` … `4PS-SEED-107`) |
+| Mobiles | `091550/5/8 00000+` |
+| Sections / staff | **unchanged** (66 sections, 43 staff) |
+
+Totals now: **551 learners · 819 enrollments · 741 invoices · 2,303 payments ·
+9,727 grades · 87,054 scores · 80,946 attendance records · 775 users.**
+
+**Why 70/30 rather than 50/50.** Headcount per section was 7.4 in the finished
+year against 11.2 in the current one, so the finished year was the binding
+constraint. A learner entering 2025-2026 also continues into 2026-2027 about
+68% of the time, so weighting the intake into the finished year lifts *both*.
+Per-grade intake was then split in proportion to each grade's shortfall, so
+Senior High (four sections, furthest behind) took 20 of the 70.
+
+| | before | after |
+|---|---|---|
+| 2025-2026 headcount/section | 7.4 (5-10) | **9.5 (7-11)** |
+| 2026-2027 headcount/section | 11.2 (8-15) | **13.4 (10-18)** |
+
+**Reaching a 20 average.** From here it needs roughly **493 more learners**
+(not 830 — continuations do much of the work if the intake is weighted into the
+finished year). The solved split is 415 new in 2025-2026 and 78 brand-new in
+2026-2027, which lands both years at exactly 20.0. The LRN cap is no longer in
+the way; `student_id` has ~9,300 of headroom.
+
+**Verification.** Backed up, loaded on a throwaway copy with
+`ON_ERROR_STOP=1`, loaded a **second** time for idempotency (identical counts),
+then loaded live. All clean: invoice reconciliation, no zero/negative payments,
+no out-of-range grades, no duplicate student numbers or LRNs, **every LRN
+matches `^[0-9]{12}$`**, every enrollment's section exists, one live enrollment
+per learner per year, document gate 0, no weekend/holiday/future attendance.
+The 451 already-loaded learners kept every student number **and every LRN**.
+`flag_overdue_installments` flagged 136 more.
+
+Backup: `~/Documents/ASIA-db-backups/SLIS_THESIS_FINAL_2026-10-05_before-tier7-seed.dump`.
+
+**All 551 learners are pinned.**
+
 ### 9.6 Reserved identifiers (don't reuse for other data)
 
 | What | Reserved |
 |---|---|
-| LRN | `136700000xxx` (seed learners use the last three digits = student_id) |
-| student_id / household_id | 100-376 |
+| LRN | `13670000` + **4-digit** student_id (`13670000xxxx`), always 12 digits. Match the seed's own rows with `LRN_LIKE` (`13670000____`), never a bare prefix — see §9.12. |
+| student_id / household_id | 100-676 |
 | application_id | 700-712 |
-| enrollment_id | 200-378 (2025-2026), 400-600 (2026-2027) |
-| invoice_id | 300-453 (2025-2026), 500-698 (2026-2027) |
-| student_number | `2025-0001..2025-0147`, `2026-0001..2026-0109` (**all 251 are pinned**, see §9.7-9.9) |
+| enrollment_id | 200-438 + 1200-1259 + 1600-1652 (2025-2026), 400-600 + 1400-1483 + 1700-1784 (2026-2027) |
+| invoice_id | 300-505 + 1300-1351 + 1800-1851 (2025-2026), 500-698 + 1500-1583 + 1900-1984 (2026-2027) |
+| student_number | `2025-0001..2025-0315`, `2026-0001..2026-0239` (**all 551 are pinned**, see §9.7-9.12) |
 | Emails | `*@slis.test`, `*.seed@gmail.com` |
-| Guardian / learner mobiles | Tiers 1-2.5 use `09xx11xxxxx` and `09xx12xxxxx`; **Tier 3 uses `091777/8/9 00000+`, Tier 4 uses `091887/8/9 00000+`** (primary guardian / secondary / learner's own) — keep new tiers out of all of these |
+| Guardian / learner mobiles | Tiers 1-2.5 `09xx11xxxxx` / `09xx12xxxxx`; **T3 `091777/8/9`, T4 `091887/8/9`, T5 `091997/8/9`, T6 `091667/8/9`, T7 `091550/5/8`** — keep new tiers out of all of these |
 | Legacy block (old seeders) | LRN `9900…` |
 
 Tier 1's original ID ranges (student_id 100/110/111/114/115/125/128/140/147/152; household_id same minus 152; enrollment_id 200-211; invoice_id 300-309) are a subset still in use — those ten learners are the core of Tier 2's history, unchanged.
@@ -1321,11 +1514,10 @@ These are proposals, not decisions; confirm them at each go-ahead.
 - **✅ Tier 2.5 — done, loaded 2026-10-02.** +20 learners in S.Y. 2025-2026 (25 → 45), 14 of them continuing into 2026-2027 (25 → 40); 51 distinct, 94 enrollments. Every 2025-2026 section is now populated, Grade 7 Diamond included. +8 invites / +6 applications. No subjects or fees were added — those were already complete. Student-number pinning added so later tiers never renumber existing learners (§9.7). Closed Tier 2's skipped checks: fresh-`schema.sql` load and the full test suites (1344 tests).
 - **🟡 Tier 3 — generated 2026-10-04, NOT loaded or tested.** +100 learners (51 → 151; 95 in 2025-2026, 119 in 2026-2027), a second section for every grade in both years (17 → 33 each) and 16 new teachers to advise them. A realistic spread of abilities, attendance and payment behaviour; every section populated. See §9.8. **Still to do:** run §11 against it, load it, then pin Tier 3's student numbers.
 - **✅ Tier 4 — done, loaded 2026-10-04.** +100 learners (151 → 251; 145 in 2025-2026, 200 in 2026-2027), filling the sections Tier 3 created rather than adding more. No new sections or staff. See §9.9. All 251 learners are pinned.
-- **Tier 5 (if more volume is wanted), toward 400-600 learners:**
-  - a third section per grade once classes outgrow the current two, and enough learners for clustering and risk to be statistically meaningful;
-  - further stress on list pages, pagination and exports;
-  - optionally add the 2023-2024 archived year and a 2027-2028 upcoming year, carried over from Tier 2's roadmap;
-  - note the LRN scheme caps student_id at 999.
+- **✅ Tier 5 — done, loaded 2026-10-04.** +100 learners (251 → 351; 195 in 2025-2026, 284 in 2026-2027), filling the existing sections again. No new sections or staff. The original enrollment/invoice ID blocks ran out and Tier 5 moved to a fresh 1200+/1400+ range — see §9.10. All 351 learners are pinned.
+- **✅ Tier 6 — done, loaded 2026-10-04.** +100 learners (351 → 451; 245 in 2025-2026, 369 in 2026-2027), **weighted toward the thin Grade 7 and Senior High sections** instead of spreading evenly. No new sections or staff. See §9.11. All 451 learners are pinned.
+- **✅ Tier 7 — done, loaded 2026-10-05.** +100 learners (451 → 551), weighted 70/30 into the finished year so continuations lift both years. **Widened the LRN suffix to 4 digits, lifting the student_id cap from 999 to 9999** (§9.12). All 551 learners are pinned.
+- **Tier 8 — reaching a 20-per-section average.** Needs ~**493 more learners** (415 new in 2025-2026 + 78 brand-new in 2026-2027), which lands both years at exactly 20.0. A third section per grade is the alternative if classes should stay smaller. IDs continue at 2100+/2700+ (enrollments) and 3100+/3700+ (invoices); `student_id` has ~9,300 of headroom.
 
 ---
 
