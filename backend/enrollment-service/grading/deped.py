@@ -291,3 +291,24 @@ def blocking_subjects(grades):
         outcome for outcome in summarize_subjects(grades).values()
         if outcome["remarks"] in BLOCKING_REMARKS
     ]
+
+
+def tally_averages(learners, averages):
+    """
+    Split `learners` enrollments by their grade average, for the Grades
+    overview's status band: an average of at least PASSING_GRADE passes, a
+    lower one fails, and an enrollment with no grade yet is neither.
+
+    `averages` holds one average per enrollment that has any grade (None is
+    skipped), so whoever is not in it has none. The average is the plain mean
+    of the recorded grades, the same number the overview's Average column
+    shows and its Passed/Failed filter tests.
+    """
+    graded = [a for a in averages if a is not None]
+    passed = sum(1 for a in graded if a >= PASSING_GRADE)
+    return {
+        "learners": learners,
+        "passed": passed,
+        "failed": len(graded) - passed,
+        "no_grades": max(learners - len(graded), 0),
+    }

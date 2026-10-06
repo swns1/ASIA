@@ -11,8 +11,10 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import useYearFilter from "../hooks/useYearFilter";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
-import StatusBand, { StudentStatus } from "./students/StatusBand";
-import FilterMenu from "./students/FilterMenu";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import { StatusDot } from "../components/ui/Badge";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { groupYears } from "../utils/schoolYear";
@@ -321,41 +323,36 @@ export default function StudentsPage() {
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
         {/* The status mix, and the status filter. */}
         <StatusBand
-          statuses={STATUS_FILTERS}
-          counts={statusCounts}
+          total={statusCounts.all}
+          caption={`student${statusCounts.all === 1 ? "" : "s"} registered`}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              Pick a status to filter the list
+            </span>
+          }
+          options={STATUS_FILTERS.map((v) => ({
+            value: v,
+            label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
+            count: statusCounts[v],
+            variant: STUDENT_STATUS_MAP[v]?.variant,
+          }))}
           value={statusFilter}
+          allValue="all"
           onChange={handleStatusFilter}
         />
 
         {/* Toolbar: search, the two filter menus, Clear. */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex h-10 flex-1 basis-80 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-3.5 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
-            <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
-            <label htmlFor="student-search" className="sr-only">
-              Search students by name, LRN, or email
-            </label>
-            <input
-              id="student-search"
-              ref={searchRef}
-              type="search"
-              placeholder="Search by name, LRN, or email…"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              // Typing searches on its own; Enter just doesn't wait.
-              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-              className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 [&::-webkit-search-cancel-button]:appearance-none"
-            />
-            {inputVal && (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                aria-label="Clear search"
-                className="focus-ring flex shrink-0 items-center rounded-sm p-0.5 text-neutral-500 hover:text-brand-600"
-              >
-                <i className="ti ti-x text-[13px]" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+          <SearchField
+            id="student-search"
+            label="Search students by name, LRN, or email"
+            placeholder="Search by name, LRN, or email…"
+            inputRef={searchRef}
+            value={inputVal}
+            onChange={setInputVal}
+            onEnter={handleSearch}
+            onClear={handleClearSearch}
+          />
 
           <FilterMenu
             label="Sex"
@@ -518,7 +515,7 @@ export default function StudentsPage() {
                     </TableCell>
 
                     <TableCell>
-                      <StudentStatus status={st.status} />
+                      <StatusDot status={st.status} map={STUDENT_STATUS_MAP} />
                     </TableCell>
 
                     <TableCell>

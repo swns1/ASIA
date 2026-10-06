@@ -157,3 +157,23 @@ def test_general_average_rounds_half_up():
 def test_general_average_ignores_subjects_with_no_grade():
     assert general_average([90, None, 80]) == 85
     assert general_average([None, None]) is None
+
+
+# ── tally_averages: the Grades overview's band ────────────────────────────────
+
+from grading.deped import tally_averages  # noqa: E402
+
+
+def test_tally_splits_on_the_passing_grade():
+    tally = tally_averages(5, [Decimal("75.00"), Decimal("74.99"), Decimal("90.50")])
+    assert tally == {"learners": 5, "passed": 2, "failed": 1, "no_grades": 2}
+
+
+def test_tally_counts_a_missing_average_as_no_grades():
+    assert tally_averages(2, [None, Decimal("80")]) == {
+        "learners": 2, "passed": 1, "failed": 0, "no_grades": 1,
+    }
+
+
+def test_tally_of_nobody():
+    assert tally_averages(0, []) == {"learners": 0, "passed": 0, "failed": 0, "no_grades": 0}

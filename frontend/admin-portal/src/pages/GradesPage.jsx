@@ -9,20 +9,23 @@ import Card from "../components/ui/Card";
 import { StatusBadge } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Button from "../components/ui/Button";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import toast from "react-hot-toast";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 import Skeleton from "../components/ui/Skeleton";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
   getEnrollments as _getEnrollments,
+  getGradeAverages as _getGradeAverages,
   getSubjects as _getSubjects,
   getGrades as _getGrades,
   getScoreEntries as _getScoreEntries,
@@ -50,6 +53,7 @@ import useLatestRequest from "../hooks/useLatestRequest";
 const getStudents            = (p = {}) => _getStudents(p);
 const getStudent              = (id)     => _getStudent(id);
 const getEnrollments         = (p = {}) => _getEnrollments(p);
+const getGradeAverages       = (p = {}) => _getGradeAverages(p);
 const getSubjects            = (p = {}) => _getSubjects(p);
 const getGrades              = (p = {}) => _getGrades(p);
 const getScoreEntries        = (p = {}) => _getScoreEntries(p);
@@ -71,34 +75,21 @@ const deleteNarrativeReport  = (id)     => _deleteNarrativeReport(id);
 // grades is locked only by an archived year (useArchivedYears), never by status.
 const ATTENDED_STATUSES = "enrolled,completed,transferred_out";
 
-// `tone` names the shared ChipGroup palette entry rather than carrying its own
-// bg/color pair — these were already the same values, just spelled out locally.
-const OVERVIEW_SCHOOL_LEVELS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand"        },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery"      },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary"   },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh"   },
-  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh"   },
+// The band's legend: where each learner's average stands. "No grades" is a
+// learner with nothing recorded yet, so the three add up to the total. `key`
+// is the field of the grade-averages response that counts it.
+const REMARK_FILTERS = [
+  { value: "",       label: "All" },
+  { value: "passed", label: "Passed",    variant: "success", key: "passed" },
+  { value: "failed", label: "Failed",    variant: "error",   key: "failed" },
+  { value: "none",   label: "No grades", variant: "muted",   key: "no_grades" },
 ];
-
-// The pass/fail facet. `dot` fills the status dot and the selected chip's
-// count badge; "All" carries no dot, matching every other status chip row.
-const REMARKS_FILTER_OPTIONS = [
-  { value: "",       label: "All"                                      },
-  { value: "passed", label: "Passed", tone: "success", dot: "#4caf50" },
-  { value: "failed", label: "Failed", tone: "error",   dot: "#f44336" },
-];
-
-const OVERVIEW_GRADE_LEVELS = {
-  nursery:           ["Nursery"],
-  kindergarten:      ["Kindergarten"],
-  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
-  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
-  senior_highschool: ["Grade 11","Grade 12"],
-};
 
 const OVERVIEW_PAGE_SIZE = 20;
+
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the Students and Enrollments lists.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // Overview's sortable columns. `Table` renders the caret and wires the click,
 // so the local SortIcon helper this page used is gone.
@@ -114,8 +105,6 @@ const OVERVIEW_COLUMNS = [
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 function OverviewTab({ onNavigate }) {
 
-  // SchoolYearPicker reads the option list and per-year counts from the context
-  // itself, so only the year is needed here.
   const [schoolYear,    setSchoolYear, yearIsDefault] = useYearFilter();
   const [schoolLevel,   setSchoolLevel]   = useState("");
   const [gradeLevel,    setGradeLevel]    = useState("");
@@ -140,19 +129,41 @@ function OverviewTab({ onNavigate }) {
   const [sortDir,  setSortDir]  = useState("asc");
   const searchInputRef = useRef(null);
 
-  // Debounce search so we don't fire an API call on every keystroke
+  // Search as you type: the box applies itself once typing pauses.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [search]);
 
-  const gradeLevelOptions = schoolLevel ? (OVERVIEW_GRADE_LEVELS[schoolLevel] ?? []) : [];
-  const periodOptions     = schoolLevel
-    ? (GRADING_PERIODS_BY_LEVEL[schoolLevel] ?? [])
-    : ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter","1st_semester","2nd_semester"];
+  const gradeLevelOptions = schoolLevel ? (GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? []) : [];
+  const periodOptions     = schoolLevel ? (GRADING_PERIODS_BY_LEVEL[schoolLevel] ?? []) : [];
 
   // reset cascaded filters + page when level changes
   useEffect(() => { setGradeLevel(""); setGradingPeriod(""); }, [schoolLevel]);
+
+  // The band's numbers: how every learner in the selection averages, from
+  // the server. The rows below can only say so for the page they fetched.
+  // Search narrows the rows, not the band, as on the other list pages. Kept
+  // with the scope it was asked for, so a stale answer never shows.
+  const averagesScope = {
+    enrollment_status__in: ATTENDED_STATUSES,
+    ...(schoolYear && { school_year: schoolYear }),
+    ...(schoolLevel && { school_level: schoolLevel }),
+    ...(gradeLevel && { grade_level: gradeLevel }),
+    ...(gradingPeriod && { grading_period: gradingPeriod }),
+  };
+  const averagesKey = JSON.stringify(averagesScope);
+  const [averages, setAverages] = useState({ key: null, data: null });
+  useEffect(() => {
+    let cancelled = false;
+    getGradeAverages(JSON.parse(averagesKey))
+      .then((d) => { if (!cancelled) setAverages({ key: averagesKey, data: d }); })
+      // An older server without the endpoint: the band reads "—" and the
+      // page works as before.
+      .catch(() => { if (!cancelled) setAverages({ key: averagesKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [averagesKey]);
+  const counts = averages.key === averagesKey ? averages.data : null;
 
   const hasFilters = !yearIsDefault || schoolLevel || gradeLevel || gradingPeriod || remarks || search;
 
@@ -219,17 +230,20 @@ function OverviewTab({ onNavigate }) {
       // 400-enrollment year showed two rows under a footer reading "Page 1 of
       // 20 · 400 total records", and every following page was mostly empty
       // with no way to tell how many failing learners there actually were.
-      // The count is now labelled for what it is.
+      // The count is now labelled for what it is, and the band above says how
+      // many there are in all.
       const fetchedOnPage = built.length;
       if (rm) {
         built = built.filter((r) => {
           if (rm === "passed") return r.avg !== null && r.avg >= GRADE_PASSING;
           if (rm === "failed") return r.avg !== null && r.avg < GRADE_PASSING;
+          if (rm === "none")   return r.avg === null;
           return true;
         });
       }
+      const rmLabel = REMARK_FILTERS.find((f) => f.value === rm)?.label ?? rm;
       setFilterNote(
-        rm ? `${built.length} of ${fetchedOnPage} on this page match "${rm}"` : "",
+        rm ? `${built.length} of ${fetchedOnPage} on this page match "${rmLabel}"` : "",
       );
 
       setRows(built);
@@ -264,69 +278,107 @@ function OverviewTab({ onNavigate }) {
 
   const isFirstRender = useIsFirstRender();
 
+  // What the band counts: the year, and the level, grade and period when set.
+  const remark = REMARK_FILTERS.find((f) => f.value === remarks);
+  const bandCaption = [
+    `enrollment${counts?.learners === 1 ? "" : "s"} in ${schoolYear ? `S.Y. ${schoolYear}` : "all school years"}`,
+    schoolLevel && LEVEL_FILTER_OPTIONS.find((l) => l.value === schoolLevel)?.label,
+    gradeLevel,
+    gradingPeriod && PERIOD_LABELS[gradingPeriod],
+  ].filter(Boolean).join(" · ");
+
+  // The caption's number. With a pass/fail filter the rows are one page's
+  // matches, so it says the band's whole count instead -- unless a search is
+  // narrowing the rows, which the band doesn't follow.
+  const captionCount = !remarks
+    ? (!loading && !loadError ? pageMeta.count : null)
+    : (!debouncedSearch ? counts?.[remark?.key] : null);
+
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="space-y-4">
 
-      {/* ── Filters ── */}
-      <FilterBar
-        searchValue={search}
-        onSearchChange={setSearch}
-        onClearSearch={() => setSearch("")}
-        onSearch={() => searchInputRef.current?.blur()}
-        searchRef={searchInputRef}
-        searchPlaceholder="Search student name or LRN…"
-        searchLabel="Search students by name or LRN"
-        hasFilters={Boolean(hasFilters)}
-        onClearFilters={clearFilters}
-        animate={isFirstRender}
-        animateDelay={0.28}
-        scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} />}
-      >
-        <FilterRow label="School Level">
-          <ChipGroup
-            options={OVERVIEW_SCHOOL_LEVELS}
-            value={schoolLevel}
-            onChange={setSchoolLevel}
-            label="Filter by school level"
-          />
-        </FilterRow>
+      {/* ── How the selection is doing, and the pass/fail filter ──
+          The school year sits in the band because its numbers are counted
+          for it. */}
+      <StatusBand
+        total={counts?.learners}
+        caption={bandCaption}
+        aside={<SchoolYearMenu value={schoolYear} onChange={setSchoolYear} />}
+        options={REMARK_FILTERS.map((f) => ({
+          value: f.value,
+          label: f.label,
+          count: counts ? (f.key ? counts[f.key] : counts.learners) : undefined,
+          variant: f.variant,
+        }))}
+        value={remarks}
+        allValue=""
+        onChange={setRemarks}
+        label="Filter by average"
+      />
 
-        {/* Both cascade off School Level, so they stay mounted and animate
-            open rather than popping in and shoving the table down. */}
-        <CollapsibleFilterRow open={schoolLevel !== ""} label="Grade Level">
-          <ChipGroup
-            options={[{ value: "", label: "All Grades" }, ...gradeLevelOptions.map((g) => ({ value: g, label: g }))]}
+      {/* ── Toolbar: search, the filter menus, Clear ── */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchField
+          id="grades-search"
+          label="Search students by name or LRN"
+          placeholder="Search student name or LRN…"
+          inputRef={searchInputRef}
+          value={search}
+          onChange={setSearch}
+          onEnter={() => setDebouncedSearch(search.trim())}
+          onClear={() => setSearch("")}
+        />
+
+        <FilterMenu
+          label="Level"
+          valueLabel={LEVEL_FILTER_OPTIONS.find((l) => l.value === schoolLevel)?.label ?? "All levels"}
+          active={Boolean(schoolLevel)}
+          options={LEVEL_FILTER_OPTIONS}
+          value={schoolLevel}
+          onChange={setSchoolLevel}
+          align="end"
+          menuWidth={220}
+        />
+
+        {/* Grades and grading periods differ by level (quarters, or SHS
+            semesters), so both wait for one. */}
+        {schoolLevel && (
+          <FilterMenu
+            label="Grade"
+            valueLabel={gradeLevel || "All grades"}
+            active={Boolean(gradeLevel)}
+            options={[{ value: "", label: "All grades" }, ...gradeLevelOptions.map((g) => ({ value: g, label: g }))]}
             value={gradeLevel}
             onChange={setGradeLevel}
-            label="Filter by grade level"
-            stagger
-            generation={schoolLevel}
+            align="end"
+            menuWidth={180}
           />
-        </CollapsibleFilterRow>
+        )}
 
-        <CollapsibleFilterRow open={schoolLevel !== ""} label="Grading Period">
-          <ChipGroup
-            options={[
-              { value: "", label: "All Periods" },
-              ...periodOptions.map((p) => ({ value: p, label: PERIOD_LABELS[p], tone: "info" })),
-            ]}
+        {schoolLevel && (
+          <FilterMenu
+            label="Period"
+            valueLabel={PERIOD_LABELS[gradingPeriod] ?? "All periods"}
+            active={Boolean(gradingPeriod)}
+            options={[{ value: "", label: "All periods" }, ...periodOptions.map((p) => ({ value: p, label: PERIOD_LABELS[p] }))]}
             value={gradingPeriod}
             onChange={setGradingPeriod}
-            label="Filter by grading period"
-            stagger
-            generation={`${schoolLevel}-period`}
+            align="end"
+            menuWidth={200}
           />
-        </CollapsibleFilterRow>
+        )}
 
-        <FilterRow label="Status">
-          <ChipGroup
-            options={REMARKS_FILTER_OPTIONS}
-            value={remarks}
-            onChange={setRemarks}
-            label="Filter by pass/fail status"
-          />
-        </FilterRow>
-      </FilterBar>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+          >
+            <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+            Clear
+          </button>
+        )}
+      </div>
 
       <ArchivedYearNotice schoolYear={schoolYear} records="grades" />
 
@@ -337,7 +389,16 @@ function OverviewTab({ onNavigate }) {
         transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.38 : 0 }}
       >
         <Card padding="none">
+          <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+            <h2 className="text-md font-bold text-neutral-900">
+              {remarks ? remark?.label : "All enrollments"}
+            </h2>
+            {captionCount != null && (
+              <span className="text-sm text-neutral-500 tabular-nums">{captionCount.toLocaleString()}</span>
+            )}
+          </div>
           <Table
+            headerVariant="quiet"
             columns={OVERVIEW_COLUMNS}
             loading={loading}
             error={loadError}
@@ -363,16 +424,17 @@ function OverviewTab({ onNavigate }) {
               return (
                 <TableRow key={r.enrollment_id}>
                   <TableCell>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-3">
                       <div
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                         style={{ background: pal.bg, color: pal.color }}
+                        aria-hidden="true"
                       >
                         {initialsFrom(r.name)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-neutral-900">{r.name}</div>
-                        <div className="text-xs text-neutral-500">LRN {r.lrn} · {r.student_number}</div>
+                        <div className="truncate text-[13px] font-semibold text-neutral-900">{r.name}</div>
+                        <div className="truncate text-[11.5px] text-neutral-500">LRN {r.lrn} · {r.student_number}</div>
                       </div>
                       <div className="flex shrink-0 gap-1">
                         <Button
@@ -394,29 +456,28 @@ function OverviewTab({ onNavigate }) {
                   </TableCell>
 
                   <TableCell align="center">
-                    <div className="text-xs font-semibold text-neutral-900">{r.grade_level}</div>
-                    <div className="text-xs text-neutral-500">{r.section}</div>
+                    <div className="text-sm font-medium text-neutral-900">{r.grade_level}</div>
+                    <div className="text-[11.5px] text-neutral-500">{r.section}</div>
                   </TableCell>
 
-                  <TableCell align="center" className="text-[13px] font-semibold text-neutral-900">
-                    {r.total}
+                  <TableCell align="center">
+                    <span className="text-[13px] font-semibold text-neutral-900 tabular-nums">{r.total}</span>
                   </TableCell>
 
-                  <TableCell align="center" className="text-[13px] font-bold text-success-500">
-                    {r.passed}
+                  <TableCell align="center">
+                    <span className="text-[13px] font-bold text-success-500 tabular-nums">{r.passed}</span>
                   </TableCell>
 
-                  <TableCell
-                    align="center"
-                    className={`text-[13px] font-bold ${r.failed > 0 ? "text-error-500" : "text-neutral-500"}`}
-                  >
-                    {r.failed}
+                  <TableCell align="center">
+                    <span className={`text-[13px] font-bold tabular-nums ${r.failed > 0 ? "text-error-500" : "text-neutral-500"}`}>
+                      {r.failed}
+                    </span>
                   </TableCell>
 
                   <TableCell align="center">
                     {r.avg !== null ? (
                       <span
-                        className="rounded-lg px-3 py-0.5 text-[13px] font-bold"
+                        className="rounded-lg px-3 py-0.5 text-[13px] font-bold tabular-nums"
                         style={{ background: gs.bg, color: gs.color }}
                       >
                         {r.avg.toFixed(2)}
@@ -1949,7 +2010,6 @@ export default function GradesPage() {
 
       <PageHeader
         title="Grades"
-        icon="ti-chart-bar"
         actions={
           <Tabs
             variant="pill"

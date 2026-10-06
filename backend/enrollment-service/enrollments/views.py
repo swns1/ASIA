@@ -10,7 +10,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
@@ -1498,6 +1498,40 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             for y in sorted(labels, reverse=True)
         ]
         return Response({"current": current, "results": results})
+
+    @action(detail=False, methods=["get"], url_path="grade-averages")
+    def grade_averages(self, request):
+        """
+        GET /api/enrollments/grade-averages/?school_year=2026-2027
+            &enrollment_status__in=enrolled,completed,transferred_out
+            [&school_level=…&grade_level=…&grading_period=1st_quarter]
+
+        How the matching enrollments' grade averages split: passing, failing,
+        or no grades yet -- {"learners", "passed", "failed", "no_grades"}.
+        The Grades overview's status band draws it.
+
+        The overview sorts Passed from Failed by each learner's average, which
+        it can only work out for the page of learners it has fetched. Counted
+        here instead, through this viewset's own filters and role scoping, so
+        the numbers are the whole selection's and a teacher's cover only their
+        own advisory, exactly as the list does. `grading_period` narrows the
+        grades averaged, as the overview's period filter does.
+        """
+        from grades.models import Grade
+        from grading.deped import tally_averages
+
+        enrollments = self.filter_queryset(self.get_queryset()).order_by()
+        grades = Grade.objects.filter(enrollment_id__in=enrollments.values("pk"))
+        period = request.query_params.get("grading_period")
+        if period:
+            grades = grades.filter(grading_period=period)
+        averages = (
+            grades.order_by()
+            .values("enrollment_id")
+            .annotate(avg=Avg("numeric_grade"))
+            .values_list("avg", flat=True)
+        )
+        return Response(tally_averages(enrollments.count(), averages))
 
     @action(detail=False, methods=["get"], url_path="unplaced")
     def unplaced(self, request):

@@ -27,6 +27,28 @@ export const LEVEL_ICONS = {
   senior_highschool: "ti-certificate",
 };
 
+// One colour per level (tokens.css `--color-<level>-500`), as a dot, so a
+// level reads the same in a list page's Level menu and in its rows. Literal
+// classes: Tailwind can't see a built name.
+export const LEVEL_DOTS = {
+  nursery:           "bg-nursery-500",
+  kindergarten:      "bg-kindergarten-500",
+  elementary:        "bg-elementary-500",
+  junior_highschool: "bg-juniorhigh-500",
+  senior_highschool: "bg-seniorhigh-500",
+};
+
+// The Level menu on the list pages (Enrollments, Grades). Short names: they
+// sit on a pill and after a status band's total.
+export const LEVEL_FILTER_OPTIONS = [
+  { value: "",                  label: "All levels" },
+  { value: "nursery",           label: "Nursery",      dot: LEVEL_DOTS.nursery },
+  { value: "kindergarten",      label: "Kindergarten", dot: LEVEL_DOTS.kindergarten },
+  { value: "elementary",        label: "Elementary",   dot: LEVEL_DOTS.elementary },
+  { value: "junior_highschool", label: "Junior High",  dot: LEVEL_DOTS.junior_highschool },
+  { value: "senior_highschool", label: "Senior High",  dot: LEVEL_DOTS.senior_highschool },
+];
+
 // GRADE_LEVELS_BY_LEVEL / SHS_STRANDS / schoolLevelForGrade —
 //
 // The canonical DepEd grade ladder. Promoted here out of EnrollmentFormPage

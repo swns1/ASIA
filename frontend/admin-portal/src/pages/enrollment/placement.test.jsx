@@ -239,7 +239,7 @@ describe("Not yet placed", () => {
     renderEnrollments();
 
     expect(await screen.findByText((_, el) =>
-      el?.tagName === "SPAN" && el.textContent === "1 active student has no enrollment in SY 2025-2026.",
+      el?.tagName === "SPAN" && el.textContent === "1 active student has no enrollment in S.Y. 2025-2026.",
     )).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Show/ }));
     fireEvent.click(await screen.findByRole("button", { name: /^Enroll$/ }));

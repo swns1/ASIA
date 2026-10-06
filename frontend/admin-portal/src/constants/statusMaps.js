@@ -22,13 +22,16 @@ export const STUDENT_STATUS_MAP = {
 /** Enrollments — enrollment.enrollment_status
  *  "cancelled" is deliberately `muted`, not `error`: it's an inactive terminal
  *  state rather than a fault needing attention. (Two of the three previous
- *  copies already treated it that way; EnrollmentsPage was the outlier.) */
+ *  copies already treated it that way; EnrollmentsPage was the outlier.)
+ *  "transferred_out" is `accent`: it shared warning with Pending, and the
+ *  Enrollments status band draws every status in one bar, where two ambers
+ *  can't be told apart. */
 export const ENROLLMENT_STATUS_MAP = {
   enrolled:        { label: "Enrolled",        variant: "success", icon: "ti-circle-check" },
   pending:         { label: "Pending",         variant: "warning", icon: "ti-clock" },
   completed:       { label: "Completed",       variant: "info",    icon: "ti-flag-check" },
   cancelled:       { label: "Cancelled",       variant: "muted",   icon: "ti-circle-minus" },
-  transferred_out: { label: "Transferred Out", variant: "warning", icon: "ti-arrow-right-circle" },
+  transferred_out: { label: "Transferred Out", variant: "accent",  icon: "ti-arrow-right-circle" },
 };
 
 /** A guardian's answer on a next-year pending enrollment —

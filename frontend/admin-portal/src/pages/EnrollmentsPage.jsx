@@ -6,15 +6,17 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import Card from "../components/ui/Card";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
-import { StatusBadge } from "../components/ui/Badge";
-import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP } from "../constants/statusMaps";
+import { StatusBadge, StatusDot } from "../components/ui/Badge";
+import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP, fallbackStatus } from "../constants/statusMaps";
+import { STATUS_TEXT } from "../constants/statusTones";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
 
@@ -35,6 +37,7 @@ import toast from "react-hot-toast";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { followingSchoolYear, yearOptionsForEntry } from "../utils/schoolYear";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_DOTS, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import SectionSelect from "../components/sections/SectionSelect";
 import useSections from "../hooks/useSections";
 import useArchivedYears from "../hooks/useArchivedYears";
@@ -63,14 +66,20 @@ const SCHOOL_LEVELS = [
   { value: "senior_highschool", label: "Senior High School"},
 ];
 
-const GRADE_LEVELS_BY_LEVEL = {
-  "":                ["All Grades"],
-  nursery:           ["All Grades", "Nursery"],
-  kindergarten:      ["All Grades", "Kindergarten"],
-  elementary:        ["All Grades", "Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
-  junior_highschool: ["All Grades", "Grade 7","Grade 8","Grade 9","Grade 10"],
-  senior_highschool: ["All Grades", "Grade 11","Grade 12"],
-};
+// The band's legend, in the order the bar draws them. Transferred Out had no
+// tile, so the tiles didn't add up to the total once anyone transferred out.
+const STATUS_FILTERS = ["", "enrolled", "pending", "completed", "cancelled", "transferred_out"];
+
+// Guardians answer "returning next year?" on pending rows only.
+const PARENT_ANSWERS = [
+  { value: "",              label: "All answers" },
+  { value: "returning",     label: "Returning" },
+  { value: "not_returning", label: "Not returning" },
+  { value: "none",          label: "No answer" },
+];
+
+// Long enough that a word is finished, short enough that the list keeps up.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // Column widths carry over from the hand-rolled <thead>. No `sortable` flags:
 // this list has no server-side ordering wired up, and Table only renders a
@@ -80,18 +89,25 @@ const TABLE_COLUMNS = [
   { key: "level",       label: "Level",       width: "16%" },
   { key: "grade",       label: "Grade",       width: "12%" },
   { key: "section",     label: "Section",     width: "12%" },
-  { key: "school_year", label: "School Year", width: "13%" },
+  { key: "school_year", label: "School year", width: "13%" },
   { key: "status",      label: "Status",      width: "11%" },
   { key: "actions",     label: "",            width: "8%"  },
 ];
 
-const LEVEL_ICONS = {
-  nursery:           "ti-baby-carriage",
-  kindergarten:      "ti-star",
-  elementary:        "ti-book",
-  junior_highschool: "ti-school",
-  senior_highschool: "ti-certificate",
-};
+/** A pending row's answer from the guardian, under its status. The reason
+ *  they gave is in the tooltip. */
+function ParentAnswer({ answer }) {
+  const meta = GUARDIAN_RESPONSE_MAP[answer.response] ?? fallbackStatus(answer.response);
+  return (
+    <span
+      title={answer.reason ? `Parent: ${answer.reason}` : "Parent's answer"}
+      className={`inline-flex items-center gap-[5px] pl-[15px] text-[11.5px] font-semibold ${STATUS_TEXT[meta.variant] ?? STATUS_TEXT.muted}`}
+    >
+      <i className={`ti ${meta.icon} text-[13px]`} aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
+}
 
 
 // ─── Mass Enroll Modal ────────────────────────────────────────────────────────
@@ -1225,7 +1241,7 @@ export default function EnrollmentsPage() {
   const [unplacedOpen,    setUnplacedOpen]    = useState(false);
   const [unplacedReload,  setUnplacedReload]  = useState(0);
   const [markingGraduated, setMarkingGraduated] = useState(false);
-  const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0 });
+  const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0, transferred_out: 0 });
   const [countsLoading,  setCountsLoading]  = useState(true);
   const [countsReload,   setCountsReload]   = useState(0);
   // "Close SY": a finished year that still has learners marked Enrolled.
@@ -1248,8 +1264,6 @@ export default function EnrollmentsPage() {
   const [parentAnswer, setParentAnswer] = useState("");
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
-
-  const gradeOptions      = GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? ["All Grades"];
 
   // Only pending rows carry a guardian's answer, so the filter applies only
   // while Pending is selected.
@@ -1298,7 +1312,7 @@ export default function EnrollmentsPage() {
   }, [schoolLevel]);
 
   // Fetch status counts scoped to the same school year / level / grade as the list below,
-  // so the stat-card numbers always match what clicking into them actually shows.
+  // so the band's numbers always match what clicking into them actually shows.
   useEffect(() => {
     if (!token) return;
     setCountsLoading(true);
@@ -1313,13 +1327,17 @@ export default function EnrollmentsPage() {
       apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "pending"   }),
       apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "completed" }),
       apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "cancelled" }),
-    ]).then(([all, enrolled, pending, completed, cancelled]) => {
+      // Without it the statuses didn't add up to the total once anyone
+      // transferred out, and the band's bar would have had a gap.
+      apiGetEnrollments({ ...scope, page_size: 1, enrollment_status: "transferred_out" }),
+    ]).then(([all, enrolled, pending, completed, cancelled, transferredOut]) => {
       setStatusCounts({
         total:     all.count       ?? 0,
         enrolled:  enrolled.count  ?? 0,
         pending:   pending.count   ?? 0,
         completed: completed.count ?? 0,
         cancelled: cancelled.count ?? 0,
+        transferred_out: transferredOut.count ?? 0,
       });
     }).catch(() => {}).finally(() => setCountsLoading(false));
   }, [token, schoolYear, schoolLevel, gradeLevel, countsReload]);
@@ -1383,6 +1401,15 @@ export default function EnrollmentsPage() {
 
   useEffect(() => { fetchEnrollments(1); }, [fetchEnrollments]);
 
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the fetch above reads, so nothing here can land
+  // with stale filters; Enter only skips the wait.
+  useEffect(() => {
+    if (searchInput === search) return;
+    const timer = setTimeout(() => setSearch(searchInput), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput, search]);
+
   const handleSearch = () => { setSearch(searchInput); };
   const clearFilters = () => {
     setSchoolYear(null); // back to the current school year, not All years
@@ -1396,14 +1423,26 @@ export default function EnrollmentsPage() {
 
   const isFirstRender    = useIsFirstRender();
 
+  // What the band's total counts: its year, and the level and grade when set,
+  // since the counts are scoped to all three.
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === schoolLevel)?.label;
+  const bandCaption = [
+    `enrollment${statusCounts.total === 1 && !countsLoading ? "" : "s"} in ${schoolYear ? `S.Y. ${schoolYear}` : "all school years"}`,
+    schoolLevel && levelLabel,
+    gradeLevel,
+  ].filter(Boolean).join(" · ");
+
+  const gradeMenuOptions = [
+    { value: "", label: "All grades" },
+    ...(GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? []).map((g) => ({ value: g, label: g })),
+  ];
+
   return (
     <>
     <>
 
           <PageHeader
             title="Enrollments"
-            icon="ti-clipboard-list"
-            subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} enrollment${pageMeta.count !== 1 ? "s" : ""} found`}
             actions={
               <>
                 {/* All three write enrollments, which the server allows only
@@ -1427,42 +1466,37 @@ export default function EnrollmentsPage() {
             }
           />
 
-          {/* Content */}
-          <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:18 }}>
+          {/* Content. Stacked blocks, not a flex column: in a flex column that
+              scrolls, the notice cards (overflow-hidden) shrank to a hairline
+              once the page outgrew the screen. */}
+          <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-            {/* ── Stat cards ── */}
-            <div className="flex gap-3">
-              {[
-                { label:"Total Enrollments", icon:"ti-clipboard-list", value: statusCounts.total,     tone:"brand",   status:"" },
-                { label:"Enrolled",          icon:"ti-user-check",     value: statusCounts.enrolled,  tone:"success", status:"enrolled" },
-                { label:"Pending",           icon:"ti-clock",          value: statusCounts.pending,   tone:"warning", status:"pending" },
-                { label:"Completed",         icon:"ti-certificate",    value: statusCounts.completed, tone:"info",    status:"completed" },
-                { label:"Cancelled",         icon:"ti-user-x",         value: statusCounts.cancelled, tone:"error",   status:"cancelled" },
-              ].map((card, i) => (
-                <div key={card.label} className="min-w-0 flex-1">
-                  <StatCard
-                    label={card.label}
-                    icon={card.icon}
-                    iconTone={card.tone}
-                    value={card.value?.toLocaleString() ?? "—"}
-                    loading={countsLoading}
-                    active={statusFilter === card.status}
-                    onClick={() => setStatusFilter(statusFilter === card.status ? "" : card.status)}
-                    animate={isFirstRender}
-                    animateDelay={isFirstRender ? i * 0.06 : 0}
-                  />
-                </div>
-              ))}
-            </div>
+            {/* ── The status mix, and the status filter ──
+                The school year sits in the band because the band's numbers
+                are counted for it. */}
+            <StatusBand
+              total={countsLoading ? undefined : statusCounts.total}
+              caption={bandCaption}
+              aside={<SchoolYearMenu value={schoolYear} onChange={setSchoolYear} />}
+              options={STATUS_FILTERS.map((s) => ({
+                value: s,
+                label: s ? ENROLLMENT_STATUS_MAP[s].label : "All",
+                count: countsLoading ? undefined : s ? statusCounts[s] : statusCounts.total,
+                variant: ENROLLMENT_STATUS_MAP[s]?.variant,
+              }))}
+              value={statusFilter}
+              allValue=""
+              onChange={setStatusFilter}
+            />
 
             {/* ── A finished year still open ── */}
             {openPastYear && (
               <Card padding="none" className="overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-2.5 text-sm text-neutral-800">
-                    <i className="ti ti-calendar-exclamation text-lg text-warning-500" aria-hidden="true" />
+                    <i className="ti ti-calendar-exclamation text-[18px] text-warning-500" aria-hidden="true" />
                     <span>
-                      SY {schoolYear} has ended, but <strong>{statusCounts.enrolled}</strong> learner{statusCounts.enrolled !== 1 ? "s are" : " is"} still marked Enrolled.
+                      S.Y. {schoolYear} has ended, but <strong className="text-neutral-900">{statusCounts.enrolled}</strong> learner{statusCounts.enrolled !== 1 ? "s are" : " is"} still marked Enrolled.
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -1470,7 +1504,7 @@ export default function EnrollmentsPage() {
                       <>
                         <span className="text-xs text-neutral-600">Mark all {statusCounts.enrolled} completed?</span>
                         <Button variant="primary" size="sm" loading={closingYear} onClick={handleCloseYear}>
-                          Close SY {schoolYear}
+                          Close S.Y. {schoolYear}
                         </Button>
                         <Button variant="ghost" size="sm" disabled={closingYear} onClick={() => setCloseYearAsk(false)}>
                           Cancel
@@ -1478,7 +1512,7 @@ export default function EnrollmentsPage() {
                       </>
                     ) : (
                       <Button variant="secondary" size="sm" icon="ti-lock" onClick={() => setCloseYearAsk(true)}>
-                        Close SY {schoolYear}
+                        Close S.Y. {schoolYear}
                       </Button>
                     )}
                   </div>
@@ -1489,11 +1523,11 @@ export default function EnrollmentsPage() {
             {/* ── Not yet placed ── */}
             {canManage && unplaced?.school_year === schoolYear && unplaced.count > 0 && (
               <Card padding="none" className="overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-2.5 text-sm text-neutral-800">
-                    <i className="ti ti-user-question text-lg text-warning-500" aria-hidden="true" />
+                    <i className="ti ti-user-question text-[18px] text-warning-500" aria-hidden="true" />
                     <span>
-                      <strong>{unplaced.count}</strong> active student{unplaced.count !== 1 ? "s have" : " has"} no enrollment in SY {unplaced.school_year}.
+                      <strong className="text-neutral-900">{unplaced.count}</strong> active student{unplaced.count !== 1 ? "s have" : " has"} no enrollment in S.Y. {unplaced.school_year}.
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -1527,7 +1561,7 @@ export default function EnrollmentsPage() {
                           <div className="truncate text-sm font-semibold text-neutral-900">{st.full_name}</div>
                           <div className="truncate text-xs text-neutral-500">
                             {st.last_enrollment
-                              ? `Last: ${st.last_enrollment.grade_level} · SY ${st.last_enrollment.school_year} · ${ENROLLMENT_STATUS_MAP[st.last_enrollment.enrollment_status]?.label ?? st.last_enrollment.enrollment_status}`
+                              ? `Last: ${st.last_enrollment.grade_level} · S.Y. ${st.last_enrollment.school_year} ·${ENROLLMENT_STATUS_MAP[st.last_enrollment.enrollment_status]?.label ?? st.last_enrollment.enrollment_status}`
                               : "No enrollment on record"}
                           </div>
                         </div>
@@ -1558,90 +1592,70 @@ export default function EnrollmentsPage() {
               </Card>
             )}
 
-            {/* ── Search + filters ── */}
-            <FilterBar
-              animate={isFirstRender}
-              animateDelay={isFirstRender ? 0.22 : 0}
-              searchInputId="enrollment-search"
-              searchLabel="Search students"
-              searchPlaceholder="Search student name or section…"
-              searchValue={searchInput}
-              onSearchChange={setSearchInput}
-              onSearch={handleSearch}
-              onClearSearch={() => { setSearchInput(""); setSearch(""); }}
-              hasFilters={Boolean(hasFilters)}
-              onClearFilters={clearFilters}
-              scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} />}
-            >
-              <FilterRow label="School Level">
-                <ChipGroup
-                  label="Filter by school level"
-                  value={schoolLevel}
-                  onChange={setSchoolLevel}
-                  options={[
-                    { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand" },
-                    { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery" },
-                    { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
-                    { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary" },
-                    { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh" },
-                    { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh" },
-                  ]}
-                />
-              </FilterRow>
+            {/* ── Toolbar: search, the filter menus, Clear ──
+                The menus open to the right edge, where the pills sit. */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <SearchField
+                id="enrollment-search"
+                label="Search enrollments by student name or section"
+                placeholder="Search student name or section…"
+                value={searchInput}
+                onChange={setSearchInput}
+                onEnter={handleSearch}
+                onClear={() => { setSearchInput(""); setSearch(""); }}
+              />
 
-              <CollapsibleFilterRow open={schoolLevel !== ""} label="Grade Level">
-                <ChipGroup
-                  label="Filter by grade level"
-                  stagger
-                  generation={schoolLevel}
+              <FilterMenu
+                label="Level"
+                valueLabel={levelLabel ?? "All levels"}
+                active={Boolean(schoolLevel)}
+                options={LEVEL_FILTER_OPTIONS}
+                value={schoolLevel}
+                onChange={setSchoolLevel}
+                align="end"
+                menuWidth={220}
+              />
+
+              {/* A grade only narrows within a level. */}
+              {schoolLevel && (
+                <FilterMenu
+                  label="Grade"
+                  valueLabel={gradeLevel || "All grades"}
+                  active={Boolean(gradeLevel)}
+                  options={gradeMenuOptions}
                   value={gradeLevel}
                   onChange={setGradeLevel}
-                  options={gradeOptions.map((g) => ({
-                    value: g === "All Grades" ? "" : g,
-                    label: g,
-                  }))}
+                  align="end"
+                  menuWidth={180}
                 />
-              </CollapsibleFilterRow>
-
-              <FilterRow label="Status">
-                <ChipGroup
-                  label="Filter by status"
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  // Each chip shows ITS OWN count, from statusCounts.
-                  //
-                  // All four used to read `pageMeta.count`, which is the size
-                  // of the currently filtered list -- so with "Enrolled"
-                  // selected and 68 results, every chip read 68, including
-                  // Cancelled when there were none. The per-status numbers
-                  // were already being fetched for the stat cards directly
-                  // above; the chips just were not reading them.
-                  options={[
-                    { value: "",          label: "All",       tone: "brand",   count: !countsLoading ? statusCounts.total     : null },
-                    { value: "enrolled",  label: "Enrolled",  tone: "success", dot: "#4caf50", count: !countsLoading ? statusCounts.enrolled  : null },
-                    { value: "pending",   label: "Pending",   tone: "warning", dot: "#ff9800", count: !countsLoading ? statusCounts.pending   : null },
-                    { value: "completed", label: "Completed", tone: "info",    dot: "#2196f3", count: !countsLoading ? statusCounts.completed : null },
-                    { value: "cancelled", label: "Cancelled", tone: "error",   dot: "#f44336", count: !countsLoading ? statusCounts.cancelled : null },
-                  ]}
-                />
-              </FilterRow>
+              )}
 
               {/* Guardians answer "returning next year?" on pending rows, so
                   this only appears with the Pending filter. */}
-              <CollapsibleFilterRow open={statusFilter === "pending"} label="Parent answer">
-                <ChipGroup
-                  label="Filter by parent answer"
+              {statusFilter === "pending" && (
+                <FilterMenu
+                  label="Parent answer"
+                  valueLabel={PARENT_ANSWERS.find((a) => a.value === parentAnswer)?.label ?? "All answers"}
+                  active={Boolean(parentAnswer)}
+                  options={PARENT_ANSWERS}
                   value={parentAnswer}
                   onChange={setParentAnswer}
-                  options={[
-                    { value: "",              label: "All",           tone: "brand" },
-                    { value: "returning",     label: "Returning",     tone: "success", icon: "ti-user-check" },
-                    { value: "not_returning", label: "Not returning", tone: "error",   icon: "ti-user-x" },
-                    { value: "none",          label: "No answer",     tone: "warning", icon: "ti-help-circle" },
-                  ]}
+                  align="end"
+                  menuWidth={200}
                 />
-              </CollapsibleFilterRow>
-            </FilterBar>
+              )}
+
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+                >
+                  <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+                  Clear
+                </button>
+              )}
+            </div>
 
             <ArchivedYearNotice schoolYear={schoolYear} records="enrollments" />
 
@@ -1652,7 +1666,18 @@ export default function EnrollmentsPage() {
               transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
             >
               <Card padding="none" className="overflow-hidden">
+                <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+                  <h2 className="text-md font-bold text-neutral-900">
+                    {statusFilter ? ENROLLMENT_STATUS_MAP[statusFilter]?.label ?? statusFilter : "All enrollments"}
+                  </h2>
+                  {!loading && !loadError && (
+                    <span className="text-sm text-neutral-500 tabular-nums">
+                      {pageMeta.count.toLocaleString()}
+                    </span>
+                  )}
+                </div>
                 <Table
+                  headerVariant="quiet"
                   columns={TABLE_COLUMNS}
                   loading={loading}
                   error={loadError}
@@ -1673,7 +1698,6 @@ export default function EnrollmentsPage() {
                   {enrollments.map((en) => {
                     const name = en.student_name ?? `Student #${en.student}`;
                     const palette = getAvatarPalette(name);
-                    const levelIcon = LEVEL_ICONS[en.school_level] ?? "ti-school";
                     return (
                       <TableRow
                         key={en.enrollment_id}
@@ -1682,59 +1706,54 @@ export default function EnrollmentsPage() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                               style={{ background: palette.bg, color: palette.color }}
                               aria-hidden="true"
                             >
                               {initialsFrom(name) || "?"}
                             </div>
                             <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+                              <div className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
                                 {name}
                               </div>
-                              <div className="truncate text-xs text-neutral-500">
+                              <div className="truncate text-[11.5px] text-neutral-500">
                                 ID #{en.enrollment_id}
                               </div>
                             </div>
                           </div>
                         </TableCell>
 
+                        {/* The same dot as the Level menu, so a level reads
+                            the same in both. */}
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <i className={`ti ${levelIcon} text-sm text-brand-600`} aria-hidden="true" />
-                            <span className="text-xs text-neutral-700">
+                          <span className="flex min-w-0 items-center gap-2 text-sm text-neutral-800">
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOTS[en.school_level] ?? "bg-neutral-400"}`}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">
                               {SCHOOL_LEVELS.find((l) => l.value === en.school_level)?.label ?? en.school_level}
                             </span>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-xs font-medium text-neutral-700">
-                          {en.grade_level}
-                        </TableCell>
-
-                        <TableCell className="text-xs text-neutral-700">
-                          {en.section}
-                        </TableCell>
-
-                        <TableCell>
-                          <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">
-                            {en.school_year}
                           </span>
                         </TableCell>
 
                         <TableCell>
-                          <div className="flex flex-col items-start gap-1">
-                            <StatusBadge
-                              status={en.enrollment_status}
-                              map={ENROLLMENT_STATUS_MAP}
-                            />
+                          <span className="text-sm font-medium text-neutral-900">{en.grade_level}</span>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="text-sm text-neutral-800">{en.section}</span>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="font-mono text-[12px] text-neutral-800">{en.school_year}</span>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="flex flex-col items-start gap-[3px]">
+                            <StatusDot status={en.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
                             {en.enrollment_status === "pending" && en.guardian_response && (
-                              <StatusBadge
-                                size="sm"
-                                status={en.guardian_response.response}
-                                map={GUARDIAN_RESPONSE_MAP}
-                                title={en.guardian_response.reason ? `Parent: ${en.guardian_response.reason}` : "Parent's answer"}
-                              />
+                              <ParentAnswer answer={en.guardian_response} />
                             )}
                           </div>
                         </TableCell>

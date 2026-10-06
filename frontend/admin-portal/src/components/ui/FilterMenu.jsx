@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 // FilterMenu — a compact filter that shows its value and opens a menu of
-// choices. The Students toolbar's Sex and Enrollment filters use it, replacing
-// chip rows that took a labelled line each.
+// choices. The Students and Enrollments toolbars use it for every filter that
+// isn't search or status, replacing chip rows that took a labelled line each.
 //
 // A menu button with radio items: focus moves into the menu on open, the
 // arrow keys, Home and End walk it, Enter or Space picks, and Escape, Tab or a
@@ -16,15 +16,42 @@ const ALIGN = {
   end: "right-0",
 };
 
+// The pill. "light" sits on the page; "dark" sits on a StatusBand, where it
+// stays outlined whatever it's set to, since the band has no pale tint to
+// mark "set" with.
+const TONES = {
+  light: {
+    trigger: "h-10 rounded-lg",
+    idle: "border-neutral-300 bg-white hover:border-brand-500",
+    set: "border-brand-500 bg-brand-100",
+    label: "text-neutral-500",
+    value: "text-neutral-900",
+    valueSet: "text-brand-600",
+    chevron: "text-neutral-600",
+  },
+  dark: {
+    trigger: "h-9 rounded-full",
+    idle: "border-white/16 bg-transparent hover:border-white/30",
+    set: "border-white/16 bg-transparent hover:border-white/30",
+    label: "text-brand-300",
+    value: "text-white",
+    valueSet: "text-white",
+    chevron: "text-brand-border",
+  },
+};
+
 /**
  * @param {string} label  what the filter is ("Sex")
  * @param {string} valueLabel  what it's set to ("All", "Female")
  * @param {boolean} active  whether it's narrowing the list right now
- * @param {{ value: string, label: string }[]} options
+ * @param {{ value: string, label: string, dot?: string, note?: React.ReactNode }[]} options
+ *   `dot` is a literal bg class for a colour key (a school level); `note` sits
+ *   at the right of the item ("Current").
  * @param {string} value  the selected option's value
  * @param {(value: string) => void} onChange
  * @param {"start"|"end"} [align]  the edge the menu prefers to line up with
  * @param {number} [menuWidth]  the menu's minimum width, in px
+ * @param {"light"|"dark"} [tone]
  */
 export default function FilterMenu({
   label,
@@ -35,7 +62,9 @@ export default function FilterMenu({
   onChange,
   align = "start",
   menuWidth = 200,
+  tone = "light",
 }) {
+  const t = TONES[tone] ?? TONES.light;
   const [open, setOpen] = useState(false);
   // The edge the menu actually opens from. `align` is a preference: on a
   // narrow screen the toolbar wraps, and a pill that sat at the right edge
@@ -122,13 +151,13 @@ export default function FilterMenu({
         aria-label={`${label}: ${valueLabel}`}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={onTriggerKeyDown}
-        className={`focus-ring flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border-[1.5px] px-3.5 text-[12.5px] transition-colors duration-150 ${
-          active ? "border-brand-500 bg-brand-100" : "border-neutral-300 bg-white hover:border-brand-500"
+        className={`focus-ring flex items-center gap-2 whitespace-nowrap border-[1.5px] px-3.5 text-[12.5px] transition-colors duration-150 ${t.trigger} ${
+          active ? t.set : t.idle
         }`}
       >
-        <span className="text-neutral-500">{label}</span>
-        <span className={`font-bold ${active ? "text-brand-600" : "text-neutral-900"}`}>{valueLabel}</span>
-        <i className="ti ti-chevron-down text-[13px] text-neutral-600" aria-hidden="true" />
+        <span className={t.label}>{label}</span>
+        <span className={`font-bold ${active ? t.valueSet : t.value}`}>{valueLabel}</span>
+        <i className={`ti ti-chevron-down text-[13px] ${t.chevron}`} aria-hidden="true" />
       </button>
 
       {open && (
@@ -159,7 +188,9 @@ export default function FilterMenu({
                 onClick={() => pick(o.value)}
                 className="flex h-[34px] w-full items-center gap-2 whitespace-nowrap rounded-sm px-2.5 text-left text-[12.5px] text-neutral-900 outline-none hover:bg-brand-50 focus:bg-brand-50"
               >
+                {o.dot && <span className={`h-2 w-2 shrink-0 rounded-full ${o.dot}`} aria-hidden="true" />}
                 <span className="flex-1">{o.label}</span>
+                {o.note}
                 {selected && <i className="ti ti-check text-[14px] text-brand-500" aria-hidden="true" />}
               </button>
             );
