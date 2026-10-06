@@ -15,7 +15,7 @@ import numpy as np
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from ai import analytics_views
-from ai.analytics_views import ClusterAnalyticsView, _fit_candidate_ks
+from ai.analytics_views import BAND_COLORS, GROUP_BANDS, ClusterAnalyticsView, _fit_candidate_ks
 
 
 def _student(sid, grade, attendance=1.0, narrative=3.0):
@@ -86,3 +86,33 @@ def test_view_reports_the_groups_it_actually_drew(monkeypatch):
     assert response.status_code == 200
     assert response.data["meta"]["n_clusters"] == 2
     assert len(response.data["clusters"]) == 2
+
+
+# ── Order, bands and colours ──────────────────────────────────────────────────
+
+def test_groups_are_ranked_by_overall_standing_not_grade_alone(monkeypatch):
+    # Regular attenders on 80, and learners on 88 who miss a third of school
+    # with weaker behavior marks. By grade alone the absent group ranked
+    # higher -- and was coloured and named as the stronger of the two.
+    steady = [_student(i, 80.0, attendance=0.97, narrative=2.5) for i in range(1, 4)]
+    absent = [_student(i, 88.0, attendance=0.62, narrative=2.0) for i in range(4, 7)]
+    response = _call_view(monkeypatch, steady + absent, n_clusters="2")
+    assert response.status_code == 200
+    weakest, strongest = response.data["clusters"]
+    assert {s["student_id"] for s in weakest["students"]} == {4, 5, 6}
+    assert (weakest["band"], weakest["color"]) == ("low", BAND_COLORS["low"])
+    assert (strongest["band"], strongest["color"]) == ("high", BAND_COLORS["high"])
+
+
+def test_every_group_count_runs_from_weakest_band_to_strongest():
+    order = ["low", "middle", "high"]
+    for k in range(2, 8):
+        bands = GROUP_BANDS[k]
+        assert len(bands) == k
+        assert bands[0] == "low" and bands[-1] == "high"
+        ranks = [order.index(b) for b in bands]
+        assert ranks == sorted(ranks)
+
+
+def test_three_groups_are_red_amber_green():
+    assert [BAND_COLORS[b] for b in GROUP_BANDS[3]] == ["#a32d2d", "#fab219", "#0ca30c"]

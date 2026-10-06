@@ -22,6 +22,8 @@ import useElementSize from "../components/charts/useElementSize";
 
 import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
+import GroupMap, { GroupSwatch } from "./analytics/GroupMap";
+import { groupShapes } from "./analytics/mapFrame";
 import { subjectOptionLabel } from "./analytics/subjectOptions";
 import {
   CHART_OPTIONS,
@@ -240,12 +242,22 @@ const GROUP_STUDENT_COLUMNS = [
 ];
 
 function PerformanceGroups({ result }) {
+  // Past three groups some share a colour; the shape that tells them apart
+  // on the map marks them here too.
+  const shapes = useMemo(() => groupShapes(result?.clusters), [result]);
   const students = useMemo(() => {
     if (!result?.clusters) return [];
     return result.clusters
-      .flatMap((c) => (c.students ?? []).map((s) => ({ ...s, groupLabel: c.label, groupColor: c.color })))
+      .flatMap((c) =>
+        (c.students ?? []).map((s) => ({
+          ...s,
+          groupLabel: c.label,
+          groupColor: c.color,
+          groupShape: shapes.get(c.cluster_id),
+        }))
+      )
       .sort((a, b) => (a.grade ?? 0) - (b.grade ?? 0));
-  }, [result]);
+  }, [result, shapes]);
 
   if (!result) return null;
 
@@ -260,11 +272,7 @@ function PerformanceGroups({ result }) {
           {result.clusters.map((c) => (
             <Card key={c.label} padding="md" className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: c.color }}
-                  aria-hidden="true"
-                />
+                <GroupSwatch color={c.color} shape={shapes.get(c.cluster_id)} />
                 <span className="truncate font-bold text-neutral-900">{c.label}</span>
               </div>
               <div className="text-xl font-bold text-neutral-900">
@@ -292,6 +300,17 @@ function PerformanceGroups({ result }) {
         </div>
       </Panel>
 
+      <Panel
+        title="Where each group sits"
+        subtitle="Average grade against attendance, one dot per student"
+        icon="ti-chart-scatter"
+      >
+        <GroupMap
+          key={`${result.meta.school_year}-${result.meta.grading_period}-${result.meta.subject}-${result.meta.n_clusters}`}
+          result={result}
+        />
+      </Panel>
+
       <Card padding="none" className="overflow-hidden">
         <div className="border-b border-neutral-200 px-5 py-4">
           <div className="font-bold text-neutral-900">Every student, weakest first</div>
@@ -308,11 +327,7 @@ function PerformanceGroups({ result }) {
               </TableCell>
               <TableCell>
                 <span className="inline-flex items-center gap-1.5 text-xs text-neutral-700">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: s.groupColor }}
-                    aria-hidden="true"
-                  />
+                  <GroupSwatch color={s.groupColor} shape={s.groupShape} size="sm" />
                   {s.groupLabel}
                 </span>
               </TableCell>
