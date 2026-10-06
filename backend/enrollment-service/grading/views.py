@@ -19,6 +19,7 @@ from subjects.models import Subject
 from .deped import (
     PASSING_GRADE,
     descriptor,
+    initial_grade_from,
     percentage_score,
     quantize,
     transmute,
@@ -170,8 +171,7 @@ class ScoreEntryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         components = template.components.all().order_by("sort_order")
         component_results = []
         pending_components = []
-        weighted_total = Decimal("0")
-        encoded_weight = Decimal("0")
+        component_percentages = []
 
         for comp in components:
             entries = list(ScoreEntry.objects.filter(
@@ -193,8 +193,7 @@ class ScoreEntryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
                 weighted = None
             else:
                 weighted = (ps * comp.weight) / Decimal("100")
-                weighted_total += weighted
-                encoded_weight += Decimal(str(comp.weight))
+            component_percentages.append((comp.weight, ps))
 
             component_results.append({
                 "component_id": comp.grading_component_id,
@@ -210,12 +209,9 @@ class ScoreEntryViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
 
         # While encoding is still in progress, renormalise over the components
         # that do have scores so the running grade is meaningful instead of
-        # artificially depressed. This mirrors how the risk model renormalises
-        # over the signals actually present (ai/services.py).
-        if encoded_weight > 0:
-            initial_grade = quantize(weighted_total * 100 / encoded_weight)
-        else:
-            initial_grade = None
+        # artificially depressed. Shared with the analytics, which read this
+        # same running grade for a period still being encoded (ai/services.py).
+        initial_grade = initial_grade_from(component_percentages)
 
         transmuted_grade = transmute(initial_grade)
 

@@ -4,7 +4,6 @@ import { AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
-import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
@@ -30,7 +29,6 @@ import {
   getUsers as _getUsers,
   createUser as _createUser,
   updateUser as _updateUser,
-  deleteUser as _deleteUser,
 } from "../api/identityApi";
 
 const ROLES = ["admin", "super_admin", "registrar", "accounting", "teacher", "guardian"];
@@ -529,57 +527,14 @@ function EditProfileModal({ user, currentUser, onClose, onSaved }) {
   );
 }
 
-// ── Deactivate / reactivate ───────────────────────────────────────────────────
-//
-// Accounts are retired, not deleted. A delete left every record that points at
-// the person -- a teacher's section advisories, grades they entered, a
-// parent's guardian link -- pointing at nobody. A deactivated account can't
-// sign in, but it still names them everywhere, and it can be brought back.
-
-function DeleteUserModal({ user, currentUser, onClose, onDeleted }) {
-  const isSelf = currentUser?.id === user.user_id;
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState(() =>
-    isSelf ? "You can't delete your own account." : ""
-  );
-
-  async function handleDelete() {
-    if (isSelf) return;
-    setDeleting(true);
-    try {
-      await _deleteUser(user.user_id);
-      toast.success("User account deleted.");
-      onDeleted(user.user_id);
-      onClose();
-    } catch (err) {
-      setError(firstMessageFrom(err) || "We couldn't delete this account. Please try again.");
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <ConfirmModal
-      icon="ti-trash"
-      title="Delete user account?"
-      message={
-        <>
-          <strong className="text-neutral-900">{user.name}</strong> will lose access to the
-          portal immediately. This cannot be undone.
-        </>
-      }
-      error={error}
-      loading={deleting}
-      confirmDisabled={isSelf}
-      confirmLabel="Delete account"
-      onConfirm={handleDelete}
-      onCancel={onClose}
-    />
-  );
-}
-
 // ── Deactivate ────────────────────────────────────────────────────────────────
 
+// Accounts are retired, never deleted -- the server refuses a delete, and this
+// page offers none (a Delete button came back once, through a merge). A delete
+// left every record that points at the person -- a teacher's section
+// advisories, the grades they entered, a parent's guardian link -- pointing at
+// nobody, and it could not be undone.
+//
 // Someone who has left is deactivated rather than deleted: they can't sign in
 // and drop out of the staff pickers, but their past advisories, grades and
 // audit entries keep a name. A teacher's advisories from this year on are
@@ -683,7 +638,6 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [deleting, setDeleting] = useState(null);
   const [deactivating, setDeactivating] = useState(null);
   const [reactivatingId, setReactivatingId] = useState(null);
 
@@ -979,15 +933,6 @@ export default function UsersPage() {
                           onClick={() => handleReactivate(u)}
                         />
                       )}
-                      {canChangeStatus && (
-                        <Button
-                          variant="ghost" size="sm" iconOnly icon="ti-trash"
-                          title="Delete account"
-                          aria-label={`Delete ${u.name}`}
-                          className="hover:bg-error-50 hover:text-error-500"
-                          onClick={() => setDeleting(u)}
-                        />
-                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1045,19 +990,6 @@ export default function UsersPage() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {deleting && (
-          <DeleteUserModal
-            user={deleting}
-            currentUser={currentUser}
-            onClose={() => setDeleting(null)}
-            onDeleted={() => {
-              setDeleting(null);
-              fetchUsers();
-            }}
-          />
-        )}
-      </AnimatePresence>
     </>
   );
 }

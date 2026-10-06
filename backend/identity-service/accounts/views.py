@@ -13,6 +13,7 @@ from django.db.models import Count, Q
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -459,8 +460,8 @@ class UserListView(APIView):
 
 class UserDetailView(APIView):
     """GET /api/auth/users/<id>/   — view a user
-       PATCH /api/auth/users/<id>/ — edit a user
-       DELETE /api/auth/users/<id>/ — delete a user (admin only)"""
+       PATCH /api/auth/users/<id>/ — edit a user (is_active=false retires one)
+       DELETE /api/auth/users/<id>/ — always 405: accounts are deactivated"""
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
     # No required_roles: this is reachable by any authenticated user because
@@ -677,38 +678,20 @@ class UserDetailView(APIView):
         return Response(UserSerializer(target).data)
 
     def delete(self, request, user_id):
-        requester = request.resolved_user
-        if not is_audit_admin(requester):
-            return Response({"detail": "Only admins can delete users."}, status=403)
-        if requester.user_id == int(user_id):
-            return Response({"detail": "You cannot delete your own account."}, status=400)
-
-        target = self._get_target(user_id)
-        if not target:
-            return Response({"detail": "User not found."}, status=404)
-
-        # Same hierarchy as patch(): a plain admin must not be able to delete
-        # the super_admin account out from under the system.
-        if is_super_admin(target) and not is_super_admin(requester):
-            return Response(
-                {"detail": "Only a super admin can delete a super admin account."},
-                status=403,
-            )
-
-        name, email, role = target.name, target.email, target.role
-        target.delete()
-
-        record_audit_event(
-            request,
-            user=requester,
-            action="Deleted user account",
-            module="Users",
-            status="success",
-            details=f"User '{name}' ({email}) with role '{role}' was permanently deleted.",
-            metadata={"target_user_id": int(user_id), "target_email": email, "role": role},
+        # Accounts are retired by deactivating them (PATCH is_active=false),
+        # never deleted -- for anyone, super admins included. `users` has no
+        # foreign keys, so a delete left everything that points at the person
+        # (a teacher's section advisories, the attendance and grades they
+        # recorded, a parent's guardian link) naming nobody, and it could not
+        # be undone. A deactivated account can't sign in, but its row and its
+        # name stay on that history, and it can be reactivated.
+        raise MethodNotAllowed(
+            request.method,
+            detail=(
+                "Accounts can't be deleted. Deactivate the account instead: it can't "
+                "sign in, and its name stays on the records it is attached to."
+            ),
         )
-
-        return Response({"detail": "User deleted."}, status=204)
 
 
 # ── Audit ──────────────────────────────────────────────────────────────────────

@@ -304,6 +304,16 @@ describe("UsersPage — one page at a time, from the server", () => {
 });
 
 describe("UsersPage — deactivating instead of deleting", () => {
+  // A Delete button came back once, through a merge. Deleting orphaned every
+  // record that names the person, so the page must never offer it again.
+  it("offers no way to delete an account", async () => {
+    renderUsers({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });
+    await screen.findByText("Tina Teacher");
+
+    expect(screen.queryByRole("button", { name: /^Delete\b/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deactivate Tina Teacher" })).toBeTruthy();
+  });
+
   it("deactivates an account rather than deleting it", async () => {
     api.updateUser.mockResolvedValue({ ...TEACHER, is_active: false });
     renderUsers({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });

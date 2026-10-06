@@ -710,6 +710,12 @@ export default function AnalyticsPage() {
                 Showing {assessed} student{assessed === 1 ? "" : "s"} · {periodLabel(risk.grading_period)}{" "}
                 {risk.school_year} · last checked {formatWhen(risk.updated_at ?? risk.created_at)}
                 {riskIsLatest && " (saved result — press Check again for fresh numbers)"}
+                {/* How the backend reads grades (ai/services.py): said here so a
+                    running grade or a semester figure is never a surprise. */}
+                <span className="mt-0.5 block">
+                  A period still being encoded uses each learner&apos;s running grade from the scores entered so far.
+                  Senior High is graded by semester, so a quarter shows their semester.
+                </span>
               </p>
             )}
           </Card>

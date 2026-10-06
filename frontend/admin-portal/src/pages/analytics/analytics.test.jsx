@@ -106,6 +106,13 @@ describe("riskVocabulary", () => {
     expect(confidenceFor(0).key).toBe("limited");
   });
 
+  it("measures the picture against what the period allows", () => {
+    // The 1st quarter has no earlier period to trend against: 3 of 3 is
+    // everything, not "Partial".
+    expect(confidenceFor(3, 3).key).toBe("complete");
+    expect(confidenceFor(3, 4).key).toBe("partial");
+  });
+
   it("only offers a band legend on the charts that draw bands unlabelled", () => {
     expect(viewUsesBands("section")).toBe(true);
     expect(viewUsesBands("map")).toBe(true);
@@ -147,6 +154,12 @@ describe("CSV export", () => {
     const csv = buildRiskCSV([row({ average_grade: null, attendance_rate: null, grade_delta: null })]);
     expect(csv).not.toContain("null");
   });
+
+  it("counts the signals used out of those the period allows", () => {
+    expect(buildRiskCSV([row({ signals_present: 3, signals_possible: 3 })])).toContain("3 of 3");
+    // An older saved check carries no signals_possible: out of four, as it was.
+    expect(buildRiskCSV([row({ signals_present: 3 })])).toContain("3 of 4");
+  });
 });
 
 describe("RiskTable", () => {
@@ -166,6 +179,18 @@ describe("RiskTable", () => {
     render(<RiskTable run={runWith([row()])} />);
     expect(screen.getByText(/Failing 2 subjects/)).toBeTruthy();
     expect(screen.getByText(/Missed 14% of school days/)).toBeTruthy();
+  });
+
+  it("calls the follow-up filter Flagged, so it can't be read as the Needs attention status", () => {
+    render(<RiskTable run={runWith([row()])} />);
+    expect(screen.getByText("Flagged")).toBeTruthy();
+    expect(screen.queryByText("Needs follow-up")).toBeNull();
+  });
+
+  it("counts a student's signals out of those their period allows", () => {
+    render(<RiskTable run={runWith([row({ signals_present: 3, signals_possible: 3 })])} />);
+    expect(screen.getByText("3/3")).toBeTruthy();
+    expect(screen.getByTitle(/Full picture/)).toBeTruthy();
   });
 
   it("collapses extra reasons behind a control rather than truncating them", () => {
@@ -274,10 +299,33 @@ describe("RiskChart", () => {
     expect(screen.getByText("1 needs follow-up")).toBeTruthy();
   });
 
-  it("shows each reason as a share of everyone assessed", () => {
-    render(<RiskChart view="reasons" run={run} />);
-    expect(screen.getByRole("img", { name: "Failing one or more subjects: 2 students, 100% of those assessed" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Chronically absent: 1 student, 50% of those assessed" })).toBeTruthy();
+  it("shows each reason as a share of the students flagged", () => {
+    const flagged = runWith([
+      row(),
+      row({ student_id: 2, risk_level: "high" }),
+      row({ student_id: 3, risk_level: "low", average_grade: 91 }),
+    ]);
+    // The backend counts reasons among the flagged only (two here).
+    flagged.summary.by_reason = [
+      { code: "failing_subjects", count: 2 },
+      { code: "chronic_absence", count: 1 },
+    ];
+    render(<RiskChart view="reasons" run={flagged} />);
+    expect(screen.getByRole("img", { name: "Failing one or more subjects: 2 students, 100% of those flagged" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chronically absent: 1 student, 50% of those flagged" })).toBeTruthy();
+    expect(screen.getByText(/Share of the 2 students who need follow-up/)).toBeTruthy();
+  });
+
+  it("says nobody needs following up rather than charting reasons for no one", () => {
+    const calm = runWith([row({ risk_level: "low", average_grade: 91 })]);
+    render(<RiskChart view="reasons" run={calm} />);
+    expect(screen.getByText("Nobody needs following up in this selection.")).toBeTruthy();
+  });
+
+  it("names the map's corners by their figures, never by a status", () => {
+    render(<RiskChart view="map" run={run} />);
+    expect(screen.getByText("Struggling and often absent")).toBeTruthy();
+    expect(screen.queryByText("Needs urgent help")).toBeNull();
   });
 
   it("colours passing grades green and failing ones red", () => {

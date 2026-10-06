@@ -108,8 +108,8 @@ function ReasonCell({ reasons }) {
   );
 }
 
-function ConfidenceDot({ signalsPresent }) {
-  const c = confidenceFor(signalsPresent ?? 0);
+function ConfidenceDot({ signalsPresent, signalsPossible = 4 }) {
+  const c = confidenceFor(signalsPresent ?? 0, signalsPossible);
   const tone =
     c.key === "complete"
       ? "bg-success-dot"
@@ -122,7 +122,7 @@ function ConfidenceDot({ signalsPresent }) {
       title={`${c.label} — ${c.hint}`}
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${tone}`} aria-hidden="true" />
-      <span className="tabular-nums">{signalsPresent ?? 0}/4</span>
+      <span className="tabular-nums">{signalsPresent ?? 0}/{signalsPossible}</span>
     </span>
   );
 }
@@ -151,9 +151,12 @@ export default function RiskTable({
   const bandOptions = useMemo(() => {
     const counts = run?.summary?.by_level ?? {};
     return [
+      // "Flagged", not "Needs follow-up": beside the "Needs attention" status
+      // the two read as the same thing, when this is Needs attention and
+      // Needs urgent help together.
       {
         value: "flagged",
-        label: "Needs follow-up",
+        label: "Flagged",
         icon: "ti-flag",
         count: run?.summary?.flagged_count ?? 0,
       },
@@ -336,7 +339,7 @@ export default function RiskTable({
                 </TableCell>
 
                 <TableCell align="center">
-                  <ConfidenceDot signalsPresent={row.signals_present} />
+                  <ConfidenceDot signalsPresent={row.signals_present} signalsPossible={row.signals_possible ?? 4} />
                 </TableCell>
               </TableRow>
             );

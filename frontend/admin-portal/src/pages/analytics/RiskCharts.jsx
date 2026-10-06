@@ -219,15 +219,20 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
 
 // ── 4 · Why students are flagged ─────────────────────────────────────────────
 // The most directly actionable view: it names the intervention. Each bar is
-// the share of everyone assessed who has that reason. Single series, so one
+// the share of the flagged students (Needs attention or Needs urgent help) who
+// have that reason -- the backend counts reasons among them only. It used to
+// count everyone assessed, which charted 118 "behavior concerns" under this
+// title in a check that had flagged 52 students in all. Single series, so one
 // hue and no legend — the title says what the bars are.
 
-function ReasonChart({ summary, total }) {
+function ReasonChart({ summary }) {
+  const flagged = summary?.flagged_count ?? 0;
+  if (!flagged) return <NoData message="Nobody needs following up in this selection." />;
   const rows = (summary?.by_reason ?? [])
     .filter((r) => r.code !== "limited_data")
     .sort((a, b) => b.count - a.count);
   if (!rows.length) return <NoData message="No concerns were raised for this selection." />;
-  const whole = Math.max(total, ...rows.map((r) => r.count));
+  const whole = Math.max(flagged, ...rows.map((r) => r.count));
 
   return (
     <div>
@@ -237,7 +242,7 @@ function ReasonChart({ summary, total }) {
             <span className="truncate text-sm font-semibold text-neutral-800" title={reasonLabel(row.code)}>
               {reasonLabel(row.code)}
             </span>
-            <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those assessed`}>
+            <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those flagged`}>
               <Fill share={row.count / whole} color={chartInk().bar} />
             </Track>
             <span className="text-right text-sm tabular-nums text-neutral-600">
@@ -247,8 +252,8 @@ function ReasonChart({ summary, total }) {
         ))}
       </ul>
       <p className="mt-4 text-xs text-neutral-500">
-        Share of the {students(whole)} assessed. One student can have several reasons, so these can add up to more
-        than everyone.
+        Share of the {students(whole)} who need follow-up. One student can have several reasons, so these can add up
+        to more than everyone.
       </p>
     </div>
   );
@@ -479,11 +484,13 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
   const points = placeDots(items, axes);
 
   // The top two sit above the plot, out of the dot field; the bottom two stay
-  // inside it, where the corners are emptiest.
+  // inside it, where the corners are emptiest. A corner describes where the
+  // figures are, never a status: this one was "Needs urgent help", the name of
+  // the top status, so a "Needs attention" dot sat in a corner calling it urgent.
   const QUADRANTS = [
     { x: PAD_L + 8, y: PAD_T - 10, text: "Attending, still struggling", anchor: "start" },
     { x: W - PAD_R - 8, y: PAD_T - 10, text: "Doing well", anchor: "end" },
-    { x: PAD_L + 8, y: PAD_T + plotH - 8, text: "Needs urgent help", anchor: "start" },
+    { x: PAD_L + 8, y: PAD_T + plotH - 8, text: "Struggling and often absent", anchor: "start" },
     { x: W - PAD_R - 8, y: PAD_T + plotH - 8, text: "Passing but often absent", anchor: "end" },
   ];
 
@@ -601,7 +608,7 @@ export default function RiskChart({ view, run, onSelectStudent }) {
         />
       );
     case "reasons":
-      return <ReasonChart summary={summary} total={total} />;
+      return <ReasonChart summary={summary} />;
     case "grades":
       return <GradeDistributionChart scores={scores} />;
     case "map":

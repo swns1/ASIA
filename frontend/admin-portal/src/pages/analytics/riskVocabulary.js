@@ -106,14 +106,18 @@ export function reasonLabel(code) {
 // rather than folded into it — a student scored from one signal is not as
 // confidently placed as one scored from four, and the weight renormalization
 // in score_students() would otherwise hide that completely.
+//
+// Measured against what the period allows (the backend's signals_possible):
+// the grade trend needs an earlier period, so in the 1st quarter three is
+// everything. Counting out of four marked every 1st-quarter student "Partial".
 export const CONFIDENCE_META = {
-  complete: { label: "Full picture", hint: "All 4 signals had data" },
+  complete: { label: "Full picture", hint: "Every signal this period allows had data" },
   partial: { label: "Partial", hint: "Some signals had no data yet" },
   limited: { label: "Thin data", hint: "Scored from a single signal — treat with care" },
 };
 
-export function confidenceFor(signalsPresent) {
-  if (signalsPresent >= 4) return { key: "complete", ...CONFIDENCE_META.complete };
+export function confidenceFor(signalsPresent, signalsPossible = 4) {
+  if (signalsPresent >= signalsPossible) return { key: "complete", ...CONFIDENCE_META.complete };
   if (signalsPresent >= 2) return { key: "partial", ...CONFIDENCE_META.partial };
   return { key: "limited", ...CONFIDENCE_META.limited };
 }
@@ -224,7 +228,7 @@ export function buildRiskCSV(rows) {
     r.attendance_rate == null ? "" : `${Math.round(Number(r.attendance_rate) * 100)}%`,
     r.grade_delta == null ? "" : Number(r.grade_delta).toFixed(1),
     r.failing_subject_count ?? 0,
-    `${r.signals_present ?? 0} of 4`,
+    `${r.signals_present ?? 0} of ${r.signals_possible ?? 4}`,
     (r.reasons ?? []).map((x) => x.text).join("; "),
   ]);
 
@@ -273,7 +277,7 @@ const CHART_BLURBS = {
   mix: "How the whole group splits across the four levels.",
   grade_level: "Which year groups are carrying the most students who need help.",
   section: "Which sections are carrying the most students who need help.",
-  reasons: "What is actually driving the flags — this is what to act on.",
+  reasons: "What is driving the flags among the students who need follow-up — this is what to act on.",
   grades: "Where everyone's average sits, and how many fall below the passing mark.",
   map: "Grades against attendance, so a bright absentee and a struggling attender don't look alike.",
 };

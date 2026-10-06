@@ -27,14 +27,17 @@ makes the bands fire.
 
 from collections import Counter, defaultdict
 from datetime import date
+from decimal import Decimal
 
 import numpy as np
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q, Sum
 
 from attendance.models import AttendanceRecord
 from enrollments.models import Enrollment
 from grades.models import Grade, NarrativeReport
 from grading.deped import PASSING_GRADE as DEPED_PASSING_GRADE
+from grading.deped import initial_grade_from, transmute
+from grading.models import GradingComponent, ScoreEntry
 from subjects.models import Subject
 
 NARRATIVE_SCORE = {
@@ -73,6 +76,83 @@ QUARTER_INDEX = {
     "3rd_quarter": 2,
     "4th_quarter": 3,
 }
+LAST_QUARTER_INDEX = 3
+
+# The quarters (first, last) a period spans, for its attendance window.
+QUARTERS_OF_PERIOD = {
+    **{period: (index, index) for period, index in QUARTER_INDEX.items()},
+    "1st_semester": (0, 1),
+    "2nd_semester": (2, 3),
+}
+
+# Senior high is graded by semester, never by quarter (the database's
+# trg_validate_grading_period holds every level to its own periods). So a
+# quarter check reads a senior high learner at the semester the quarter falls
+# in -- the 1st semester spans the 1st and 2nd quarters -- or Grades 11-12
+# would sit out every quarter check of the year.
+SENIOR_HIGH = "senior_highschool"
+SEMESTER_OF_QUARTER = {
+    "1st_quarter": "1st_semester",
+    "2nd_quarter": "1st_semester",
+    "3rd_quarter": "2nd_semester",
+    "4th_quarter": "2nd_semester",
+}
+
+
+def period_for_level(grading_period, school_level):
+    """
+    The grading period a learner at `school_level` is graded in during
+    `grading_period`: a quarter reads senior high at its semester. None when
+    the level has no such period (a semester, for anyone below senior high).
+    """
+    if grading_period == "overall":
+        return grading_period
+    if school_level == SENIOR_HIGH:
+        if grading_period in SEMESTER_OF_QUARTER:
+            return SEMESTER_OF_QUARTER[grading_period]
+        return grading_period if grading_period in QUARTERS_OF_PERIOD else None
+    return grading_period if grading_period in QUARTER_INDEX else None
+
+
+def previous_period_for_level(grading_period, school_level):
+    """
+    The period a learner's grade trend compares against, or None when there
+    is nothing earlier to compare with. A quarter check reads senior high at
+    its semester, so for them the 2nd quarter has no trend (it is the same
+    1st semester as the 1st quarter) and the 3rd compares the 2nd semester
+    with the 1st.
+    """
+    current = period_for_level(grading_period, school_level)
+    if not current:
+        return None
+    if school_level == SENIOR_HIGH and grading_period in SEMESTER_OF_QUARTER:
+        previous_quarter = PERIOD_SEQUENCE.get(grading_period)
+        previous = SEMESTER_OF_QUARTER.get(previous_quarter) if previous_quarter else None
+        return previous if previous != current else None
+    return PERIOD_SEQUENCE.get(current)
+
+
+def _period_q(period_for, levels=(None, SENIOR_HIGH), *, period_field="grading_period",
+              level_field="enrollment__school_level"):
+    """
+    A Q over rows carrying `period_field`, reading each level at its own
+    period: `period_for(level)` gives the period for senior high
+    (SENIOR_HIGH) and for everyone else (None), or None for no rows.
+    None overall when neither level has a period.
+    """
+    parts = []
+    for level in levels:
+        period = period_for(level)
+        if not period:
+            continue
+        level_q = Q(**{level_field: SENIOR_HIGH}) if level == SENIOR_HIGH else ~Q(**{level_field: SENIOR_HIGH})
+        parts.append(level_q & Q(**{period_field: period}))
+    if not parts:
+        return None
+    q = parts[0]
+    for part in parts[1:]:
+        q |= part
+    return q
 
 
 # Fallback academic window, used only when the school has not configured its
@@ -139,18 +219,20 @@ def resolve_period_window(school_year, grading_period):
 
     Quarter boundaries are derived from the school's own `quarter_break`
     calendar events (n breaks delimit n+1 quarters): quarter N runs from the
-    end of break N-1 to the start of break N. When the school hasn't entered
-    enough breaks — or the period is a semester or "overall" — this falls
-    back to the full school year and says so via "source", so the UI can
-    state which window the attendance figure actually covers instead of
-    implying a precision that isn't there.
+    end of break N-1 to the start of break N. A semester is two quarters --
+    senior high's 1st runs to the semestral break, its 2nd from it to the end
+    of the year. When the school hasn't entered the breaks a window needs --
+    or the period is "overall" -- this falls back to the full school year and
+    says so via "source", so the UI can state which window the attendance
+    figure actually covers instead of implying a precision that isn't there.
     """
     outer_from, outer_to = _school_year_bounds(school_year)
     full_year = {"from": outer_from, "to": outer_to, "source": "full_year"}
 
-    index = QUARTER_INDEX.get(grading_period)
-    if index is None:
+    span = QUARTERS_OF_PERIOD.get(grading_period)
+    if span is None:
         return full_year
+    first, last = span
 
     # Imported lazily: academic_calendar is a sibling app, and this module is
     # otherwise import-light enough to stay usable from a non-Django context.
@@ -162,13 +244,17 @@ def resolve_period_window(school_year, grading_period):
         .order_by("start_date")
         .values_list("start_date", "end_date")
     )
-    # Quarter N needs break N to close it (except the last quarter, which the
-    # school year itself closes). Too few breaks entered → don't guess.
-    if len(breaks) < index:
+    # The first quarter needs break N-1 to open it (the year opens the 1st
+    # quarter) and the last needs break N to close it (the year closes the
+    # 4th). Too few breaks entered -> don't guess. This used to check only
+    # the opening break, so a 2nd quarter whose closing break wasn't entered
+    # yet quietly ran to the end of the school year.
+    needed = max(first, last + 1) if last < LAST_QUARTER_INDEX else first
+    if len(breaks) < needed:
         return full_year
 
-    window_from = breaks[index - 1][1] if index > 0 else outer_from
-    window_to = breaks[index][0] if index < len(breaks) else outer_to
+    window_from = breaks[first - 1][1] if first > 0 else outer_from
+    window_to = breaks[last][0] if last < LAST_QUARTER_INDEX else outer_to
 
     if window_from and window_to and window_from > window_to:
         return full_year
@@ -198,6 +284,82 @@ def pick_primary_enrollment(rows):
     if not rows:
         return None
     return max(rows, key=lambda r: (r.enrollment_status == "enrolled", r.enrollment_id))
+
+
+def running_grades(component_totals, weights):
+    """
+    {(enrollment_id, subject_id, grading_period): transmuted grade} -- the
+    gradebook's running grade, from score totals already summed per grading
+    component: the DO 8 percentage score of each component (summed raw over
+    summed highest possible, as grading.deped.percentage_score), weighted and
+    renormalised over the components with anything encoded
+    (grading.deped.initial_grade_from), then transmuted.
+
+    component_totals: rows with enrollment_id, subject_id, grading_period,
+    grading_component_id, total (the scores summed) and possible (the highest
+    possible scores summed, zero-point assessments left out).
+    weights: {grading_component_id: weight}.
+    """
+    parts = defaultdict(list)
+    for row in component_totals:
+        possible = Decimal(str(row["possible"] or 0))
+        if possible <= 0:
+            continue
+        percentage = Decimal(str(row["total"] or 0)) / possible * 100
+        key = (row["enrollment_id"], row["subject_id"], row["grading_period"])
+        parts[key].append((weights.get(row["grading_component_id"], 0), percentage))
+
+    grades = {}
+    for key, pairs in parts.items():
+        transmuted = transmute(initial_grade_from(pairs))
+        if transmuted is not None:
+            grades[key] = float(transmuted)
+    return grades
+
+
+def _unposted_running_grades(entry_filter):
+    """
+    running_grades() for every (enrollment, subject, period) matching
+    `entry_filter` (a Q over ScoreEntry) that has score entries but no posted
+    grade yet. Summed in the database, one row per component.
+    """
+    posted = Grade.objects.filter(
+        enrollment_id=OuterRef("enrollment_id"),
+        subject_id=OuterRef("subject_id"),
+        grading_period=OuterRef("grading_period"),
+    )
+    totals = list(
+        ScoreEntry.objects
+        .filter(entry_filter, max_score__gt=0)
+        .filter(~Exists(posted))
+        .order_by()  # a default ordering would join the GROUP BY
+        .values("enrollment_id", "subject_id", "grading_period", "grading_component_id")
+        .annotate(total=Sum("score"), possible=Sum("max_score"))
+    )
+    if not totals:
+        return {}
+    weights = dict(
+        GradingComponent.objects
+        .filter(pk__in={row["grading_component_id"] for row in totals})
+        .values_list("pk", "weight")
+    )
+    return running_grades(totals, weights)
+
+
+def _new_student_entry(enrollment):
+    student = enrollment.student
+    return {
+        "student_id":     student.student_id,
+        "enrollment_id":  enrollment.enrollment_id,
+        "student_name":   f"{student.last_name}, {student.first_name}"
+                          + (f" {student.middle_name[0]}." if student.middle_name else ""),
+        "student_number": student.student_number,
+        "grade_level":    enrollment.grade_level,
+        "section":        enrollment.section,
+        "school_level":   enrollment.school_level,
+        "grade_accum":    defaultdict(list),
+        "running_subjects": 0,
+    }
 
 
 def build_student_features(school_year, grading_period, subject_id=None,
@@ -231,10 +393,25 @@ def build_student_features(school_year, grading_period, subject_id=None,
 
     Reads each learner's enrolled and completed rows for the year
     (FEATURE_STATUSES), merged per student: a senior high learner has one row
-    per semester. "enrollment_id", "grade_level" and "section" come from the
-    row they are on now -- see pick_primary_enrollment.
+    per semester. "enrollment_id", "grade_level", "section" and
+    "school_level" come from the row they are on now -- see
+    pick_primary_enrollment.
+
+    Each level is read at its own grading period: a quarter check reads
+    senior high at the semester the quarter falls in (period_for_level), and
+    "previous_period" is the student's own (previous_period_for_level).
+
+    A subject's grade for a period is the posted grade, or -- while the
+    period is still being encoded and nothing is posted -- the running grade
+    from its score entries ("running_subjects" counts those).
     """
     is_overall_period = grading_period == "overall"
+    # Every row a check reads, each level at its own period: senior high at
+    # the semester a quarter falls in (see period_for_level). None overall.
+    current_q = None if is_overall_period else _period_q(
+        lambda level: period_for_level(grading_period, level)
+    )
+    no_rows = Q(pk__in=[])
 
     grades_qs = Grade.objects.select_related(
         "enrollment", "enrollment__student", "subject"
@@ -242,17 +419,25 @@ def build_student_features(school_year, grading_period, subject_id=None,
         enrollment__school_year=school_year,
         enrollment__enrollment_status__in=FEATURE_STATUSES,
     )
+    entry_filter = Q(
+        enrollment__school_year=school_year,
+        enrollment__enrollment_status__in=FEATURE_STATUSES,
+    )
 
     if not is_overall_period:
-        grades_qs = grades_qs.filter(grading_period=grading_period)
+        grades_qs = grades_qs.filter(current_q if current_q is not None else no_rows)
+        entry_filter &= current_q if current_q is not None else no_rows
     if school_level:
         grades_qs = grades_qs.filter(enrollment__school_level=school_level)
+        entry_filter &= Q(enrollment__school_level=school_level)
     if grade_level:
         grades_qs = grades_qs.filter(enrollment__grade_level=grade_level)
+        entry_filter &= Q(enrollment__grade_level=grade_level)
 
     subject_name = "Overall"
     if subject_id:
         grades_qs = grades_qs.filter(subject_id=subject_id)
+        entry_filter &= Q(subject_id=subject_id)
         subject_name = Subject.objects.get(pk=subject_id).subject_name
 
     # ── Build per-student grade data ──────────────────────────────────
@@ -263,18 +448,38 @@ def build_student_features(school_year, grading_period, subject_id=None,
     for g in grades_qs:
         sid = g.enrollment.student_id
         if sid not in student_data:
-            s = g.enrollment.student
-            student_data[sid] = {
-                "student_id":    s.student_id,
-                "enrollment_id": g.enrollment.enrollment_id,
-                "student_name":  f"{s.last_name}, {s.first_name}"
-                                 + (f" {s.middle_name[0]}." if s.middle_name else ""),
-                "student_number": s.student_number,
-                "grade_level":   g.enrollment.grade_level,
-                "section":       g.enrollment.section,
-                "grade_accum":   defaultdict(list),
-            }
+            student_data[sid] = _new_student_entry(g.enrollment)
         student_data[sid]["grade_accum"][g.subject.subject_name].append(float(g.numeric_grade))
+
+    # ── Periods still being encoded: the gradebook's running grade ───────
+    # A grade is posted when its period closes, but scores are encoded all
+    # through it. Reading posted grades alone left a check of the period in
+    # progress empty, and kept senior high -- posted once a semester -- out
+    # of every quarter check until the semester ended. Where a learner has
+    # score entries for a subject and period but no posted grade yet, the
+    # running grade from those entries stands in: the same renormalised
+    # formula the gradebook shows the teacher (grading.deped).
+    running = _unposted_running_grades(entry_filter)
+    if running:
+        enrollments = {
+            e.enrollment_id: e
+            for e in Enrollment.objects.select_related("student").filter(
+                pk__in={key[0] for key in running}
+            )
+        }
+        names = dict(
+            Subject.objects.filter(pk__in={key[1] for key in running})
+            .values_list("subject_id", "subject_name")
+        )
+        for (enrollment_id, subj_id, _period), grade in running.items():
+            enrollment = enrollments.get(enrollment_id)
+            if enrollment is None:
+                continue
+            sd = student_data.get(enrollment.student_id)
+            if sd is None:
+                sd = student_data[enrollment.student_id] = _new_student_entry(enrollment)
+            sd["grade_accum"][names.get(subj_id, f"Subject {subj_id}")].append(grade)
+            sd["running_subjects"] += 1
 
     # Resolve accumulated lists → per-subject mean, one overall average, and
     # the per-subject detail the "why is this student flagged" reasons need.
@@ -315,7 +520,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
         student_id__in=list(student_data),
         school_year=school_year,
         enrollment_status__in=FEATURE_STATUSES,
-    ).only("enrollment_id", "student_id", "enrollment_status", "grade_level", "section"):
+    ).only("enrollment_id", "student_id", "enrollment_status", "grade_level", "section", "school_level"):
         rows_by_student[e.student_id].append(e)
     student_of = {}
     for sid, sd in student_data.items():
@@ -327,25 +532,30 @@ def build_student_features(school_year, grading_period, subject_id=None,
             sd["enrollment_id"] = primary.enrollment_id
             sd["grade_level"] = primary.grade_level
             sd["section"] = primary.section
+            sd["school_level"] = primary.school_level
         student_of.setdefault(sd["enrollment_id"], sid)
     enrollment_ids = list(student_of)
 
     # ── Previous grading period, for the trajectory signal ─────────────
     # A student sliding 88 → 79 → 72 is the strongest early-warning signal
     # available here, and it is invisible in any single period's average.
-    previous_period = PERIOD_SEQUENCE.get(grading_period)
+    # Each level compares against its own previous period (senior high's
+    # previous semester -- see previous_period_for_level), posted or still
+    # running, the same as the current one.
+    previous_q = _period_q(lambda level: previous_period_for_level(grading_period, level))
     previous_avg = {}
-    if previous_period:
-        prev_qs = Grade.objects.filter(
-            enrollment_id__in=enrollment_ids,
-            grading_period=previous_period,
-        )
+    if previous_q is not None:
+        prev_qs = Grade.objects.filter(previous_q, enrollment_id__in=enrollment_ids)
+        prev_filter = previous_q & Q(enrollment_id__in=enrollment_ids)
         if subject_id:
             prev_qs = prev_qs.filter(subject_id=subject_id)
+            prev_filter &= Q(subject_id=subject_id)
 
         prev_accum = defaultdict(lambda: defaultdict(list))
         for g in prev_qs:
             prev_accum[student_of[g.enrollment_id]][g.subject_id].append(float(g.numeric_grade))
+        for (enrollment_id, subj_id, _period), grade in _unposted_running_grades(prev_filter).items():
+            prev_accum[student_of[enrollment_id]][subj_id].append(grade)
         for sid, by_subject in prev_accum.items():
             subject_means = [float(np.mean(vals)) for vals in by_subject.values()]
             previous_avg[sid] = float(np.mean(subject_means)) if subject_means else np.nan
@@ -378,9 +588,11 @@ def build_student_features(school_year, grading_period, subject_id=None,
     att_map = {row["enrollment__student_id"]: row for row in att_qs}
 
     # ── Fetch narrative reports ───────────────────────────────────────
+    # Each level at its own period: senior high rates observed values per
+    # semester, so a quarter check reads the semester's ratings for them.
     narrative_qs = NarrativeReport.objects.filter(enrollment_id__in=enrollment_ids)
     if not is_overall_period:
-        narrative_qs = narrative_qs.filter(grading_period=grading_period)
+        narrative_qs = narrative_qs.filter(current_q if current_q is not None else no_rows)
 
     narrative_map = defaultdict(list)
     narrative_ratings_map = defaultdict(list)
@@ -424,6 +636,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
         sd["attendance_window"] = window["source"]
 
         prev = previous_avg.get(sid, np.nan)
+        previous_period = previous_period_for_level(grading_period, sd.get("school_level"))
         sd["previous_grade"] = prev
         sd["previous_period"] = previous_period
         current = sd.get("grade")
@@ -745,14 +958,26 @@ def _build_reasons(sd, components):
     return reasons
 
 
-def _data_confidence(signals_present):
+def signals_possible_for(sd):
+    """
+    How many of the four signals could have data for this student. The
+    grade trend needs a period before this one, so the 1st quarter (and
+    senior high's 2nd and 4th, the same semester as the quarter before) can
+    reach three at most. Counting it as missing told staff every student in
+    the 1st quarter was only partly assessed.
+    """
+    return 4 if sd.get("previous_period") else 3
+
+
+def _data_confidence(signals_present, signals_possible=4):
     """
     How much of the picture we actually have. A student scored from one
     signal is not as confidently placed as one scored from four, and the
     weight renormalization below hides that — so it's reported alongside the
-    score rather than folded into it.
+    score rather than folded into it. Measured against what the period makes
+    possible: every signal a 1st-quarter student can have is complete.
     """
-    if signals_present >= 4:
+    if signals_present >= signals_possible:
         return "complete"
     if signals_present >= 2:
         return "partial"
@@ -778,6 +1003,7 @@ def score_students(student_data, weights=None):
         "risk_level" ("low" | "moderate" | "high" | "critical"),
         "reasons" ([{code, text, severity}], most severe first),
         "signals_present" (int 0-4),
+        "signals_possible" (3 or 4 -- see signals_possible_for),
         "data_confidence" ("complete" | "partial" | "limited"),
     }
 
@@ -814,13 +1040,14 @@ def score_students(student_data, weights=None):
         risk_score = round(risk_score, 2)
         risk_level = _risk_level(risk_score)
         signals_present = len(available)
+        signals_possible = signals_possible_for(sd)
         reasons = _build_reasons(sd, components)
         if not reasons and risk_level != "low":
             reasons = [_combined_reason(sd, components)]
         if signals_present <= 1:
             reasons.append({
                 "code": "limited_data",
-                "text": f"Based on {signals_present} of 4 signals — this score is less certain",
+                "text": f"Based on {signals_present} of {signals_possible} signals — this score is less certain",
                 "severity": "low",
             })
 
@@ -833,7 +1060,8 @@ def score_students(student_data, weights=None):
             "risk_level":           risk_level,
             "reasons":              reasons,
             "signals_present":      signals_present,
-            "data_confidence":      _data_confidence(signals_present),
+            "signals_possible":     signals_possible,
+            "data_confidence":      _data_confidence(signals_present, signals_possible),
         }
 
     return results
