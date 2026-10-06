@@ -3,11 +3,12 @@
  *
  * The filter used to take whatever year the sidebar selector was set to: the
  * page never said which, and changing the sidebar didn't reload the list. It
- * now has its own "Not enrolled for" picker, always shown so the page says
- * which year the filter means, and only styled as applied while it is on.
+ * then got a "Not enrolled" chip with its own year picker beside the search
+ * box. Now both are one Enrollment menu, where each year is its own choice
+ * ("Not enrolled for 2025-2026"), so the pill always names the year it checks.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const getStudents = vi.fn();
@@ -31,23 +32,22 @@ function page() {
   );
 }
 
-function ctx(currentYear) {
-  return { currentYear, options: ["2026-2027", "2025-2026", "2024-2025"], yearCounts: {} };
+function ctx(currentYear, options = ["2026-2027", "2025-2026", "2024-2025"]) {
+  return { currentYear, options, yearCounts: {} };
 }
 
-const notEnrolledChip = () =>
-  within(screen.getByRole("group", { name: /no enrollment for/i })).getByRole("button", { name: /not enrolled/i });
-const yearPicker = () => screen.getByRole("button", { name: /not enrolled for/i });
-const pickYear = (year) => {
-  fireEvent.click(yearPicker());
-  fireEvent.click(screen.getByRole("option", { name: new RegExp(year) }));
+const enrollmentMenu = () => screen.getByRole("button", { name: /^enrollment:/i });
+const menuItems = () => screen.getAllByRole("menuitemradio");
+const pick = (label) => {
+  fireEvent.click(enrollmentMenu());
+  fireEvent.click(screen.getByRole("menuitemradio", { name: label }));
 };
-// Whole class names: the neutral pill carries `hover:border-brand-500`.
-const looksApplied = () => yearPicker().className.split(/\s+/).includes("border-brand-500");
+// Whole class names: the resting pill carries `hover:border-brand-500`.
+const looksApplied = () => enrollmentMenu().className.split(/\s+/).includes("border-brand-500");
 const lastUnenrolled = () => getStudents.mock.lastCall[0].unenrolled;
-// The header reads "Loading records…" while a request is out; waiting for
-// the count to come back keeps every state update inside the test.
-const settled = () => screen.findByText("0 students registered");
+// The empty state only shows once a request has come back, so waiting for it
+// keeps every state update inside the test.
+const settled = () => screen.findByText(/^No students (yet|match these filters)$/);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -59,89 +59,93 @@ beforeEach(() => {
 });
 
 describe("StudentsPage — Not enrolled", () => {
-  it("always says which year it checks, and only looks applied while it's on", async () => {
+  it("offers each year as its own choice, the current year first, and never All years", async () => {
+    schoolYearCtx = ctx("2026-2027", ["2027-2028", "2026-2027", "2025-2026"]);
     render(page());
     await settled();
-    expect(yearPicker().getAttribute("aria-label")).toBe("Not enrolled for: 2026-2027");
+    expect(enrollmentMenu().getAttribute("aria-label")).toBe("Enrollment: Any");
     expect(looksApplied()).toBe(false);
+
+    fireEvent.click(enrollmentMenu());
+
+    expect(menuItems().map((i) => i.textContent)).toEqual([
+      "Any enrollment",
+      "Not enrolled for 2026-2027",
+      "Not enrolled for 2027-2028",
+      "Not enrolled for 2025-2026",
+    ]);
+    expect(screen.getByRole("menuitemradio", { name: "Any enrollment" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("menuitemradio", { name: /all years/i })).toBeNull();
+  });
+
+  it("lists who isn't enrolled for the year picked, and the pill names that year", async () => {
+    render(page());
+    await settled();
     expect(lastUnenrolled()).toBeUndefined();
 
-    fireEvent.click(notEnrolledChip());
+    pick("Not enrolled for 2025-2026");
+
+    await waitFor(() => expect(lastUnenrolled()).toBe("2025-2026"));
+    await settled();
+    expect(enrollmentMenu().getAttribute("aria-label")).toBe("Enrollment: Not enrolled for 2025-2026");
+    expect(looksApplied()).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("also turns it on for the year it already defaults to", async () => {
+    render(page());
+    await settled();
+
+    pick("Not enrolled for 2026-2027");
 
     await waitFor(() => expect(lastUnenrolled()).toBe("2026-2027"));
     await settled();
     expect(looksApplied()).toBe(true);
   });
 
-  it("reloads for a year picked in its picker", async () => {
+  it("reloads when a different year is picked while it's on", async () => {
     render(page());
     await settled();
-    fireEvent.click(notEnrolledChip());
-    await waitFor(() => expect(lastUnenrolled()).toBe("2026-2027"));
-
-    pickYear("2025-2026");
-
-    await waitFor(() => expect(lastUnenrolled()).toBe("2025-2026"));
-    await settled();
-    expect(yearPicker().getAttribute("aria-label")).toBe("Not enrolled for: 2025-2026");
-  });
-
-  it("turns the filter on when a year is picked while it's off", async () => {
-    render(page());
-    await settled();
-
-    pickYear("2025-2026");
-
-    await waitFor(() => expect(lastUnenrolled()).toBe("2025-2026"));
-    await settled();
-    expect(notEnrolledChip().getAttribute("aria-pressed")).toBe("true");
-    expect(looksApplied()).toBe(true);
-  });
-
-  it("also turns it on when the year picked is the one already shown", async () => {
-    render(page());
-    await settled();
-
-    pickYear("2026-2027");
-
+    pick("Not enrolled for 2026-2027");
     await waitFor(() => expect(lastUnenrolled()).toBe("2026-2027"));
     await settled();
-    expect(notEnrolledChip().getAttribute("aria-pressed")).toBe("true");
+
+    pick("Not enrolled for 2024-2025");
+
+    await waitFor(() => expect(lastUnenrolled()).toBe("2024-2025"));
+    await settled();
+    expect(enrollmentMenu().getAttribute("aria-label")).toBe("Enrollment: Not enrolled for 2024-2025");
   });
 
-  it("offers one specific year, never All years", async () => {
+  it("goes back to everyone on Any enrollment", async () => {
     render(page());
     await settled();
-    fireEvent.click(yearPicker());
-
-    expect(screen.queryByRole("option", { name: /all years/i })).toBeNull();
-  });
-
-  it("reloads when the current year arrives from School Settings", async () => {
-    const { rerender } = render(page());
-    await settled();
-    fireEvent.click(notEnrolledChip());
-    await waitFor(() => expect(lastUnenrolled()).toBe("2026-2027"));
-
-    schoolYearCtx = ctx("2025-2026");
-    rerender(page());
-
+    pick("Not enrolled for 2025-2026");
     await waitFor(() => expect(lastUnenrolled()).toBe("2025-2026"));
     await settled();
+
+    pick("Any enrollment");
+
+    await waitFor(() => expect(lastUnenrolled()).toBeUndefined());
+    await settled();
+    expect(enrollmentMenu().getAttribute("aria-label")).toBe("Enrollment: Any");
+    expect(looksApplied()).toBe(false);
   });
 
-  it("clears back to no filter, with the picker still showing the current year", async () => {
+  it("clears back to no filter", async () => {
     render(page());
     await settled();
-    pickYear("2025-2026");
+    pick("Not enrolled for 2025-2026");
     await waitFor(() => expect(lastUnenrolled()).toBe("2025-2026"));
     await settled();
 
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+
     await waitFor(() => expect(lastUnenrolled()).toBeUndefined());
     await settled();
-    expect(yearPicker().getAttribute("aria-label")).toBe("Not enrolled for: 2026-2027");
+    expect(enrollmentMenu().getAttribute("aria-label")).toBe("Enrollment: Any");
     expect(looksApplied()).toBe(false);
-    expect(notEnrolledChip().getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(enrollmentMenu());
+    expect(screen.getByRole("menuitemradio", { name: "Any enrollment" }).getAttribute("aria-checked")).toBe("true");
   });
 });
