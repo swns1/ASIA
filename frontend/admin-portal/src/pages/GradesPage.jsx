@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Tabs from "../components/ui/Tabs";
 import Card from "../components/ui/Card";
-import { StatusBadge } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Button from "../components/ui/Button";
 import StatusBand from "../components/ui/StatusBand";
@@ -15,12 +14,25 @@ import SearchField from "../components/ui/SearchField";
 import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import toast from "react-hot-toast";
 import AIInsightPanel from "../components/AIInsightPanel";
-import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
-import Skeleton from "../components/ui/Skeleton";
-import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import Alert from "../components/ui/Alert";
 import { GRADE_LEVELS_BY_LEVEL, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { useSchoolYear } from "../context/SchoolYearContext";
+import SelectionCard from "./grades/SelectionCard";
+import ScoreSheet from "./grades/ScoreSheet";
+import GradeBar from "./grades/GradeBar";
+import SummaryCard from "./grades/SummaryCard";
+import ObservedValues from "./grades/ObservedValues";
+import {
+  GRADE_LEGEND,
+  GRADING_PERIODS_BY_LEVEL,
+  PERIOD_LABELS,
+  gradeStyle,
+  periodsFor,
+  subjectParamsFor,
+  summarizeGrades,
+} from "./grades/gradeRules";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -42,15 +54,13 @@ import {
   deleteNarrativeReport as _deleteNarrativeReport,
   callGemini,
 } from "../api/enrollmentApi";
-import { getStudents as _getStudents, getStudent as _getStudent } from "../api/studentApi";
+import { getStudent as _getStudent } from "../api/studentApi";
 import useYearFilter from "../hooks/useYearFilter";
 import useArchivedYears from "../hooks/useArchivedYears";
 import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
-import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
-import { OBSERVED_VALUES, observedMark } from "../constants/observedValues";
+import { GRADE_PASSING } from "../utils/grading";
 import useLatestRequest from "../hooks/useLatestRequest";
 
-const getStudents            = (p = {}) => _getStudents(p);
 const getStudent              = (id)     => _getStudent(id);
 const getEnrollments         = (p = {}) => _getEnrollments(p);
 const getGradeAverages       = (p = {}) => _getGradeAverages(p);
@@ -527,634 +537,40 @@ function OverviewTab({ onNavigate }) {
   );
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const GRADING_PERIODS_BY_LEVEL = {
-  nursery:           ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
-  kindergarten:      ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
-  elementary:        ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
-  junior_highschool: ["1st_quarter","2nd_quarter","3rd_quarter","4th_quarter"],
-  senior_highschool: ["1st_semester","2nd_semester"],
-};
-
-// A senior high enrollment is one semester: it takes that semester's period
-// and subjects only — the core subjects plus the learner's own strand. The
-// server refuses the rest, so offering every semester and strand only led the
-// teacher to an error.
-function periodsFor(enrollment) {
-  if (!enrollment) return [];
-  if (enrollment.school_level === "senior_highschool" && enrollment.semester) {
-    return [`${enrollment.semester}_semester`];
-  }
-  return GRADING_PERIODS_BY_LEVEL[enrollment.school_level] ?? [];
-}
-
-function subjectParamsFor(enrollment) {
-  // The enrollment's own year's subjects: each year has its own curriculum.
-  const params = {
-    school_year: enrollment.school_year, school_level: enrollment.school_level,
-    grade_level: enrollment.grade_level, page_size: 100,
-  };
-  if (enrollment.school_level === "senior_highschool") {
-    if (enrollment.strand) params.for_strand = enrollment.strand;
-    // That semester's subjects plus those with none recorded; the exact
-    // match left a HUMSS or ABM learner with nothing to grade.
-    if (enrollment.semester) params.for_semester = enrollment.semester;
-  }
-  return params;
-}
-
-const PERIOD_LABELS = {
-  "1st_quarter":  "1st Quarter",
-  "2nd_quarter":  "2nd Quarter",
-  "3rd_quarter":  "3rd Quarter",
-  "4th_quarter":  "4th Quarter",
-  "1st_semester": "1st Semester",
-  "2nd_semester": "2nd Semester",
-};
-
-// Matches Grade.REMARKS_CHOICES (backend/enrollment-service/grades/models.py).
-// computeGrade() can only ever auto-produce "passed"/"failed"/null — a
-// teacher picks "incomplete"/"dropped" manually, there's no path to those
-// from the computed score.
-const REMARKS_META = {
-  passed:     { label: "Passed",     color: "#2e6b0d", bg: "#e8f5e0" },
-  failed:     { label: "Failed",     color: "#9b2020", bg: "#fde8e8" },
-  incomplete: { label: "Incomplete", color: "#854f0b", bg: "#faeeda" },
-  dropped:    { label: "Dropped",    color: "#5c5752", bg: "#f0ede8" },
-};
-
-const PERIOD_FULL = {
-  "1st_quarter":  "1st Quarter",
-  "2nd_quarter":  "2nd Quarter",
-  "3rd_quarter":  "3rd Quarter",
-  "4th_quarter":  "4th Quarter",
-  "1st_semester": "1st Semester",
-  "2nd_semester": "2nd Semester",
-};
-
-const SCHOOL_LEVEL_META = {
-  nursery:           { label:"Nursery",      color:"#be185d", bg:"#fde8f8" },
-  kindergarten:      { label:"Kindergarten", color:"#854f0b", bg:"#fdf5e8" },
-  elementary:        { label:"Elementary",   color:"#2e6b0d", bg:"#e8f5e0" },
-  junior_highschool: { label:"Junior HS",    color:"#1455a0", bg:"#e3f0fd" },
-  senior_highschool: { label:"Senior HS",    color:"#7c3aed", bg:"#f0e8fd" },
-};
-
-const COMPONENT_COLORS = ["#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2"];
-
-// ── Shared styles ─────────────────────────────────────────────────────────────
-const thStyle = {
-  // neutral-600, not 500: these headers sit on the tinted #f9f4f4 sticky
-  // row, where neutral-500 measures 4.43:1 — under AA by a whisker.
-  textAlign:"center", fontSize:10.5, fontWeight:600, color:"#855c5c",
-  padding:"12px 16px", borderBottom:"1px solid #f5eaea",
-  textTransform:"uppercase", letterSpacing:"0.07em",
-};
-const tdStyle = {
-  textAlign:"center", padding:"12px 16px", borderBottom:"1px solid #f9f0f0",
-  verticalAlign:"middle", transition:"background 0.1s",
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function gradeStyle(g) {
-  if (g === null || g === undefined) return { color:"#8a6a6a", bg:"transparent", label:"—" };
-  const n = parseFloat(g);
-  if (n >= 90) return { color:"#1455a0", bg:"#e3f0fd",  label:"Outstanding" };
-  if (n >= 85) return { color:"#2e6b0d", bg:"#e8f5e0",  label:"Very Satisfactory" };
-  if (n >= 80) return { color:"#2e6b0d", bg:"#eaf3de",  label:"Satisfactory" };
-  if (n >= 75) return { color:"#854f0b", bg:"#faeeda",  label:"Fairly Satisfactory" };
-  return { color:"#9b2020", bg:"#fde8e8", label:"Did Not Meet" };
-}
-
-// Derived from gradeStyle rather than restated: the legend previously hard-coded
-// its own copy of these five bands, so changing a threshold or colour in
-// gradeStyle would have left the legend quietly describing the old scheme.
-const GRADE_LEGEND = [
-  { range: "90–100", at: 95 },
-  { range: "85–89",  at: 87 },
-  { range: "80–84",  at: 82 },
-  { range: "75–79",  at: 77 },
-  { range: "< 75",   at: 70 },
-].map(({ range, at }) => ({ range, ...gradeStyle(at) }));
-
-function gradeColor(g) {
-  if (g >= GRADE_OUTSTANDING) return { color:"#1455a0", bg:"#e3f0fd" };
-  if (g >= GRADE_PASSING)     return { color:"#2e6b0d", bg:"#e8f5e0" };
-  if (g >  0)                 return { color:"#9b2020", bg:"#fde8e8" };
-  return { color:"#7a5050", bg:"#f9f4f4" };
-}
-
-// ── Student Picker ────────────────────────────────────────────────────────────
-function StudentPicker({ value, onChange }) {
-  const [query,   setQuery]   = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [open,    setOpen]    = useState(false);
-
-  useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
-    setLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await getStudents({ search: query, page_size: 100 });
-        setResults(data.results || []);
-      } catch { setResults([]); }
-      finally { setLoading(false); }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  if (value) {
-    const p = getAvatarPalette(`${value.first_name ?? ""} ${value.last_name ?? ""}`);
-    const initials = initialsFrom(value.first_name, value.last_name);
-    const fullName = [value.first_name, value.middle_name, value.last_name, value.suffix].filter(Boolean).join(" ");
-    return (
-      <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"linear-gradient(to right,#fff8f6,white)" }}>
-        <div style={{ width:46, height:46, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:15, flexShrink:0 }}>{initials}</div>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{fullName}</div>
-          <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>LRN {value.lrn} · {value.student_number}</div>
-        </div>
-        <button type="button" onClick={() => onChange(null)}
-          style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:8, padding:"6px 12px", fontSize:12, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
-          Change
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ position:"relative" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:12, padding:"0 14px", height:46 }}>
-        <i className="ti ti-search" style={{ fontSize:15, color:"#8a6a6a" }} />
-        <input placeholder="Search student by name or LRN…" aria-label="Search students" value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          style={{ flex:1, border:"none", background:"transparent", fontSize:14, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-        {loading && <i className="ti ti-loader-2" style={{ fontSize:14, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
-      </div>
-      {open && query && (
-        <div style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:12, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:280, overflowY:"auto", zIndex:1000 }}>
-          {results.length === 0 && !loading && <div style={{ padding:"20px 16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No students match "{query}".</div>}
-          {results.map((st) => {
-            const p = getAvatarPalette(`${st.first_name ?? ""} ${st.last_name ?? ""}`);
-            const initials = initialsFrom(st.first_name, st.last_name);
-            return (
-              <div key={st.student_id} onClick={() => { onChange(st); setOpen(false); setQuery(""); }}
-                className="flex cursor-pointer items-center gap-3 border-b border-neutral-100 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
-                <div style={{ width:34, height:34, borderRadius:"50%", background:p.bg, color:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>{initials}</div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{st.last_name}, {st.first_name}</div>
-                  <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>LRN {st.lrn}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Grade Summary Table ───────────────────────────────────────────────────────
-function GradeCell({ grade }) {
-  if (grade === null || grade === undefined) {
-    return <td style={tdStyle}><span style={{ color:"#8a6a6a", fontSize:13 }}>—</span></td>;
-  }
-  const n = parseFloat(grade);
-  const gs = gradeStyle(n);
-  return (
-    <td style={tdStyle}>
-      <span style={{ fontSize:13, fontWeight:700, padding:"3px 10px", borderRadius:8, background:gs.bg, color:gs.color }}>
-        {n.toFixed(2)}
-      </span>
-    </td>
-  );
-}
-
-function GeneralAverageCell({ grades }) {
-  const valid = grades.filter((g) => g !== null && g !== undefined);
-  if (valid.length === 0) return <td style={{ ...tdStyle, background:"#fdfafa" }}><span style={{ color:"#8a6a6a", fontSize:13 }}>—</span></td>;
-  const avg = valid.reduce((s, g) => s + parseFloat(g), 0) / valid.length;
-  const gs = gradeStyle(avg);
-  return (
-    <td style={{ ...tdStyle, background:"#fdfafa" }}>
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-        <span style={{ fontSize:14, fontWeight:700, padding:"3px 12px", borderRadius:8, background:gs.bg, color:gs.color }}>{avg.toFixed(2)}</span>
-      </div>
-    </td>
-  );
-}
-
-function SummaryTable({ enrollment, grades, subjects, loading }) {
-  const periods = periodsFor(enrollment);
-  const lvlMeta = SCHOOL_LEVEL_META[enrollment.school_level] ?? SCHOOL_LEVEL_META.elementary;
-
-  const gradeMap = useMemo(() => {
-    const map = {};
-    grades.forEach((g) => {
-      if (!map[g.subject]) map[g.subject] = {};
-      map[g.subject][g.grading_period] = g.numeric_grade;
-    });
-    return map;
-  }, [grades]);
-
-  const periodAverages = useMemo(() => {
-    const avgs = {};
-    periods.forEach((p) => {
-      const vals = subjects.map((s) => gradeMap[s.subject_id]?.[p]).filter((v) => v !== undefined);
-      avgs[p] = vals.length > 0 ? vals.reduce((s, v) => s + parseFloat(v), 0) / vals.length : null;
-    });
-    return avgs;
-  }, [gradeMap, subjects, periods]);
-
-  const overallAvg = useMemo(() => {
-    const all = grades.map((g) => parseFloat(g.numeric_grade));
-    if (all.length === 0) return null;
-    return all.reduce((s, g) => s + g, 0) / all.length;
-  }, [grades]);
-
-  const overallGs = gradeStyle(overallAvg);
-
-  if (loading) return (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"24px", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      {[1,2,3,4,5].map((i) => <div key={i} style={{ marginBottom:12 }}><Skeleton width="100%" height={36} radius={8} /></div>)}
-    </div>
-  );
-
-  return (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)", animation:"fadeUp 0.25s ease both" }}>
-      <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
-      <div style={{ padding:"18px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, background:"linear-gradient(to right,#fdfafa,white)" }}>
-        <div>
-          <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a"}}>
-            {enrollment.grade_level} — {enrollment.section}
-          </div>
-          <div style={{ fontSize:12, color:"#8a6a6a", marginTop:3 }}>
-            S.Y. {enrollment.school_year} ·
-            <span style={{ display:"inline-flex", alignItems:"center", gap:4, marginLeft:6, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:99, background:lvlMeta.bg, color:lvlMeta.color }}>
-              {lvlMeta.label}
-            </span>
-            {enrollment.strand && <span style={{ marginLeft:6, color:"#8a6a6a" }}>· {enrollment.strand}</span>}
-          </div>
-        </div>
-        {overallAvg !== null && (
-          <div style={{ textAlign:"center" }}>
-            <div style={{ fontSize:11, color:"#8a6a6a", marginBottom:4, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>General Average</div>
-            <div style={{ fontSize:32, fontWeight:700, padding:"6px 20px", borderRadius:12, background:overallGs.bg, color:overallGs.color, lineHeight:1 }}>
-              {overallAvg.toFixed(2)}
-            </div>
-            <div style={{ fontSize:11, color:overallGs.color, fontWeight:600, marginTop:4 }}>{overallGs.label}</div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-          <thead>
-            <tr style={{ background:"#fdfafa" }}>
-              <th style={{ ...thStyle, textAlign:"left", width:"35%" }}>Subject</th>
-              {periods.map((p) => (
-                <th key={p} style={{ ...thStyle, width:`${50/periods.length}%` }}>{PERIOD_FULL[p]}</th>
-              ))}
-              <th style={{ ...thStyle, background:"#f9f4f4", width:"15%" }}>Average</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subjects.length === 0 ? (
-              <tr>
-                <td colSpan={periods.length + 2} style={{ ...tdStyle, textAlign:"center", padding:"40px", color:"#8a6a6a", fontStyle:"italic" }}>
-                  No subjects found for this enrollment level.
-                </td>
-              </tr>
-            ) : subjects.map((sub, idx) => {
-              const subGrades = periods.map((p) => gradeMap[sub.subject_id]?.[p] ?? null);
-              return (
-                <tr key={sub.subject_id} className="grade-matrix-row" style={{ animation:`rowIn 0.18s ease both`, animationDelay:`${idx*20}ms` }}>
-                  <td style={{ ...tdStyle, textAlign:"left" }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{sub.subject_name}</div>
-                    <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1, fontFamily:"monospace" }}>{sub.subject_code}</div>
-                  </td>
-                  {subGrades.map((g, i) => <GradeCell key={i} grade={g} />)}
-                  <GeneralAverageCell grades={subGrades} />
-                </tr>
-              );
-            })}
-            {subjects.length > 0 && (
-              <tr style={{ background:"#fdfafa", borderTop:"2px solid #f5eaea" }}>
-                <td style={{ ...tdStyle, textAlign:"left", fontWeight:700, color:"#1a0a0a", background:"#fdfafa" }}>Period Average</td>
-                {periods.map((p) => {
-                  const avg = periodAverages[p];
-                  const gs = gradeStyle(avg);
-                  return (
-                    <td key={p} style={{ ...tdStyle, background:"#fdfafa" }}>
-                      {avg !== null
-                        ? <span style={{ fontSize:13, fontWeight:700, padding:"3px 10px", borderRadius:8, background:gs.bg, color:gs.color }}>{avg.toFixed(2)}</span>
-                        : <span style={{ color:"#8a6a6a", fontSize:13 }}>—</span>
-                      }
-                    </td>
-                  );
-                })}
-                <td style={{ ...tdStyle, background:"#f9f4f4" }}>
-                  {overallAvg !== null
-                    ? <span style={{ fontSize:14, fontWeight:700, padding:"3px 12px", borderRadius:8, background:overallGs.bg, color:overallGs.color }}>{overallAvg.toFixed(2)}</span>
-                    : <span style={{ color:"#8a6a6a", fontSize:13 }}>—</span>
-                  }
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ padding:"14px 22px", borderTop:"1px solid #f5eaea", display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
-        <span style={{ fontSize:11, color:"#8a6a6a", fontWeight:600 }}>Legend:</span>
-        {[
-          { range:"90–100", label:"Outstanding",         color:"#1455a0", bg:"#e3f0fd" },
-          { range:"85–89",  label:"Very Satisfactory",   color:"#2e6b0d", bg:"#e8f5e0" },
-          { range:"80–84",  label:"Satisfactory",        color:"#2e6b0d", bg:"#eaf3de" },
-          { range:"75–79",  label:"Fairly Satisfactory", color:"#854f0b", bg:"#faeeda" },
-          { range:"< 75",   label:"Did Not Meet",        color:"#9b2020", bg:"#fde8e8" },
-        ].map((l) => (
-          <div key={l.range} style={{ display:"flex", alignItems:"center", gap:5 }}>
-            <span style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:6, background:l.bg, color:l.color }}>{l.range}</span>
-            <span style={{ fontSize:11, color:"#8a6a6a" }}>{l.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Score Row ─────────────────────────────────────────────────────────────────
-function ScoreRow({ entry, onUpdate, onDelete, color, readOnly = false }) {
-  const [editing, setEditing] = useState(false);
-  const [label,   setLabel]   = useState(entry.label);
-  const [score,   setScore]   = useState(String(entry.score));
-  const [max,     setMax]     = useState(String(entry.max_score));
-  const [saving,  setSaving]  = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
-
-  const pct = entry.max_score > 0 ? Math.round((entry.score / entry.max_score) * 100) : 0;
-  const gc  = gradeColor(pct);
-
-  const handleSave = async () => {
-    if (!label.trim() || !score || !max || parseFloat(max) <= 0) return;
-    if (parseFloat(score) > parseFloat(max)) return;
-    setSaving(true);
-    try {
-      await onUpdate(entry.score_entry_id, { label: label.trim(), score: parseFloat(score), max_score: parseFloat(max) });
-      toast.success("Score entry updated.");
-      setEditing(false);
-    } catch (e) {
-      toast.error(e.message || "Update failed.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      await onDelete(entry.score_entry_id);
-      toast.success("Score entry deleted.");
-      setConfirmDelete(false);
-    } catch (e) {
-      const msg = e.message || "Delete failed.";
-      setDeleteError(msg);
-      toast.error(msg);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const inp = { border:"1.5px solid #fde2de", borderRadius:8, padding:"6px 10px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none" };
-
-  return (
-    <div className="flex items-center gap-2.5 rounded-[10px] border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 transition-colors duration-150 hover:border-brand-300">
-      <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
-      {editing ? (
-        <>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label" style={{ ...inp, flex:1, minWidth:0 }} />
-          {/* Bounded to what the server already enforces (score_entries has
-              CHECKs for score >= 0, max_score > 0 and score <= max_score).
-              These had no min or max at all, so a negative score or a typo'd
-              extra digit was accepted by the field and only refused on save. */}
-          <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="Score" style={{ ...inp, width:70, textAlign:"right" }} />
-          <span style={{ fontSize:12, color:"#8a6a6a" }}>/</span>
-          <input type="number" min="0.01" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} placeholder="Max" style={{ ...inp, width:70, textAlign:"right" }} />
-          <button onClick={handleSave} disabled={saving}
-            style={{ background:"#e03131", color:"white", border:"none", borderRadius:7, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:4 }}>
-            {saving ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize:12 }} />}
-          </button>
-          <button onClick={() => { setEditing(false); setLabel(entry.label); setScore(String(entry.score)); setMax(String(entry.max_score)); }}
-            style={{ background:"white", color:"#855c5c", border:"1px solid #f0e4e4", borderRadius:7, padding:"6px 10px", fontSize:12, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-            <i className="ti ti-x" style={{ fontSize:12 }} />
-          </button>
-        </>
-      ) : (
-        <>
-          <span style={{ flex:1, fontSize:13, color:"#1a0a0a", fontWeight:500 }}>{entry.label}</span>
-          <span style={{ fontSize:13, color:"#5a4a4a" }}>{entry.score} / {entry.max_score}</span>
-          <span style={{ fontSize:12, fontWeight:700, padding:"2px 8px", borderRadius:6, background:gc.bg, color:gc.color }}>{pct}%</span>
-          {!readOnly && <>
-          <Button
-            variant="ghost" size="sm" icon="ti-pencil"
-            aria-label={`Edit score entry ${entry.label}`}
-            onClick={() => setEditing(true)}
-          />
-          <Button
-            variant="ghost" size="sm" icon="ti-trash"
-            aria-label={`Delete score entry ${entry.label}`}
-            onClick={() => setConfirmDelete(true)}
-          />
-          </>}
-        </>
-      )}
-      <AnimatePresence>
-        {confirmDelete && (
-          <ConfirmModal
-            icon="ti-trash"
-            title="Delete score entry?"
-            message={<>Remove <strong>{entry.label}</strong> ({entry.score}/{entry.max_score})? This cannot be undone.</>}
-            loading={deleting}
-            error={deleteError}
-            onConfirm={handleConfirmDelete}
-            onCancel={() => { setConfirmDelete(false); setDeleteError(""); }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ── Add Score Form ────────────────────────────────────────────────────────────
-function AddScoreForm({ componentId, enrollmentId, subjectId, gradingPeriod, onAdded, color }) {
-  const [label, setLabel] = useState("");
-  const [score, setScore] = useState("");
-  const [max,   setMax]   = useState("");
-  const [saving,setSaving]= useState(false);
-  const [error, setError] = useState("");
-
-  const handleAdd = async () => {
-    if (!label.trim())                        { setError("Label required."); return; }
-    if (!score || parseFloat(score) < 0)      { setError("Score required."); return; }
-    if (!max   || parseFloat(max)   <= 0)     { setError("Max score required."); return; }
-    if (parseFloat(score) > parseFloat(max))  { setError("Score cannot exceed max."); return; }
-    setSaving(true); setError("");
-    try {
-      await createScore({
-        enrollment:        enrollmentId,
-        subject:           subjectId,
-        grading_component: componentId,
-        grading_period:    gradingPeriod,
-        label:             label.trim(),
-        score:             parseFloat(score),
-        max_score:         parseFloat(max),
-      });
-      setLabel(""); setScore(""); setMax("");
-      onAdded();
-    } catch (e) { setError(e.message || "Failed to add score."); }
-    finally { setSaving(false); }
-  };
-
-  const inp = { border:"1.5px solid #fde2de", borderRadius:8, padding:"7px 10px", fontSize:13, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a", background:"#fffbfb", outline:"none" };
-
-  return (
-    <div style={{ marginTop:8 }}>
-      {error && <div style={{ fontSize:11, color:"#b91c1c", marginBottom:6 }}>{error}</div>}
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0, opacity:0.4 }} />
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Quiz 1"
-          style={{ ...inp, flex:1, minWidth:0 }}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
-        <input type="number" value={score} onChange={(e) => setScore(e.target.value)} placeholder="Score" min="0"
-          style={{ ...inp, width:70, textAlign:"right" }}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
-        <span style={{ fontSize:12, color:"#8a6a6a" }}>/</span>
-        <input type="number" value={max} onChange={(e) => setMax(e.target.value)} placeholder="Max" min="0"
-          style={{ ...inp, width:70, textAlign:"right" }}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
-        <button onClick={handleAdd} disabled={saving}
-          style={{ background:saving?"#e87474":"#fff0f0", color:"#c92a2a", border:"1px solid #fca5a5", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap" }}>
-          {saving ? <i className="ti ti-loader-2" style={{ fontSize:12, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-plus" style={{ fontSize:12 }} />}
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════
-// Ratings are the DepEd Observed Values marks -- see constants/observedValues.js.
 
-function NarrativeSection({ enrollment, gradingPeriod, periods, onPeriodChange, categories, reports, loading, savingStates, onRatingChange, readOnly = false }) {
-  const reportMap = {};
-  reports.forEach((r) => { reportMap[r.category] = r; });
+const TAB_FOR_PATH = {
+  "/grades/summary":  "summary",
+  "/grades/entry":    "entry",
+  "/grades/observed": "observed",
+};
 
+// How long scores sit still before the grade is worked out again: long enough
+// that a teacher tabbing down a column doesn't fire a request per field.
+const COMPUTE_DEBOUNCE_MS = 400;
+
+/** Whether two grades are the same to the hundredth the server keeps. */
+const sameGrade = (a, b) =>
+  a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(Number(a) - Number(b)) < 0.005;
+
+/** A tab's right column before there's anything to show. */
+function EmptyPanel({ icon, title, children }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: "easeOut" }}
-      style={{ background: "white", borderRadius: 16, border: "1px solid #ede8fd", overflow: "hidden", boxShadow: "0 2px 16px rgba(124,58,237,0.07)" }}
-    >
-      <div style={{ height: 4, background: "linear-gradient(to right,#7c3aed,#a78bfa,#c4b5fd)" }} />
-      <div style={{ padding: "18px 22px", borderBottom: "1px solid #f0ecfd", background: "linear-gradient(to right,#fdfaff,white)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: "#7c3aed" }} />
-              Narrative Report
-            </div>
-            <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 3 }}>
-              Behavioral &amp; learning assessment for {enrollment.grade_level} · {enrollment.section}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {periods.map((p) => {
-              const active = gradingPeriod === p;
-              return (
-                <motion.button key={p} initial={false}
-                  animate={{ backgroundColor: active ? "#f0e8fd" : "#ffffff", color: active ? "#7c3aed" : "#855c5c", borderColor: active ? "#7c3aed" : "#e8e0f0" }}
-                  transition={{ duration: 0.16 }} whileTap={{ scale: 0.96 }} onClick={() => onPeriodChange(p)}
-                  style={{ height: 28, padding: "0 12px", borderRadius: 99, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                  {PERIOD_LABELS[p]}
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {[1,2,3].map((i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#fdfafa", borderRadius: 10 }}>
-              <Skeleton width="28%" height={14} />
-              <div style={{ flex: 1, display: "flex", gap: 6 }}><Skeleton width={110} height={28} radius={99} /><Skeleton width={110} height={28} radius={99} /><Skeleton width={140} height={28} radius={99} /></div>
-            </div>
-          ))}
-        </div>
-      ) : categories.length === 0 ? (
-        <div style={{ padding: "32px 22px", textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: "#8a6a6a" }}>
-            No narrative categories configured.{" "}
-            <a href="/grading-templates?tab=narrative" style={{ color: "#c92a2a", fontWeight: 600 }}>Go to Settings → Narrative Categories</a>{" "}to add some.
-          </div>
-        </div>
-      ) : (
-        <div style={{ padding: "12px 22px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {categories.map((cat) => {
-            const existing      = reportMap[cat.category_id] ?? null;
-            const currentRating = existing?.rating ?? null;
-            // An older row's word lights its mark, as SF9 prints it.
-            const currentMark   = observedMark(currentRating);
-            const saving        = savingStates[cat.category_id] ?? false;
-            return (
-              <div key={cat.category_id}
-                className="flex items-center gap-3.5 rounded-[10px] border border-accent-50 bg-neutral-50 px-4 py-2.5 transition-colors duration-150 hover:border-accent-dot">
-                <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</div>
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
-                  {OBSERVED_VALUES.map((r) => {
-                    const active = currentMark === r.value;
-                    return (
-                      <motion.button key={r.value} onClick={() => !saving && !readOnly && onRatingChange(cat, existing, r.value)} disabled={saving || readOnly}
-                        initial={false}
-                        animate={{ backgroundColor: active ? r.bg : "#ffffff", color: active ? r.color : "#855c5c", borderColor: active ? r.color : "#e8e0f0" }}
-                        transition={{ duration: 0.15 }} whileTap={{ scale: 0.96 }}
-                        style={{ height: 28, padding: "0 10px", borderRadius: 99, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4, opacity: saving && !active ? 0.5 : 1 }}>
-                        {saving && active && <i className="ti ti-loader-2" style={{ fontSize: 10, animation: "spin 1s linear infinite" }} />}
-                        {r.label}
-                      </motion.button>
-                    );
-                  })}
-                  {currentRating && !readOnly && (
-                    <motion.button onClick={() => !saving && onRatingChange(cat, existing, null)} disabled={saving}
-                      whileHover={{ backgroundColor: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }} whileTap={{ scale: 0.96 }} transition={{ duration: 0.12 }}
-                      title="Clear rating"
-                      style={{ width: 28, height: 28, borderRadius: "50%", border: "1.5px solid #e8e0f0", background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: saving ? "not-allowed" : "pointer", color: "#8a6a6a" }}>
-                      <i className="ti ti-x" style={{ fontSize: 10 }} />
-                    </motion.button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </motion.div>
+    <Card padding="none" className="px-6 py-20 text-center">
+      <i className={`ti ${icon} text-[28px] text-neutral-500`} aria-hidden="true" />
+      <div className="mt-3 text-base font-semibold text-neutral-700">{title}</div>
+      <div className="mt-1.5 text-[13px] text-neutral-500">{children}</div>
+    </Card>
   );
 }
 
 export default function GradesPage() {
   usePageTitle("Grades");
   const location = useLocation();
-  const [tab, setTab] = useState(location.pathname === "/grades/entry" ? "entry" : location.pathname === "/grades/summary" ? "summary" : "overview");
+  const [tab, setTab] = useState(TAB_FOR_PATH[location.pathname] ?? "overview");
+  const { currentYear } = useSchoolYear();
 
   // ── Shared state (student + enrollment) ──────────────────────────────────
   const [student,     setStudent]     = useState(null);
@@ -1176,16 +592,22 @@ export default function GradesPage() {
   const [subject,        setSubject]        = useState(null);
   const [gradingPeriod,  setGradingPeriod]  = useState("");
   const [scoreEntries,   setScoreEntries]   = useState([]);
+  // The server's grade for the scores, and which scores it was worked out
+  // from: it is kept while newer scores are being computed, and Save waits
+  // until it matches what's on screen.
   const [computation,    setComputation]    = useState(null);
+  const [computedFor,    setComputedFor]    = useState(null);
   const [manualRemarks,  setManualRemarks]  = useState(""); // teacher-editable override of computation.remarks
+  // Once the teacher picks a remark it stays theirs; until then it follows
+  // the computed grade.
+  const remarksTouched = useRef(false);
   const [existingGrade,  setExistingGrade]  = useState(null);
   const [loadingScores,  setLoadingScores]  = useState(false);
-  const [computing,      setComputing]      = useState(false);
   const [savingFinal,    setSavingFinal]    = useState(false);
   const [savedMsg,       setSavedMsg]       = useState("");
   const [entryError,     setEntryError]     = useState("");
 
-    // ── Narrative report state ────────────────────────────────────────────────
+  // ── Observed values state ────────────────────────────────────────────────
   const [narrativeCategories,   setNarrativeCategories]   = useState([]);
   const [narrativeReports,      setNarrativeReports]      = useState([]);
   const [loadingNarrative,      setLoadingNarrative]      = useState(false);
@@ -1226,7 +648,7 @@ export default function GradesPage() {
   }, [enrollments]);
 
   // ── Load enrollments when student changes ──────────────────────────────────
-  // Both tabs list every attended enrollment; an archived year's opens read-only.
+  // Every tab lists every attended enrollment; an archived year's opens read-only.
   useEffect(() => {
     if (!student) {
       setEnrollments([]); setEnrollment(null);
@@ -1249,6 +671,7 @@ export default function GradesPage() {
   }, [student]);
 
   // ── Summary: load grades + subjects when enrollment changes ───────────────
+  // Entry reads these grades too, for the subject list's "Saved grade".
   useEffect(() => {
     if (!enrollment) { setSumGrades([]); setSumSubjects([]); setLoadingSum(false); return; }
     let cancelled = false;
@@ -1276,6 +699,7 @@ export default function GradesPage() {
     setGradingPeriod(periods[0] ?? "");
     setSubject(null);
     setComputation(null);
+    remarksTouched.current = false;
     return () => { cancelled = true; };
   }, [enrollment]);
 
@@ -1297,22 +721,56 @@ export default function GradesPage() {
       setScoreEntries(Array.isArray(data) ? data : data?.results ?? []);
       const existing = (Array.isArray(g) ? g : g?.results ?? [])[0] ?? null;
       setExistingGrade(existing);
-      setComputation(null);
-      setManualRemarks(existing?.remarks ?? "");
+      if (!remarksTouched.current) setManualRemarks(existing?.remarks ?? "");
     } catch (e) { console.error(e); }
     finally { if (isCurrent()) setLoadingScores(false); }
   }, [enrollment, subject, gradingPeriod, beginScoresLoad]);
 
   useEffect(() => { loadScores(); }, [loadScores]);
 
-    useEffect(() => {
+  // ── Entry: the grade follows the scores ───────────────────────────────────
+  // After any score is added, changed or removed, the server works the grade
+  // out again: its formula (DepEd's, with the transmutation table) is the one
+  // that counts. The last answer stays on screen until the new one lands.
+  useEffect(() => {
+    if (!enrollment || !subject?.grading_template_detail || !gradingPeriod) return;
+    if (loadingScores || scoreEntries.length === 0) return;
+    let cancelled = false;
+    const basis = scoreEntries;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await computeGrade({
+          enrollment_id: enrollment.enrollment_id, subject_id: subject.subject_id, grading_period: gradingPeriod,
+        });
+        if (cancelled) return;
+        setComputation(result);
+        setComputedFor(basis);
+        // Passed or failed from the 75 mark, unless the grade is the one
+        // already saved -- then whatever was saved with it.
+        if (!remarksTouched.current) {
+          setManualRemarks(
+            existingGrade && sameGrade(result.final_grade, existingGrade.numeric_grade)
+              ? existingGrade.remarks ?? ""
+              : result.remarks ?? "",
+          );
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setEntryError(e.message || "Failed to compute grade.");
+        setComputedFor(basis);
+      }
+    }, COMPUTE_DEBOUNCE_MS);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [enrollment, subject, gradingPeriod, scoreEntries, existingGrade, loadingScores]);
+
+  useEffect(() => {
     getNarrativeCategories({ is_active: true, page_size: 100 })
       .then((d) => setNarrativeCategories(Array.isArray(d) ? d : d?.results ?? []))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (tab !== "entry" || !enrollment || !gradingPeriod) { setNarrativeReports([]); setLoadingNarrative(false); return; }
+    if (tab !== "observed" || !enrollment || !gradingPeriod) { setNarrativeReports([]); setLoadingNarrative(false); return; }
     let cancelled = false;
     setLoadingNarrative(true);
     getNarrativeReports({ enrollment: enrollment.enrollment_id, grading_period: gradingPeriod, page_size: 100 })
@@ -1345,17 +803,6 @@ export default function GradesPage() {
     finally { setNarrativeSavingStates((prev) => ({ ...prev, [catId]: false })); }
   }, [enrollment, gradingPeriod]);
 
-  const handleCompute = async () => {
-    if (!enrollment || !subject || !gradingPeriod) return;
-    setComputing(true); setEntryError("");
-    try {
-      const result = await computeGrade({ enrollment_id: enrollment.enrollment_id, subject_id: subject.subject_id, grading_period: gradingPeriod });
-      setComputation(result);
-      setManualRemarks(result.remarks ?? "");
-    } catch (e) { setEntryError(e.message || "Failed to compute grade."); }
-    finally { setComputing(false); }
-  };
-
   const handleSaveFinal = async () => {
     if (!computation) return;
     setSavingFinal(true); setEntryError("");
@@ -1366,9 +813,10 @@ export default function GradesPage() {
       } else {
         await saveGrade(payload);
       }
-      setSavedMsg("Final grade saved successfully!");
+      setSavedMsg("Grade saved");
       setTimeout(() => setSavedMsg(""), 3000);
       toast.success("Final grade saved.");
+      remarksTouched.current = false;
       await loadScores();
       // Refresh summary grades too
       if (enrollment) {
@@ -1384,12 +832,28 @@ export default function GradesPage() {
     finally { setSavingFinal(false); }
   };
 
-  const handleUpdateScore = async (id, payload) => { await updateScore(id, payload); await loadScores(); setComputation(null); };
-  const handleDeleteScore = async (id) => { await deleteScore(id); await loadScores(); setComputation(null); };
+  // Each change reloads the sheet, and the new scores bring a new grade.
+  const handleUpdateScore = async (id, payload) => { await updateScore(id, payload); await loadScores(); };
+  const handleDeleteScore = async (id) => { await deleteScore(id); await loadScores(); };
+  const handleCreateScore = async (fields) => {
+    await createScore({
+      enrollment:     enrollment.enrollment_id,
+      subject:        subject.subject_id,
+      grading_period: gradingPeriod,
+      ...fields,
+    });
+    await loadScores();
+  };
 
-  const periods    = periodsFor(enrollment);
-  const template   = subject?.grading_template_detail;
-  const components = template?.components ?? [];
+  // A new selection starts from its own saved grade and remark.
+  const clearEntry = () => { setComputation(null); remarksTouched.current = false; };
+  const pickStudent = (s) => { setStudent(s); setEnrollment(null); setSubject(null); clearEntry(); };
+  const pickEnrollment = (en) => { setEnrollment(en); setSubject(null); clearEntry(); };
+  const pickSubject = (sub) => { setSubject(sub); clearEntry(); };
+  const pickPeriod = (p) => { setGradingPeriod(p); clearEntry(); };
+
+  const periods  = periodsFor(enrollment);
+  const template = subject?.grading_template_detail;
 
   const scoresByComponent = useMemo(() => {
     const map = {};
@@ -1400,300 +864,49 @@ export default function GradesPage() {
     return map;
   }, [scoreEntries]);
 
-  const gc = computation ? gradeColor(computation.final_grade) : null;
+  // The subject list's "Saved grade": each subject's grade for this period.
+  const savedGrades = useMemo(() => {
+    const map = {};
+    sumGrades.forEach((g) => { if (g.grading_period === gradingPeriod) map[g.subject] = g.numeric_grade; });
+    return map;
+  }, [sumGrades, gradingPeriod]);
 
-  const palette  = student ? getAvatarPalette(`${student.first_name ?? ""} ${student.last_name ?? ""}`) : null;
-  const initials = student ? initialsFrom(student.first_name, student.last_name) : "";
-  const fullName = student ? [student.first_name, student.middle_name, student.last_name, student.suffix].filter(Boolean).join(" ") : "";
-
-  const gradeCount  = sumGrades.length;
-  const passedCount = sumGrades.filter((g) => parseFloat(g.numeric_grade) >= 75).length;
-  const failedCount = sumGrades.filter((g) => parseFloat(g.numeric_grade) < 75).length;
-  const overallAvg  = gradeCount > 0 ? sumGrades.reduce((s, g) => s + parseFloat(g.numeric_grade), 0) / gradeCount : null;
-
-  // ── Shared enrollment chip renderer (used in both summary + entry left panels) ─
-  const EnrollmentChip = ({ en, onClick }) => {
-    const lvlMeta = SCHOOL_LEVEL_META[en.school_level] ?? SCHOOL_LEVEL_META.elementary;
-    const active  = enrollment?.enrollment_id === en.enrollment_id;
-    return (
-      <motion.button
-        onClick={onClick}
-        whileHover={{ backgroundColor: active ? lvlMeta.bg : "#fff8f6" }}
-        whileTap={{ scale: 0.98 }}
-        transition={{ duration: 0.12 }}
-        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${active ? lvlMeta.color : "#f0e4e4"}`, background: active ? lvlMeta.bg : "white", cursor:"pointer", textAlign:"left", fontFamily:"'DM Sans',sans-serif", transition:"border-color 0.14s" }}
-      >
-        <div style={{ width:34, height:34, borderRadius:9, background: active ? lvlMeta.color + "22" : "#f5f0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <i className="ti ti-clipboard-list" style={{ fontSize:15, color: active ? lvlMeta.color : "#855c5c" }} />
-        </div>
-        <div style={{ minWidth:0, flex:1 }}>
-          <div style={{ fontSize:13, fontWeight:700, color: active ? lvlMeta.color : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>S.Y. {en.school_year}</div>
-          <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>{en.grade_level} · {en.section}</div>
-        </div>
-        <span style={{ fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:99, background: lvlMeta.bg, color: lvlMeta.color, flexShrink:0 }}>
-          {lvlMeta.label}
-        </span>
-      </motion.button>
-    );
-  };
-
-  // ── Left panel (shared) ───────────────────────────────────────────────────
-  const leftPanel = (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-
-      {/* Student picker */}
-      <motion.div
-        initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
-        transition={{ duration:0.22, ease:"easeOut" }}
-        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"visible", boxShadow:"0 2px 12px rgba(224,49,49,0.05)", position:"relative", zIndex:10 }}
-      >
-        <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10, borderRadius:"16px 16px 0 0" }}>
-          <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <i className="ti ti-user-search" style={{ fontSize:14, color:"#c92a2a" }} />
-          </div>
-          <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select Student</span>
-        </div>
-        <div style={{ padding:"14px 18px", borderRadius:"0 0 16px 16px", overflow:"visible" }}>
-          <StudentPicker value={student} onChange={(s) => { setStudent(s); setEnrollment(null); setSubject(null); setComputation(null); }} />
-        </div>
-      </motion.div>
-
-      {/* Student profile card */}
-      <AnimatePresence>
-        {student && (
-          <motion.div
-            key="profile"
-            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            transition={{ duration:0.2, ease:"easeOut" }}
-            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-          >
-            <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
-            <div style={{ padding:"16px 18px", display:"flex", alignItems:"center", gap:14 }}>
-              <div style={{ width:48, height:48, borderRadius:"50%", background:palette.bg, color:palette.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:17, flexShrink:0, border:`2px solid ${palette.color}33` }}>{initials}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fullName}</div>
-                <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>LRN {student.lrn}</div>
-                {/* Was an inline pill that only told "active" from everything
-                    else, so transferred/graduated/dropped all rendered as the
-                    same grey. The shared map distinguishes all five. */}
-                <StatusBadge status={student.status} map={STUDENT_STATUS_MAP} size="sm" className="mt-1" />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Enrollment picker — same card style for both tabs */}
-      <AnimatePresence>
-        {student && (
-          <motion.div
-            key="enrollments"
-            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            transition={{ duration:0.2, ease:"easeOut", delay:0.05 }}
-            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-          >
-            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#c92a2a" }} />
-              </div>
-              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>
-                {tab === "entry" ? "Select Enrollment" : "Select School Year"}
-              </span>
-            </div>
-            <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8, maxHeight:260, overflowY:"auto" }}>
-              {loadingEnr
-                ? [1,2].map((i) => (
-                    <div key={i} style={{ padding:"10px 14px", borderRadius:12, border:"1px solid #f5eaea" }}>
-                      <Skeleton width="80%" height={14} /><div style={{ marginTop:6 }}><Skeleton width="50%" height={11} /></div>
-                    </div>
-                  ))
-                : enrollments.length === 0
-                  ? <div style={{ fontSize:13, color:"#8a6a6a", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>
-                      No enrollments found.
-                    </div>
-                  : enrollments.map((en) => (
-                      <EnrollmentChip
-                        key={en.enrollment_id}
-                        en={en}
-                        onClick={() => { setEnrollment(en); setSubject(null); setComputation(null); }}
-                      />
-                    ))
-              }
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Summary: mini stat cards */}
-      <AnimatePresence>
-        {tab === "summary" && enrollment && !loadingSum && sumGrades.length > 0 && (
-          <motion.div
-            key="sum-stats"
-            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-            transition={{ duration:0.2, ease:"easeOut" }}
-            style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:8 }}
-          >
-            {[
-              { label:"Recorded", value:gradeCount,                   color:"#c92a2a", bg:"#fff0f0", icon:"ti-clipboard-check" },
-              { label:"Passed",   value:passedCount,                  color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-circle-check"   },
-              { label:"Failed",   value:failedCount,                  color:"#9b2020", bg:"#fde8e8", icon:"ti-circle-x"       },
-              { label:"Average",  value:overallAvg?.toFixed(2) ?? "—", color:"#1455a0", bg:"#e3f0fd", icon:"ti-chart-bar"     },
-            ].map((s, i) => (
-              <motion.div
-                key={s.label}
-                initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
-                transition={{ duration:0.18, ease:"easeOut", delay: i * 0.05 }}
-                whileHover={{ y:-2, boxShadow:"0 6px 18px rgba(224,49,49,0.10)" }}
-                style={{ background:"white", borderRadius:12, border:"1px solid #f5eaea", padding:"12px 14px", display:"flex", alignItems:"center", gap:10, boxShadow:"0 2px 8px rgba(224,49,49,0.04)" }}
-              >
-                <div style={{ width:32, height:32, borderRadius:8, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className={`ti ${s.icon}`} style={{ fontSize:15, color:s.color }} />
-                </div>
-                <div>
-                  <div style={{ fontSize:18, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{s.value}</div>
-                  <div style={{ fontSize:10, color:"#8a6a6a", marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:500 }}>{s.label}</div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Entry: subject picker (step 3) */}
-      <AnimatePresence>
-        {tab === "entry" && enrollment && (
-          <motion.div
-            key="subjects"
-            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            transition={{ duration:0.2, ease:"easeOut" }}
-            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-          >
-            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <i className="ti ti-book" style={{ fontSize:14, color:"#c92a2a" }} />
-              </div>
-              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Select Subject</span>
-            </div>
-            <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:6, maxHeight:240, overflowY:"auto" }}>
-              {entSubjects.length === 0
-                ? <div style={{ fontSize:13, color:"#8a6a6a", textAlign:"center", padding:"16px 0", fontStyle:"italic" }}>No subjects for this level.</div>
-                : entSubjects.map((sub) => {
-                    const active = subject?.subject_id === sub.subject_id;
-                    const hasTpl = Boolean(sub.grading_template_detail);
-                    return (
-                      <motion.button
-                        key={sub.subject_id}
-                        onClick={() => { setSubject(sub); setComputation(null); }}
-                        whileHover={{ backgroundColor: active ? "#fff0f0" : "#fff8f6" }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ duration: 0.12 }}
-                        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:12, border:`1.5px solid ${active ? "#e03131" : "#f0e4e4"}`, background: active ? "#fff0f0" : "white", cursor:"pointer", textAlign:"left", fontFamily:"'DM Sans',sans-serif", transition:"border-color 0.14s" }}
-                      >
-                        <div style={{ width:34, height:34, borderRadius:9, background: active ? "#fde8e8" : "#f5f0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          <i className="ti ti-book" style={{ fontSize:15, color: active ? "#c92a2a" : "#855c5c" }} />
-                        </div>
-                        <div style={{ minWidth:0, flex:1 }}>
-                          <div style={{ fontSize:13, fontWeight:700, color: active ? "#c92a2a" : "#1a0a0a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub.subject_name}</div>
-                          <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2, display:"flex", alignItems:"center", gap:5 }}>
-                            <span style={{ fontFamily:"monospace" }}>{sub.subject_code}</span>
-                            {hasTpl
-                              ? <span style={{ color:"#2e6b0d", fontSize:10, fontWeight:600 }}>· {sub.grading_template_detail.template_name}</span>
-                              : <span style={{ color:"#8a6a6a", fontSize:10, fontStyle:"italic" }}>· No template</span>
-                            }
-                          </div>
-                        </div>
-                      </motion.button>
-                    );
-                  })
-              }
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Entry: grading period (step 4) */}
-      <AnimatePresence>
-        {tab === "entry" && subject && (
-          <motion.div
-            key="periods"
-            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }}
-            transition={{ duration:0.2, ease:"easeOut" }}
-            style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-          >
-            <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:28, height:28, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <i className="ti ti-calendar-event" style={{ fontSize:14, color:"#c92a2a" }} />
-              </div>
-              <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Grading Period</span>
-            </div>
-            <div style={{ padding:"14px 18px", display:"flex", flexWrap:"wrap", gap:8 }}>
-              {periods.map((p) => {
-                const active = gradingPeriod === p;
-                return (
-                  <motion.button
-                    key={p}
-                    initial={false}
-                    animate={{ backgroundColor: active ? "#e3f0fd" : "#ffffff", color: active ? "#1455a0" : "#855c5c", borderColor: active ? "#1455a0" : "#f0e4e4" }}
-                    transition={{ duration:0.16, ease:"easeOut" }}
-                    whileTap={{ scale:0.96 }}
-                    onClick={() => { setGradingPeriod(p); setComputation(null); }}
-                    style={{ display:"inline-flex", alignItems:"center", gap:6, height:32, padding:"0 14px", borderRadius:99, fontSize:12, fontWeight:600, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                  >
-                    {PERIOD_LABELS[p]}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-    </div>
-  );
+  // ── The grade bar's state ─────────────────────────────────────────────────
+  const shownComputation = scoreEntries.length > 0 ? computation : null;
+  const computeFresh = scoreEntries.length === 0 || (computation !== null && computedFor === scoreEntries);
+  const finalGrade = shownComputation?.final_grade ?? null;
+  const complete = Boolean(shownComputation?.is_complete) && finalGrade !== null;
+  const gradeChanged = complete && !sameGrade(finalGrade, existingGrade?.numeric_grade);
+  const remarksChanged = complete && Boolean(existingGrade) && (manualRemarks || "") !== (existingGrade.remarks ?? "");
+  const canSave = !entryReadOnly && computeFresh && complete && (gradeChanged || remarksChanged);
+  const status = !complete
+    ? { tone: "muted", icon: "ti-info-circle", text: "Add a score to every component to get a grade" }
+    : gradeChanged || remarksChanged
+      ? { tone: "warning", icon: "ti-point-filled", text: "Unsaved change" }
+      : { tone: "success", icon: "ti-circle-check", text: savedMsg || "Up to date" };
 
   // ── Summary right panel ───────────────────────────────────────────────────
   const summaryPanel = !student ? (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2, ease:"easeOut" }}
-      style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-        <i className="ti ti-table" style={{ fontSize:28, color:"#8a6a6a" }} />
-      </div>
-      <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>No student selected</div>
-      <div style={{ fontSize:13, color:"#8a6a6a", marginTop:6 }}>Search for a student on the left to view their grade report.</div>
-    </motion.div>
+    <EmptyPanel icon="ti-table" title="No student selected">
+      Search for a student on the left to view their grade report.
+    </EmptyPanel>
   ) : !enrollment ? (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2, ease:"easeOut" }}
-      style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-        <i className="ti ti-clipboard-list" style={{ fontSize:28, color:"#8a6a6a" }} />
-      </div>
-      <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>Select a school year</div>
-      <div style={{ fontSize:13, color:"#8a6a6a", marginTop:6 }}>Pick an enrollment from the left to see the grade table.</div>
-    </motion.div>
+    <EmptyPanel icon="ti-clipboard-list" title="Select a school year">
+      Pick an enrollment from the left to see the grade table.
+    </EmptyPanel>
   ) : (
-    <motion.div
-      key={enrollment.enrollment_id}
-      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-      transition={{ duration:0.22, ease:"easeOut" }}
-      style={{ display:"flex", flexDirection:"column", gap:14 }}
-    >
-      <SummaryTable enrollment={enrollment} grades={sumGrades} subjects={sumSubjects} loading={loadingSum} />
+    <div className="flex flex-col gap-4">
+      <SummaryCard enrollment={enrollment} grades={sumGrades} subjects={sumSubjects} loading={loadingSum} />
 
       {!loadingSum && sumGrades.length === 0 && (
-        <motion.div initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.18 }}
-          style={{ background:"#fef3e2", border:"1px solid #f6c96a", borderRadius:16, padding:"24px 28px", display:"flex", alignItems:"flex-start", gap:14 }}>
-          <i className="ti ti-alert-triangle" style={{ fontSize:22, color:"#854f0b", flexShrink:0, marginTop:2 }} />
-          <div>
-            <div style={{ fontSize:14, fontWeight:700, color:"#854f0b" }}>No grades recorded yet</div>
-            <div style={{ fontSize:13, color:"#7a4a08", marginTop:4, lineHeight:1.6 }}>Use the Grade Entry tab to start recording scores.</div>
-            <motion.button
-              onClick={() => setTab("entry")}
-              whileHover={{ opacity:0.88 }} whileTap={{ scale:0.97 }} transition={{ duration:0.12 }}
-              style={{ marginTop:12, display:"inline-flex", alignItems:"center", gap:6, background:"#854f0b", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
-              <i className="ti ti-pencil" style={{ fontSize:12 }} />Go to Grade Entry
-            </motion.button>
+        <Alert variant="warning" title="No grades recorded yet">
+          Use the Entry tab to start recording scores.
+          <div className="mt-2.5">
+            <Button size="sm" variant="secondary" icon="ti-pencil" onClick={() => setTab("entry")}>
+              Go to Entry
+            </Button>
           </div>
-        </motion.div>
+        </Alert>
       )}
 
       {!loadingSum && sumGrades.length > 0 && (
@@ -1702,6 +915,7 @@ export default function GradesPage() {
           description="Gemini-powered analysis of this student's academic performance"
           disabled={sumGrades.length === 0}
           onFetch={() => {
+            const report = summarizeGrades(sumSubjects, sumGrades, periodsFor(enrollment));
             const subjectMap = {};
             sumSubjects.forEach((s) => { subjectMap[s.subject_id] = s.subject_name; });
             const gradesBySubject = {};
@@ -1710,277 +924,101 @@ export default function GradesPage() {
               if (!gradesBySubject[name]) gradesBySubject[name] = {};
               gradesBySubject[name][g.grading_period] = parseFloat(g.numeric_grade);
             });
+            const recorded = sumGrades.map((g) => parseFloat(g.numeric_grade)).filter((n) => !Number.isNaN(n));
+            const recordedAverage = recorded.length ? recorded.reduce((a, b) => a + b, 0) / recorded.length : null;
+            // Subjects are passed or failed on their final rating. Before any
+            // subject has one, say what is known -- how many quarter grades
+            // pass or fail -- under names that say so. The page used to send
+            // those quarter-grade counts as subjects.
+            const hasFinals = report.rows.some((r) => r.final !== null);
+            const counts = hasFinals
+              ? { passed_subjects: report.passed.length, failed_subjects: report.failed.length }
+              : {
+                  passed_period_grades: recorded.filter((n) => n >= GRADE_PASSING).length,
+                  failed_period_grades: recorded.filter((n) => n < GRADE_PASSING).length,
+                };
             return callGemini("grade_report", {
               grade_level:     enrollment.grade_level,
               school_level:    enrollment.school_level,
               section:         enrollment.section,
               school_year:     enrollment.school_year,
-              overall_average: overallAvg?.toFixed(2),
-              passed_subjects: passedCount,
-              failed_subjects: failedCount,
-              total_grades:    gradeCount,
+              overall_average: (report.generalAverage ?? recordedAverage)?.toFixed(2),
+              ...counts,
+              total_grades:    recorded.length,
               grades_by_subject: gradesBySubject,
             });
           }}
         />
       )}
-    </motion.div>
+    </div>
   );
 
   // ── Entry right panel ─────────────────────────────────────────────────────
   const entryPanel = (
-    <>
-    <ArchivedYearNotice schoolYear={enrollment?.school_year} records="grades" className="mb-3.5" />
-    {!student || !enrollment ? (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-        <i className="ti ti-pencil" style={{ fontSize:28, color:"#8a6a6a" }} />
-      </div>
-      <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>Select a student and enrollment</div>
-      <div style={{ fontSize:13, color:"#8a6a6a", marginTop:6 }}>Use the panel on the left to get started.</div>
-    </div>
-  ) : !subject ? (
-    <div style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"80px 24px", textAlign:"center", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}>
-      <div style={{ width:60, height:60, borderRadius:18, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-        <i className="ti ti-book" style={{ fontSize:28, color:"#8a6a6a" }} />
-      </div>
-      <div style={{ fontSize:16, color:"#7a5050", fontWeight:600 }}>Select a subject</div>
-      <div style={{ fontSize:13, color:"#8a6a6a", marginTop:6 }}>Pick a subject from the left panel to enter scores.</div>
-    </div>
-  ) : !template ? (
-    <div style={{ background:"#fef3e2", border:"1px solid #f6c96a", borderRadius:16, padding:"24px 28px", display:"flex", alignItems:"flex-start", gap:14 }}>
-      <i className="ti ti-alert-triangle" style={{ fontSize:22, color:"#854f0b", flexShrink:0, marginTop:2 }} />
-      <div>
-        <div style={{ fontSize:14, fontWeight:700, color:"#854f0b" }}>No grading template assigned</div>
-        <div style={{ fontSize:13, color:"#7a4a08", marginTop:4, lineHeight:1.6 }}>
-          "{subject.subject_name}" doesn't have a grading template. Go to <strong>Subjects</strong> and assign one first.
-        </div>
-      </div>
-    </div>
-  ) : (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-
-      {/* ── Subject header card — mirrors SummaryTable header ── */}
-      <motion.div
-        initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-        transition={{ duration:0.22, ease:"easeOut" }}
-        style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 16px rgba(224,49,49,0.06)" }}
-      >
-        <div style={{ height:4, background:"linear-gradient(to right,#e03131,#ff6b6b,#fca5a5)" }} />
-        <div style={{ padding:"18px 22px", borderBottom:"1px solid #f5eaea", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, background:"linear-gradient(to right,#fdfafa,white)" }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a" }}>{subject.subject_name}</div>
-            <div style={{ fontSize:12, color:"#8a6a6a", marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-              <span style={{ fontFamily:"monospace", background:"#f5f0f0", padding:"1px 7px", borderRadius:5, fontSize:11 }}>{subject.subject_code}</span>
-              <span>·</span>
-              <span>{template.template_name}</span>
-              <span>·</span>
-              <span style={{ fontWeight:600, color:"#1455a0" }}>{PERIOD_LABELS[gradingPeriod]}</span>
-            </div>
-          </div>
-          {existingGrade && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:"#8a6a6a", marginBottom:4, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>Saved Grade</div>
-              <div style={{ fontSize:28, fontWeight:700, padding:"5px 18px", borderRadius:12, lineHeight:1, ...gradeColor(existingGrade.numeric_grade) }}>
-                {parseFloat(existingGrade.numeric_grade).toFixed(2)}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Mini stat cards inside header — scores entered, components, weight total */}
-        <div style={{ padding:"14px 22px", display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-          {[
-            { label:"Scores Entered",  value: scoreEntries.length,      color:"#c92a2a", bg:"#fff0f0", icon:"ti-list-numbers"   },
-            { label:"Components",      value: components.length,         color:"#1455a0", bg:"#e3f0fd", icon:"ti-layout-columns" },
-            { label:"Template Weight", value: template.total_weight != null ? `${template.total_weight}%` : "—", color:"#2e6b0d", bg:"#e8f5e0", icon:"ti-percentage" },
-          ].map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
-              transition={{ duration:0.18, ease:"easeOut", delay: i * 0.05 }}
-              style={{ background:"#fdfafa", borderRadius:10, border:"1px solid #f5eaea", padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}
-            >
-              <div style={{ width:28, height:28, borderRadius:7, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize:13, color:s.color }} />
-              </div>
-              <div>
-                <div style={{ fontSize:15, fontWeight:700, color:"#1a0a0a", lineHeight:1 }}>{loadingScores ? "—" : s.value}</div>
-                <div style={{ fontSize:9.5, color:"#8a6a6a", marginTop:2, textTransform:"uppercase", letterSpacing:"0.05em", fontWeight:500 }}>{s.label}</div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Notifications */}
-      <AnimatePresence>
-        {entryError && (
-          <motion.div key="err" initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
-            style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#b91c1c", display:"flex", alignItems:"center", gap:8 }}>
-            <i className="ti ti-alert-circle" style={{ fontSize:15 }} />{entryError}
-            <button onClick={() => setEntryError("")} style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#b91c1c" }}><i className="ti ti-x" style={{ fontSize:13 }} /></button>
-          </motion.div>
-        )}
-        {savedMsg && (
-          <motion.div key="ok" initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
-            style={{ background:"#e8f5e0", border:"1px solid #a3d977", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#2e6b0d", display:"flex", alignItems:"center", gap:8 }}>
-            <i className="ti ti-circle-check" style={{ fontSize:15 }} />{savedMsg}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Grading components */}
-      {loadingScores ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {[1,2,3].map((i) => (
-            <div key={i} style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", padding:"20px 22px" }}>
-              <Skeleton width="40%" height={16} /><div style={{ marginTop:12 }}><Skeleton width="100%" height={40} /></div>
-            </div>
-          ))}
-        </div>
+    <div className="flex flex-col gap-4">
+      <ArchivedYearNotice schoolYear={enrollment?.school_year} records="grades" />
+      {!student || !enrollment ? (
+        <EmptyPanel icon="ti-pencil" title="Select a student and enrollment">
+          Use the panel on the left to get started.
+        </EmptyPanel>
+      ) : !subject ? (
+        <EmptyPanel icon="ti-book" title="Select a subject">
+          Pick a subject from the left panel to enter scores.
+        </EmptyPanel>
+      ) : !template ? (
+        <Alert variant="warning" title="No grading template assigned">
+          “{subject.subject_name}” doesn't have a grading template. Go to <strong>Subjects</strong> and assign one first.
+        </Alert>
       ) : (
-        components.map((comp, ci) => {
-          const color    = COMPONENT_COLORS[ci % COMPONENT_COLORS.length];
-          const entries  = scoresByComponent[comp.grading_component_id] ?? [];
-          const avgPct   = entries.length > 0 ? entries.reduce((s, e) => s + (e.score / e.max_score) * 100, 0) / entries.length : null;
-          const weighted = avgPct !== null ? (avgPct * comp.weight) / 100 : null;
-          return (
-            <motion.div
-              key={comp.grading_component_id}
-              initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
-              transition={{ duration:0.22, ease:"easeOut", delay: ci * 0.06 }}
-              style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-            >
-              <div style={{ padding:"14px 18px", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", justifyContent:"space-between", background:"linear-gradient(to right,#fdfafa,white)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:10, height:10, borderRadius:"50%", background:color, flexShrink:0 }} />
-                  <span style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{comp.component_name}</span>
-                  <span style={{ fontSize:11, color:"#8a6a6a", background:"#f9f4f4", padding:"2px 8px", borderRadius:6 }}>{comp.weight}% weight</span>
-                  <span style={{ fontSize:11, color:"#8a6a6a" }}>{entries.length} score{entries.length !== 1 ? "s" : ""}</span>
-                </div>
-                {weighted !== null && (
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:11, color:"#8a6a6a" }}>Contribution</div>
-                    <div style={{ fontSize:15, fontWeight:700, color }}>+{weighted.toFixed(2)}</div>
-                  </div>
-                )}
-              </div>
-              <div style={{ padding:"12px 18px", display:"flex", flexDirection:"column", gap:6 }}>
-                {entries.map((entry) => (
-                  <ScoreRow key={entry.score_entry_id} entry={entry} color={color} onUpdate={handleUpdateScore} onDelete={handleDeleteScore} readOnly={entryReadOnly} />
-                ))}
-                {!entryReadOnly && <AddScoreForm
-                  componentId={comp.grading_component_id}
-                  enrollmentId={enrollment.enrollment_id}
-                  subjectId={subject.subject_id}
-                  gradingPeriod={gradingPeriod}
-                  onAdded={() => { loadScores(); setComputation(null); }}
-                  color={color}
-                />}
-              </div>
-              {avgPct !== null && (
-                <div style={{ padding:"10px 18px", borderTop:"1px solid #f9f0f0", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fdfafa" }}>
-                  <span style={{ fontSize:12, color:"#8a6a6a" }}>Component average</span>
-                  <span style={{ fontSize:13, fontWeight:700, ...gradeColor(avgPct), padding:"2px 10px", borderRadius:6 }}>{avgPct.toFixed(2)}%</span>
-                </div>
-              )}
-            </motion.div>
-          );
-        })
-      )}
-
-      {/* Compute & save */}
-      {!loadingScores && scoreEntries.length > 0 && (
-        <motion.div
-          initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-          transition={{ duration:0.22, ease:"easeOut" }}
-          style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", overflow:"hidden", boxShadow:"0 2px 12px rgba(224,49,49,0.05)" }}
-        >
-          <div style={{ padding:"16px 22px", borderBottom: computation ? "1px solid #f5eaea" : "none", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:14, background:"linear-gradient(to right,#fdfafa,white)" }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>Final Grade</div>
-              <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>Compute weighted grade from all scores above</div>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-              {computation && (
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:28, fontWeight:700, padding:"6px 18px", borderRadius:12, ...gc }}>{computation.final_grade}</span>
-                  <select
-                    value={manualRemarks}
-                    disabled={entryReadOnly}
-                    aria-label="Remarks"
-                    onChange={(e) => setManualRemarks(e.target.value)}
-                    style={{
-                      fontSize:13, fontWeight:700, padding:"6px 14px", borderRadius:99, border:"1.5px solid transparent",
-                      fontFamily:"'DM Sans',sans-serif", cursor:"pointer", outline:"none",
-                      color: REMARKS_META[manualRemarks]?.color ?? "#855c5c",
-                      background: REMARKS_META[manualRemarks]?.bg ?? "#f9f4f4",
-                    }}
-                  >
-                    <option value="">— No remarks —</option>
-                    {Object.entries(REMARKS_META).map(([value, meta]) => (
-                      <option key={value} value={value}>{meta.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <motion.button
-                onClick={handleCompute} disabled={computing}
-                whileHover={!computing ? { backgroundColor:"#fff0f0" } : {}}
-                whileTap={!computing ? { scale:0.97 } : {}}
-                transition={{ duration:0.12 }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, background:"white", color:"#c92a2a", border:"1.5px solid #fca5a5", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:computing?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif" }}
-              >
-                {computing ? <i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-calculator" style={{ fontSize:14 }} />}
-                {computing ? "Computing…" : "Compute"}
-              </motion.button>
-              {computation && !entryReadOnly && (
-                <motion.button
-                  onClick={handleSaveFinal} disabled={savingFinal}
-                  whileHover={!savingFinal ? { opacity:0.88 } : {}}
-                  whileTap={!savingFinal ? { scale:0.97 } : {}}
-                  transition={{ duration:0.12 }}
-                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:savingFinal?"#e87474":"linear-gradient(135deg,#e03131,#c92a2a)", color:"white", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:savingFinal?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(224,49,49,0.26)" }}
-                >
-                  {savingFinal ? <i className="ti ti-loader-2" style={{ fontSize:14, animation:"spin 1s linear infinite" }} /> : <i className="ti ti-device-floppy" style={{ fontSize:14 }} />}
-                  {savingFinal ? "Saving…" : existingGrade ? "Update Grade" : "Save Grade"}
-                </motion.button>
-              )}
-            </div>
-          </div>
-
-          {computation && (
-            <div style={{ padding:"16px 22px" }}>
-              <div style={{ fontSize:11, color:"#8a6a6a", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:10 }}>Grade Breakdown</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {computation.components.map((comp, i) => (
-                  <div key={comp.component_id} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <div style={{ width:8, height:8, borderRadius:"50%", background:COMPONENT_COLORS[i%COMPONENT_COLORS.length], flexShrink:0 }} />
-                    <span style={{ flex:1, fontSize:13, color:"#1a0a0a" }}>{comp.component_name}</span>
-                    <span style={{ fontSize:12, color:"#8a6a6a" }}>{comp.average_percentage}% avg</span>
-                    <span style={{ fontSize:12, color:"#8a6a6a" }}>× {comp.weight}%</span>
-                    <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", minWidth:36, textAlign:"right" }}>= {comp.weighted_score}</span>
-                  </div>
-                ))}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6, paddingTop:10, borderTop:"1px solid #f5eaea" }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>Final Grade</span>
-                  <span style={{ fontSize:18, fontWeight:700, padding:"3px 14px", borderRadius:99, ...gc }}>{computation.final_grade}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </motion.div>
+        <>
+          <AnimatePresence>
+            {entryError && (
+              <Alert key="entry-error" variant="error" dismissible onDismiss={() => setEntryError("")}>
+                {entryError}
+              </Alert>
+            )}
+          </AnimatePresence>
+          <ScoreSheet
+            subject={subject}
+            template={template}
+            gradingPeriod={gradingPeriod}
+            scoresByComponent={scoresByComponent}
+            loading={loadingScores}
+            readOnly={entryReadOnly}
+            onUpdate={handleUpdateScore}
+            onDelete={handleDeleteScore}
+            onCreate={handleCreateScore}
+          />
+          <GradeBar
+            computation={shownComputation}
+            fresh={computeFresh}
+            existingGrade={existingGrade}
+            statusTone={status.tone}
+            statusIcon={status.icon}
+            statusText={status.text}
+            remarks={manualRemarks}
+            onRemarksChange={(v) => { remarksTouched.current = true; setManualRemarks(v); }}
+            canSave={canSave}
+            saving={savingFinal}
+            onSave={handleSaveFinal}
+            readOnly={entryReadOnly}
+          />
+        </>
       )}
     </div>
-  )}
-    {enrollment && (
-      <div style={{ marginTop: 14 }}>
-        <NarrativeSection
-          enrollment={enrollment}
+  );
+
+  // ── Observed values right panel ───────────────────────────────────────────
+  const observedPanel = (
+    <div className="flex flex-col gap-4">
+      <ArchivedYearNotice schoolYear={enrollment?.school_year} records="grades" />
+      {!student || !enrollment ? (
+        <EmptyPanel icon="ti-clipboard-text" title="Select a student and enrollment">
+          Use the panel on the left to get started.
+        </EmptyPanel>
+      ) : (
+        <ObservedValues
           gradingPeriod={gradingPeriod}
-          periods={periods}
-          onPeriodChange={(p) => { setGradingPeriod(p); setComputation(null); }}
           categories={narrativeCategories}
           reports={narrativeReports}
           loading={loadingNarrative}
@@ -1988,26 +1026,12 @@ export default function GradesPage() {
           onRatingChange={handleNarrativeRating}
           readOnly={entryReadOnly}
         />
-      </div>
-    )}
-    </>
+      )}
+    </div>
   );
 
   return (
     <>
-      <style>{`
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes rowIn   { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
-        @keyframes spin    { to{transform:rotate(360deg)} }
-        /* The gradebook matrix is a cross-tab, not a record list, so it keeps
-           its own <table> rather than the shared Table. Hovering used to be
-           done in JS by walking every cell and restoring the Average column
-           by index; as a CSS rule the tinted column just keeps its own
-           background and nothing has to be put back. */
-        .grade-matrix-row:hover > td { background: var(--color-brand-50); }
-      `}</style>
-
       <PageHeader
         title="Grades"
         actions={
@@ -2016,29 +1040,48 @@ export default function GradesPage() {
             value={tab}
             onChange={setTab}
             tabs={[
-              { id: "overview", icon: "ti-layout-list", label: "Overview" },
-              { id: "summary",  icon: "ti-table",       label: "Summary" },
-              { id: "entry",    icon: "ti-pencil",      label: "Entry" },
+              { id: "overview", icon: "ti-layout-list",    label: "Overview" },
+              { id: "summary",  icon: "ti-table",          label: "Summary" },
+              { id: "entry",    icon: "ti-pencil",         label: "Entry" },
+              { id: "observed", icon: "ti-clipboard-text", label: "Observed values" },
             ]}
           />
         }
       />
 
       {/* Content */}
-      <div style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", gap:16 }}>
+      <div className="flex-1 overflow-y-auto px-7 py-6">
         {tab === "overview" ? (
           <OverviewTab onNavigate={(targetTab, studentObj, enrollmentObj) => {
             setStudent(studentObj);
             setEnrollment(enrollmentObj);
             setSubject(null);
-            setComputation(null);
+            clearEntry();
             setTab(targetTab);
           }} />
         ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"300px 1fr", gap:16, alignItems:"start" }}>
-            {leftPanel}
-            <div key={tab}>
-              {tab === "summary" ? summaryPanel : entryPanel}
+          // Below lg the selection card stacks above the content.
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[288px_minmax(0,1fr)]">
+            <SelectionCard
+              tab={tab}
+              student={student}
+              onPickStudent={pickStudent}
+              onChangeStudent={() => pickStudent(null)}
+              enrollments={enrollments}
+              loadingEnrollments={loadingEnr}
+              enrollment={enrollment}
+              onPickEnrollment={pickEnrollment}
+              currentYear={currentYear}
+              subjects={entSubjects}
+              subject={subject}
+              onPickSubject={pickSubject}
+              savedGrades={savedGrades}
+              periods={periods}
+              gradingPeriod={gradingPeriod}
+              onPickPeriod={pickPeriod}
+            />
+            <div key={tab} className="min-w-0">
+              {tab === "summary" ? summaryPanel : tab === "entry" ? entryPanel : observedPanel}
             </div>
           </div>
         )}
