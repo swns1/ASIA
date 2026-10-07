@@ -44,7 +44,7 @@ const lastAwardsYear = () => api.getEnrollmentScholarships.mock.lastCall[0].scho
 
 async function pickYear(label) {
   fireEvent.click(screen.getByRole("button", { name: /^school year:/i }));
-  fireEvent.click(screen.getByRole("option", { name: new RegExp(label, "i") }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(label, "i") }));
 }
 
 beforeEach(() => {

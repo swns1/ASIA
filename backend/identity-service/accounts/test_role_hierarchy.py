@@ -104,7 +104,24 @@ def test_admin_cannot_delete_a_super_admin(mock_get_target, mock_resolve):
 
     response = APIClient().delete("/api/auth/users/2/")
 
-    assert response.status_code == 403
+    assert response.status_code == 405
+    target.delete.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("accounts.permissions.resolve_user_from_request")
+@patch("accounts.views.UserDetailView._get_target")
+def test_no_account_can_be_deleted_even_by_a_super_admin(mock_get_target, mock_resolve):
+    """Accounts are retired by deactivation. A delete orphaned every row
+    that names the person (users has no foreign keys) and couldn't be undone."""
+    mock_resolve.return_value = _super(user_id=9, email="owner2@example.com")
+    target = _user(user_id=3, email="teacher@example.com")
+    mock_get_target.return_value = target
+
+    response = APIClient().delete("/api/auth/users/3/")
+
+    assert response.status_code == 405
+    assert "Deactivate" in response.data["detail"]
     target.delete.assert_not_called()
 
 

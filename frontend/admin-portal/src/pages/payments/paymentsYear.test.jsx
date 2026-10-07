@@ -102,7 +102,7 @@ describe("PaymentsPage — Clear filters", () => {
     await waitFor(() => expect(getPayments).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole("button", { name: /school year: 2026-2027/i }));
-    fireEvent.click(await screen.findByRole("option", { name: /2025-2026/ }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /2025-2026/ }));
     await waitFor(() =>
       expect(getPayments).toHaveBeenLastCalledWith(expect.objectContaining({ school_year: "2025-2026" })),
     );

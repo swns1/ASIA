@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import useYearFilter from "../hooks/useYearFilter";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
@@ -12,22 +12,21 @@ import { pageVariants } from "../utils/motion";
 
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard, Panel } from "../components/ui/Card";
+import Card, { Panel } from "../components/ui/Card";
 import Tabs from "../components/ui/Tabs";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import ErrorState from "../components/ui/ErrorState";
-import Alert from "../components/ui/Alert";
 import Pagination from "../components/Pagination";
-import Badge, { StatusBadge } from "../components/ui/Badge";
+import Badge, { StatusBadge, StatusDot } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Skeleton from "../components/ui/Skeleton";
-import { Select } from "../components/FormField";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
+import { STATUS_TEXT } from "../constants/statusTones";
 import { paymentMethodMeta } from "../constants/paymentMethods";
-import { useSchoolYear } from "../context/SchoolYearContext";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -51,16 +50,31 @@ const reissueInvoice    = (id, p)  => _reissueInvoice(id, p);
 const getEnrollments    = (p = {}) => _getEnrollments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+// Amount and balance are worked out on the server (billing.views.with_amounts);
+// they used to be offered here and silently ignored.
 const SORT_OPTIONS = [
   { value: "-invoice_id",   label: "Newest first" },
   { value: "invoice_id",    label: "Oldest first" },
-  { value: "due_date",      label: "Due date ↑" },
-  { value: "-due_date",     label: "Due date ↓" },
-  { value: "net_amount",    label: "Amount ↑" },
-  { value: "-net_amount",   label: "Amount ↓" },
-  { value: "balance",       label: "Balance ↑" },
-  { value: "-balance",      label: "Balance ↓" },
+  { value: "-balance",      label: "Largest balance" },
+  { value: "balance",       label: "Smallest balance" },
+  { value: "-net_amount",   label: "Largest amount" },
+  { value: "net_amount",    label: "Smallest amount" },
+  { value: "due_date",      label: "Earliest due date" },
+  { value: "-due_date",     label: "Latest due date" },
 ];
+const DEFAULT_ORDERING = "-invoice_id";
+
+// The band's legend, in the order the bar draws them.
+const STATUS_FILTERS = ["unpaid", "partially_paid", "paid", "void"];
+
+const DUE_FILTERS = [
+  { value: "",        label: "Any" },
+  { value: "overdue", label: "A payment is past due" },
+];
+
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the other list pages.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // `tone` names the shared palette entry; the bg/color literals stay for the
 // inline plan pill on each list row until that moves to a shared Badge.
@@ -70,6 +84,11 @@ const PLAN_META = {
   semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd", tone:"accent" },
   annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
 };
+
+const PLAN_FILTERS = [
+  { value: "", label: "Any" },
+  ...Object.entries(PLAN_META).map(([value, m]) => ({ value, label: m.label })),
+];
 
 // Detail-panel tables. Neither is sortable — both render a short, already
 // ordered list (installments by sequence, payments by date).
@@ -760,7 +779,7 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
+/// ════════════════════════════════════════════════════════════════════════════
 export default function InvoicesPage() {
   usePageTitle("Invoices");
   const [searchParams] = useSearchParams();
@@ -776,164 +795,131 @@ export default function InvoicesPage() {
   // can't disagree about which year "now" is; a `school_year` in the link wins,
   // so a deep link keeps pointing at the year it named. "" is the explicit
   // all-years view — the escape hatch for chasing an older balance.
-  const { currentYear } = useSchoolYear();
   const [yearFilter,   setYearFilter, yearIsDefault] = useYearFilter();
 
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "all");
-  const [planFilter,   setPlanFilter]   = useState("all");
+  const [planFilter,   setPlanFilter]   = useState("");
   // "Only invoices with a payment past due" — reached from the admin home's
   // overdue count, which links here with ?overdue=1. Overdue is flagged on
-  // installments, so it isn't one of the status chips.
+  // installments, not on the invoice's status, so it's its own menu.
   const [overdueOnly,  setOverdueOnly]  = useState(() => ["1", "true"].includes(searchParams.get("overdue")));
   const [search,       setSearch]       = useState("");
   const [inputVal,     setInputVal]     = useState("");
-  const [ordering,     setOrdering]     = useState("-invoice_id");
+  const [ordering,     setOrdering]     = useState(DEFAULT_ORDERING);
   const [page,         setPage]         = useState(1);
   const [pageMeta,     setPageMeta]     = useState({ count:0, next:null, previous:null });
   const [showGenModal,      setShowGenModal]      = useState(false);
   const [payModalInvoiceId, setPayModalInvoiceId] = useState(null);
   const [refreshKey,        setRefreshKey]        = useState(0);
-  const [summary,           setSummary]           = useState({ unpaid:0, partially_paid:0, paid:0, void:0, total:0, school_years:[] });
-  // Separate from `loading` so the stat tiles only skeleton on the very first
-  // load. Sharing the list's flag made every chip click and page change blank
-  // the tiles and jitter the layout, even though their numbers rarely change.
-  const [countsLoading,     setCountsLoading]     = useState(true);
+  const searchRef = useRef(null);
 
-  const fetchInvoices = useCallback(async (
-    p = 1,
-    status = statusFilter,
-    plan = planFilter,
-    term = search,
-    ord = ordering,
-    year = yearFilter,
-    overdue = overdueOnly,
-  ) => {
+  // Only the newest request may fill the list: typing and filters fire
+  // requests back to back, and an older one landing last showed its rows
+  // under the newer filter.
+  const fetchSeq = useRef(0);
+  const fetchInvoices = useCallback(async (p = 1) => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
+    setLoadError(null);
     try {
-      const params = { page: p, ordering: ord };
-      if (status !== "all") params.status = status;
-      if (plan   !== "all") params.payment_plan = plan;
-      if (term.trim())      params.search = term.trim();
-      if (year)             params.school_year = year;
-      if (overdue)          params.overdue = "true";
-
-      // The stat tiles read from /summary/, so it must carry the same year and
-      // plan scoping as the list — otherwise the tiles would total a different
-      // set of invoices than the rows beneath them.
-      const summaryParams = {};
-      if (plan !== "all") summaryParams.payment_plan = plan;
-      if (year)           summaryParams.school_year = year;
-      if (overdue)        summaryParams.overdue = "true";
-
-      const [data, summaryData] = await Promise.all([
-        getInvoices(params),
-        getInvoiceSummary(summaryParams),
-      ]);
+      const params = { page: p, ordering };
+      if (statusFilter !== "all") params.status = statusFilter;
+      if (planFilter)             params.payment_plan = planFilter;
+      if (search.trim())          params.search = search.trim();
+      if (yearFilter)             params.school_year = yearFilter;
+      if (overdueOnly)            params.overdue = "true";
+      const data = await getInvoices(params);
+      if (seq !== fetchSeq.current) return;
       setInvoices(Array.isArray(data) ? data : data?.results ?? []);
       setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
       setPage(p);
-      setSummary(summaryData);
-      setCountsLoading(false);
-      setLoadError(null);
     } catch (e) {
+      if (seq !== fetchSeq.current) return;
       console.error(e);
       // Was swallowed — a failed load rendered as "No invoices found".
       setLoadError(e);
       setInvoices([]);
       setPageMeta({ count: 0, next: null, previous: null });
+    } finally {
+      if (seq === fetchSeq.current) setLoading(false);
     }
-    finally { setLoading(false); }
   }, [statusFilter, planFilter, search, ordering, yearFilter, overdueOnly]);
 
-  // The year is never empty on first render (useYearFilter starts from the
-  // current year), so the first load no longer waits for it; if School
-  // Settings then names a different year, the filter follows and this reloads.
+  // Any filter, another year, or a change made here (a payment, a void) is
+  // another list: back to its first page.
+  useEffect(() => { fetchInvoices(1); }, [fetchInvoices, refreshKey]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  // The band's numbers, from /summary/: the year, plan and past-due filter,
+  // like the list, but not the status (each count is its own status) or the
+  // search, which narrows only the rows, as on the other list pages. Kept
+  // with the scope it was counted for, so a stale answer never shows.
+  const scopeKey = JSON.stringify({ yearFilter, planFilter, overdueOnly, refreshKey });
+  const [summary, setSummary] = useState({ key: null, data: null });
+  // The year menu lists years that have invoices, which the summary reports;
+  // kept across scopes so the menu doesn't empty while the next one loads.
+  const [invoiceYears, setInvoiceYears] = useState([]);
   useEffect(() => {
-    fetchInvoices(1, statusFilter, planFilter, "", "-invoice_id", yearFilter); // eslint-disable-line react-hooks/set-state-in-effect
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, yearFilter]);
+    let cancelled = false;
+    const { yearFilter: year, planFilter: plan, overdueOnly: overdue } = JSON.parse(scopeKey);
+    const params = {};
+    if (plan)    params.payment_plan = plan;
+    if (year)    params.school_year = year;
+    if (overdue) params.overdue = "true";
+    getInvoiceSummary(params)
+      .then((d) => {
+        if (cancelled) return;
+        setSummary({ key: scopeKey, data: d });
+        setInvoiceYears(d?.school_years ?? []);
+      })
+      // Non-critical: the band reads "—" and the list still works.
+      .catch(() => { if (!cancelled) setSummary({ key: scopeKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [scopeKey]);
+  const counts = summary.key === scopeKey ? summary.data : null;
 
-  const handleSearch = () => {
-    setSearch(inputVal);
-    fetchInvoices(1, statusFilter, planFilter, inputVal, ordering, yearFilter);
-  };
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the fetch above reads, so Enter only skips the wait.
+  useEffect(() => {
+    if (inputVal === search) return;
+    const timer = setTimeout(() => setSearch(inputVal), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [inputVal, search]);
 
-  const handleOrdering = (val) => {
-    setOrdering(val);
-    fetchInvoices(1, statusFilter, planFilter, search, val, yearFilter);
-  };
-
-  const handleYear = (val) => {
-    setYearFilter(val);
-    fetchInvoices(1, statusFilter, planFilter, search, ordering, val);
-  };
+  // The current year is where the page opens, so it isn't a filter to clear.
+  const hasActiveFilters =
+    search || statusFilter !== "all" || planFilter || overdueOnly ||
+    ordering !== DEFAULT_ORDERING || !yearIsDefault;
+  // What narrows the list. The year doesn't: every visit opens on one.
+  const narrowed = search || statusFilter !== "all" || planFilter || overdueOnly;
 
   const handleClearAll = () => {
     setInputVal(""); setSearch("");
-    setStatusFilter("all"); setPlanFilter("all");
+    setStatusFilter("all"); setPlanFilter("");
     setOverdueOnly(false);
-    setOrdering("-invoice_id");
+    setOrdering(DEFAULT_ORDERING);
     // Clearing returns to the current school year, not to all-years: falling
     // back to every year would resurrect the mixed-year view this filter exists
     // to prevent.
     setYearFilter(null);
-    fetchInvoices(1, "all", "all", "", "-invoice_id", currentYear, false);
+    searchRef.current?.focus();
   };
-
-  const showAllInvoices = () => {
-    setOverdueOnly(false);
-    fetchInvoices(1, statusFilter, planFilter, search, ordering, yearFilter, false);
-  };
-
-  const hasActiveFilters =
-    search || statusFilter !== "all" || planFilter !== "all" ||
-    ordering !== "-invoice_id" || !yearIsDefault || overdueOnly;
 
   const totalPages = Math.ceil(pageMeta.count / 20);
-
   const isFirstRender = useIsFirstRender();
 
-  const STAT_CARDS = [
-    { label: "Unpaid",  statusKey: "unpaid",         value: summary.unpaid,         icon: "ti-alert-circle", tone: "error" },
-    { label: "Partial", statusKey: "partially_paid", value: summary.partially_paid, icon: "ti-progress",     tone: "warning" },
-    { label: "Paid",    statusKey: "paid",           value: summary.paid,           icon: "ti-circle-check", tone: "success" },
-    { label: "Void",    statusKey: "void",           value: summary.void,           icon: "ti-ban",          tone: "muted" },
-  ];
+  // What the band counts: the year, and the plan and past-due filter when set.
+  const bandCaption = [
+    `invoice${counts?.total === 1 ? "" : "s"} in ${yearFilter ? `S.Y. ${yearFilter}` : "all school years"}`,
+    planFilter && `${PLAN_META[planFilter]?.label} plan`,
+    overdueOnly && "with a payment past due",
+  ].filter(Boolean).join(" · ");
 
-  // Tones come from the shared status map, so a chip lights up in the same
-  // colour as the stat card and row badge for that status.
-  const statusChipOptions = [
-    { value: "all", label: "All", tone: "brand", count: countsLoading ? null : summary.total },
-    ...["unpaid", "partially_paid", "paid", "void"].map((v) => ({
-      value: v,
-      label: INVOICE_STATUS_MAP[v]?.label ?? v,
-      tone: INVOICE_STATUS_MAP[v]?.variant ?? "brand",
-      // The chip's own status total, not the filtered row count — the same
-      // number its stat card shows. The badge appearing is also what widens
-      // the chip, which is what the layout spring animates.
-      count: countsLoading ? null : summary[v],
-    })),
-  ];
-
-  const planChipOptions = [
-    { value: "all", label: "All", tone: "brand" },
-    ...Object.entries(PLAN_META).map(([value, m]) => ({
-      value,
-      label: m.label,
-      tone: m.tone,
-    })),
-  ];
+  const statusMeta = INVOICE_STATUS_MAP[statusFilter];
 
   return (
     <>
       <PageHeader
         title="Invoices"
-        icon="ti-receipt"
-        subtitle={
-          loading
-            ? "Loading…"
-            : `${summary.total} total · ${summary.unpaid} unpaid · ${summary.partially_paid} partial`
-        }
         actions={
           <Button icon="ti-receipt" onClick={() => setShowGenModal(true)}>
             Generate Invoice
@@ -943,123 +929,117 @@ export default function InvoicesPage() {
 
       {/* Content */}
       <motion.div
-        className="flex-1 space-y-4 overflow-y-auto p-6"
+        className="flex-1 space-y-4 overflow-y-auto px-7 py-6"
         variants={pageVariants.container}
         initial={isFirstRender ? "hidden" : false}
         animate="visible"
       >
-        {/* Stat tiles double as status filters */}
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {STAT_CARDS.map((s) => (
-            <StatCard
-              key={s.statusKey}
-              label={s.label}
-              value={s.value}
-              icon={s.icon}
-              iconTone={s.tone}
-              layout="horizontal"
-              loading={countsLoading}
-              active={statusFilter === s.statusKey}
-              onClick={() => {
-                const next = statusFilter === s.statusKey ? "all" : s.statusKey;
-                setStatusFilter(next);
-                fetchInvoices(1, next, planFilter, search, ordering);
-              }}
-            />
-          ))}
-        </div>
+        {/* ── Where the year's invoices stand, and the status filter ──
+            The school year sits in the band because its numbers are counted
+            for it; its years are the ones with invoices. */}
+        <StatusBand
+          total={counts?.total}
+          caption={bandCaption}
+          aside={<SchoolYearMenu value={yearFilter} onChange={setYearFilter} years={invoiceYears} />}
+          options={[
+            { value: "all", label: "All", count: counts?.total },
+            ...STATUS_FILTERS.map((s) => ({
+              value: s,
+              label: INVOICE_STATUS_MAP[s].label,
+              count: counts?.[s],
+              variant: INVOICE_STATUS_MAP[s].variant,
+            })),
+          ]}
+          value={statusFilter}
+          allValue="all"
+          onChange={setStatusFilter}
+        />
 
-        {/* Filters */}
-        <FilterBar
-          searchInputId="invoice-search"
-          searchLabel="Search by invoice number"
-          searchPlaceholder="Search by invoice number…"
-          searchValue={inputVal}
-          onSearchChange={setInputVal}
-          onSearch={handleSearch}
-          onClearSearch={() => { setInputVal(""); setSearch(""); fetchInvoices(1, statusFilter, planFilter, "", ordering, yearFilter); }}
-          hasFilters={Boolean(hasActiveFilters)}
-          onClearFilters={handleClearAll}
-          // Years come from /summary/ — years that have *invoices*, which is not
-          // the same set as years that have enrollments, so the context's list
-          // would offer years with nothing to bill. The summary tallies by
-          // status rather than by year, so these rows carry no per-year count.
-          scope={
-            <SchoolYearPicker
-              value={yearFilter}
-              onChange={handleYear}
-              options={summary.school_years ?? []}
-              counts={{}}
-              allYearsCount={countsLoading ? undefined : summary.total}
-            />
-          }
-          extraControls={
-            <div className="shrink-0">
-              <label htmlFor="invoice-sort" className="sr-only">Sort invoices</label>
-              <Select
-                id="invoice-sort"
-                value={ordering}
-                onChange={(e) => handleOrdering(e.target.value)}
-                className="h-[42px] w-[170px] rounded-lg border-neutral-300 bg-white py-0 text-[13px] font-semibold"
-              >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </Select>
-            </div>
-          }
-        >
-          <FilterRow label="Status">
-            <ChipGroup
-              label="Filter by status"
-              options={statusChipOptions}
-              value={statusFilter}
-              onChange={(v) => { setStatusFilter(v); fetchInvoices(1, v, planFilter, search, ordering, yearFilter); }}
-            />
-          </FilterRow>
+        {/* ── Toolbar: search, the filter menus, Clear ──
+            The menus open to the right edge, where the pills sit. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="invoice-search"
+            label="Search invoices by number or student name"
+            placeholder="Search invoice no. or student name…"
+            inputRef={searchRef}
+            value={inputVal}
+            onChange={setInputVal}
+            onEnter={() => setSearch(inputVal)}
+            onClear={() => { setInputVal(""); setSearch(""); }}
+          />
 
-          <FilterRow label="Payment Plan">
-            <ChipGroup
-              label="Filter by payment plan"
-              options={planChipOptions}
-              value={planFilter}
-              onChange={(v) => { setPlanFilter(v); fetchInvoices(1, statusFilter, v, search, ordering, yearFilter); }}
-            />
-          </FilterRow>
-        </FilterBar>
+          <FilterMenu
+            label="Plan"
+            valueLabel={PLAN_META[planFilter]?.label ?? "Any"}
+            active={Boolean(planFilter)}
+            options={PLAN_FILTERS}
+            value={planFilter}
+            onChange={setPlanFilter}
+            align="end"
+            menuWidth={180}
+          />
 
-        <AnimatePresence>
-          {overdueOnly && (
-            <Alert variant="warning" icon="ti-clock-exclamation" title="Only invoices with a payment past due">
-              Each of these has at least one installment past its due date.{" "}
-              <button type="button" onClick={showAllInvoices} className="focus-ring rounded-sm font-semibold underline">
-                Show all invoices
-              </button>
-            </Alert>
+          <FilterMenu
+            label="Due"
+            valueLabel={overdueOnly ? "Past due" : "Any"}
+            active={overdueOnly}
+            options={DUE_FILTERS}
+            value={overdueOnly ? "overdue" : ""}
+            onChange={(v) => setOverdueOnly(v === "overdue")}
+            align="end"
+            menuWidth={240}
+          />
+
+          <FilterMenu
+            label="Sort"
+            valueLabel={SORT_OPTIONS.find((o) => o.value === ordering)?.label ?? "Newest first"}
+            active={ordering !== DEFAULT_ORDERING}
+            options={SORT_OPTIONS}
+            value={ordering}
+            onChange={setOrdering}
+            align="end"
+            menuWidth={200}
+          />
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
           )}
-        </AnimatePresence>
+        </div>
 
         {/* Master / detail — stacks below lg, where a 360px + detail split has
             no room to breathe. */}
         <motion.div
           variants={pageVariants.item}
-          className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]"
+          className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[360px_minmax(0,1fr)]"
         >
           {/* Left: Invoice list */}
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-            <div className="max-h-[calc(100vh-340px)] overflow-y-auto">
+          <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-4 py-3.5">
+              <h2 className="text-md font-bold text-neutral-900">
+                {statusMeta ? `${statusMeta.label} invoices` : "All invoices"}
+              </h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">{pageMeta.count.toLocaleString()}</span>
+              )}
+            </div>
+
+            <div className="max-h-[calc(100vh-380px)] min-h-[200px] overflow-y-auto">
               {loading ? (
-                Array.from({ length:8 }).map((_, i) => (
-                  <div key={i} style={{ padding:"14px 16px", borderBottom:"1px solid #f9f0f0", display:"flex", flexDirection:"column", gap:8 }}>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-2 border-b border-neutral-200/70 px-4 py-3.5">
                     <Skeleton width={140} height={14} /><Skeleton width={100} height={11} /><Skeleton width={80} height={11} />
                   </div>
                 ))
               ) : loadError ? (
-                <ErrorState
-                  error={loadError}
-                  subject="invoices"
-                  onRetry={() => fetchInvoices(page, statusFilter, planFilter, search, ordering)}
-                />
+                <ErrorState error={loadError} subject="invoices" onRetry={() => fetchInvoices(page)} />
               ) : invoices.length === 0 ? (
                 <EmptyState
                   icon="ti-receipt-off"
@@ -1067,22 +1047,22 @@ export default function InvoicesPage() {
                   // reads as the school having none at all. Name the year, and
                   // offer the all-years view as the way out.
                   title={
-                    hasActiveFilters ? "No invoices match these filters"
+                    narrowed ? "No invoices match these filters"
                       : yearFilter ? `No invoices for S.Y. ${yearFilter}`
                       : "No invoices yet"
                   }
                   subtitle={
-                    hasActiveFilters ? "Try a different search or clear the filters."
+                    narrowed ? "Try a different search or clear the filters."
                       : yearFilter ? "Generate one for this year, or view all years."
                       : "Generate the first invoice to get started."
                   }
                   action={
-                    hasActiveFilters ? (
+                    narrowed ? (
                       <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
                         Clear filters
                       </Button>
                     ) : yearFilter ? (
-                      <Button variant="secondary" size="sm" icon="ti-calendar" onClick={() => handleYear("")}>
+                      <Button variant="secondary" size="sm" icon="ti-calendar" onClick={() => setYearFilter("")}>
                         View all years
                       </Button>
                     ) : (
@@ -1093,56 +1073,54 @@ export default function InvoicesPage() {
                   }
                 />
               ) : (
-                <AnimatePresence mode="popLayout" initial={false}>
-                  {invoices.map((inv) => {
-                    const pm = PLAN_META[inv.payment_plan] ?? PLAN_META.monthly;
-                    const isSelected = selectedId === inv.invoice_id;
-                    const en = inv.enrollment_detail;
-                    const balance = parseFloat(inv.balance ?? 0);
-                    // From the installments (server-side), not invoice.due_date:
-                    // that is the first installment's date and never moves, so
-                    // every open invoice read as overdue from July on.
-                    const isOverdue = Boolean(inv.is_overdue);
-                    return (
-                      <motion.div
-                        key={inv.invoice_id}
-                        initial={{ opacity:0, x:-10 }}
-                        animate={{ opacity:1, x:0 }}
-                        exit={{ opacity:0, x:-10 }}
-                        transition={{ duration:0.18, ease:"easeOut" }}
-                        style={{ padding:"13px 16px", borderBottom:"1px solid #f9f0f0", cursor:"pointer", background:isSelected ? "#fff8f6" : "white", borderLeft:`3px solid ${isSelected ? "#e03131" : isOverdue ? "#7c3aed" : "transparent"}` }}
-                        onClick={() => setSelectedId(inv.invoice_id)}
-                        whileHover={{ backgroundColor: isSelected ? "#fff8f6" : "#fff4f4" }}
-                      >
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
-                          <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
-                          <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                            {/* Overdue now reads as urgent (error-toned + clock
-                                icon) rather than the old purple, which looked
-                                like an unrelated category. */}
-                            {isOverdue && (
-                              <StatusBadge status="overdue" map={INVOICE_STATUS_MAP} size="sm" />
-                            )}
-                            <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
-                          </div>
-                        </div>
-                        <div style={{ fontSize:12, color:"#5a4a4a", fontWeight:600, marginBottom:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`}</div>
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                          <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                            <span style={{ fontSize:10.5, fontWeight:600, padding:"1px 6px", borderRadius:99, background:pm.bg, color:pm.color }}>{pm.label}</span>
-                            <span style={{ fontSize:11, color:"#8a6a6a" }}>{en?.grade_level ?? ""}</span>
-                          </div>
-                          <span style={{ fontSize:12, fontWeight:700, color: balance > 0 ? "#a32d2d" : "#2e6b0d" }}>{fmt(balance)} bal.</span>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
+                invoices.map((inv) => {
+                  const isSelected = selectedId === inv.invoice_id;
+                  const en = inv.enrollment_detail;
+                  const balance = parseFloat(inv.balance ?? 0);
+                  // From the installments (server-side), not invoice.due_date:
+                  // that is the first installment's date and never moves, so
+                  // every open invoice read as overdue from July on.
+                  const isOverdue = Boolean(inv.is_overdue);
+                  return (
+                    <button
+                      key={inv.invoice_id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedId(inv.invoice_id)}
+                      className={`focus-ring flex w-full flex-col gap-1 border-b border-l-[3px] border-b-neutral-200/70 px-4 py-3 text-left transition-colors duration-150 ${
+                        isSelected ? "border-l-brand-500 bg-brand-50" : "border-l-transparent bg-white hover:bg-brand-50"
+                      }`}
+                    >
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="font-mono text-[12px] font-semibold text-neutral-900">{inv.invoice_no}</span>
+                        <span className="flex items-center gap-2.5">
+                          {isOverdue && (
+                            <span className={`text-[12px] font-semibold ${STATUS_TEXT.error}`}>
+                              {INVOICE_STATUS_MAP.overdue.label}
+                            </span>
+                          )}
+                          <StatusDot status={inv.status} map={INVOICE_STATUS_MAP} />
+                        </span>
+                      </span>
+                      <span className="truncate text-[13px] font-semibold text-neutral-900">
+                        {en?.student_name ?? `Enrollment #${inv.enrollment_id}`}
+                      </span>
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="truncate text-[11.5px] text-neutral-500">
+                          {[PLAN_META[inv.payment_plan]?.label ?? "Monthly", en?.grade_level].filter(Boolean).join(" · ")}
+                        </span>
+                        <span className={`whitespace-nowrap text-[12.5px] font-bold tabular-nums ${balance > 0 ? "text-neutral-900" : "text-success-600"}`}>
+                          {fmt(balance)} <span className="font-medium text-neutral-500">bal.</span>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })
               )}
             </div>
 
-            {/* Pagination — now the shared control, so it behaves and reads
-                the same as every other list in the app. */}
+            {/* Pagination — the shared control, so it behaves and reads the
+                same as every other list in the app. */}
             {!loading && !loadError && pageMeta.count > 20 && (
               <div className="border-t border-neutral-200 bg-white px-4 py-2.5">
                 <Pagination
@@ -1151,29 +1129,27 @@ export default function InvoicesPage() {
                   count={pageMeta.count}
                   hasPrevious={Boolean(pageMeta.previous)}
                   hasNext={Boolean(pageMeta.next)}
-                  onPageChange={(p) => fetchInvoices(p, statusFilter, planFilter, search, ordering)}
+                  onPageChange={(p) => fetchInvoices(p)}
                 />
               </div>
             )}
 
-            {/* Aggregate totals footer */}
+            {/* What this page of invoices still has to collect. */}
             {!loading && invoices.length > 0 && (() => {
               const pageTotal    = invoices.reduce((s, i) => s + parseFloat(i.balance ?? 0), 0);
               const overdueCount = invoices.filter((i) => i.is_overdue).length;
               return (
-                <div style={{ padding:"10px 16px", borderTop:"1px solid #f5eaea", background:"#fdfafa", display:"flex", gap:12, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:11, color:"#8a6a6a" }}>
-                    <span style={{ fontWeight:600, color:"#1a0a0a" }}>{fmt(pageTotal)}</span> outstanding this page
-                  </div>
+                <div className="flex flex-wrap gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[11.5px] text-neutral-500">
+                  <span>
+                    <span className="font-semibold text-neutral-900 tabular-nums">{fmt(pageTotal)}</span> outstanding this page
+                  </span>
                   {overdueCount > 0 && (
-                    <div style={{ fontSize:11, color:"#7c3aed", fontWeight:600 }}>
-                      <i className="ti ti-alert-triangle" style={{ fontSize:11, marginRight:3 }} />{overdueCount} overdue
-                    </div>
+                    <span className={`font-semibold ${STATUS_TEXT.error}`}>{overdueCount} overdue</span>
                   )}
                 </div>
               );
             })()}
-          </div>
+          </Card>
 
           {/* Right: Detail panel */}
           <AnimatePresence mode="wait">
@@ -1202,12 +1178,10 @@ export default function InvoicesPage() {
                 exit={{ opacity:0 }}
                 transition={{ duration:0.18 }}
               >
-                <Card padding="none" className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-neutral-500">
-                  <div className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-brand-100">
-                    <i className="ti ti-receipt text-[22px] text-neutral-500" aria-hidden="true" />
-                  </div>
+                <Card padding="none" className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
+                  <i className="ti ti-receipt text-[24px] text-neutral-500" aria-hidden="true" />
                   <div className="text-sm font-semibold text-neutral-700">Select an invoice</div>
-                  <div className="text-[13px]">Click an invoice on the left to view its details</div>
+                  <div className="text-[12.5px] text-neutral-500">Pick one from the list to see its installments and payments.</div>
                 </Card>
               </motion.div>
             ) : null}

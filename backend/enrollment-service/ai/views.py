@@ -121,6 +121,10 @@ ALLOWED_PAYLOAD_FIELDS = {
         "grade_level", "school_level", "section", "school_year",
         "overall_average", "passed_subjects", "failed_subjects",
         "total_grades", "grades_by_subject",
+        # Sent instead of passed/failed_subjects while no subject has a final
+        # rating yet: counts of quarter grades, under a name that says so.
+        # The page used to send those counts as subjects.
+        "passed_period_grades", "failed_period_grades",
     },
     "clustering_insights": {
         "school_year", "grading_period", "grade_level", "subject",

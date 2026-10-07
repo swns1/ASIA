@@ -1,62 +1,97 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
+import Card from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Pagination from "../components/Pagination";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
-import { getAvatarPalette } from "../utils/avatarPalette";
-import { StatusBadge as StudentStatusBadge } from "../components/ui/Badge";
-import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { getStudent, getStudents } from "../api/studentApi";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
+import { StatusDot } from "../components/ui/Badge";
+import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { STATUS_DOT, STATUS_TEXT } from "../constants/statusTones";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_DOTS, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { getDocumentStatus } from "../api/enrollmentApi";
+import { getStudent } from "../api/studentApi";
 import useYearFilter from "../hooks/useYearFilter";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 
-
-
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
-  green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
-  border: "#f5eaea", softBorder: "#f9f0f0",
-  text: "#1a0a0a", muted: "#7a5050", pale: "#8a6a6a",
-  bg: "#fdf8f6", white: "#ffffff",
-};
-
-
-const RECENT_COLUMNS = [
-  { key: 'student', label: 'Student', width: '35%' },
-  { key: 'lrn',     label: 'LRN',     width: '20%' },
-  { key: 'grade',   label: 'Grade',   width: '20%' },
-  { key: 'status',  label: 'Status',  width: '15%' },
-  { key: 'arrow',   label: '',        width: '10%' },
+// ── Constants ─────────────────────────────────────────────────────────────────
+// The band's legend: whether a learner has handed in every required document
+// their placement asks for. "Missing documents" is who the registrar still has
+// to chase -- a pending learner in it can't be enrolled until they're in.
+// Red, as the checklist marks a missing required document.
+const DOCUMENT_FILTERS = [
+  { value: "",         label: "All",               title: "All learners" },
+  { value: "complete", label: "Complete",          title: "Complete",          variant: "success" },
+  { value: "missing",  label: "Missing documents", title: "Missing documents", variant: "error" },
 ];
 
-// ── Filter constants ──────────────────────────────────────────────────────────
-// `tone` names the shared ChipGroup palette entry; the categorical school-level
-// tones are the same ones EnrollmentsPage uses, so a level reads the same colour
-// on both pages.
-const SCHOOL_LEVELS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand" },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary" },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh" },
-  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh" },
-];
-
-const GRADE_LEVELS_BY_LEVEL = {
-  "":                ["All Grades"],
-  nursery:           ["All Grades", "Nursery"],
-  kindergarten:      ["All Grades", "Kindergarten"],
-  elementary:        ["All Grades", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"],
-  junior_highschool: ["All Grades", "Grade 7", "Grade 8", "Grade 9", "Grade 10"],
-  senior_highschool: ["All Grades", "Grade 11", "Grade 12"],
+// How a learner came into the year, which decides what they owe: a
+// transferee also owes their old school's records.
+const ENTRY_STATUS = {
+  new:        { label: "New",        hint: "Starting school here, at Nursery, Kindergarten or Grade 1" },
+  transferee: { label: "Transferee", hint: "Came from another school, so owes their records from there too" },
+  continuing: { label: "Continuing", hint: "Spent an earlier school year here" },
 };
 
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the other list pages.
+const SEARCH_DEBOUNCE_MS = 300;
+
+const PAGE_SIZE = 20;
+
+const TABLE_COLUMNS = [
+  { key: "student",    label: "Student",            width: "28%" },
+  { key: "placement",  label: "Grade / section",    width: "15%" },
+  { key: "entry",      label: "Entry",              width: "11%" },
+  { key: "documents",  label: "Required documents", width: "30%" },
+  { key: "enrollment", label: "Enrollment",         width: "12%" },
+  { key: "open",       label: "",                   width: "4%"  },
+];
+
+/** "Cruz, Ana M." -- the list is sorted by last name, as on Students. */
+function fullName(st) {
+  const given = [st.first_name, st.middle_name ? `${st.middle_name[0]}.` : "", st.suffix ?? ""]
+    .filter(Boolean).join(" ");
+  if (!st.last_name) return given || `Student #${st.student_id}`;
+  return given ? `${st.last_name}, ${given}` : st.last_name;
+}
+
+/** A learner's required documents, as a dot matching the band's legend. */
+function DocumentsCell({ row }) {
+  if (!row.missing.length) {
+    return (
+      <div className="flex flex-col gap-[3px]">
+        <span className={`inline-flex items-center gap-[7px] text-sm font-semibold ${STATUS_TEXT.success}`}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT.success}`} aria-hidden="true" />
+          Complete
+        </span>
+        <span className="pl-[15px] text-[11.5px] text-neutral-500 tabular-nums">
+          {row.required ? `${row.submitted} of ${row.required} in` : "None required"}
+        </span>
+      </div>
+    );
+  }
+  const names = row.missing.map((m) => m.requirement_name).join(", ");
+  return (
+    <div className="flex min-w-0 flex-col gap-[3px]">
+      <span className={`inline-flex items-center gap-[7px] text-sm font-semibold ${STATUS_TEXT.error}`}>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT.error}`} aria-hidden="true" />
+        Missing {row.missing.length} of {row.required}
+      </span>
+      <span className="truncate pl-[15px] text-[11.5px] text-neutral-600" title={names}>
+        {names}
+      </span>
+    </div>
+  );
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -65,371 +100,348 @@ export default function RequirementsPage() {
   usePageTitle("Requirements");
   const navigate = useNavigate();
 
-  // Filter state
+  // What a learner owes depends on where they're placed, which is per school
+  // year, so the page shows one year at a time: the current one, or the one
+  // in the link (see hooks/useYearFilter).
+  const [schoolYear, setSchoolYear, yearIsDefault] = useYearFilter({ allowAll: false });
   const [levelFilter, setLevelFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
-  // Level and grade are where a learner is placed, which is per school year:
-  // the filters list students enrolled (or pending) there in the current
-  // school year, or the year a link names (see hooks/useYearFilter).
-  const [schoolYear] = useYearFilter();
-  const gradeOptions = GRADE_LEVELS_BY_LEVEL[levelFilter] ?? ["All Grades"];
-
-  // Reset grade when level changes
-  useEffect(() => { setGradeFilter(""); }, [levelFilter]);
-
-  const hasFilters = levelFilter || gradeFilter;
-
-  // Search state
-  const [searchInput,   setSearchInput]   = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [showDropdown,  setShowDropdown]  = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [docsFilter,  setDocsFilter]  = useState("");
+  const [search,      setSearch]      = useState("");
+  const [inputVal,    setInputVal]    = useState("");
   const searchRef = useRef(null);
-  const suppressSearch = useRef(false);
 
-  // Recent students
-  const [recentStudents,        setRecentStudents]        = useState([]);
-  const [recentStudentsLoading, setRecentStudentsLoading] = useState(false);
-  const [recentPage,            setRecentPage]            = useState(1);
-  const [recentPageMeta,        setRecentPageMeta]        = useState({ count: 0, next: null, previous: null });
-  const RECENT_PAGE_SIZE = 10;
+  const [rows,      setRows]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  // A failed load used to show "No students found", as if nobody owed a thing.
+  const [loadError, setLoadError] = useState(null);
+  const [page,      setPage]      = useState(1);
+  const [pageMeta,  setPageMeta]  = useState({ count: 0, next: null, previous: null });
 
-  // Requirement counts, reported up by RequirementDocumentsPanel — the panel
-  // owns the checklist itself (loading, upload, replace, remove, view).
-  const [reqCounts,  setReqCounts]  = useState({ total: 0, submitted: 0, requiredMissing: 0 });
-  const [reqLoading, setReqLoading] = useState(false);
+  // The learner whose checklist is open: their student record, and their row
+  // for the year when they have one -- which says what they're asked for.
+  const [selected,   setSelected]   = useState(null);
   const [reqRefresh, setReqRefresh] = useState(0);
-
-  const handleReqChange = useCallback((counts) => {
-    setReqCounts(counts);
-    setReqLoading(false);
-  }, []);
 
   // Auth guard
   useEffect(() => {
     if (!sessionStorage.getItem("access_token")) navigate("/");
   }, [navigate]);
 
-  // Deep link: /requirements?student=123.
+  // The band counts the year, level and grade; search and the documents
+  // filter only narrow the rows. Kept with the scope it was counted for, so
+  // another scope's numbers never show while the next ones load.
+  const scopeKey = JSON.stringify({ schoolYear, levelFilter, gradeFilter });
+  const [summary, setSummary] = useState({ key: null, data: null });
+  const bandCounts = summary.key === scopeKey ? summary.data : null;
+
+  const fetchRows = useCallback(async (p = 1) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const params = { school_year: schoolYear, page: p, page_size: PAGE_SIZE };
+      if (levelFilter) params.school_level = levelFilter;
+      if (gradeFilter) params.grade_level  = gradeFilter;
+      if (docsFilter)  params.documents    = docsFilter;
+      if (search)      params.search       = search;
+      const data = await getDocumentStatus(params);
+      setRows(data.results ?? []);
+      setPageMeta({ count: data.count ?? 0, next: data.next, previous: data.previous });
+      setSummary({ key: scopeKey, data: data.summary ?? null });
+      setPage(p);
+    } catch (e) {
+      console.error(e);
+      setLoadError(e);
+      setRows([]);
+      setPageMeta({ count: 0, next: null, previous: null });
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolYear, levelFilter, gradeFilter, docsFilter, search, scopeKey]);
+
+  // Any filter, or another year, is another list: back to its first page.
+  useEffect(() => { fetchRows(1); }, [fetchRows]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the fetch above reads, so Enter only skips the wait.
+  useEffect(() => {
+    if (inputVal === search) return;
+    const timer = setTimeout(() => setSearch(inputVal), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [inputVal, search]);
+
+  // The checklist panel reports its counts after every load and every
+  // change. A change to the open learner's documents moves their row and the
+  // band, so the list is fetched again -- but not on the first report, which
+  // is only the checklist loading.
+  const lastReport = useRef(null);
+  const handleReqChange = useCallback((counts) => {
+    const report = `${counts.submitted}/${counts.total}/${counts.requiredMissing}`;
+    if (lastReport.current !== null && lastReport.current !== report) fetchRows(page);
+    lastReport.current = report;
+  }, [fetchRows, page]);
+
+  const openStudent = (student, row = null) => {
+    lastReport.current = null;
+    setSelected({ student, row });
+  };
+  const closeStudent = () => setSelected(null);
+
+  // Deep link: /requirements?student=123[&school_year=…].
   //
-  // This page used to take no parameters at all, so the only way in was the
-  // sidebar followed by re-searching for a student by name. That is the whole
-  // reason a registrar blocked by "missing required documents" on an
-  // enrollment had nowhere to go — the enrollment pages now link straight
-  // here for the learner already on screen.
+  // The enrollment pages link here for the learner on screen, which is how a
+  // registrar blocked by "missing required documents" gets somewhere that
+  // can fix it. Their row for the year says what they're asked for; a
+  // learner with none that year still opens, on the whole catalogue.
   const [searchParams] = useSearchParams();
   const deepLinkId = searchParams.get("student");
   useEffect(() => {
     if (!deepLinkId) return;
     let cancelled = false;
-    getStudent(deepLinkId)
-      .then((student) => { if (!cancelled && student) selectStudent(student); })
-      .catch(() => { /* a bad id just leaves the picker empty */ });
-    return () => { cancelled = true; };
-  }, [deepLinkId]);
-
-  // Load recent students — re-fetches when filters or page change
-  const fetchRecentStudents = useCallback((page = 1) => {
-    setRecentStudentsLoading(true);
-    getStudents({
-      ordering: "-student_id",
-      page,
-      page_size: RECENT_PAGE_SIZE,
-      school_level: levelFilter,
-      grade_level: gradeFilter,
-      ...((levelFilter || gradeFilter) && schoolYear ? { school_year: schoolYear } : {}),
-    })
-      .then((data) => {
-        setRecentStudents(data?.results ?? []);
-        setRecentPageMeta({ count: data?.count ?? 0, next: data?.next, previous: data?.previous });
-        setRecentPage(page);
-      })
-      .catch(() => {})
-      .finally(() => setRecentStudentsLoading(false));
-  }, [levelFilter, gradeFilter, schoolYear]);
-
-  useEffect(() => { fetchRecentStudents(1); }, [fetchRecentStudents]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handler(e) {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setShowDropdown(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  // Live debounced student search
-  useEffect(() => {
-    if (suppressSearch.current) { suppressSearch.current = false; return; }
-    if (!searchInput.trim()) { setSearchResults([]); setShowDropdown(false); return; }
-    setSearchLoading(true);
-    setShowDropdown(true);
-    const t = setTimeout(async () => {
+    (async () => {
+      let row = null;
       try {
-        const data = await getStudents({ search: searchInput.trim() });
-        setSearchResults(Array.isArray(data) ? data : data?.results ?? []);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
+        const data = await getDocumentStatus({ school_year: schoolYear, student: deepLinkId, page_size: 1 });
+        row = data.results?.[0] ?? null;
+      } catch { /* the student alone still opens */ }
+      let student = row;
+      if (!student) {
+        try { student = await getStudent(deepLinkId); } catch { return; /* a bad id leaves the list */ }
       }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+      if (!cancelled && student) openStudent(student, row);
+    })();
+    return () => { cancelled = true; };
+  }, [deepLinkId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Select a student → the panel loads their requirements
-  function selectStudent(student) {
-    suppressSearch.current = true;
-    setSelectedStudent(student);
-    setShowDropdown(false);
-    setSearchResults([]);
-    setSearchInput(`${student.first_name} ${student.last_name}`);
-    setReqLoading(true);
-    setReqCounts({ total: 0, submitted: 0, requiredMissing: 0 });
-  }
+  // Every filter acts on the list, so it closes an open checklist to show it.
+  const filterWith = (set) => (value) => { set(value); closeStudent(); };
+  const changeLevel = (value) => { setLevelFilter(value); setGradeFilter(""); closeStudent(); };
 
-  const reloadRequirements = useCallback(() => {
-    if (!selectedStudent) return;
-    setReqLoading(true);
-    setReqRefresh((v) => v + 1);
-  }, [selectedStudent]);
+  // What narrows the list. The year doesn't: every visit opens on one.
+  const narrowed = Boolean(search || levelFilter || gradeFilter || docsFilter);
+  // The current year is where the page opens, so it isn't a filter to clear.
+  const hasFilters = narrowed || !yearIsDefault;
+  const clearFilters = () => {
+    setSchoolYear(null); // back to the current school year
+    setInputVal(""); setSearch("");
+    setLevelFilter(""); setGradeFilter(""); setDocsFilter("");
+    closeStudent();
+    searchRef.current?.focus();
+  };
 
-  const submitted = reqCounts.submitted;
-  const pending   = Math.max(reqCounts.total - reqCounts.submitted, 0);
+  const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
+  const isFirstRender = useIsFirstRender();
+
+  // What the band counts: the year, and the level and grade when set.
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === levelFilter)?.label;
+  const bandCaption = [
+    `learner${bandCounts?.learners === 1 ? "" : "s"} in S.Y. ${schoolYear}`,
+    levelFilter && levelLabel,
+    gradeFilter,
+  ].filter(Boolean).join(" · ");
+
+  const gradeMenuOptions = [
+    { value: "", label: "All grades" },
+    ...(GRADE_LEVELS_BY_LEVEL[levelFilter] ?? []).map((g) => ({ value: g, label: g })),
+  ];
+
+  const docsMeta = DOCUMENT_FILTERS.find((f) => f.value === docsFilter);
+  const nobodyMissing = docsFilter === "missing" && !search && !levelFilter && !gradeFilter;
 
   return (
     <>
-          <PageHeader
-            title="Student Requirements"
-            icon="ti-file-check"
-            subtitle="Enrollment documents and submission tracker"
-            actions={
-              selectedStudent && (
-                <Button variant="secondary" icon="ti-refresh" onClick={reloadRequirements}>
-                  Refresh
-                </Button>
-              )
-            }
+      <PageHeader title="Student Requirements" />
+
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
+
+        {/* ── Who has their documents in, and the filter ──
+            The school year sits in the band because its numbers are counted
+            for it. Documents are owed per placement, so there's no All years. */}
+        <StatusBand
+          total={bandCounts?.learners}
+          caption={bandCaption}
+          aside={
+            <SchoolYearMenu
+              value={schoolYear}
+              onChange={filterWith(setSchoolYear)}
+              includeAllYears={false}
+            />
+          }
+          options={DOCUMENT_FILTERS.map((f) => ({
+            value: f.value,
+            label: f.label,
+            count: bandCounts ? (f.value ? bandCounts[f.value] : bandCounts.learners) : undefined,
+            variant: f.variant,
+          }))}
+          value={docsFilter}
+          allValue=""
+          onChange={filterWith(setDocsFilter)}
+          label="Filter by documents"
+        />
+
+        {/* ── Toolbar: search, the filter menus, Clear ──
+            The menus open to the right edge, where the pills sit. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="requirements-search"
+            label="Search learners by name, LRN or section"
+            placeholder="Search student name, LRN or section…"
+            inputRef={searchRef}
+            value={inputVal}
+            onChange={filterWith(setInputVal)}
+            onEnter={() => setSearch(inputVal)}
+            onClear={() => { setInputVal(""); setSearch(""); }}
           />
 
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
+          <FilterMenu
+            label="Level"
+            valueLabel={levelLabel ?? "All levels"}
+            active={Boolean(levelFilter)}
+            options={LEVEL_FILTER_OPTIONS}
+            value={levelFilter}
+            onChange={changeLevel}
+            align="end"
+            menuWidth={220}
+          />
 
-            {/* ── Filter + Search panel ── */}
-            {/* The search is a student autocomplete with an overlaying result
-                list, not FilterBar's plain text search, so it rides in
-                `extraControls`; the chip rows below are ordinary children. */}
-            <FilterBar
-              hasFilters={Boolean(hasFilters)}
-              onClearFilters={() => { setLevelFilter(""); setGradeFilter(""); }}
-              className="relative z-[100]"
-              onSearch={() => { if (searchInput.trim()) setShowDropdown(true); }}
-              extraControls={
-                <div className="relative flex-1" ref={searchRef}>
-                  <div className="filterbar-search flex h-[42px] items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
-                    <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
-                    <label htmlFor="requirements-search" className="sr-only">Search students</label>
-                    <input
-                      id="requirements-search"
-                      value={searchInput}
-                      onChange={(e) => {
-                        setSearchInput(e.target.value);
-                        if (!e.target.value) { setSelectedStudent(null); setShowDropdown(false); }
-                      }}
-                      placeholder="Search student name, LRN, or student number…"
-                      className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500"
-                    />
-                    {searchInput && (
-                      <button
-                        type="button"
-                        aria-label="Clear search"
-                        onClick={() => { setSearchInput(""); setSelectedStudent(null); setShowDropdown(false); }}
-                        className="focus-ring flex shrink-0 items-center rounded-sm p-0.5 text-neutral-500 hover:text-brand-600"
-                      >
-                        <i className="ti ti-x text-[13px]" aria-hidden="true" />
-                      </button>
-                    )}
-                    {searchLoading && (
-                      <i className="ti ti-loader-2 shrink-0 animate-spin text-[13px] text-brand-500" aria-hidden="true" />
-                    )}
-                  </div>
+          {/* A grade only narrows within a level. */}
+          {levelFilter && (
+            <FilterMenu
+              label="Grade"
+              valueLabel={gradeFilter || "All grades"}
+              active={Boolean(gradeFilter)}
+              options={gradeMenuOptions}
+              value={gradeFilter}
+              onChange={filterWith(setGradeFilter)}
+              align="end"
+              menuWidth={180}
+            />
+          )}
 
-                  {showDropdown && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[9999] max-h-[280px] overflow-y-auto rounded-xl border-[1.5px] border-neutral-200 bg-white shadow-[0_12px_40px_rgba(224,49,49,0.14)]">
-                      {searchLoading && (
-                        <div className="px-4 py-3.5 text-[13px] text-neutral-500">Searching…</div>
-                      )}
-                      {!searchLoading && searchResults.length === 0 && (
-                        <div className="px-4 py-3.5 text-[13px] text-neutral-500">No students found.</div>
-                      )}
-                      {!searchLoading && searchResults.map((st) => {
-                        const ap = getAvatarPalette(st.last_name ?? "X");
-                        return (
-                          <div
-                            key={st.student_id}
-                            onClick={() => selectStudent(st)}
-                            className="flex cursor-pointer items-center gap-3 border-b border-neutral-200/70 px-4 py-2.5 transition-colors last:border-b-0 hover:bg-brand-50"
-                          >
-                            <div
-                              className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                              style={{ background: ap.bg, color: ap.color }}
-                              aria-hidden="true"
-                            >
-                              {st.first_name?.[0]}{st.last_name?.[0]}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-[13px] font-bold text-neutral-900">
-                                {st.first_name} {st.middle_name ? st.middle_name + " " : ""}{st.last_name}
-                              </div>
-                              <div className="text-xs text-neutral-500">LRN: {st.lrn} · {st.student_number}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
+
+        {selected ? (
+          <StudentChecklist
+            selected={selected}
+            schoolYear={schoolYear}
+            refreshKey={reqRefresh}
+            onRefresh={() => setReqRefresh((k) => k + 1)}
+            onChange={handleReqChange}
+            onBack={closeStudent}
+            onProfile={() => navigate(`/students/${selected.student.student_id}`)}
+          />
+        ) : (
+          <>
+            <motion.div
+              initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
+            >
+              <Card padding="none" className="overflow-hidden">
+                <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+                  <h2 className="text-md font-bold text-neutral-900">{docsMeta?.title ?? "All learners"}</h2>
+                  {!loading && !loadError && (
+                    <span className="text-sm text-neutral-500 tabular-nums">
+                      {pageMeta.count.toLocaleString()}
+                    </span>
                   )}
                 </div>
-              }
-            >
-              <FilterRow label="School Level">
-                <ChipGroup
-                  options={SCHOOL_LEVELS.map((l) => ({
-                    value: l.value, label: l.label, icon: l.icon, tone: l.tone,
-                  }))}
-                  value={levelFilter}
-                  onChange={setLevelFilter}
-                  label="Filter by school level"
-                />
-              </FilterRow>
-
-              <CollapsibleFilterRow open={levelFilter !== ""} label="Grade Level">
-                <ChipGroup
-                  options={gradeOptions.map((g) => ({
-                    value: g === "All Grades" ? "" : g, label: g,
-                  }))}
-                  value={gradeFilter}
-                  onChange={setGradeFilter}
-                  label="Filter by grade level"
-                  stagger
-                  generation={levelFilter}
-                />
-              </CollapsibleFilterRow>
-            </FilterBar>
-
-            {/* ── Selected student stats ── */}
-            {selectedStudent && (() => {
-              const selAp = getAvatarPalette(selectedStudent.last_name ?? "X");
-              return (
-              <div className="grid grid-cols-4 gap-3">
-                <div className="flex items-center gap-3.5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: selAp.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: selAp.color, flexShrink: 0 }}>
-                    {selectedStudent.first_name?.[0]}{selectedStudent.last_name?.[0]}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {selectedStudent.first_name} {selectedStudent.last_name}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.pale }}>LRN: {selectedStudent.lrn}</div>
-                    <div style={{ fontSize: 11, color: C.pale }}>{selectedStudent.student_number}</div>
-                    <button
-                      onClick={() => navigate(`/students/${selectedStudent.student_id}`)}
-                      style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5, height: 26, padding: "0 10px", border: `1px solid ${C.border}`, borderRadius: 7, background: "white", color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
-                    >
-                      <i className="ti ti-user" style={{ fontSize: 12 }} />View Profile
-                    </button>
-                  </div>
-                </div>
-                <StatCard label="Total Requirements" value={reqCounts.total} icon="ti-list" iconTone="brand" loading={reqLoading} />
-                <StatCard label="Submitted" value={submitted} icon="ti-circle-check" iconTone="success" loading={reqLoading} />
-                <StatCard label="Pending" value={pending} icon="ti-clock" iconTone="warning" loading={reqLoading} />
-              </div>
-              );
-            })()}
-
-            {/* The document checklist itself lives in a shared panel so the
-                enrollment pages can embed the same thing — that is where the
-                completeness gate blocks a registrar, and where fixing it
-                belongs. This page keeps the search, the level/grade filters
-                and the recent-students table; only the per-student document
-                block moved. */}
-            {selectedStudent && (
-              <Card padding="lg">
-                <RequirementDocumentsPanel
-                  studentId={selectedStudent.student_id}
-                  student={selectedStudent}
-                  variant="table"
-                  refreshKey={reqRefresh}
-                  onChange={handleReqChange}
-                />
-              </Card>
-            )}
-
-            {/* ── Recently enrolled students ── */}
-            {!selectedStudent && (
-              <>
-              <Card padding="none" className="overflow-hidden">
                 <Table
-                  columns={RECENT_COLUMNS}
-                  loading={recentStudentsLoading}
-                  isEmpty={recentStudents.length === 0}
-                  skeletonRows={RECENT_PAGE_SIZE}
-                  empty={{
-                    icon: "ti-users-off",
-                    title: "No students found",
-                    subtitle: hasFilters
-                      ? "Try a different school level or grade."
-                      : "No recently enrolled students to show.",
-                  }}
+                  headerVariant="quiet"
+                  columns={TABLE_COLUMNS}
+                  loading={loading}
+                  error={loadError}
+                  onRetry={() => fetchRows(page)}
+                  errorSubject="the requirements list"
+                  isEmpty={rows.length === 0}
+                  skeletonRows={8}
+                  // "Nobody is missing anything" is good news only when no
+                  // search or menu is hiding learners.
+                  empty={
+                    nobodyMissing ? {
+                      icon: "ti-mood-happy",
+                      title: "Nobody is missing documents",
+                      subtitle: `Every learner in S.Y. ${schoolYear} has handed in the required documents their placement asks for.`,
+                    } : narrowed ? {
+                      icon: "ti-users-off",
+                      title: "No learners match these filters",
+                      subtitle: "Try a different search, or clear the filters to see the whole year.",
+                      action: (
+                        <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ),
+                    } : {
+                      icon: "ti-users-off",
+                      title: `No learners in S.Y. ${schoolYear} yet`,
+                      subtitle: "Learners show here once they're enrolled for the year, or waiting to be.",
+                    }
+                  }
                 >
-                  {recentStudents.map((st) => {
-                    const rap = getAvatarPalette(st.last_name ?? "X");
-                    const initials = `${st.first_name?.[0] ?? ""}${st.last_name?.[0] ?? ""}`.toUpperCase();
-                    const fullName = [st.last_name, ",", st.first_name, st.middle_name ? st.middle_name[0] + "." : "", st.suffix ?? ""].filter(Boolean).join(" ");
-                    const gradeLabel = st.grade_level
-                      ? st.grade_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-                      : st.school_level
-                        ? st.school_level.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-                        : null;
+                  {rows.map((r) => {
+                    const name = fullName(r);
+                    const palette = getAvatarPalette(`${r.last_name ?? ""}${r.first_name ?? ""}`);
+                    const entry = ENTRY_STATUS[r.entry_status];
                     return (
-                      <TableRow key={st.student_id} onClick={() => selectStudent(st)}>
+                      <TableRow key={r.student_id} onClick={() => openStudent(r, r)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                              style={{ background: rap.bg, color: rap.color }}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                              style={{ background: palette.bg, color: palette.color }}
                               aria-hidden="true"
                             >
-                              {initials}
+                              {initialsFrom(r.first_name, r.last_name) || "?"}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-[13px] font-semibold leading-tight text-neutral-900 transition-colors group-hover:text-brand-600">
-                                {fullName}
+                              <div className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+                                {name}
                               </div>
-                              <div className="mt-0.5 text-xs text-neutral-500">
-                                {st.student_number || <span className="italic">no student number</span>}
+                              <div className="truncate text-[11.5px] text-neutral-500">
+                                {[r.lrn && `LRN ${r.lrn}`, r.student_number].filter(Boolean).join(" · ") || "—"}
                               </div>
                             </div>
                           </div>
                         </TableCell>
 
+                        {/* The same dot as the Level menu, so a level reads
+                            the same in both. */}
                         <TableCell>
-                          {st.lrn
-                            ? <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">{st.lrn}</span>
-                            : <span className="text-xs italic text-neutral-500">—</span>}
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOTS[r.school_level] ?? "bg-neutral-400"}`}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate text-sm font-medium text-neutral-900">{r.grade_level}</span>
+                          </div>
+                          <div className="truncate pl-4 text-[11.5px] text-neutral-500">{r.section}</div>
                         </TableCell>
 
                         <TableCell>
-                          {gradeLabel
-                            ? <span className="text-xs text-neutral-700">{gradeLabel}</span>
-                            : <span className="text-xs italic text-neutral-500">—</span>}
+                          <span className="text-sm text-neutral-800" title={entry?.hint}>
+                            {entry?.label ?? r.entry_status}
+                          </span>
                         </TableCell>
 
                         <TableCell>
-                          <StudentStatusBadge status={st.status} map={STUDENT_STATUS_MAP} size="sm" />
+                          <DocumentsCell row={r} />
                         </TableCell>
 
                         <TableCell>
+                          <StatusDot status={r.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
+                        </TableCell>
+
+                        <TableCell align="right">
                           <i className="ti ti-chevron-right text-sm text-neutral-500" aria-hidden="true" />
                         </TableCell>
                       </TableRow>
@@ -437,29 +449,90 @@ export default function RequirementsPage() {
                   })}
                 </Table>
               </Card>
+            </motion.div>
 
-              {!recentStudentsLoading && recentPageMeta.count > RECENT_PAGE_SIZE && (
-                <Pagination
-                  page={recentPage}
-                  totalPages={Math.ceil(recentPageMeta.count / RECENT_PAGE_SIZE)}
-                  count={recentPageMeta.count}
-                  hasPrevious={Boolean(recentPageMeta.previous)}
-                  hasNext={Boolean(recentPageMeta.next)}
-                  onPageChange={(p) => fetchRecentStudents(p)}
-                />
-              )}
-              </>
+            {!loading && !loadError && pageMeta.count > 0 && (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                count={pageMeta.count}
+                hasPrevious={Boolean(pageMeta.previous)}
+                hasNext={Boolean(pageMeta.next)}
+                onPageChange={(p) => fetchRows(p)}
+              />
             )}
-          </div>
-
+          </>
+        )}
+      </div>
     </>
   );
 }
 
-// ── CSS ───────────────────────────────────────────────────────────────────────
-// Page-specific rules only. The keyframes, the `*`/body resets, the scrollbar
-// styling and `.search-wrap:focus-within` all live in index.css now, and the
-// `.nav-item`/`.nav-active` overrides were dead weight — the sidebar no longer
-// uses those class names, so the rules matched nothing.
+/**
+ * One learner's document checklist, in place of the list. The checklist
+ * itself is the shared panel the enrollment pages embed, so documents are
+ * handled the same way everywhere; given the learner's row for the year, it
+ * shows only what their placement asks for, which is what the list counted.
+ */
+function StudentChecklist({ selected, schoolYear, refreshKey, onRefresh, onChange, onBack, onProfile }) {
+  const { student, row } = selected;
+  const name = fullName(student);
+  const palette = getAvatarPalette(`${student.last_name ?? ""}${student.first_name ?? ""}`);
+  const entry = row && ENTRY_STATUS[row.entry_status];
+  const facts = [
+    student.lrn && `LRN ${student.lrn}`,
+    row && [row.grade_level, row.section].filter(Boolean).join(" · "),
+    entry?.label,
+  ].filter(Boolean).join(" · ");
 
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }}>
+      <Card padding="none" className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="sm" icon="ti-arrow-left" onClick={onBack}>
+              All learners
+            </Button>
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+              style={{ background: palette.bg, color: palette.color }}
+              aria-hidden="true"
+            >
+              {initialsFrom(student.first_name, student.last_name) || "?"}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-md font-bold text-neutral-900">{name}</h2>
+              {facts && <div className="truncate text-[11.5px] text-neutral-500">{facts}</div>}
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="secondary" size="sm" icon="ti-refresh" onClick={onRefresh}>
+              Refresh
+            </Button>
+            <Button variant="secondary" size="sm" icon="ti-user" onClick={onProfile}>
+              View profile
+            </Button>
+          </div>
+        </div>
 
+        {!row && (
+          <div className="flex items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-5 py-2.5 text-[12.5px] text-neutral-700">
+            <i className="ti ti-info-circle text-[15px] text-neutral-500" aria-hidden="true" />
+            Not enrolled for S.Y. {schoolYear}, so every document in the catalogue is shown.
+          </div>
+        )}
+
+        <div className="px-5 py-4">
+          <RequirementDocumentsPanel
+            studentId={student.student_id}
+            student={student}
+            variant="table"
+            context={row ? { schoolLevel: row.school_level, entryStatus: row.entry_status } : null}
+            refreshKey={refreshKey}
+            onChange={onChange}
+          />
+        </div>
+      </Card>
+    </motion.div>
+  );
+}

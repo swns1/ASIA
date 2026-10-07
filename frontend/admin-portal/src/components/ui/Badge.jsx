@@ -1,4 +1,5 @@
 import { fallbackStatus } from "../../constants/statusMaps";
+import { STATUS_DOT, STATUS_TEXT } from "../../constants/statusTones";
 
 // Badge / StatusBadge — the one pill used for every status in the app.
 //
@@ -17,15 +18,7 @@ const VARIANTS = {
   brand: "bg-brand-100 text-brand-600",
 };
 
-const DOTS = {
-  success: "bg-success-dot",
-  warning: "bg-warning-dot",
-  error: "bg-error-dot",
-  info: "bg-info-dot",
-  muted: "bg-muted-dot",
-  accent: "bg-accent-dot",
-  brand: "bg-brand-500",
-};
+const DOTS = STATUS_DOT;
 
 const SIZES = {
   sm: "text-xs px-2 py-0.5 gap-1",
@@ -84,5 +77,27 @@ export function StatusBadge({ status, map = {}, showIcon = true, ...props }) {
     >
       {meta.label}
     </Badge>
+  );
+}
+
+/**
+ * StatusDot — a status as a coloured dot and its label, without the pill.
+ *
+ *   <StatusDot status={en.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
+ *
+ * For a table that sits under a StatusBand: the dot matches the band's bar
+ * and legend, and a column of pills would be heavier than the rows need. The
+ * label carries the meaning; the dot only matches it to the band.
+ */
+export function StatusDot({ status, map = {}, className = "", ...props }) {
+  const meta = map[status] ?? fallbackStatus(status);
+  return (
+    <span
+      className={`inline-flex items-center gap-[7px] text-sm font-semibold ${STATUS_TEXT[meta.variant] ?? STATUS_TEXT.muted} ${className}`}
+      {...props}
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${DOTS[meta.variant] ?? DOTS.muted}`} aria-hidden="true" />
+      {meta.label}
+    </span>
   );
 }

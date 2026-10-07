@@ -20,6 +20,21 @@ const ALIGN = {
   right: "text-right",
 };
 
+// Header label treatments. "default" is the uppercase, tracked caption every
+// list page has used. "quiet" is sentence case for a table that already sits
+// under its own caption (Students), where a second shouting header row was
+// noise. Opt-in, so no other page changes.
+const HEADER_VARIANTS = {
+  default: {
+    cell: "text-xs font-bold uppercase tracking-[0.08em] text-neutral-500",
+    sortButton: "uppercase tracking-[0.08em]",
+  },
+  quiet: {
+    cell: "text-[12px] font-semibold text-neutral-600",
+    sortButton: "",
+  },
+};
+
 export default function Table({
   columns = [],
   children,
@@ -34,10 +49,12 @@ export default function Table({
   sortDir = "asc",
   onSort,
   stickyHeader = true,
+  headerVariant = "default",
   className = "",
   ...props
 }) {
   const colCount = columns.length || 1;
+  const header = HEADER_VARIANTS[headerVariant] ?? HEADER_VARIANTS.default;
 
   // Precedence matters: an error must win over "empty", otherwise a failed
   // load silently renders as a legitimate empty result.
@@ -78,7 +95,8 @@ export default function Table({
                   // a visual caret alone doesn't convey.
                   aria-sort={isSorted ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
                   className={[
-                    "border-b border-neutral-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-neutral-500",
+                    "border-b border-neutral-200 bg-white px-4 py-3",
+                    header.cell,
                     ALIGN[col.align] ?? ALIGN.left,
                     stickyHeader ? "sticky top-0 z-10" : "",
                     col.className ?? "",
@@ -90,7 +108,7 @@ export default function Table({
                     <button
                       type="button"
                       onClick={() => onSort(col.key)}
-                      className="focus-ring inline-flex items-center gap-1.5 rounded-sm uppercase tracking-[0.08em] transition-colors hover:text-brand-600"
+                      className={`focus-ring inline-flex items-center gap-1.5 rounded-sm transition-colors hover:text-brand-600 ${header.sortButton}`}
                     >
                       {col.label}
                       <i

@@ -64,7 +64,7 @@ describe("StudentsPage — Last enrolled", () => {
         <StudentsPage />
       </MemoryRouter>,
     );
-    await screen.findByText("3 students on record");
+    await screen.findByText(/^Castillo\b/);
 
     expect(screen.getByRole("columnheader", { name: /last enrolled/i })).toBeTruthy();
     const castillo = within(rowOf("Castillo"));
@@ -78,7 +78,7 @@ describe("StudentsPage — Last enrolled", () => {
         <StudentsPage />
       </MemoryRouter>,
     );
-    await screen.findByText("3 students on record");
+    await screen.findByText(/^Castillo\b/);
 
     expect(within(rowOf("Pascual")).getByText("Not enrolled yet")).toBeTruthy();
     expect(within(rowOf("Uy")).queryByText("Not enrolled yet")).toBeNull();

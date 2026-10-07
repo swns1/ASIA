@@ -76,7 +76,9 @@ describe("TeacherAdvisoriesPage", () => {
     renderPage();
     await screen.findByText("Ana Active");
 
-    expect(screen.getAllByText("Needs a new adviser")).toHaveLength(2);
+    // The rows, not the band's legend, which names the status too.
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByText("Needs a new adviser")).toHaveLength(2);
     expect(screen.getByText("Removed account #99")).toBeTruthy();
   });
 
@@ -84,8 +86,9 @@ describe("TeacherAdvisoriesPage", () => {
     renderPage("?school_year=2024-2025");
     await screen.findByText(/Luna/);
 
-    expect(screen.getByText("Adviser deactivated")).toBeTruthy();
-    expect(screen.queryByText("Needs a new adviser")).toBeNull();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Adviser deactivated")).toBeTruthy();
+    expect(table.queryByText("Needs a new adviser")).toBeNull();
   });
 
   it("never offers a deactivated teacher, and asks for a new adviser", async () => {

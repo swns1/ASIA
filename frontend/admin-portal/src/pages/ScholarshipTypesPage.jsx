@@ -1,17 +1,19 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import ChipGroup from "../components/ui/ChipGroup";
 import Card from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
-import Badge from "../components/ui/Badge";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import { StatusDot } from "../components/ui/Badge";
 import { Field, Input, Textarea } from "../components/FormField";
-import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 
 import {
   getScholarshipTypes as _getScholarshipTypes,
@@ -27,12 +29,30 @@ const deleteScholarshipType = (id)     => _deleteScholarshipType(id);
 
 
 const TABLE_COLUMNS = [
-  { key: "name",   label: "Scholarship",    width: "30%" },
-  { key: "code",   label: "Code",           width: "14%" },
-  { key: "mode",   label: "Discount Type",  width: "16%" },
-  { key: "value",  label: "Discount Value", width: "14%" },
-  { key: "status", label: "Status",         width: "13%" },
-  { key: "actions", label: "",              width: "5%"  },
+  { key: "name",    label: "Scholarship", width: "38%" },
+  { key: "code",    label: "Code",        width: "16%" },
+  { key: "value",   label: "Discount",    width: "22%" },
+  { key: "status",  label: "Status",      width: "14%" },
+  { key: "actions", label: "",            width: "10%" },
+];
+
+// The band's legend: whether a type can be awarded. Only active ones are
+// offered when awarding, so an inactive one is kept for the awards already
+// made with it.
+const TYPE_STATUS_MAP = {
+  active:   { label: "Active",   variant: "success" },
+  inactive: { label: "Inactive", variant: "muted" },
+};
+const STATUS_FILTERS = [
+  { value: "",         label: "All" },
+  { value: "active",   label: "Active",   variant: "success", title: "Active scholarship types" },
+  { value: "inactive", label: "Inactive", variant: "muted",   title: "Inactive scholarship types" },
+];
+
+const MODE_FILTERS = [
+  { value: "",             label: "Any" },
+  { value: "percentage",   label: "Percentage" },
+  { value: "fixed_amount", label: "Fixed amount" },
 ];
 
 // ── Format helpers ────────────────────────────────────────────────────────────
@@ -227,59 +247,47 @@ function DeleteModal({ item, onConfirm, onCancel, deleting, deleteError }) {
   );
 }
 
-// ── Table Row ─────────────────────────────────────────────────────────────────
+/// ── Table Row ─────────────────────────────────────────────────────────────────
 function ScholarshipRow({ sch, onEdit, onDelete }) {
-  const isPct    = sch.discount_mode === "percentage";
-  const isActive = sch.is_active;
-  // Percentage vs fixed-amount is a category, not a status, so the two get
-  // their own tones rather than borrowing the status palette.
-  const modeTone = isPct ? "info" : "success";
-
+  const isPct = sch.discount_mode === "percentage";
   return (
-    <TableRow>
+    <TableRow onClick={() => onEdit(sch)}>
       <TableCell>
-        <div className="flex items-center gap-2.5">
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${isPct ? "bg-info-50" : "bg-success-50"}`}>
-            <i
-              className={`ti ${isPct ? "ti-percentage" : "ti-currency-peso"} text-[15px] ${isPct ? "text-info-600" : "text-success-600"}`}
-              aria-hidden="true"
-            />
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+            {sch.scholarship_name}
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-neutral-900">{sch.scholarship_name}</div>
-            {sch.description && (
-              <div className="max-w-[240px] truncate text-xs text-neutral-500">{sch.description}</div>
-            )}
-          </div>
+          {sch.description && (
+            <div className="truncate text-[11.5px] text-neutral-500">{sch.description}</div>
+          )}
         </div>
       </TableCell>
 
       <TableCell>
-        <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">
-          {sch.scholarship_code}
-        </span>
+        <span className="font-mono text-[12px] text-neutral-800">{sch.scholarship_code}</span>
+      </TableCell>
+
+      {/* Percentage vs fixed amount is a category, not a status: words, not
+          a coloured pill. */}
+      <TableCell>
+        <div className="text-[13px] font-bold text-neutral-900 tabular-nums">{formatDiscount(sch)}</div>
+        <div className="text-[11.5px] text-neutral-500">{isPct ? "Percentage of tuition" : "Fixed amount"}</div>
       </TableCell>
 
       <TableCell>
-        <Badge variant={modeTone} icon={isPct ? "ti-percentage" : "ti-currency-peso"} size="sm">
-          {isPct ? "Percentage" : "Fixed Amount"}
-        </Badge>
+        <StatusDot status={sch.is_active ? "active" : "inactive"} map={TYPE_STATUS_MAP} />
       </TableCell>
 
-      <TableCell className={`text-[15px] font-bold ${isPct ? "text-info-600" : "text-success-600"}`}>
-        {formatDiscount(sch)}
-      </TableCell>
-
-      <TableCell>
-        <Badge variant={isActive ? "success" : "muted"} dot size="sm">
-          {isActive ? "Active" : "Inactive"}
-        </Badge>
-      </TableCell>
-
+      {/* Row actions must not trigger the row's own click. */}
       <TableCell onClick={(e) => e.stopPropagation()}>
-        <div className="flex gap-1">
+        <div className="flex justify-end gap-1">
           <Button variant="ghost" size="sm" icon="ti-pencil" aria-label={`Edit ${sch.scholarship_name}`} onClick={() => onEdit(sch)} />
-          <Button variant="ghost" size="sm" icon="ti-trash" aria-label={`Delete ${sch.scholarship_name}`} onClick={() => onDelete(sch)} />
+          <Button
+            variant="ghost" size="sm" icon="ti-trash"
+            aria-label={`Delete ${sch.scholarship_name}`}
+            className="hover:bg-error-50 hover:text-error-500"
+            onClick={() => onDelete(sch)}
+          />
         </div>
       </TableCell>
     </TableRow>
@@ -294,93 +302,68 @@ export default function ScholarshipTypesPage() {
 
   const [scholarships,  setScholarships]  = useState([]);
   const [loading,       setLoading]       = useState(true);
+  // A failed load used to read as "No scholarship types found".
+  const [loadError,     setLoadError]     = useState(null);
   const [search,        setSearch]        = useState("");
-  const [statusFilter,  setStatusFilter]  = useState("all");
-  const [typeFilter,    setTypeFilter]    = useState("all"); // all | percentage | fixed_amount
+  const [statusFilter,  setStatusFilter]  = useState("");
+  const [modeFilter,    setModeFilter]    = useState("");
   const [modal,         setModal]         = useState(null);
   const [toDelete,      setToDelete]      = useState(null);
   const [deleting,      setDeleting]      = useState(false);
   const [deleteError,   setDeleteError]   = useState("");
-
-  const [animated] = useState(false);
-  const isFirstRender = !animated;
+  const searchRef = useRef(null);
+  const isFirstRender = useIsFirstRender();
 
   const fetchScholarships = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getScholarshipTypes({ page_size: 500 });
       setScholarships(Array.isArray(data) ? data : data?.results ?? []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+      setLoadError(e);
+      setScholarships([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     fetchScholarships(); // eslint-disable-line react-hooks/set-state-in-effect
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchScholarships]);
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
-  const totalCount    = scholarships.length;
-  const activeCount   = scholarships.filter((s) => s.is_active).length;
+  // Every type is loaded at once, so the band counts here. As on the other
+  // list pages, the Discount menu narrows the band and search only the rows.
+  const inScope = useMemo(
+    () => scholarships.filter((s) => !modeFilter || s.discount_mode === modeFilter),
+    [scholarships, modeFilter],
+  );
+  const counts = loading || loadError ? null : {
+    "": inScope.length,
+    active: inScope.filter((s) => s.is_active).length,
+    inactive: inScope.filter((s) => !s.is_active).length,
+  };
 
-  // ── Client-side filtered list ──────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let list = scholarships;
-    if (statusFilter === "active")     list = list.filter((s) => s.is_active);
-    if (statusFilter === "inactive")   list = list.filter((s) => !s.is_active);
-    if (typeFilter === "percentage")   list = list.filter((s) => s.discount_mode === "percentage");
-    if (typeFilter === "fixed_amount") list = list.filter((s) => s.discount_mode === "fixed_amount");
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((s) =>
+    const q = search.trim().toLowerCase();
+    return inScope.filter((s) => {
+      if (statusFilter === "active" && !s.is_active) return false;
+      if (statusFilter === "inactive" && s.is_active) return false;
+      if (!q) return true;
+      return (
         s.scholarship_name.toLowerCase().includes(q) ||
         s.scholarship_code.toLowerCase().includes(q) ||
         (s.description || "").toLowerCase().includes(q)
       );
-    }
-    return list;
-  }, [scholarships, statusFilter, typeFilter, search]);
+    });
+  }, [inScope, statusFilter, search]);
 
-  const hasFilters = statusFilter !== "all" || typeFilter !== "all" || search.trim() !== "";
-
-  // Counts are taken against the *other* facet plus the search, never against
-  // the facet the chip belongs to — so picking "Active" doesn't rewrite the
-  // Percentage/Fixed numbers to match it. Same rule the awards summary follows.
-  const matchesSearch = useCallback((s) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      s.scholarship_name.toLowerCase().includes(q) ||
-      s.scholarship_code.toLowerCase().includes(q) ||
-      (s.description || "").toLowerCase().includes(q)
-    );
-  }, [search]);
-
-  const statusOptions = useMemo(() => {
-    const pool = scholarships.filter(
-      (s) => matchesSearch(s) &&
-        (typeFilter === "all" || s.discount_mode === typeFilter)
-    );
-    return [
-      { value: "all",      label: "All",      count: pool.length },
-      { value: "active",   label: "Active",   tone: "success", count: pool.filter((s) => s.is_active).length },
-      { value: "inactive", label: "Inactive", tone: "muted",   count: pool.filter((s) => !s.is_active).length },
-    ];
-  }, [scholarships, typeFilter, matchesSearch]);
-
-  const typeOptions = useMemo(() => {
-    const pool = scholarships.filter(
-      (s) => matchesSearch(s) &&
-        (statusFilter === "all" ||
-          (statusFilter === "active" ? s.is_active : !s.is_active))
-    );
-    return [
-      { value: "all",          label: "All",          count: pool.length },
-      { value: "percentage",   label: "Percentage",   tone: "info",   icon: "ti-percentage",
-        count: pool.filter((s) => s.discount_mode === "percentage").length },
-      { value: "fixed_amount", label: "Fixed Amount", tone: "accent", icon: "ti-currency-peso",
-        count: pool.filter((s) => s.discount_mode === "fixed_amount").length },
-    ];
-  }, [scholarships, statusFilter, matchesSearch]);
+  const hasFilters = Boolean(statusFilter || modeFilter || search.trim());
+  const clearFilters = () => {
+    setStatusFilter(""); setModeFilter(""); setSearch("");
+    searchRef.current?.focus();
+  };
 
   const handleDelete = async () => {
     if (!toDelete) return;
@@ -404,12 +387,13 @@ export default function ScholarshipTypesPage() {
     }
   };
 
+  const modeLabel = MODE_FILTERS.find((m) => m.value === modeFilter)?.label;
+  const statusMeta = STATUS_FILTERS.find((f) => f.value === statusFilter);
+
   return (
     <>
       <PageHeader
         title="Scholarship Types"
-        icon="ti-discount"
-        subtitle={loading ? "Loading…" : `${totalCount} scholarship types · ${activeCount} active`}
         actions={
           <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
             New Scholarship
@@ -417,59 +401,100 @@ export default function ScholarshipTypesPage() {
         }
       />
 
-      {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-        <FilterBar
-          animate={isFirstRender}
-          animateDelay={0.18}
-          searchValue={search}
-          onSearchChange={setSearch}
-          onClearSearch={() => setSearch("")}
-          searchPlaceholder="Search by name, code, or description…"
-          searchLabel="Search scholarship types"
-          searchInputId="scholarship-types-search"
-          hasFilters={hasFilters}
-          onClearFilters={() => { setStatusFilter("all"); setTypeFilter("all"); setSearch(""); }}
-        >
-          <FilterRow label="Status">
-            <ChipGroup
-              options={statusOptions}
-              value={statusFilter}
-              onChange={setStatusFilter}
-              label="Filter by status"
-            />
-          </FilterRow>
+        {/* ── Which types can be awarded, and the filter ── */}
+        <StatusBand
+          total={counts?.[""]}
+          caption={[
+            `scholarship type${counts?.[""] === 1 ? "" : "s"}`,
+            modeFilter && modeLabel,
+          ].filter(Boolean).join(" · ")}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              Only active types can be awarded
+            </span>
+          }
+          options={STATUS_FILTERS.map((f) => ({
+            value: f.value,
+            label: f.label,
+            count: counts?.[f.value],
+            variant: f.variant,
+          }))}
+          value={statusFilter}
+          allValue=""
+          onChange={setStatusFilter}
+        />
 
-          <FilterRow label="Discount Type">
-            <ChipGroup
-              options={typeOptions}
-              value={typeFilter}
-              onChange={setTypeFilter}
-              label="Filter by discount type"
-            />
-          </FilterRow>
-        </FilterBar>
+        {/* ── Toolbar: search, the filter menu, Clear ── */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="scholarship-types-search"
+            label="Search scholarship types"
+            placeholder="Search by name, code, or description…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+          />
 
-        {/* Table */}
+          <FilterMenu
+            label="Discount"
+            valueLabel={modeLabel ?? "Any"}
+            active={Boolean(modeFilter)}
+            options={MODE_FILTERS}
+            value={modeFilter}
+            onChange={setModeFilter}
+            align="end"
+            menuWidth={200}
+          />
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* ── Table ── */}
         <motion.div
-          initial={isFirstRender ? { y: 10, opacity: 0 } : false}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
+          initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
         >
           <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">{statusMeta?.title ?? "All scholarship types"}</h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">{filtered.length.toLocaleString()}</span>
+              )}
+            </div>
             <Table
+              headerVariant="quiet"
               columns={TABLE_COLUMNS}
               loading={loading}
+              error={loadError}
+              onRetry={fetchScholarships}
+              errorSubject="scholarship types"
               isEmpty={filtered.length === 0}
               skeletonRows={6}
               empty={{
                 icon: "ti-discount-off",
-                title: hasFilters ? "No scholarships match your filters" : "No scholarship types found",
+                withAvatar: false,
+                title: hasFilters ? "No scholarship types match these filters" : "No scholarship types yet",
                 subtitle: hasFilters
-                  ? "Try adjusting your search or filters"
-                  : "Create your first scholarship type to get started",
-                action: !hasFilters && (
+                  ? "Try a different search, or clear the filters."
+                  : "Create the first one to start awarding scholarships.",
+                action: hasFilters ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : (
                   <Button size="sm" icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
                     New Scholarship
                   </Button>

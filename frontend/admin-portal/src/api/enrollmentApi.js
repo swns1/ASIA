@@ -98,6 +98,19 @@ export const getSchoolYears = () =>
 export const getEnrollments = (params = {}) =>
   enrollmentClient.get("/enrollments/", { params }).then((r) => r.data);
 
+// How the matching enrollments' grade averages split — { learners, passed,
+// failed, no_grades }. Takes the list's own filters, plus grading_period to
+// average one period's grades. The Grades overview's status band draws it.
+export const getGradeAverages = (params = {}) =>
+  enrollmentClient.get("/enrollments/grade-averages/", { params }).then((r) => r.data);
+
+// A school year's learners, each with the required documents they still owe —
+// a page of rows plus `summary` ({ learners, complete, missing }), which counts
+// the year, level and grade whatever search or `documents` (missing/complete)
+// narrow the rows to. The Requirements page lists it.
+export const getDocumentStatus = (params = {}) =>
+  enrollmentClient.get("/enrollments/documents/", { params }).then((r) => r.data);
+
 export const getEnrollment = (id) =>
   enrollmentClient.get(`/enrollments/${id}/`).then((r) => r.data);
 

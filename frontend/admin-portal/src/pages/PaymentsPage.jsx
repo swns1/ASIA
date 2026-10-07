@@ -8,46 +8,54 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
+import Card from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Pagination from "../components/Pagination";
-import Badge from "../components/ui/Badge";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import RangeMenu from "../components/ui/RangeMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import { seriesDot } from "../constants/statusTones";
 
 import { getPayments as _getPayments, getPaymentSummary } from "../api/billingApi";
-import { fmtDate, todayISO } from "../utils/format";
+import { fmtDate } from "../utils/format";
+import { amountRangeLabel, dateRangeLabel, datePresets } from "../utils/ranges";
 import { PAYMENT_METHODS, PAYMENT_METHOD_MAP as PM } from "../constants/paymentMethods";
 const getPayments = (p = {}) => _getPayments(p);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-// `tone` names the shared palette entry each method already used — every one
-// of these colours was an exact match for an existing token, so the tiles and
-// chips now theme from tokens.css instead of per-page literals. The bg/color
-// literals stay for the inline method pill on each table row until that moves
-// to a shared Badge.
-
 const SORT_OPTIONS = [
-  { value:"-payment_date", label:"Date ↓" },
-  { value:"payment_date",  label:"Date ↑" },
-  { value:"-amount_paid",  label:"Amount ↓" },
-  { value:"amount_paid",   label:"Amount ↑" },
+  { value: "-payment_date", label: "Newest first" },
+  { value: "payment_date",  label: "Oldest first" },
+  { value: "-amount_paid",  label: "Largest first" },
+  { value: "amount_paid",   label: "Smallest first" },
 ];
+const DEFAULT_SORT = "-payment_date";
 
-const fmt     = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+// A method keeps its colour whatever the filters do: it's handed out by the
+// method's place in PAYMENT_METHODS, never by how much it collected.
+const METHOD_DOT = Object.fromEntries(PAYMENT_METHODS.map((m, i) => [m.value, seriesDot(i)]));
 
-// Columns for the payments table. Not sortable here — ordering is driven by
-// the Sort chip row in the filter bar, which maps to the API's `ordering`.
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the other list pages.
+const SEARCH_DEBOUNCE_MS = 300;
+
+const fmt = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+// The band's figures are whole pesos: centavos across six methods made the
+// legend twice as long without saying anything the table doesn't.
+const wholePesos = (n) => `₱${Math.round(Number(n) || 0).toLocaleString("en-PH")}`;
+
+// Not sortable here: the Sort menu drives the API's `ordering`.
 const TABLE_COLUMNS = [
-  { key: "student",   label: "Student" },
-  { key: "invoice",   label: "Invoice" },
-  { key: "date",      label: "Date" },
-  { key: "amount",    label: "Amount" },
-  { key: "method",    label: "Method" },
-  { key: "reference", label: "Reference" },
-  { key: "notes",     label: "Notes" },
+  { key: "student",   label: "Student",   width: "24%" },
+  { key: "invoice",   label: "Invoice",   width: "15%" },
+  { key: "date",      label: "Date",      width: "12%" },
+  { key: "amount",    label: "Amount",    width: "12%", align: "right" },
+  { key: "method",    label: "Method",    width: "13%" },
+  { key: "reference", label: "Reference", width: "11%" },
+  { key: "notes",     label: "Notes",     width: "13%" },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -71,27 +79,17 @@ export default function PaymentsPage() {
   const [dateTo,       setDateTo]       = useState("");
   const [amountMin,    setAmountMin]    = useState("");
   const [amountMax,    setAmountMax]    = useState("");
-  const [sortField,    setSortField]    = useState("-payment_date");
+  const [sortField,    setSortField]    = useState(DEFAULT_SORT);
   const [search,       setSearch]       = useState("");
+  const searchRef = useRef(null);
   // Opens on the current school year, the way Enrollments and Grades do —
   // opening on "All years" made this the one year-scoped page that started
   // unscoped, and left its picker sitting grey while theirs read as active.
   const { currentYear } = useSchoolYear();
   const [yearFilter,   setYearFilter, yearIsDefault] = useYearFilter();
 
-  const hasDateOrAmount  = dateFrom || dateTo || amountMin || amountMax;
-  const hasActiveFilters = methodFilter !== "all" || hasDateOrAmount ||
-    sortField !== "-payment_date" || search.trim() !== "" || !yearIsDefault;
-
-  const clearFilters = () => {
-    setMethodFilter("all");
-    setDateFrom(""); setDateTo("");
-    setAmountMin(""); setAmountMax("");
-    setSortField("-payment_date");
-    setSearch(""); setYearFilter(null); // back to the current school year
-  };
-
-  const totalCollected = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
+  const hasActiveFilters = methodFilter !== "all" || dateFrom || dateTo || amountMin || amountMax ||
+    sortField !== DEFAULT_SORT || search.trim() !== "" || !yearIsDefault;
 
   const buildParams = (p = 1, overrides = {}) => {
     const f = { methodFilter, dateFrom, dateTo, amountMin, amountMax, sortField, search, yearFilter, ...overrides };
@@ -106,14 +104,16 @@ export default function PaymentsPage() {
     return params;
   };
 
-  // The tiles report per-method totals, so their request carries the date and
-  // amount filters but drops page, ordering and the method itself — scoping it
-  // to one method would zero out the other five tiles.
+  // The band reports per-method totals for the year, dates and amounts. It
+  // drops page and ordering, the method itself -- scoping it to one method
+  // would zero out the other five -- and the search, which narrows only the
+  // rows, as on the other list pages.
   const buildSummaryParams = (overrides = {}) => {
     const params = buildParams(1, overrides);
     delete params.page;
     delete params.ordering;
     delete params.payment_method;
+    delete params.search;
     return params;
   };
 
@@ -121,9 +121,8 @@ export default function PaymentsPage() {
   // swallow the error and fall through to "No payments found · Record the
   // first payment", which during an outage reads as a fresh install.
   const [loadError, setLoadError] = useState(null);
-  // Separate from `loading` so the method tiles only skeleton on the very
-  // first load. Sharing the list's flag made them blank on every chip click
-  // and page change, jittering the layout each time.
+  // Separate from `loading` so the band only reads "—" on the very first
+  // load, not on every filter change and page.
   const [tilesLoading, setTilesLoading] = useState(true);
   const [methodTotals, setMethodTotals] = useState({});
 
@@ -176,40 +175,42 @@ export default function PaymentsPage() {
     fetchPayments();
   }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Search fires on a delay so typing a name doesn't hit the endpoint per
-  // keystroke — every other control here fetches immediately on change, which
-  // is right for a click but wrong for a text field. Skipped on first render,
-  // where the effect above already loads page 1.
+  // Search as you type, once typing pauses. Every other control fetches on
+  // change, which is right for a click but wrong for a text field. Skipped
+  // on first render, where the effect above already loads page 1.
   const searchDebounce = useRef(null);
   const searchMounted  = useRef(false);
   useEffect(() => {
     if (!searchMounted.current) { searchMounted.current = true; return; }
-    searchDebounce.current = setTimeout(() => fetchPayments(1), 400);
+    searchDebounce.current = setTimeout(() => fetchPayments(1), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(searchDebounce.current);
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const clearFilters = () => {
+    setMethodFilter("all");
+    setDateFrom(""); setDateTo("");
+    setAmountMin(""); setAmountMax("");
+    setSortField(DEFAULT_SORT);
+    setSearch(""); setYearFilter(null); // back to the current school year
+    fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField: DEFAULT_SORT, search:"", yearFilter: currentYear });
+    searchRef.current?.focus();
+  };
+
   const totalPages = Math.ceil(pageMeta.count / 20);
 
+  // What the band counts: the year, and the dates and amounts when set.
+  const bandCaption = [
+    `collected in ${yearFilter ? `S.Y. ${yearFilter}` : "all school years"}`,
+    (dateFrom || dateTo) && dateRangeLabel(dateFrom, dateTo),
+    (amountMin || amountMax) && `payments of ${amountRangeLabel(amountMin, amountMax).replace(/^(At least|Up to)/, (w) => w.toLowerCase())}`,
+  ].filter(Boolean).join(" · ");
 
-  const filterLabel = {
-    fontSize:10, fontWeight:700, color:"#8a6a6a",
-    textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4,
-    display:"block",
-  };
-  const filterInput = {
-    border:"1.5px solid #f0e4e4", borderRadius:8, padding:"6px 10px",
-    fontSize:12, fontFamily:"'DM Sans',sans-serif", color:"#1a0a0a",
-    background:"#fffbfb", outline:"none", height:34, boxSizing:"border-box",
-  };
-
+  const methodMeta = PM[methodFilter];
 
   return (
     <>
-
       <PageHeader
         title="Payments"
-        icon="ti-cash"
-        subtitle={loading ? "Loading…" : `${pageMeta.count} transaction${pageMeta.count !== 1 ? "s" : ""} · ${fmt(totalCollected)} this page`}
         actions={
           <>
             <Button variant="secondary" icon="ti-receipt" onClick={() => navigate("/invoices")}>
@@ -222,232 +223,210 @@ export default function PaymentsPage() {
         }
       />
 
-      {/* ── Content ────────────────────────────────────────────────────────── */}
-      <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", display:"flex", flexDirection:"column", gap:14 }}>
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-        {/* ── Method stat cards ──────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
-          {PAYMENT_METHODS.map((pm, i) => {
-            const isActive = methodFilter === pm.value;
-            return (
-              <StatCard
-                key={pm.value}
-                label={pm.label}
-                value={fmt(methodTotals[pm.value])}
-                icon={pm.icon}
-                iconTone={pm.tone}
-                layout="horizontal"
-                loading={tilesLoading}
-                active={isActive}
-                animate={isFirstRender}
-                animateDelay={isFirstRender ? i * 0.06 : 0}
-                onClick={() => {
-                  const next = isActive ? "all" : pm.value;
-                  setMethodFilter(next);
-                  fetchPayments(1, { methodFilter: next });
-                }}
-              />
-            );
-          })}
-        </div>
-
-        {/* ── Filter panel ───────────────────────────────────────────────── */}
-        <FilterBar
-          animate={isFirstRender}
-          animateDelay={isFirstRender ? 0.22 : 0}
-          searchInputId="payment-search"
-          searchValue={search}
-          onSearchChange={setSearch}
-          onClearSearch={() => setSearch("")}
-          onSearch={() => fetchPayments(1)}
-          searchPlaceholder="Search by student name, LRN, or invoice no.…"
-          searchLabel="Search payments by student name, LRN, or invoice number"
-          scope={
-            // Years and counts come from /payments/summary/, not the global
-            // context: the context counts ENROLMENTS per year, so "2025-2026 ·
-            // 68" beside a payments filter would read as 68 payments. Both are
-            // computed unscoped by the active year, so selecting one can't
-            // collapse the picker to that single option.
-            <SchoolYearPicker
+        {/* ── What came in, by method, and the method filter ──
+            The school year sits in the band because its totals are counted
+            for it; its years are the ones with payments. */}
+        <StatusBand
+          total={tilesLoading ? undefined : methodTotals.total}
+          caption={bandCaption}
+          format={wholePesos}
+          aside={
+            <SchoolYearMenu
               value={yearFilter}
               onChange={(v) => { setYearFilter(v); fetchPayments(1, { yearFilter: v }); }}
-              options={methodTotals.school_years ?? []}
-              counts={methodTotals.year_counts ?? {}}
-              allYearsCount={tilesLoading ? undefined : pageMeta.count}
+              years={methodTotals.school_years ?? []}
             />
           }
-          hasFilters={hasActiveFilters}
-          onClearFilters={() => {
-            clearFilters();
-            fetchPayments(1, { methodFilter:"all", dateFrom:"", dateTo:"", amountMin:"", amountMax:"", sortField:"-payment_date", search:"", yearFilter: currentYear });
-          }}
-          advanced={
-            <>
-              <div>
-                <label htmlFor="pay-date-from" style={filterLabel}>Date from</label>
-                <input id="pay-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
-              </div>
-              <div>
-                <label htmlFor="pay-date-to" style={filterLabel}>Date to</label>
-                <input id="pay-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...filterInput, minWidth:140 }} />
-              </div>
-              <div>
-                <label htmlFor="pay-amount-min" style={filterLabel}>Min amount</label>
-                <div style={{ position:"relative" }}>
-                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                  <input id="pay-amount-min" type="number" min="0" step="0.01" value={amountMin} onChange={(e) => setAmountMin(e.target.value)}
-                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="pay-amount-max" style={filterLabel}>Max amount</label>
-                <div style={{ position:"relative" }}>
-                  <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", fontSize:12, color:"#8a6a6a", fontWeight:600 }}>₱</span>
-                  <input id="pay-amount-max" type="number" min="0" step="0.01" value={amountMax} onChange={(e) => setAmountMax(e.target.value)}
-                    placeholder="0.00" style={{ ...filterInput, paddingLeft:22, minWidth:100 }} />
-                </div>
-              </div>
-              <div>
-                <span style={filterLabel}>Quick</span>
-                <div style={{ display:"flex", gap:6 }}>
-                  {[
-                    { label:"Today",      fn:() => { const d=todayISO(); setDateFrom(d); setDateTo(d); } },
-                    { label:"This Month", fn:() => { const now=new Date(); setDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setDateTo(todayISO()); } },
-                    { label:"Last Month", fn:() => { const now=new Date(); const y=now.getMonth()===0?now.getFullYear()-1:now.getFullYear(); const m=now.getMonth()===0?12:now.getMonth(); const last=new Date(now.getFullYear(),now.getMonth(),0).getDate(); setDateFrom(`${y}-${String(m).padStart(2,"0")}-01`); setDateTo(`${y}-${String(m).padStart(2,"0")}-${last}`); } },
-                  ].map((q) => (
-                    <motion.button key={q.label} type="button" onClick={q.fn}
-                      whileHover={{ borderColor:"#e03131", color:"#c92a2a" }}
-                      whileTap={{ scale:0.96 }}
-                      transition={{ duration:0.12 }}
-                      style={{ height:34, padding:"0 10px", border:"1px solid #f0e4e4", borderRadius:8, background:"white", color:"#7a5050", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
-                    >
-                      {q.label}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-              {/* Date and amount are the one group that isn't applied on
-                  change — typing a partial range would refetch on every
-                  keystroke, so they commit together. */}
-              <motion.button
-                onClick={() => fetchPayments(1)}
-                whileHover={{ scale:1.02, boxShadow:"0 6px 16px rgba(224,49,49,0.30)" }}
-                whileTap={{ scale:0.97 }}
-                transition={{ duration:0.12 }}
-                style={{ height:34, padding:"0 18px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#e03131,#c01a1a)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginLeft:"auto", boxShadow:"0 3px 10px rgba(224,49,49,0.22)" }}
-              >
-                Apply
-              </motion.button>
-            </>
-          }
-          advancedLabel="Date / Amount"
-          advancedIcon="ti-calendar-search"
-          advancedActive={hasDateOrAmount}
-        >
-          <FilterRow label="Payment Method">
-            <ChipGroup
-              label="Filter by payment method"
-              value={methodFilter}
-              onChange={(v) => { setMethodFilter(v); fetchPayments(1, { methodFilter:v }); }}
-              options={[
-                { value:"all", label:"All", tone:"brand" },
-                ...PAYMENT_METHODS.map((m) => ({ value:m.value, label:m.label, icon:m.icon, tone:m.tone })),
-              ]}
-            />
-          </FilterRow>
+          options={[
+            { value: "all", label: "All", count: tilesLoading ? undefined : methodTotals.total },
+            ...PAYMENT_METHODS.map((m) => ({
+              value: m.value,
+              label: m.label,
+              count: tilesLoading ? undefined : (methodTotals[m.value] ?? 0),
+              dot: METHOD_DOT[m.value],
+            })),
+          ]}
+          value={methodFilter}
+          allValue="all"
+          onChange={(v) => { setMethodFilter(v); fetchPayments(1, { methodFilter: v }); }}
+          label="Filter by payment method"
+        />
 
-          <FilterRow label="Sort">
-            <ChipGroup
-              label="Sort payments"
-              value={sortField}
-              onChange={(v) => { setSortField(v); fetchPayments(1, { sortField:v }); }}
-              options={SORT_OPTIONS.map((o) => ({ value:o.value, label:o.label, tone:"brand" }))}
-            />
-          </FilterRow>
-        </FilterBar>
+        {/* ── Toolbar: search, the filter menus, Clear ──
+            The menus open to the right edge, where the pills sit. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="payment-search"
+            label="Search payments by student name, LRN, or invoice number"
+            placeholder="Search by student name, LRN, or invoice no.…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onEnter={() => fetchPayments(1)}
+            onClear={() => setSearch("")}
+          />
 
-        {/* ── Payments table ──────────────────────────────────────────────── */}
-        <Card padding="none" className="overflow-hidden">
-          <Table
-            columns={TABLE_COLUMNS}
-            loading={loading}
-            error={loadError}
-            onRetry={() => fetchPayments(page)}
-            errorSubject="payments"
-            isEmpty={payments.length === 0}
-            empty={{
-              icon: "ti-cash",
-              title: "No payments found",
-              subtitle: hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Record the first payment to get started.",
-              action: !hasActiveFilters && (
-                <Button size="sm" icon="ti-cash" onClick={() => setShowModal(true)}>
-                  Record Payment
-                </Button>
-              ),
+          {/* Dates and amounts commit together on Apply: a half-typed range
+              would refetch on every keystroke. */}
+          <RangeMenu
+            label="Date"
+            valueLabel={dateRangeLabel(dateFrom, dateTo)}
+            active={Boolean(dateFrom || dateTo)}
+            fields={[
+              { key: "from", label: "From", type: "date", value: dateFrom },
+              { key: "to",   label: "To",   type: "date", value: dateTo },
+            ]}
+            presets={datePresets()}
+            onApply={({ from, to }) => {
+              setDateFrom(from); setDateTo(to);
+              fetchPayments(1, { dateFrom: from, dateTo: to });
             }}
-          >
-            {payments.map((p) => {
-              const name  = p.invoice_detail?.student_name || null;
-              const invNo = p.invoice_detail?.invoice_no   || `#${p.invoice}`;
-              const mc    = PM[p.payment_method] ?? PM.others;
-              const pal   = getAvatarPalette(name ?? "");
-              return (
-                <TableRow key={p.payment_id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-xs font-bold"
-                        style={{ background: pal.bg, color: pal.color }}
-                        aria-hidden="true"
-                      >
-                        {name ? initialsFrom(name) : <i className="ti ti-user text-[15px]" />}
+          />
+
+          <RangeMenu
+            label="Amount"
+            valueLabel={amountRangeLabel(amountMin, amountMax)}
+            active={Boolean(amountMin || amountMax)}
+            fields={[
+              { key: "min", label: "At least", type: "number", value: amountMin, prefix: "₱" },
+              { key: "max", label: "Up to",    type: "number", value: amountMax, prefix: "₱" },
+            ]}
+            onApply={({ min, max }) => {
+              setAmountMin(min); setAmountMax(max);
+              fetchPayments(1, { amountMin: min, amountMax: max });
+            }}
+          />
+
+          <FilterMenu
+            label="Sort"
+            valueLabel={SORT_OPTIONS.find((o) => o.value === sortField)?.label ?? "Newest first"}
+            active={sortField !== DEFAULT_SORT}
+            options={SORT_OPTIONS}
+            value={sortField}
+            onChange={(v) => { setSortField(v); fetchPayments(1, { sortField: v }); }}
+            align="end"
+            menuWidth={180}
+          />
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* ── Payments table ── */}
+        <motion.div
+          initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
+        >
+          <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">
+                {methodMeta ? `${methodMeta.label} payments` : "All payments"}
+              </h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">{pageMeta.count.toLocaleString()}</span>
+              )}
+            </div>
+            <Table
+              headerVariant="quiet"
+              columns={TABLE_COLUMNS}
+              loading={loading}
+              error={loadError}
+              onRetry={() => fetchPayments(page)}
+              errorSubject="payments"
+              isEmpty={payments.length === 0}
+              empty={{
+                icon: "ti-cash",
+                title: hasActiveFilters ? "No payments match these filters" : "No payments yet",
+                subtitle: hasActiveFilters
+                  ? "Try a different search, or clear the filters."
+                  : "Record the first payment to get started.",
+                action: hasActiveFilters ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button size="sm" icon="ti-cash" onClick={() => setShowModal(true)}>
+                    Record Payment
+                  </Button>
+                ),
+              }}
+            >
+              {payments.map((p) => {
+                const name  = p.invoice_detail?.student_name || null;
+                const invNo = p.invoice_detail?.invoice_no   || `#${p.invoice}`;
+                const mc    = PM[p.payment_method] ?? PM.others;
+                const pal   = getAvatarPalette(name ?? "");
+                return (
+                  <TableRow key={p.payment_id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                          style={{ background: pal.bg, color: pal.color }}
+                          aria-hidden="true"
+                        >
+                          {name ? initialsFrom(name) : <i className="ti ti-user text-[14px]" />}
+                        </div>
+                        <span className="truncate text-[13px] font-semibold text-neutral-900">
+                          {name ?? <span className="font-normal italic text-neutral-500">Unknown</span>}
+                        </span>
                       </div>
-                      <span className="whitespace-nowrap text-sm font-semibold text-neutral-900">
-                        {name ?? <span className="font-normal italic text-neutral-500">Unknown</span>}
+                    </TableCell>
+
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
+                        className="focus-ring whitespace-nowrap rounded-sm font-mono text-[12px] font-semibold text-brand-600 underline transition-colors hover:text-brand-700"
+                      >
+                        {invNo}
+                      </button>
+                    </TableCell>
+
+                    <TableCell>
+                      <span className="whitespace-nowrap text-sm text-neutral-800">{fmtDate(p.payment_date)}</span>
+                    </TableCell>
+
+                    <TableCell align="right">
+                      <span className="whitespace-nowrap text-[13px] font-bold text-neutral-900 tabular-nums">{fmt(p.amount_paid)}</span>
+                    </TableCell>
+
+                    {/* The same dot as the band's legend. */}
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2 text-sm text-neutral-800">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${METHOD_DOT[p.payment_method] ?? METHOD_DOT.others}`} aria-hidden="true" />
+                        {mc.label}
                       </span>
-                    </div>
-                  </TableCell>
+                    </TableCell>
 
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/invoices?selected=${p.invoice}`)}
-                      className="focus-ring whitespace-nowrap rounded-sm font-mono text-xs font-bold text-brand-600 underline transition-colors hover:text-brand-700"
-                    >
-                      {invNo}
-                    </button>
-                  </TableCell>
+                    <TableCell>
+                      {p.reference_number
+                        ? <span className="block max-w-[150px] truncate font-mono text-[12px] text-neutral-800" title={p.reference_number}>{p.reference_number}</span>
+                        : <span className="text-sm italic text-neutral-500">—</span>}
+                    </TableCell>
 
-                  <TableCell className="whitespace-nowrap text-neutral-700">
-                    {fmtDate(p.payment_date)}
-                  </TableCell>
-
-                  <TableCell className="whitespace-nowrap font-bold text-success-600">
-                    {fmt(p.amount_paid)}
-                  </TableCell>
-
-                  <TableCell>
-                    <Badge variant={mc.tone} icon={mc.icon} size="sm">
-                      {mc.label}
-                    </Badge>
-                  </TableCell>
-
-                  <TableCell className="font-mono text-xs text-neutral-700">
-                    {p.reference_number || <span className="text-neutral-500">—</span>}
-                  </TableCell>
-
-                  <TableCell className="max-w-[180px] text-xs text-neutral-700">
-                    {p.notes
-                      ? <span className="block truncate">{p.notes}</span>
-                      : <span className="text-neutral-500">—</span>}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </Table>
-        </Card>
+                    <TableCell>
+                      {p.notes
+                        ? <span className="block max-w-[180px] truncate text-sm text-neutral-700" title={p.notes}>{p.notes}</span>
+                        : <span className="text-sm italic text-neutral-500">—</span>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </Table>
+          </Card>
+        </motion.div>
 
         {!loading && !loadError && pageMeta.count > 0 && (
           <Pagination
@@ -459,8 +438,6 @@ export default function PaymentsPage() {
             onPageChange={(p) => fetchPayments(p)}
           />
         )}
-
-
       </div>
 
       {/* Record Payment Modal */}
@@ -481,7 +458,6 @@ export default function PaymentsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-
     </>
   );
 }

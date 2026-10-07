@@ -57,7 +57,9 @@ function renderAt(url = "/subjects") {
   );
 }
 
-const lastParams = () => api.getSubjects.mock.calls.at(-1)[0];
+// The list's own requests; the band's counts ask for one row (page_size: 1).
+const listCalls = () => api.getSubjects.mock.calls.map((c) => c[0]).filter((p) => p.page_size !== 1);
+const lastParams = () => listCalls().at(-1);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,7 +76,7 @@ describe("SubjectsPage — per school year", () => {
     renderAt();
     expect(await screen.findByText("Mathematics 7")).toBeTruthy();
     expect(lastParams()).toEqual(expect.objectContaining({ school_year: "2026-2027", page: 1 }));
-    expect(screen.getByText("1 subjects in S.Y. 2026-2027's curriculum")).toBeTruthy();
+    expect(await screen.findByText("subject in S.Y. 2026-2027")).toBeTruthy();
   });
 
   it("opens on the year in the link", async () => {

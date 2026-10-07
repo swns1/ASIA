@@ -18,10 +18,19 @@ class SubjectFilter(filters.FilterSet):
 
     for_strand = filters.CharFilter(method="filter_for_strand")
     for_semester = filters.CharFilter(method="filter_for_semester")
+    has_template = filters.BooleanFilter(method="filter_has_template")
 
     class Meta:
         model = Subject
         fields = ("school_year", "school_level", "grade_level", "strand", "semester")
+
+    def filter_has_template(self, queryset, name, value):
+        """
+        `?has_template=false` -- the subjects nobody can work a grade out for
+        yet: computing one needs the subject's grading template, and without
+        it the server refuses. The Subjects page's status band counts these.
+        """
+        return queryset.filter(grading_template__isnull=not value)
 
     def filter_for_strand(self, queryset, name, value):
         value = (value or "").strip()

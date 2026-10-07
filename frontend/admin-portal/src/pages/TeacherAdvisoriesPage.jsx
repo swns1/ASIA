@@ -1,18 +1,23 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
 import useYearFilter from "../hooks/useYearFilter";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
-import Badge from "../components/ui/Badge";
+import { StatusDot } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
+import { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_DOTS, LEVEL_FILTER_OPTIONS, LEVEL_LABELS } from "../constants/schoolLevels";
+import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
@@ -43,24 +48,31 @@ const SCHOOL_LEVELS = [
   { value: "senior_highschool", label: "Senior High School", icon: "ti-certificate",   tone: "seniorhigh",   chip: "bg-seniorhigh-50 text-seniorhigh-500" },
 ];
 
-const GRADE_LEVELS_BY_LEVEL = {
-  nursery:           ["Nursery"],
-  kindergarten:      ["Kindergarten"],
-  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
-  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
-  senior_highschool: ["Grade 11","Grade 12"],
-};
-
-const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? null;
-
 const TABLE_COLUMNS = [
   { key: "teacher", label: "Teacher",         width: "26%" },
-  { key: "year",    label: "School Year",     width: "14%" },
-  { key: "level",   label: "School Level",    width: "18%" },
-  { key: "section", label: "Grade & Section", width: "18%" },
-  { key: "strand",  label: "Strand",          width: "14%" },
+  { key: "year",    label: "School year",     width: "12%" },
+  { key: "level",   label: "Level",           width: "17%" },
+  { key: "section", label: "Grade & section", width: "17%" },
+  { key: "adviser", label: "Adviser",         width: "18%" },
   { key: "actions", label: "",                width: "10%" },
 ];
+
+// Newest year first, then up the grade ladder, then by section. The server's
+// order is by text, which put Grade 10 before Grade 2.
+const GRADE_RANK = Object.fromEntries(Object.values(GRADE_LEVELS_BY_LEVEL).flat().map((g, i) => [g, i]));
+const byYearGradeSection = (a, b) =>
+  b.school_year.localeCompare(a.school_year) ||
+  (GRADE_RANK[a.grade_level] ?? 99) - (GRADE_RANK[b.grade_level] ?? 99) ||
+  a.section.localeCompare(b.section);
+
+// The band's legend: whether each section's adviser can still sign in to
+// take attendance and enter grades. A past year's adviser leaving later is
+// history, not a gap, so it's its own, quiet status.
+const ADVISER_STATUS_MAP = {
+  active:        { label: "Active adviser",      variant: "success", title: "Sections with an active adviser" },
+  needs_adviser: { label: "Needs a new adviser", variant: "warning", title: "Sections that need a new adviser" },
+  deactivated:   { label: "Adviser deactivated", variant: "muted",   title: "Past sections whose adviser has left" },
+};
 
 // ── Advisory Modal (create/edit) ────────────────────────────────────────────────
 function AdvisoryModal({ advisory, defaultYear, teachers, teachersUnavailable, onClose, onSaved }) {
@@ -258,57 +270,54 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
   );
 }
 
-// ── Table Row ─────────────────────────────────────────────────────────────────
-function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, readOnly, onEdit, onDelete }) {
-  const lvlMeta = getLevelMeta(advisory.school_level);
-
+/// ── Table Row ─────────────────────────────────────────────────────────────────
+function AdvisoryRow({ advisory, teacherName, adviserStatus, readOnly, onEdit, onDelete }) {
+  const palette = getAvatarPalette(teacherName);
   return (
     <TableRow onClick={readOnly ? undefined : () => onEdit(advisory)}>
       <TableCell>
-        <div className="flex items-center gap-2.5">
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${lvlMeta?.chip ?? "bg-brand-100 text-brand-600"}`}>
-            <i className="ti ti-user-check text-[15px]" aria-hidden="true" />
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+            style={{ background: palette.bg, color: palette.color }}
+            aria-hidden="true"
+          >
+            {initialsFrom(teacherName)}
           </div>
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
-              {teacherName}
-            </div>
-            {adviserGone && (
-              <Badge variant={needsAdviser ? "warning" : "muted"} icon="ti-user-off" size="sm">
-                {needsAdviser ? "Needs a new adviser" : "Adviser deactivated"}
-              </Badge>
-            )}
-          </div>
+          <span className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+            {teacherName}
+          </span>
         </div>
       </TableCell>
 
-      <TableCell className="text-[13px] text-neutral-700">{advisory.school_year}</TableCell>
-
       <TableCell>
-        {lvlMeta ? (
-          <Badge variant={lvlMeta.tone} icon={lvlMeta.icon} size="sm">
-            {lvlMeta.label}
-          </Badge>
-        ) : (
-          <span className="text-[12.5px] text-neutral-700">{advisory.school_level}</span>
-        )}
+        <span className="font-mono text-[12px] text-neutral-800">{advisory.school_year}</span>
+      </TableCell>
+
+      {/* The same dot as the Level menu, so a level reads the same in both. */}
+      <TableCell>
+        <span className="flex min-w-0 items-center gap-2 text-sm text-neutral-800">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOTS[advisory.school_level] ?? "bg-neutral-400"}`} aria-hidden="true" />
+          <span className="truncate">{LEVEL_LABELS[advisory.school_level] ?? advisory.school_level}</span>
+        </span>
       </TableCell>
 
       <TableCell>
-        <Badge variant="info" size="sm">
-          {advisory.grade_level} · {advisory.section}
-        </Badge>
+        <span className="text-sm font-medium text-neutral-900">{advisory.grade_level} · {advisory.section}</span>
+        {advisory.strand && <div className="text-[11.5px] text-neutral-500">{advisory.strand}</div>}
       </TableCell>
 
-      <TableCell className="text-[12.5px] text-neutral-700">
-        {advisory.strand || <span className="italic text-neutral-500">—</span>}
+      <TableCell>
+        {adviserStatus
+          ? <StatusDot status={adviserStatus} map={ADVISER_STATUS_MAP} />
+          : <span className="text-sm italic text-neutral-500">—</span>}
       </TableCell>
 
       <TableCell onClick={(e) => e.stopPropagation()}>
         {readOnly ? (
           <span className="text-xs font-semibold text-neutral-500" title={`S.Y. ${advisory.school_year} is archived`}>Archived</span>
         ) : (
-        <div className="flex gap-1">
+        <div className="flex justify-end gap-1">
           <Button
             variant="ghost" size="sm" icon="ti-pencil"
             aria-label={`Edit ${teacherName}'s advisory`}
@@ -317,6 +326,7 @@ function AdvisoryRow({ advisory, teacherName, adviserGone, needsAdviser, readOnl
           <Button
             variant="ghost" size="sm" icon="ti-trash"
             aria-label={`Remove ${teacherName}'s advisory`}
+            className="hover:bg-error-50 hover:text-error-500"
             onClick={() => onDelete(advisory)}
           />
         </div>
@@ -337,7 +347,11 @@ export default function TeacherAdvisoriesPage() {
   const [teachers,   setTeachers]           = useState([]);
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
   const [loading,    setLoading]    = useState(true);
+  // A failed load used to show "No advisory assignments found".
+  const [loadError,  setLoadError]  = useState(null);
   const [search,     setSearch]     = useState("");
+  const [levelFilter,  setLevelFilter]  = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   // Opens on the current school year — still freely switchable to "All years"
   // ("") or any other year in use below.
   const [yearFilter, setYearFilter, yearIsDefault] = useYearFilter();
@@ -347,6 +361,7 @@ export default function TeacherAdvisoriesPage() {
   const [modal,      setModal]      = useState(null);
   const [toDelete,   setToDelete]   = useState(null);
   const [deleting,   setDeleting]   = useState(false);
+  const searchRef = useRef(null);
 
   const teacherMap = useMemo(() => {
     const map = new Map();
@@ -359,22 +374,24 @@ export default function TeacherAdvisoriesPage() {
   );
   const { currentYear } = useSchoolYear();
 
-  // An adviser who can't sign in: deactivated, or an account deleted before
-  // deactivation existed. Unknowable while the teacher list failed to load.
-  const adviserGone = useCallback(
-    (a) => !teachersUnavailable && !activeTeacherIds.has(a.teacher_user_id),
-    [teachersUnavailable, activeTeacherIds],
+  // Where each section's adviser stands. Gone means they can't sign in:
+  // deactivated, or an account deleted before deactivation existed. Only
+  // this year and later need a new one -- a past year's adviser leaving
+  // afterwards is history, not a gap. Unknowable while the teacher list
+  // failed to load, so nothing is flagged then.
+  const adviserStatus = useCallback((a) => {
+    if (teachersUnavailable) return null;
+    if (activeTeacherIds.has(a.teacher_user_id)) return "active";
+    return !currentYear || a.school_year >= currentYear ? "needs_adviser" : "deactivated";
+  }, [teachersUnavailable, activeTeacherIds, currentYear]);
+  const needingAdviser = useMemo(
+    () => advisories.filter((a) => adviserStatus(a) === "needs_adviser"),
+    [advisories, adviserStatus],
   );
-  // Only this year and later need action: a past year's adviser leaving
-  // afterwards is history, not a gap.
-  const needsAdviser = useCallback(
-    (a) => adviserGone(a) && (!currentYear || a.school_year >= currentYear),
-    [adviserGone, currentYear],
-  );
-  const needingAdviser = useMemo(() => advisories.filter(needsAdviser), [advisories, needsAdviser]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // Teachers only: the full list carries every account's photo. Caught
       // on its own so a failure here doesn't reject the whole Promise.all
@@ -393,7 +410,9 @@ export default function TeacherAdvisoriesPage() {
         setTeachersUnavailable(false);
       }
     } catch (e) {
-      toast.error(e.message || "Failed to load advisory assignments.");
+      console.error(e);
+      setLoadError(e);
+      setAdvisories([]);
     } finally {
       setLoading(false);
     }
@@ -401,35 +420,49 @@ export default function TeacherAdvisoriesPage() {
 
   useEffect(() => {
     fetchData(); // eslint-disable-line react-hooks/set-state-in-effect
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchData]);
 
-  // "All" first, then each year present in the data. Counts ride along so the
-  // selected chip can show how many assignments it's narrowing to.
-  // Years and counts come from the advisories actually loaded, not from the
-  // global year list: this page only ever shows years that have an advisory,
-  // and the per-year tallies are exact rather than enrollment-derived.
-  const { yearList, yearCounts } = useMemo(() => {
-    const counts = {};
-    advisories.forEach((a) => { counts[a.school_year] = (counts[a.school_year] ?? 0) + 1; });
-    return { yearList: Object.keys(counts).sort().reverse(), yearCounts: counts };
-  }, [advisories]);
+  // The year menu offers the years that have an advisory, newest first.
+  const yearList = useMemo(
+    () => [...new Set(advisories.map((a) => a.school_year))].sort().reverse(),
+    [advisories],
+  );
+
+  const teacherNameOf = useCallback(
+    (a) => teacherMap.get(a.teacher_user_id) || `Removed account #${a.teacher_user_id}`,
+    [teacherMap],
+  );
+
+  // Every advisory loads at once, so the band counts here: the year and the
+  // Level menu narrow it, the search only the rows.
+  const inScope = useMemo(() => advisories.filter((a) =>
+    (!yearFilter || a.school_year === yearFilter) && (!levelFilter || a.school_level === levelFilter),
+  ).sort(byYearGradeSection), [advisories, yearFilter, levelFilter]);
+  const counts = loading || loadError ? null : {
+    "": inScope.length,
+    ...Object.fromEntries(Object.keys(ADVISER_STATUS_MAP).map((key) => [
+      key,
+      teachersUnavailable ? undefined : inScope.filter((a) => adviserStatus(a) === key).length,
+    ])),
+  };
 
   const filtered = useMemo(() => {
-    let list = advisories;
-    if (yearFilter) list = list.filter((a) => a.school_year === yearFilter);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((a) => {
-        const teacherName = (teacherMap.get(a.teacher_user_id) || "").toLowerCase();
-        return teacherName.includes(q) ||
-          a.section.toLowerCase().includes(q) ||
-          a.grade_level.toLowerCase().includes(q);
-      });
-    }
-    return list;
-  }, [advisories, yearFilter, search, teacherMap]);
+    const q = search.trim().toLowerCase();
+    return inScope.filter((a) => {
+      if (statusFilter && adviserStatus(a) !== statusFilter) return false;
+      if (!q) return true;
+      return teacherNameOf(a).toLowerCase().includes(q) ||
+        a.section.toLowerCase().includes(q) ||
+        a.grade_level.toLowerCase().includes(q);
+    });
+  }, [inScope, statusFilter, search, adviserStatus, teacherNameOf]);
 
-  const hasFilters = !yearIsDefault || search.trim() !== "";
+  // The current year is where the page opens, so it isn't a filter to clear.
+  const hasFilters = !yearIsDefault || Boolean(search.trim() || levelFilter || statusFilter);
+  const clearFilters = () => {
+    setYearFilter(null); setSearch(""); setLevelFilter(""); setStatusFilter("");
+    searchRef.current?.focus();
+  };
 
   const handleDelete = async () => {
     if (!toDelete) return;
@@ -446,15 +479,16 @@ export default function TeacherAdvisoriesPage() {
     }
   };
 
-  const totalCount = advisories.length;
-  const teacherCount = new Set(advisories.map((a) => a.teacher_user_id)).size;
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === levelFilter)?.label;
+  const bandCaption = [
+    `advisor${counts?.[""] === 1 ? "y" : "ies"} in ${yearFilter ? `S.Y. ${yearFilter}` : "all school years"}`,
+    levelFilter && levelLabel,
+  ].filter(Boolean).join(" · ");
 
   return (
     <>
       <PageHeader
         title="Teacher Advisories"
-        icon="ti-user-check"
-        subtitle={loading ? "Loading…" : `${totalCount} assignments · ${teacherCount} teachers assigned`}
         actions={
           <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
             New Assignment
@@ -462,31 +496,29 @@ export default function TeacherAdvisoriesPage() {
         }
       />
 
-      {/* ── Content ── */}
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-7 py-6">
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-        {/* Filters */}
-        <FilterBar
-          searchValue={search}
-          onSearchChange={setSearch}
-          onClearSearch={() => setSearch("")}
-          searchPlaceholder="Search by teacher name, grade level, or section…"
-          hasFilters={hasFilters}
-          onClearFilters={() => { setYearFilter(null); setSearch(""); }}
-          animate={isFirstRender}
-          animateDelay={0.18}
-          scope={
-            <SchoolYearPicker
-              value={yearFilter}
-              onChange={setYearFilter}
-              options={yearList}
-              counts={yearCounts}
-              allYearsCount={advisories.length}
-            />
-          }
+        {/* ── Where each section's adviser stands, and the filter ──
+            The school year sits in the band because its numbers are counted
+            for it; its years are the ones with an advisory. */}
+        <StatusBand
+          total={counts?.[""]}
+          caption={bandCaption}
+          aside={<SchoolYearMenu value={yearFilter} onChange={setYearFilter} years={yearList} />}
+          options={[
+            { value: "", label: "All", count: counts?.[""] },
+            ...Object.entries(ADVISER_STATUS_MAP).map(([key, meta]) => ({
+              value: key,
+              label: meta.label,
+              count: counts?.[key],
+              variant: meta.variant,
+            })),
+          ]}
+          value={statusFilter}
+          allValue=""
+          onChange={setStatusFilter}
+          label="Filter by adviser"
         />
-
-        <ArchivedYearNotice schoolYear={yearFilter} records="advisory assignments" />
 
         {needingAdviser.length > 0 && (
           <Alert variant="warning">
@@ -494,26 +526,79 @@ export default function TeacherAdvisoriesPage() {
           </Alert>
         )}
 
-        {/* Table */}
+        {/* ── Toolbar: search, the filter menu, Clear ── */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="advisories-search"
+            label="Search advisories by teacher, grade or section"
+            placeholder="Search by teacher name, grade level, or section…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+          />
+
+          <FilterMenu
+            label="Level"
+            valueLabel={levelLabel ?? "All levels"}
+            active={Boolean(levelFilter)}
+            options={LEVEL_FILTER_OPTIONS}
+            value={levelFilter}
+            onChange={setLevelFilter}
+            align="end"
+            menuWidth={220}
+          />
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
+
+        <ArchivedYearNotice schoolYear={yearFilter} records="advisory assignments" />
+
+        {/* ── Table ── */}
         <motion.div
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.24, ease: "easeOut" }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
         >
-          <Card padding="none">
+          <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">
+                {statusFilter ? ADVISER_STATUS_MAP[statusFilter].title : "All advisories"}
+              </h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">{filtered.length.toLocaleString()}</span>
+              )}
+            </div>
             <Table
+              headerVariant="quiet"
               columns={TABLE_COLUMNS}
               loading={loading}
+              error={loadError}
+              onRetry={fetchData}
+              errorSubject="the advisory assignments"
               isEmpty={filtered.length === 0}
               skeletonRows={5}
               empty={{
                 icon: "ti-user-off",
-                title: hasFilters ? "No assignments match your filters" : "No advisory assignments found",
+                title: hasFilters ? "No assignments match your filters" : "No advisory assignments yet",
                 subtitle: hasFilters
-                  ? "Try adjusting your search or filters"
+                  ? "Try a different search, or clear the filters."
                   : "Assign a teacher to a section to get started",
-                action: hasFilters ? undefined : (
-                  <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+                action: hasFilters ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button size="sm" icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
                     New Assignment
                   </Button>
                 ),
@@ -523,9 +608,8 @@ export default function TeacherAdvisoriesPage() {
                 <AdvisoryRow
                   key={a.advisory_id}
                   advisory={a}
-                  teacherName={teacherMap.get(a.teacher_user_id) || `Removed account #${a.teacher_user_id}`}
-                  adviserGone={adviserGone(a)}
-                  needsAdviser={needsAdviser(a)}
+                  teacherName={teacherNameOf(a)}
+                  adviserStatus={adviserStatus(a)}
                   readOnly={isArchived(a.school_year)}
                   onEdit={(adv) => setModal({ mode: "edit", advisory: adv })}
                   onDelete={(adv) => setToDelete(adv)}

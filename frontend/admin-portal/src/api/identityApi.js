@@ -37,8 +37,8 @@ export const createUser = (payload) =>
 export const updateUser = (id, payload) =>
   identityClient.patch(`/users/${id}/`, payload).then((r) => r.data);
 
-export const deleteUser = (id) =>
-  identityClient.delete(`/users/${id}/`).then((r) => r.data);
+// No deleteUser: accounts are deactivated (updateUser { is_active: false }),
+// and the server answers 405 to a delete.
 
 // ── Audit logs ────────────────────────────────────────────────────────────────
 export const getAuditLogs = (params = {}) =>

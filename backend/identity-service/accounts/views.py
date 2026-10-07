@@ -13,6 +13,7 @@ from django.db.models import Count, Q
 from django.utils.dateparse import parse_date, parse_time
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -313,6 +314,25 @@ class UserPagination(PageNumberPagination):
     max_page_size = 100
 
 
+def user_counts(accounts):
+    """
+    How the accounts the caller may see split by role, and how many of each
+    are inactive -- the Users page's band, which counts each role among the
+    active (or inactive) accounts on screen, not only across both.
+    """
+    def by_role(qs):
+        return {row["role"]: row["n"] for row in qs.order_by().values("role").annotate(n=Count("pk"))}
+
+    every = by_role(accounts)
+    inactive = by_role(accounts.filter(is_active=False))
+    return {
+        "total": sum(every.values()),
+        "by_role": every,
+        "inactive": sum(inactive.values()),
+        "inactive_by_role": inactive,
+    }
+
+
 class UserListView(APIView):
     """GET /api/auth/users/  — list all users (admin, super_admin, or registrar
        — registrar needs this to populate the teacher picker on the My
@@ -371,20 +391,12 @@ class UserListView(APIView):
 
         paginator = UserPagination()
         page = paginator.paginate_queryset(users, request, view=self)
-        by_role = {
-            row["role"]: row["n"]
-            for row in base.order_by().values("role").annotate(n=Count("pk"))
-        }
         return Response({
             "count": paginator.page.paginator.count,
             "next": paginator.get_next_link(),
             "previous": paginator.get_previous_link(),
             "results": serialize(page),
-            "counts": {
-                "total": sum(by_role.values()),
-                "by_role": by_role,
-                "inactive": base.filter(is_active=False).count(),
-            },
+            "counts": user_counts(base),
         })
 
     def post(self, request):
@@ -459,8 +471,8 @@ class UserListView(APIView):
 
 class UserDetailView(APIView):
     """GET /api/auth/users/<id>/   — view a user
-       PATCH /api/auth/users/<id>/ — edit a user
-       DELETE /api/auth/users/<id>/ — delete a user (admin only)"""
+       PATCH /api/auth/users/<id>/ — edit a user (is_active=false retires one)
+       DELETE /api/auth/users/<id>/ — always 405: accounts are deactivated"""
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
     # No required_roles: this is reachable by any authenticated user because
@@ -677,38 +689,20 @@ class UserDetailView(APIView):
         return Response(UserSerializer(target).data)
 
     def delete(self, request, user_id):
-        requester = request.resolved_user
-        if not is_audit_admin(requester):
-            return Response({"detail": "Only admins can delete users."}, status=403)
-        if requester.user_id == int(user_id):
-            return Response({"detail": "You cannot delete your own account."}, status=400)
-
-        target = self._get_target(user_id)
-        if not target:
-            return Response({"detail": "User not found."}, status=404)
-
-        # Same hierarchy as patch(): a plain admin must not be able to delete
-        # the super_admin account out from under the system.
-        if is_super_admin(target) and not is_super_admin(requester):
-            return Response(
-                {"detail": "Only a super admin can delete a super admin account."},
-                status=403,
-            )
-
-        name, email, role = target.name, target.email, target.role
-        target.delete()
-
-        record_audit_event(
-            request,
-            user=requester,
-            action="Deleted user account",
-            module="Users",
-            status="success",
-            details=f"User '{name}' ({email}) with role '{role}' was permanently deleted.",
-            metadata={"target_user_id": int(user_id), "target_email": email, "role": role},
+        # Accounts are retired by deactivating them (PATCH is_active=false),
+        # never deleted -- for anyone, super admins included. `users` has no
+        # foreign keys, so a delete left everything that points at the person
+        # (a teacher's section advisories, the attendance and grades they
+        # recorded, a parent's guardian link) naming nobody, and it could not
+        # be undone. A deactivated account can't sign in, but its row and its
+        # name stay on that history, and it can be reactivated.
+        raise MethodNotAllowed(
+            request.method,
+            detail=(
+                "Accounts can't be deleted. Deactivate the account instead: it can't "
+                "sign in, and its name stays on the records it is attached to."
+            ),
         )
-
-        return Response({"detail": "User deleted."}, status=204)
 
 
 # ── Audit ──────────────────────────────────────────────────────────────────────
@@ -724,21 +718,42 @@ class AuditLogPagination(PageNumberPagination):
     max_page_size = 200
 
 
+def scope_audit_logs(queryset, params):
+    """
+    The audit filters that say which part of the log is in view: who (role),
+    where (module) and when (date, time). The list applies these, then the
+    status and the search; the facets' status counts apply only these, so the
+    page's status band counts what its menus have narrowed to.
+    """
+    role = params.get("role")
+    if role and role != "all":
+        queryset = queryset.filter(user_role=role)
+
+    module = params.get("module")
+    if module:
+        queryset = queryset.filter(module__iexact=module)
+
+    date_value = parse_date(params.get("date") or "")
+    if date_value:
+        queryset = queryset.filter(occurred_at__date=date_value)
+
+    time_from = parse_time(params.get("time_from") or "")
+    if time_from:
+        queryset = queryset.filter(occurred_at__time__gte=time_from)
+
+    time_to = parse_time(params.get("time_to") or "")
+    if time_to:
+        queryset = queryset.filter(occurred_at__time__lte=time_to)
+    return queryset
+
+
 class AuditLogListView(APIView):
     authentication_classes = [NoOpAuthentication]
     permission_classes = [HasRole]
     required_roles = ADMIN_ROLES
 
     def get(self, request):
-        queryset = AuditLog.objects.all()
-
-        role = request.query_params.get("role")
-        if role and role != "all":
-            queryset = queryset.filter(user_role=role)
-
-        module = request.query_params.get("module")
-        if module:
-            queryset = queryset.filter(module__iexact=module)
+        queryset = scope_audit_logs(AuditLog.objects.all(), request.query_params)
 
         status_value = request.query_params.get("status")
         if status_value:
@@ -756,18 +771,6 @@ class AuditLogListView(APIView):
                 | Q(details__icontains=search)
             )
 
-        date_value = parse_date(request.query_params.get("date") or "")
-        if date_value:
-            queryset = queryset.filter(occurred_at__date=date_value)
-
-        time_from = parse_time(request.query_params.get("time_from") or "")
-        if time_from:
-            queryset = queryset.filter(occurred_at__time__gte=time_from)
-
-        time_to = parse_time(request.query_params.get("time_to") or "")
-        if time_to:
-            queryset = queryset.filter(occurred_at__time__lte=time_to)
-
         ordering = request.query_params.get("ordering", "-occurred_at")
         if ordering in {"occurred_at", "-occurred_at", "user_role", "-user_role", "module", "-module", "status", "-status"}:
             queryset = queryset.order_by(ordering, "-log_id")
@@ -780,9 +783,13 @@ class AuditLogListView(APIView):
 
 class AuditLogFacetsView(APIView):
     """
-    GET /api/auth/audit-logs/facets/
+    GET /api/auth/audit-logs/facets/[?role=…&module=…&date=…&time_from=…&time_to=…]
 
     The distinct roles and modules present in the log, plus per-status counts.
+    The counts follow the role, module, date and time filters -- the part of
+    the log the page's menus have narrowed to -- but never the status (each
+    count is its own) or the search, as on the other list pages. The role and
+    module lists always cover the whole log, so a menu never empties itself.
 
     The page used to derive these by scanning every row it had downloaded,
     which only worked because it fetched the whole table. Now that the list is
@@ -818,7 +825,7 @@ class AuditLogFacetsView(APIView):
 
         counts = {
             row["status"]: row["count"]
-            for row in qs.values("status").annotate(count=Count("pk"))
+            for row in scope_audit_logs(qs, request.query_params).values("status").annotate(count=Count("pk"))
         }
         counts["total"] = sum(counts.values())
 

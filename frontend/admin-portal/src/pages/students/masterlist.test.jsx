@@ -77,13 +77,18 @@ function page(url = "/students") {
 
 const lastList = () => getStudents.mock.lastCall[0];
 const lastCounts = () => getStudentCounts.mock.lastCall[0];
-const group = (name) => screen.getByRole("group", { name });
-const chip = (groupName, name) => within(group(groupName)).getByRole("button", { name });
-const yearPicker = () => screen.getByRole("button", { name: /^school year:/i });
-const pickYear = (name) => {
-  fireEvent.click(yearPicker());
-  fireEvent.click(screen.getByRole("option", { name }));
+const legend = () => within(screen.getByRole("group", { name: "Filter by status" }));
+const menu = (label) => screen.queryByRole("button", { name: new RegExp(`^${label}:`, "i") });
+const pick = async (label, item) => {
+  fireEvent.click(menu(label));
+  fireEvent.click(await screen.findByRole("menuitemradio", { name: item }));
 };
+const yearPicker = () => menu("school year");
+const pickYear = (name) => pick("school year", name);
+// The band's total, beside the caption that says what it counts.
+const band = (caption, total) =>
+  waitFor(() => expect(screen.getByText(caption).previousSibling.textContent).toBe(total));
+const onCurrentYear = () => band("learners in S.Y. 2026-2027", "432");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,14 +100,16 @@ beforeEach(() => {
     if (params.search === "zzz") return { results: [], count: 0, next: null, previous: null };
     return { results: [IMELDA, HERMINIA], count: 45, next: "page2", previous: null };
   });
-  getStudentCounts.mockResolvedValue(COUNTS);
+  // Without a year the statuses span every record: 551, as `registered` says.
+  getStudentCounts.mockImplementation(async (p) =>
+    (p.school_year || p.unenrolled ? COUNTS : { ...COUNTS, status: { active: 540, transferred: 11 } }));
   getSections.mockResolvedValue([{ name: "Diamond" }, { name: "Garnet" }, { name: "Pearl" }]);
 });
 
 describe("StudentsPage — a school year's masterlist", () => {
   it("opens on the current year's learners, in class-list order", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
     expect(lastList()).toMatchObject({ school_year: "2026-2027", ordering: "placement" });
     expect(lastList().unenrolled).toBeUndefined();
@@ -116,41 +123,42 @@ describe("StudentsPage — a school year's masterlist", () => {
 
   it("uses the same year picker as every other year page, All years included", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
     expect(yearPicker().getAttribute("aria-label")).toBe("School year: 2026-2027");
 
-    pickYear(/all years/i);
+    await pickYear(/all years/i);
 
-    await screen.findByText("551 students on record");
+    await band("students on record", "551");
     expect(lastList().school_year).toBeUndefined();
     expect(lastList().ordering).toBe("-student_id");
     expect(screen.getByRole("columnheader", { name: /last enrolled/i })).toBeTruthy();
   });
 
-  it("counts the tiles and chips inside the same filters as the list", async () => {
+  it("counts the band and menus inside the same filters as the list", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
     expect(lastCounts()).toMatchObject({ school_year: "2026-2027" });
-    const total = screen.getByRole("button", { name: /total students/i });
-    expect(within(total).getByText("432")).toBeTruthy();
-    expect(within(screen.getByRole("button", { name: /^431 active/i })).getByText("431")).toBeTruthy();
+    expect(legend().getByRole("button", { name: "All 432" })).toBeTruthy();
+    expect(legend().getByRole("button", { name: "Active 431" })).toBeTruthy();
     // The masterlist's male/female split, beside the total.
     expect(screen.getByText(/221 male · 211 female/)).toBeTruthy();
   });
 
   it("narrows to a level, then a grade, then a section", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
-    fireEvent.click(chip("Filter by school level", /^junior high/i));
+    expect(menu("grade")).toBeNull();
+    await pick("level", /^junior high/i);
     await waitFor(() => expect(lastList()).toMatchObject({ school_level: "junior_highschool" }));
 
-    fireEvent.click(chip("Filter by grade level", /^grade 7/i));
+    expect(menu("section")).toBeNull();
+    await pick("grade", /^grade 7/i);
     await waitFor(() => expect(lastList()).toMatchObject({ grade_level: "Grade 7" }));
     await waitFor(() => expect(getSections).toHaveBeenCalledWith({ school_year: "2026-2027", grade_level: "Grade 7" }));
 
-    fireEvent.click(await within(group("Filter by section")).findByRole("button", { name: /^diamond/i }));
+    await pick("section", /^diamond/i);
     await waitFor(() => expect(lastList()).toMatchObject({
       school_year: "2026-2027", school_level: "junior_highschool", grade_level: "Grade 7", section: "Diamond",
     }));
@@ -161,9 +169,9 @@ describe("StudentsPage — a school year's masterlist", () => {
 describe("StudentsPage — Not enrolled", () => {
   it("lists the current year's learners with no place, each with Enroll", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
-    fireEvent.click(chip(/enrolled or not enrolled/i, /^not enrolled/i));
+    await pick("enrollment", /^not enrolled/i);
 
     await screen.findByText(/^Alabado/);
     expect(lastList()).toMatchObject({ unenrolled: "2026-2027", ordering: "last_name" });
@@ -176,20 +184,20 @@ describe("StudentsPage — Not enrolled", () => {
 
   it("isn't offered for a past year, where it would only list who joined later", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
-    expect(group(/enrolled or not enrolled/i)).toBeTruthy();
+    await onCurrentYear();
+    expect(menu("enrollment")).toBeTruthy();
 
-    pickYear("2025-2026");
+    await pickYear(/2025-2026/);
 
     await waitFor(() => expect(lastList()).toMatchObject({ school_year: "2025-2026" }));
-    expect(screen.queryByRole("group", { name: /enrolled or not enrolled/i })).toBeNull();
+    expect(menu("enrollment")).toBeNull();
   });
 });
 
 describe("StudentsPage — search", () => {
   it("offers every year when nobody in this one matches", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
     const box = screen.getByRole("searchbox", { name: /search students/i });
     fireEvent.change(box, { target: { value: "zzz" } });
@@ -202,10 +210,10 @@ describe("StudentsPage — search", () => {
 
   it("keeps a typed search through a filter click and onto page 2", async () => {
     render(page());
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
 
     fireEvent.change(screen.getByRole("searchbox", { name: /search students/i }), { target: { value: "bar" } });
-    fireEvent.click(chip("Filter by sex", /^female/i));
+    await pick("sex", "Female");
     await waitFor(() => expect(lastList()).toMatchObject({ search: "bar", sex: "female", page: 1 }));
     await screen.findByText(/^Barroga/);
 
@@ -217,18 +225,18 @@ describe("StudentsPage — search", () => {
 describe("StudentsPage — links and Clear", () => {
   it("opens on every student when a link asks for all years", async () => {
     render(page("/students?school_year=all&search=cruz"));
-    await screen.findByText("551 students on record");
+    await band("students on record", "551");
     expect(lastList()).toMatchObject({ search: "cruz" });
     expect(lastList().school_year).toBeUndefined();
   });
 
   it("clears back to the current year's list", async () => {
     render(page("/students?school_year=all"));
-    await screen.findByText("551 students on record");
+    await band("students on record", "551");
 
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
 
-    await screen.findByText("432 learners in S.Y. 2026-2027");
+    await onCurrentYear();
     expect(lastList()).toMatchObject({ school_year: "2026-2027", ordering: "placement" });
   });
 });

@@ -5,8 +5,8 @@ import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
 import { columnPath } from "../../components/charts/geometry";
 import { SURFACE, chartInk, token } from "../../components/charts/tokens";
 import useElementSize from "../../components/charts/useElementSize";
+import { mapAxes, placeDots } from "./mapFrame";
 import {
-  GOOD_ATTENDANCE,
   PASSING_GRADE,
   RISK_LEVELS,
   reasonLabel,
@@ -219,15 +219,20 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
 
 // ── 4 · Why students are flagged ─────────────────────────────────────────────
 // The most directly actionable view: it names the intervention. Each bar is
-// the share of everyone assessed who has that reason. Single series, so one
+// the share of the flagged students (Needs attention or Needs urgent help) who
+// have that reason -- the backend counts reasons among them only. It used to
+// count everyone assessed, which charted 118 "behavior concerns" under this
+// title in a check that had flagged 52 students in all. Single series, so one
 // hue and no legend — the title says what the bars are.
 
-function ReasonChart({ summary, total }) {
+function ReasonChart({ summary }) {
+  const flagged = summary?.flagged_count ?? 0;
+  if (!flagged) return <NoData message="Nobody needs following up in this selection." />;
   const rows = (summary?.by_reason ?? [])
     .filter((r) => r.code !== "limited_data")
     .sort((a, b) => b.count - a.count);
   if (!rows.length) return <NoData message="No concerns were raised for this selection." />;
-  const whole = Math.max(total, ...rows.map((r) => r.count));
+  const whole = Math.max(flagged, ...rows.map((r) => r.count));
 
   return (
     <div>
@@ -237,7 +242,7 @@ function ReasonChart({ summary, total }) {
             <span className="truncate text-sm font-semibold text-neutral-800" title={reasonLabel(row.code)}>
               {reasonLabel(row.code)}
             </span>
-            <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those assessed`}>
+            <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those flagged`}>
               <Fill share={row.count / whole} color={chartInk().bar} />
             </Track>
             <span className="text-right text-sm tabular-nums text-neutral-600">
@@ -247,8 +252,8 @@ function ReasonChart({ summary, total }) {
         ))}
       </ul>
       <p className="mt-4 text-xs text-neutral-500">
-        Share of the {students(whole)} assessed. One student can have several reasons, so these can add up to more
-        than everyone.
+        Share of the {students(whole)} who need follow-up. One student can have several reasons, so these can add up
+        to more than everyone.
       </p>
     </div>
   );
@@ -461,58 +466,31 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
   const PAD_R = 20;
   const PAD_T = 34;   // the two top quadrant labels sit above the plot
   const PAD_B = 44;
-  const plotW = W - PAD_L - PAD_R;
-  const plotH = H - PAD_T - PAD_B;
 
-  // Floors come from the data. Fixed floors of 60 and 50% pinned the weakest
-  // students to the frame -- a 47.7 average drew at 60, looking no worse than
-  // a borderline student. Capped so the passing and attendance lines always
-  // keep a readable share of the plot.
-  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  const lowestGrade = Math.min(...plotted.map((s) => Number(s.average_grade)));
-  const lowestAttendance = Math.min(...plotted.map((s) => Number(s.attendance_rate) * 100));
-  const X_MIN = clamp(Math.floor(lowestGrade / 10) * 10, 0, 60);
-  const X_MAX = 100;
-  const Y_MIN = clamp(Math.floor(lowestAttendance / 10) * 10, 0, 50);
-  const Y_MAX = 100;
-  const scaleX = (g) => PAD_L + ((clamp(g, 0, 100) - X_MIN) / (X_MAX - X_MIN)) * plotW;
-  const scaleY = (p) => PAD_T + plotH - ((clamp(p, 0, 100) - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
-
-  const passX = scaleX(PASSING_GRADE);
-  const goodY = scaleY(GOOD_ATTENDANCE);
-
-  const xTicks = [...new Set([
-    ...Array.from({ length: Math.floor((X_MAX - X_MIN) / 10) + 1 }, (_, i) => X_MIN + i * 10),
-    PASSING_GRADE,
-    X_MAX,
-  ])].sort((a, b) => a - b);
-  const yTicks = [...new Set([Y_MIN, 50, 70, GOOD_ATTENDANCE, Y_MAX])]
-    .filter((p) => p >= Y_MIN)
-    .sort((a, b) => a - b);
-
-  // Deterministic spiral offset so students on identical figures (very common
-  // at this school's scale) stay individually clickable instead of stacking
-  // into one dot. Same technique as the previous performance-group scatter.
-  const seen = new Map();
-  const points = plotted.map((s) => {
-    const key = `${Math.round(Number(s.average_grade))}:${Math.round(Number(s.attendance_rate) * 100)}`;
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    const angle = n * 2.4;
-    const radius = n === 0 ? 0 : 4 + n * 0.8;
-    return {
-      row: s,
-      cx: scaleX(Number(s.average_grade)) + Math.cos(angle) * radius,
-      cy: scaleY(Number(s.attendance_rate) * 100) + Math.sin(angle) * radius,
-    };
+  // The same frame as the group map on Performance groups (mapFrame.js), so
+  // a student sits in the same place on both. Dots on identical figures are
+  // spread so each stays individually clickable.
+  const items = plotted.map((s) => ({
+    row: s,
+    grade: Number(s.average_grade),
+    attendance: Number(s.attendance_rate),
+  }));
+  const axes = mapAxes(items, {
+    width: W,
+    height: H,
+    pad: { left: PAD_L, right: PAD_R, top: PAD_T, bottom: PAD_B },
   });
+  const { x: scaleX, y: scaleY, plotH, passX, goodY, xTicks, yTicks } = axes;
+  const points = placeDots(items, axes);
 
   // The top two sit above the plot, out of the dot field; the bottom two stay
-  // inside it, where the corners are emptiest.
+  // inside it, where the corners are emptiest. A corner describes where the
+  // figures are, never a status: this one was "Needs urgent help", the name of
+  // the top status, so a "Needs attention" dot sat in a corner calling it urgent.
   const QUADRANTS = [
     { x: PAD_L + 8, y: PAD_T - 10, text: "Attending, still struggling", anchor: "start" },
     { x: W - PAD_R - 8, y: PAD_T - 10, text: "Doing well", anchor: "end" },
-    { x: PAD_L + 8, y: PAD_T + plotH - 8, text: "Needs urgent help", anchor: "start" },
+    { x: PAD_L + 8, y: PAD_T + plotH - 8, text: "Struggling and often absent", anchor: "start" },
     { x: W - PAD_R - 8, y: PAD_T + plotH - 8, text: "Passing but often absent", anchor: "end" },
   ];
 
@@ -630,7 +608,7 @@ export default function RiskChart({ view, run, onSelectStudent }) {
         />
       );
     case "reasons":
-      return <ReasonChart summary={summary} total={total} />;
+      return <ReasonChart summary={summary} />;
     case "grades":
       return <GradeDistributionChart scores={scores} />;
     case "map":

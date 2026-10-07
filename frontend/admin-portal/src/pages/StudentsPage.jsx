@@ -8,23 +8,24 @@ import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
-import ChipGroup from "../components/ui/ChipGroup";
+import Card from "../components/ui/Card";
 import useYearFilter from "../hooks/useYearFilter";
 import useSections from "../hooks/useSections";
-import FilterBar, { CollapsibleFilterRow, FilterRow } from "../components/ui/FilterBar";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
-import { StatusBadge } from "../components/ui/Badge";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
+import { StatusBadge, StatusDot } from "../components/ui/Badge";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { ENROLLMENT_STATUS_MAP, STUDENT_STATUS_MAP } from "../constants/statusMaps";
-import { GRADE_LEVELS_BY_LEVEL } from "../constants/schoolLevels";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { deleteStudent, getStudentCounts, getStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 // The page is the school's masterlist, and the school year is its scope, set
-// in the same picker as Enrollments, Grades and Payments:
+// in the same menu as Enrollments, Grades and Subjects:
 //
 //   a year       that year's learners, one row each, with the grade and
 //                section they were placed in, narrowed by level, grade and
@@ -45,25 +46,27 @@ const STATUS_FILTERS = ["all", "active", "inactive", "transferred", "graduated",
 // section, then surname. The Not enrolled list is a worklist, A to Z.
 const DEFAULT_ORDERING = { roll: "placement", unenrolled: "last_name", registry: "-student_id" };
 
+// What the table caption says about the order rows are in, so nobody has to
+// read the header carets to know. One per ordering the headers can produce.
+const ORDERING_CAPTIONS = {
+  "-student_id": "Newest registered first",
+  placement:     "By grade and section, then last name",
+  "-placement":  "By grade and section, highest grade first",
+  last_name:     "Sorted by last name, A to Z",
+  "-last_name":  "Sorted by last name, Z to A",
+  birth_date:    "Sorted by age, oldest first",
+  "-birth_date": "Sorted by age, youngest first",
+};
+
 const SEX_FILTERS = [
   { value: "",       label: "All" },
-  { value: "male",   label: "Male",   icon: "ti-mars" },
-  { value: "female", label: "Female", icon: "ti-venus" },
-];
-
-// Same chips, icons and tones as the Enrollments page's level filter.
-const LEVEL_FILTERS = [
-  { value: "",                  label: "All Levels",   icon: "ti-layout-grid",   tone: "brand" },
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary" },
-  { value: "junior_highschool", label: "Junior High",  icon: "ti-school",        tone: "juniorhigh" },
-  { value: "senior_highschool", label: "Senior High",  icon: "ti-certificate",   tone: "seniorhigh" },
+  { value: "male",   label: "Male" },
+  { value: "female", label: "Female" },
 ];
 
 const ENROLLMENT_VIEWS = [
-  { value: "enrolled",     label: "Enrolled",     icon: "ti-user-check" },
-  { value: "not_enrolled", label: "Not enrolled", icon: "ti-user-exclamation" },
+  { value: "enrolled",     label: "Enrolled" },
+  { value: "not_enrolled", label: "Not enrolled" },
 ];
 
 // The years whose not-enrolled list means something: the one under way, and
@@ -71,15 +74,8 @@ const ENROLLMENT_VIEWS = [
 // only list the learners who joined after it.
 const ENROLLING_STATES = new Set(["current", "upcoming"]);
 
-// Stat tiles double as status filters; tones come from the shared status map's
-// semantics so the tile and the row badge agree.
-const STAT_CARDS = [
-  { status: "all",         label: "Total Students", icon: "ti-users",       tone: "brand" },
-  { status: "active",      label: "Active",         icon: "ti-user-check",  tone: "success" },
-  { status: "graduated",   label: "Graduated",      icon: "ti-certificate", tone: "info" },
-  { status: "transferred", label: "Transferred",    icon: "ti-transfer",    tone: "warning" },
-  { status: "dropped",     label: "Dropped",        icon: "ti-user-x",      tone: "error" },
-];
+// Long enough that a word is finished, short enough that the list keeps up.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // The third column is where the learner is: their place in the year shown,
 // or, with no one year to speak of, their latest enrollment.
@@ -92,7 +88,7 @@ function tableColumns(scope) {
     scope === "roll"
       ? { key: "placement",       label: "Grade · Section", width: "15%", sortable: true }
       : { key: "last_enrollment", label: "Last enrolled",   width: "15%" },
-    { key: "birth_date", label: "Age / DOB", width: "12%", sortable: true },
+    { key: "birth_date", label: "Age",       width: "12%", sortable: true },
     { key: "sex",     label: "Sex",       width: "8%" },
     { key: "status",  label: "Status",    width: "10%" },
     { key: "contact", label: "Contact",   width: "12%" },
@@ -119,10 +115,12 @@ function fmtDate(dateStr) {
   });
 }
 
-const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-
 /** Consistent treatment for "this field is empty", instead of a blank cell. */
 const Blank = () => <span className="text-sm italic text-neutral-500">—</span>;
+
+/** A menu item's count, at its right edge. Nothing while counts load. */
+const countNote = (n) =>
+  n == null ? null : <span className="text-[11px] text-neutral-500 tabular-nums">{n.toLocaleString()}</span>;
 
 export default function StudentsPage() {
   usePageTitle("Students");
@@ -214,8 +212,8 @@ export default function StudentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listKey]);
 
-  // The tiles, chip counts and header line. Non-critical: if they fail the
-  // tiles show a dash rather than blocking the page.
+  // The band, menu counts and sex split. Non-critical: if they fail the band
+  // shows dashes rather than blocking the page.
   const countsKey = `${JSON.stringify(filters)}|${reloadKey}`;
   const [counts, setCounts] = useState({ key: null, data: null, failed: false });
 
@@ -238,10 +236,19 @@ export default function StudentsPage() {
     return { ...byStatus, all: Object.values(byStatus).reduce((sum, n) => sum + n, 0) };
   }, [tally]);
 
-  // Sections of the chosen grade in the year shown, for the Section chips.
+  // Sections of the chosen grade in the year shown, for the Section menu.
   const { sections } = useSections(placementOn ? schoolYear : "", placementOn ? gradeLevel : "");
 
   // ── Changing filters ─────────────────────────────────────────────────────
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the requests above read, so nothing here can land
+  // with stale filters; Enter only skips the wait.
+  useEffect(() => {
+    if (inputVal === search) return undefined;
+    const timer = setTimeout(() => setSearch(inputVal), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [inputVal, search]);
+
   // Any filter change also applies what is typed in the search box, so the
   // list never shows one search while the box says another. (The chips used
   // to read the box and paging read the last search, so page 2 dropped it.)
@@ -324,37 +331,49 @@ export default function StudentsPage() {
   const students = list.results;
   const totalPages = Math.ceil(list.count / PAGE_SIZE);
 
-  // ── Chip options ─────────────────────────────────────────────────────────
-  // Counts come from /counts/, each counted inside every other filter, and a
-  // chip shows its own only while selected. The "All" chips show none: that
-  // number is the list's own total.
-  const statusOptions = STATUS_FILTERS.map((v) => ({
-    value: v,
-    label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
-    count: v === "all" ? null : statusCounts[v] ?? 0,
-    // Same tone as the matching stat card, so clicking a card and seeing its
-    // chip light up reads as one connected action instead of two disagreeing
-    // colors.
-    tone: v === "all" ? "brand" : STUDENT_STATUS_MAP[v]?.variant ?? "brand",
+  // ── Menu options ─────────────────────────────────────────────────────────
+  // Counts come from /counts/, each counted inside every other filter. The
+  // "All" items show none: that number is the band's own total.
+  const viewOptions = ENROLLMENT_VIEWS.map((o) => ({ ...o, note: countNote(tally?.enrollment?.[o.value]) }));
+  const levelOptions = LEVEL_FILTER_OPTIONS.map((o) => ({
+    ...o,
+    note: o.value && tally ? countNote(tally.school_level?.[o.value] ?? 0) : null,
   }));
-  const sexOptions = SEX_FILTERS.map((o) => ({ ...o, count: o.value ? tally?.sex?.[o.value] ?? 0 : null }));
-  const viewOptions = ENROLLMENT_VIEWS.map((o) => ({ ...o, count: tally?.enrollment?.[o.value] ?? null }));
-  const levelOptions = LEVEL_FILTERS.map((o) => ({ ...o, count: o.value ? tally?.school_level?.[o.value] ?? 0 : null }));
   const gradeOptions = [
-    { value: "", label: "All Grades" },
-    ...(GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? []).map((g) => ({ value: g, label: g, count: tally?.grade_level?.[g] ?? 0 })),
+    { value: "", label: "All grades" },
+    ...(GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? []).map((g) => ({
+      value: g, label: g, note: tally ? countNote(tally.grade_level?.[g] ?? 0) : null,
+    })),
   ];
   const sectionOptions = [
-    { value: "", label: "All Sections" },
-    ...sections.map((s) => ({ value: s.name, label: s.name, count: tally?.section?.[s.name] ?? 0 })),
+    { value: "", label: "All sections" },
+    ...sections.map((s) => ({
+      value: s.name, label: s.name, note: tally ? countNote(tally.section?.[s.name] ?? 0) : null,
+    })),
   ];
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === schoolLevel)?.label;
 
-  // ── Header and footer lines ──────────────────────────────────────────────
-  const subtitle = !tally
-    ? (counts.failed ? (allYears ? "Every student on record" : `S.Y. ${schoolYear}`) : "Loading records…")
-    : allYears
-      ? `${plural(tally.registered ?? 0, "student")} on record`
-      : `${plural(tally.year_total ?? 0, "learner")} in S.Y. ${schoolYear}`;
+  // ── Band, title and footer lines ─────────────────────────────────────────
+  // What the band's total counts: the scope, and the placement filters when
+  // set, since the counts are taken inside them.
+  const bandTotal = tally ? statusCounts.all : undefined;
+  const s = bandTotal === 1 ? "" : "s";
+  const bandCaption = [
+    allYears
+      ? `student${s} on record`
+      : notEnrolled
+        ? `learner${s} not enrolled for S.Y. ${schoolYear}`
+        : `learner${s} in S.Y. ${schoolYear}`,
+    placementOn && schoolLevel ? levelLabel : null,
+    placementOn ? gradeLevel : null,
+    placementOn ? section : null,
+  ].filter(Boolean).join(" · ");
+
+  const listTitle =
+    statusFilter === "all"
+      ? "All students"
+      : `${STUDENT_STATUS_MAP[statusFilter]?.label ?? statusFilter} students`;
+
   // The masterlist's male/female split, for the list as filtered. With a sex
   // filter on, the count already says it.
   const sexSplit = !sexFilter && tally?.sex && counts.key === countsKey
@@ -416,8 +435,6 @@ export default function StudentsPage() {
     <>
       <PageHeader
         title="Students"
-        subtitle={subtitle}
-        icon="ti-users"
         actions={
           canManage && (
             <Button icon="ti-user-plus" onClick={() => navigate("/students/new")}>
@@ -428,105 +445,112 @@ export default function StudentsPage() {
       />
 
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
-        {/* Stat tiles — also the primary status filter */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          {STAT_CARDS.map((card) => (
-            <StatCard
-              key={card.status}
-              label={card.label}
-              icon={card.icon}
-              iconTone={card.tone}
-              layout="horizontal"
-              loading={!tally && !counts.failed}
-              value={tally ? (statusCounts[card.status] ?? 0).toLocaleString() : "—"}
-              active={statusFilter === card.status}
-              onClick={() =>
-                handleStatusFilter(statusFilter === card.status ? "all" : card.status)
-              }
-            />
-          ))}
-        </div>
+        {/* The status mix, and the status filter. The school year sits in
+            the band because the band's numbers are counted for it. No counts
+            on the year menu: the context's are enrollment rows, and a senior
+            high learner has two of those a year. */}
+        <StatusBand
+          total={bandTotal}
+          caption={bandCaption}
+          aside={<SchoolYearMenu value={schoolYear} onChange={handleYear} />}
+          options={STATUS_FILTERS.map((v) => ({
+            value: v,
+            label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
+            count: tally ? statusCounts[v] ?? 0 : undefined,
+            variant: STUDENT_STATUS_MAP[v]?.variant,
+          }))}
+          value={statusFilter}
+          allValue="all"
+          onChange={handleStatusFilter}
+        />
 
-        {/* Filters */}
-        <FilterBar
-          searchInputId="student-search"
-          searchLabel="Search students by name, LRN, or email"
-          searchPlaceholder="Search by name, LRN, or email…"
-          searchRef={searchRef}
-          searchValue={inputVal}
-          onSearchChange={setInputVal}
-          onSearch={handleSearch}
-          onClearSearch={handleClearSearch}
-          hasFilters={hasActiveFilters}
-          onClearFilters={handleClearAll}
-          // No counts: the context's are enrollment rows, and a senior high
-          // learner has two of those a year.
-          scope={<SchoolYearPicker value={schoolYear} onChange={handleYear} counts={{}} />}
-        >
+        {/* Toolbar: search, the filter menus, Clear. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="student-search"
+            label="Search students by name, LRN, or email"
+            placeholder="Search by name, LRN, or email…"
+            inputRef={searchRef}
+            value={inputVal}
+            onChange={setInputVal}
+            onEnter={handleSearch}
+            onClear={handleClearSearch}
+          />
+
+          <FilterMenu
+            label="Sex"
+            valueLabel={SEX_FILTERS.find((o) => o.value === sexFilter)?.label ?? "All"}
+            active={Boolean(sexFilter)}
+            options={SEX_FILTERS}
+            value={sexFilter}
+            onChange={handleSexFilter}
+          />
+
           {canListUnenrolled && (
-            <FilterRow label={`Enrollment · S.Y. ${schoolYear}`}>
-              <ChipGroup
-                label={`Enrolled or not enrolled for S.Y. ${schoolYear}`}
-                options={viewOptions}
-                value={notEnrolled ? "not_enrolled" : "enrolled"}
-                onChange={handleView}
-              />
-            </FilterRow>
+            <FilterMenu
+              label="Enrollment"
+              valueLabel={notEnrolled ? "Not enrolled" : "Enrolled"}
+              active={notEnrolled}
+              options={viewOptions}
+              value={notEnrolled ? "not_enrolled" : "enrolled"}
+              onChange={handleView}
+              align="end"
+              menuWidth={200}
+            />
           )}
 
           {/* A learner's level, grade and section belong to one school year,
-              so these narrow a year's list only. */}
-          <CollapsibleFilterRow open={placementOn} label="School Level">
-            <ChipGroup
-              label="Filter by school level"
+              so these narrow a year's list only, each within the one before. */}
+          {placementOn && (
+            <FilterMenu
+              label="Level"
+              valueLabel={levelLabel ?? "All levels"}
+              active={Boolean(schoolLevel)}
               options={levelOptions}
               value={schoolLevel}
               onChange={handleLevel}
+              align="end"
+              menuWidth={220}
             />
-          </CollapsibleFilterRow>
+          )}
 
-          <CollapsibleFilterRow open={placementOn && schoolLevel !== ""} label="Grade Level">
-            <ChipGroup
-              label="Filter by grade level"
-              stagger
-              generation={schoolLevel}
+          {placementOn && schoolLevel && (
+            <FilterMenu
+              label="Grade"
+              valueLabel={gradeLevel || "All grades"}
+              active={Boolean(gradeLevel)}
               options={gradeOptions}
               value={gradeLevel}
               onChange={handleGrade}
+              align="end"
+              menuWidth={180}
             />
-          </CollapsibleFilterRow>
+          )}
 
-          <CollapsibleFilterRow open={placementOn && gradeLevel !== ""} label="Section">
-            <ChipGroup
-              label="Filter by section"
-              stagger
-              generation={`${schoolYear}|${gradeLevel}|${sections.length}`}
+          {placementOn && gradeLevel && (
+            <FilterMenu
+              label="Section"
+              valueLabel={section || "All sections"}
+              active={Boolean(section)}
               options={sectionOptions}
               value={section}
               onChange={handleSection}
+              align="end"
+              menuWidth={180}
             />
-          </CollapsibleFilterRow>
+          )}
 
-          <div className="flex flex-wrap gap-x-7 gap-y-3">
-            <FilterRow label="Status">
-              <ChipGroup
-                label="Filter by status"
-                options={statusOptions}
-                value={statusFilter}
-                onChange={handleStatusFilter}
-              />
-            </FilterRow>
-
-            <FilterRow label="Sex">
-              <ChipGroup
-                label="Filter by sex"
-                options={sexOptions}
-                value={sexFilter}
-                onChange={handleSexFilter}
-              />
-            </FilterRow>
-          </div>
-        </FilterBar>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
 
         {/* Results */}
         <motion.div
@@ -535,7 +559,21 @@ export default function StudentsPage() {
           transition={{ duration: 0.24, ease: "easeOut" }}
         >
           <Card padding="none" className="overflow-hidden">
+            <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-200 px-5 py-4">
+              <div className="flex items-baseline gap-2.5">
+                <h2 className="text-md font-bold text-neutral-900">{listTitle}</h2>
+                {!loading && !list.error && (
+                  <span className="text-sm text-neutral-500 tabular-nums">
+                    {list.count.toLocaleString()}
+                  </span>
+                )}
+              </div>
+              {ORDERING_CAPTIONS[effectiveOrdering] && (
+                <span className="text-[12px] text-neutral-500">{ORDERING_CAPTIONS[effectiveOrdering]}</span>
+              )}
+            </div>
             <Table
+              headerVariant="quiet"
               columns={tableColumns(scope)}
               loading={loading}
               error={list.error}
@@ -550,11 +588,12 @@ export default function StudentsPage() {
               {students.map((st) => {
                 const palette = getAvatarPalette(`${st.last_name}${st.first_name}`);
                 const age = calcAge(st.birth_date);
-                const fullName = [
-                  st.last_name, ",", st.first_name,
+                const givenNames = [
+                  st.first_name,
                   st.middle_name ? `${st.middle_name[0]}.` : "",
                   st.suffix ?? "",
                 ].filter(Boolean).join(" ");
+                const fullName = givenNames ? `${st.last_name}, ${givenNames}` : st.last_name;
 
                 return (
                   <TableRow
@@ -564,7 +603,7 @@ export default function StudentsPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                           style={{ background: palette.bg, color: palette.color }}
                           aria-hidden="true"
                         >
@@ -583,9 +622,7 @@ export default function StudentsPage() {
 
                     <TableCell>
                       {st.lrn ? (
-                        <span className="rounded-sm bg-neutral-100 px-2 py-1 font-mono text-xs text-neutral-700">
-                          {st.lrn}
-                        </span>
+                        <span className="font-mono text-[12px] text-neutral-800">{st.lrn}</span>
                       ) : <Blank />}
                     </TableCell>
 
@@ -615,7 +652,7 @@ export default function StudentsPage() {
                     </TableCell>
 
                     <TableCell>
-                      <StatusBadge status={st.status} map={STUDENT_STATUS_MAP} />
+                      <StatusDot status={st.status} map={STUDENT_STATUS_MAP} />
                     </TableCell>
 
                     <TableCell>

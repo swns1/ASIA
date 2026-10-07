@@ -52,6 +52,7 @@ from .services import (
     DEFAULT_WEIGHTS,
     RISK_LEVEL_THRESHOLDS,
     build_student_features,
+    previous_period_for_level,
     score_students,
 )
 
@@ -100,8 +101,9 @@ def _summarize(score_list):
     """
     School-level rollups computed once here so the dashboard charts need no
     second round trip: counts per risk band, per grade level, per section,
-    and how often each reason code fires. Ordered most-affected first, since
-    that's the order the charts read in.
+    and how often each reason code fires among the students flagged for
+    follow-up. Ordered most-affected first, since that's the order the
+    charts read in.
     """
     by_level = Counter()
     by_grade = defaultdict(Counter)
@@ -114,10 +116,14 @@ def _summarize(score_list):
         by_level[level] += 1
         by_grade[row.get("grade_level") or "Unassigned"][level] += 1
         by_section[row.get("section") or "Unassigned"][level] += 1
+        # Flagged students only: this feeds "Why they're flagged". Counting
+        # everyone assessed charted reasons that had flagged nobody -- 118
+        # "behavior concerns" in a check that flagged 52 students in all.
         # One student contributes at most once per reason code, so the bar
         # chart counts students-affected rather than sentences-emitted.
-        for code in {r["code"] for r in row.get("reasons") or []}:
-            reasons[code] += 1
+        if level in flagged_levels:
+            for code in {r["code"] for r in row.get("reasons") or []}:
+                reasons[code] += 1
 
     def _group(counter_map):
         rows = [
@@ -167,7 +173,7 @@ def _serialize_run(run, scores=None, allowed_student_ids=None):
 
     enrollments = Enrollment.objects.filter(
         enrollment_id__in=[s.enrollment_id for s in scores]
-    ).only("enrollment_id", "grade_level", "section")
+    ).only("enrollment_id", "grade_level", "section", "school_level")
     enrollment_map = {e.enrollment_id: e for e in enrollments}
 
     score_list = []
@@ -189,6 +195,11 @@ def _serialize_run(run, scores=None, allowed_student_ids=None):
             "risk_level":           sc.risk_level,
             "reasons":              sc.reasons_json or [],
             "signals_present":      sc.signals_present,
+            # Not stored: it follows from the period and the learner's level
+            # (a trend needs an earlier period), so older runs report it too.
+            "signals_possible":     4 if previous_period_for_level(
+                run.grading_period, enrollment.school_level if enrollment else None
+            ) else 3,
             # The raw figures a teacher reads, not the risk contributions —
             # see StudentRiskScore for why these can't be reconstructed.
             "average_grade":         sc.average_grade,

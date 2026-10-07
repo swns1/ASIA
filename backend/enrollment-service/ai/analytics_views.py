@@ -44,6 +44,10 @@ Design notes (methodological limitations, deliberate not accidental):
     and `attendance_rate` (both already below) are directly plottable on a
     2D chart, so the frontend plots those instead of an abstract PCA
     projection that isn't meaningful to a non-technical viewer.
+  - Clusters are ordered weakest to strongest by overall standing: the mean
+    of each centre's three standardized coordinates, the same equal-weighted
+    scale K-Means measures distance on. `band` (low / middle / high) and
+    `color` follow that order; see GROUP_BANDS.
 
 Returns:
 {
@@ -51,7 +55,8 @@ Returns:
     {
       "cluster_id": 0,
       "label": "AI-generated name",
-      "color": "#ef4444",
+      "band": "low",
+      "color": "#a32d2d",
       "student_count": 12,
       "avg_grade": 72.4,
       "min_grade": 60.0,
@@ -102,52 +107,45 @@ from .services import LEGACY_RATING_MARKS, build_student_features
 
 logger = logging.getLogger(__name__)
 
-# Fixed, ordered red↔blue diverging ramp, keyed by n_clusters (2-7, matching
-# the clamp below) — index i is rank i's color for THAT n_clusters, ascending
-# worst (reddest) -> best (bluest), with a neutral gray at the exact middle
-# for odd n_clusters. Anchored on the dataviz skill's pre-validated diverging
-# pair (red #e34948 / blue #2a78d6) and its documented blue sequential ramp
-# (steps 250-700 in the skill's palette.md), with an analogous red arm
-# derived at matching OKLCH lightness/chroma. Deliberately NOT a single
-# n_clusters-agnostic array indexed by rank alone: the reddest/bluest ends
-# mean "worst/best of THIS k", so a cluster's color must depend on both its
-# rank and k, not rank alone (rank 0 of k=2 is as bad as it gets; rank 0 of
-# k=7 is only the worst of 7 groups).
+# What a group's colour says: how it stands against the other groups -- red
+# the weakest, amber in between, green the strongest -- in the school's own
+# status colours, so it reads at a glance. Keyed by n_clusters (2-7, matching
+# the clamp below); index i is the band of the group at standing rank i
+# (0 = weakest), so a band depends on both rank and k: rank 0 of k=2 is as
+# weak as it gets, rank 0 of k=7 only the weakest of seven.
 #
-# Chosen deliberately over a red/amber/green/teal rainbow (the original
-# design direction) after that direction hard-failed
-# scripts/validate_palette.js's colorblind-safety checks under --pairs all
-# (required for scatter/bubble charts, where any two cluster bubbles can be
-# visual neighbors) — clustering 4 distinct hue families in a narrow band is
-# inherently unsafe for red-green colorblindness, the most common form.
+# Three colours at most, whatever k. Checked with the dataviz skill's
+# scripts/validate_palette.js under --pairs all (a scatter puts any two groups
+# side by side): red #a32d2d / amber #fab219 / green #0ca30c is the only
+# red-amber-green set among the documented steps that passes -- colour-blind
+# separation ΔE 11.3, normal vision 27.6. A deeper orange (#ff9800, #ec835a)
+# collapses into the green for protan or deutan readers, and no fourth step
+# passes at all. So past three groups, some groups share a band; the group
+# map tells them apart by marker shape, and every group is named in its
+# legend and beside its average. The amber is 1.8:1 on the chart surface, so
+# the frontend outlines its marks (mapFrame.isFaint).
 #
-# Validated via scripts/validate_palette.js: each arm (the red steps and the
-# blue steps used at every n_clusters) passes validateOrdinal (monotone
-# lightness, adjacent ΔL >= 0.06, light-end contrast >= 2:1, single hue) in
-# both light and dark mode. Running the full assembled array through the
-# plain categorical validator additionally confirms CVD separation and the
-# normal-vision floor PASS at every n_clusters — the accessibility-critical
-# checks. That same run also flags "Lightness band"/"Chroma floor" FAILs and
-# some sub-3:1 contrast WARNs; both are the *expected*, by-design signature
-# of any legitimate diverging/sequential ramp (a ramp spans the band and its
-# neutral midpoint reads as gray on purpose) — the skill's own docs say not
-# to "fix" a good ramp to satisfy those two categorical-only checks. The
-# WARN-band contrast steps are legal because every cluster is always
-# text-labeled (ClusterLegend cards + the scatter tooltip), never color
-# alone — the skill's required mitigation.
-CLUSTER_COLOR_STEPS = {
-    2: ["#c74845", "#2a78d6"],
-    3: ["#c74845", "#f0efec", "#2a78d6"],
-    4: ["#892b2a", "#e4857e", "#6da7ec", "#184f95"],
-    5: ["#892b2a", "#e4857e", "#f0efec", "#6da7ec", "#184f95"],
-    6: ["#762221", "#c74845", "#ea9a93", "#86b6ef", "#2a78d6", "#104281"],
-    7: ["#762221", "#c74845", "#ea9a93", "#f0efec", "#86b6ef", "#2a78d6", "#104281"],
+# Replaced a red-to-blue ramp that coloured groups by grade rank: blue could
+# not say "good", and grade rank was not standing.
+GROUP_BANDS = {
+    2: ["low", "high"],
+    3: ["low", "middle", "high"],
+    4: ["low", "middle", "middle", "high"],
+    5: ["low", "low", "middle", "high", "high"],
+    6: ["low", "low", "middle", "middle", "high", "high"],
+    7: ["low", "low", "middle", "middle", "middle", "high", "high"],
 }
+BAND_COLORS = {"low": "#a32d2d", "middle": "#fab219", "high": "#0ca30c"}
 
 CLUSTER_INTERPRETATION_PROMPT = """
 You are an academic analytics assistant for a Philippine basic education school (DepEd K–12 system).
 You are given the results of a K-Means clustering analysis on student performance data that includes
 grades, attendance rates, and behavioral narrative ratings.
+
+The clusters are listed from WEAKEST to STRONGEST overall standing (grades, attendance and behavior
+taken together), and the school colours them red, amber and green in that order. Each name must fit
+its place: never name a cluster as stronger than one listed after it. A cluster with high grades but
+poor attendance is not a group of high achievers.
 
 Your tasks:
 1. Give each cluster a SHORT, descriptive name (2-4 words max).
@@ -266,8 +264,8 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
 # both the "unset key" branch above and the "exception" branch above). Keyed
 # by n_clusters (2-7, matching the clamp `n_clusters = max(2, min(n_clusters,
 # 7))` below), each list is exactly n_clusters long, ascending worst->best to
-# match sorted_clusters' ascending avg_grade sort — rank 0 is always the
-# lowest-avg-grade cluster. Purely rank-based, not AI-derived, and
+# match sorted_clusters' standing order — rank 0 is always the weakest group
+# overall. Purely rank-based, not AI-derived, and
 # deliberately not named after a fixed DepEd grade band (e.g. "Outstanding" =
 # 90-100): KMeans cluster boundaries are data-driven and also factor in
 # attendance/narrative, not grade alone, so a cluster's actual grade range
@@ -285,8 +283,8 @@ FALLBACK_CLUSTER_NAMES = {
 
 
 def _fallback_cluster_name(rank: int, n_clusters: int) -> str:
-    """Grade-tier name for a cluster when no AI name is available, keyed by
-    the cluster's rank (0 = lowest avg grade) among n_clusters total. Relies
+    """Tier name for a cluster when no AI name is available, keyed by the
+    cluster's standing rank (0 = weakest overall) among n_clusters total. Relies
     on n_clusters already being clamped to [2, 7]; not defensive on purpose —
     if that clamp is ever removed, this should fail loudly rather than
     silently mislabel a cluster.
@@ -500,10 +498,17 @@ class ClusterAnalyticsView(APIView):
             for rating in sd["narrative_ratings"]:
                 narrative_dist_map[cluster_id][rating] += 1
 
-        # Sort by average grade ascending (cluster 0 = at-risk)
+        # Weakest to strongest by overall standing: the mean of each centre's
+        # three standardized coordinates (grade, attendance, behavior; higher
+        # is better on all three), the same equal-weighted scale K-Means
+        # measured distance on. Sorting by average grade alone put a group
+        # averaging 87 but attending 74% of days above one averaging 82 at
+        # 93% -- and the colours and fallback names follow this order, so the
+        # group missing a quarter of school called itself "Average".
+        standing = kmeans.cluster_centers_.mean(axis=1)
         sorted_clusters = sorted(
             clusters_map.items(),
-            key=lambda kv: np.mean([s["grade"] for s in kv[1]]),
+            key=lambda kv: (standing[kv[0]], np.mean([s["grade"] for s in kv[1]])),
         )
 
         # ── AI interpretation ─────────────────────────────────────────────
@@ -550,10 +555,12 @@ class ClusterAnalyticsView(APIView):
                 f"avg_grade={summary['avg_grade']}, range=[{summary['min_grade']}–{summary['max_grade']}], "
                 f"avg_attendance={att_str}, avg_narrative_score={narr_str}/3"
             )
+            band = GROUP_BANDS[n_clusters][new_id]
             clusters_response.append({
                 **summary,
                 "label":    _fallback_cluster_name(new_id, n_clusters),
-                "color":    CLUSTER_COLOR_STEPS[n_clusters][new_id],
+                "band":     band,
+                "color":    BAND_COLORS[band],
                 "students": students,
             })
 

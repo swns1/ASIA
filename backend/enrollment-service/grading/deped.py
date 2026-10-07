@@ -136,6 +136,33 @@ def percentage_score(entries):
     return (total_score / total_max) * 100
 
 
+def initial_grade_from(component_percentages):
+    """
+    DO 8 Initial Grade from (weight, percentage score) pairs, one per grading
+    component, renormalised over the components that have anything encoded.
+
+    A component whose percentage is None has nothing encoded yet: it is
+    pending, not zero. Scoring it 0 made every learner read as failing until
+    the last column was encoded, so while encoding is in progress the grade is
+    taken over the components that do have scores. Returns None when none do.
+
+    The one formula behind both the gradebook's running grade
+    (grading/views.py compute_grade) and the analytics' grade for a period
+    still being encoded (ai/services.py), so the two can't disagree.
+    """
+    weighted_total = Decimal("0")
+    encoded_weight = Decimal("0")
+    for weight, percentage in component_percentages:
+        if percentage is None:
+            continue
+        weight = Decimal(str(weight))
+        weighted_total += (percentage * weight) / Decimal("100")
+        encoded_weight += weight
+    if encoded_weight <= 0:
+        return None
+    return quantize(weighted_total * 100 / encoded_weight)
+
+
 def descriptor(grade):
     """DO 8 descriptor for a transmuted grade."""
     if grade is None:
@@ -264,3 +291,24 @@ def blocking_subjects(grades):
         outcome for outcome in summarize_subjects(grades).values()
         if outcome["remarks"] in BLOCKING_REMARKS
     ]
+
+
+def tally_averages(learners, averages):
+    """
+    Split `learners` enrollments by their grade average, for the Grades
+    overview's status band: an average of at least PASSING_GRADE passes, a
+    lower one fails, and an enrollment with no grade yet is neither.
+
+    `averages` holds one average per enrollment that has any grade (None is
+    skipped), so whoever is not in it has none. The average is the plain mean
+    of the recorded grades, the same number the overview's Average column
+    shows and its Passed/Failed filter tests.
+    """
+    graded = [a for a in averages if a is not None]
+    passed = sum(1 for a in graded if a >= PASSING_GRADE)
+    return {
+        "learners": learners,
+        "passed": passed,
+        "failed": len(graded) - passed,
+        "no_grades": max(learners - len(graded), 0),
+    }

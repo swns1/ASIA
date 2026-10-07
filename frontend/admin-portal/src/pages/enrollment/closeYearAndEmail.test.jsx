@@ -3,7 +3,7 @@
  *
  * - A finished school year could only be closed one class at a time, so one
  *   nobody closed stayed open: 47 learners of 2025-2026 still read as Enrolled.
- *   The Enrollments page now offers "Close SY" for a past year that has them.
+ *   The Enrollments page now offers "Close S.Y." for a past year that has them.
  * - A confirmation email that failed was logged for follow-up, but no screen
  *   read the log. The enrollment page now says so, with a Resend button.
  */
@@ -82,7 +82,7 @@ beforeEach(() => {
   api.getUnplacedStudents.mockResolvedValue({ school_year: "2025-2026", count: 0, results: [] });
 });
 
-describe("Close SY", { timeout: 20_000 }, () => {
+describe("Close S.Y.", { timeout: 20_000 }, () => {
   function renderYear(year) {
     return render(
       <MemoryRouter initialEntries={[`/enrollments?school_year=${year}`]}>
@@ -97,10 +97,10 @@ describe("Close SY", { timeout: 20_000 }, () => {
     api.closeSchoolYear.mockResolvedValue({ school_year: "2025-2026", completed: 47 });
     renderYear("2025-2026");
 
-    expect(await screen.findByText(/SY 2025-2026 has ended/, {}, { timeout: 5000 })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Close SY 2025-2026/ }));
+    expect(await screen.findByText(/S\.Y\. 2025-2026 has ended/, {}, { timeout: 5000 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Close S\.Y\. 2025-2026/ }));
     expect(screen.getByText("Mark all 47 completed?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Close SY 2025-2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Close S\.Y\. 2025-2026/ }));
 
     await waitFor(() => expect(api.closeSchoolYear).toHaveBeenCalledWith("2025-2026"));
   });

@@ -1,25 +1,33 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
-import Badge from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow, CollapsibleFilterRow } from "../components/ui/FilterBar";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
 import { Field, Input, Select } from "../components/FormField";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
 import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
 import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { STATUS_DOT, STATUS_TEXT } from "../constants/statusTones";
+import {
+  GRADE_LEVELS_BY_LEVEL,
+  LEVEL_DOTS,
+  LEVEL_FILTER_OPTIONS,
+  LEVEL_LABELS,
+  SHS_STRANDS,
+} from "../constants/schoolLevels";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -38,42 +46,71 @@ const deleteSubject = (id)     => _deleteSubject(id);
 const getTemplates  = ()       => _getTemplates({ is_active: true });
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-// `tone` names the shared ChipGroup palette entry. This page previously had its
-// own level→colour mapping unrelated to the one Enrollments and Requirements
-// use, so the same school level rendered in three different colours.
+// The New/Edit Subject form's level choices. `chip` is spelled out rather than
+// interpolated: Tailwind extracts class names statically, so a template like
+// `bg-${tone}-50` would never ship.
 const SCHOOL_LEVELS = [
-  // `chip` is spelled out rather than interpolated: Tailwind extracts class
-  // names statically, so a template like `bg-${tone}-50` would never ship.
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", tone: "nursery",      chip: "bg-nursery-50 text-nursery-500" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          tone: "kindergarten", chip: "bg-kindergarten-50 text-kindergarten-500" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          tone: "elementary",   chip: "bg-elementary-50 text-elementary-500" },
-  { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        tone: "juniorhigh",   chip: "bg-juniorhigh-50 text-juniorhigh-500" },
-  { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   tone: "seniorhigh",   chip: "bg-seniorhigh-50 text-seniorhigh-500" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", chip: "bg-nursery-50 text-nursery-500" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          chip: "bg-kindergarten-50 text-kindergarten-500" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          chip: "bg-elementary-50 text-elementary-500" },
+  { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        chip: "bg-juniorhigh-50 text-juniorhigh-500" },
+  { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   chip: "bg-seniorhigh-50 text-seniorhigh-500" },
 ];
 
-const GRADE_LEVELS_BY_LEVEL = {
-  nursery:           ["Nursery"],
-  kindergarten:      ["Kindergarten"],
-  elementary:        ["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6"],
-  junior_highschool: ["Grade 7","Grade 8","Grade 9","Grade 10"],
-  senior_highschool: ["Grade 11","Grade 12"],
-};
+// The band's legend: whether a subject can have grades worked out yet.
+// Computing a grade needs the subject's grading template, and without one the
+// server refuses, so "No template" is the part to fix. `param` is what the
+// list asks the server for (?has_template=).
+const TEMPLATE_FILTERS = [
+  { value: "",   label: "All" },
+  { value: "yes", label: "With template", variant: "success", param: true,  title: "Subjects with a template" },
+  { value: "no",  label: "No template",   variant: "warning", param: false, title: "Subjects with no template" },
+];
 
-const SHS_STRANDS = ["STEM","ABM","HUMSS","GAS","TVL-ICT","TVL-HE","TVL-IA","TVL-AFA","Arts and Design","Sports"];
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the other list pages.
+const SEARCH_DEBOUNCE_MS = 300;
+
+const PAGE_SIZE = 20;
 
 const TABLE_COLUMNS = [
-  { key: 'name',     label: 'Subject',          width: '28%' },
-  { key: 'code',     label: 'Code',             width: '12%' },
-  { key: 'level',    label: 'Level',            width: '14%' },
-  { key: 'grade',    label: 'Grade',            width: '11%' },
-  { key: 'strand',   label: 'Strand / Sem',     width: '16%' },
-  { key: 'template', label: 'Grading Template', width: '15%' },
-  { key: 'actions',  label: '',                 width: '4%'  },
+  { key: "name",     label: "Subject",           width: "26%" },
+  { key: "code",     label: "Code",              width: "11%" },
+  { key: "level",    label: "Level",             width: "15%" },
+  { key: "grade",    label: "Grade",             width: "10%" },
+  { key: "strand",   label: "Strand / semester", width: "12%" },
+  { key: "template", label: "Grading template",  width: "18%" },
+  { key: "actions",  label: "",                  width: "8%"  },
 ];
 
-const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? SCHOOL_LEVELS[2];
+/** Consistent treatment for "this field is empty", instead of a blank cell. */
+const Blank = () => <span className="text-sm italic text-neutral-500">—</span>;
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+/** A subject's grading template, as a dot matching the band's legend. */
+function TemplateCell({ template }) {
+  if (!template) {
+    return (
+      <span
+        className={`inline-flex items-center gap-[7px] text-sm font-semibold ${STATUS_TEXT.warning}`}
+        title="Teachers can't work out grades for this subject until it has a grading template."
+      >
+        <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT.warning}`} aria-hidden="true" />
+        No template
+      </span>
+    );
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-[3px]">
+      <span className="flex min-w-0 items-center gap-[7px] text-sm font-medium text-neutral-900">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT.success}`} aria-hidden="true" />
+        <span className="truncate">{template.template_name}</span>
+      </span>
+      <span className="pl-[15px] text-[11.5px] text-neutral-500">
+        {template.components?.length ?? 0} components · {template.total_weight ?? 0}%
+      </span>
+    </div>
+  );
+}
 
 // ── Form Modal ────────────────────────────────────────────────────────────────
 function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
@@ -173,13 +210,21 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
                   <motion.button
                     key={lvl.value}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => setF("school_level", lvl.value)}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.95 }}
                     transition={{ duration: 0.12 }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`, background: active ? lvl.bg : "white", color: active ? lvl.color : "#855c5c", fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.14s" }}
+                    // The picked level wears its own colour. These read colour
+                    // fields the level entries no longer carry, so nothing
+                    // showed which level was picked.
+                    className={`focus-ring inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-3 py-[7px] text-[12px] transition-colors duration-150 ${
+                      active
+                        ? `${lvl.chip} border-current font-bold`
+                        : "border-neutral-200 bg-white font-medium text-neutral-600 hover:border-neutral-300"
+                    }`}
                   >
-                    <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
+                    <i className={`ti ${lvl.icon} text-[13px]`} aria-hidden="true" />{lvl.label}
                   </motion.button>
                 );
               })}
@@ -257,6 +302,8 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function SubjectsPage() {
   usePageTitle("Subjects");
+  // Saving a subject is the admin's and registrar's (the server refuses
+  // everyone else), so nobody else is offered New, Edit or Delete.
   const canManage   = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   // Copying a year's setup across is the School Years API's, admin-only.
   const canCopy     = hasAnyRole(getCurrentUser(), STAFF_ADMIN);
@@ -265,57 +312,112 @@ export default function SubjectsPage() {
   // year and adjusted. Opens on the current year (or the one in the link, e.g.
   // from a year's setup checklist); never "All years" -- the same code can
   // mean a different subject in another year.
-  const [schoolYear, setSchoolYear] = useYearFilter({ allowAll: false });
+  const [schoolYear, setSchoolYear, yearIsDefault] = useYearFilter({ allowAll: false });
   const { options: yearLabels, yearStates } = useSchoolYear();
   const archived = yearStates[schoolYear] === "archived";
+  const canEdit = canManage && !archived;
   const [copying, setCopying] = useState(false);
 
-  const [subjects,     setSubjects]    = useState([]);
-  const [templates,    setTemplates]   = useState([]);
-  const [loading,      setLoading]     = useState(true);
-  const [search,       setSearch]      = useState("");
-  const [inputVal,     setInputVal]    = useState("");
-  const [levelFilter,  setLevelFilter] = useState("all");
-  const [gradeFilter,  setGradeFilter] = useState("");
-  const [page,         setPage]        = useState(1);
-  const [pageMeta,     setPageMeta]    = useState({ count: 0, next: null, previous: null });
-  const [modal,        setModal]       = useState(null);
-  const [toDelete,     setToDelete]    = useState(null);
-  const [deleteError,  setDeleteError] = useState("");
+  const [subjects,       setSubjects]       = useState([]);
+  const [templates,      setTemplates]      = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  // A failed load used to fall through to "No subjects for S.Y. … yet",
+  // which invited copying a curriculum that was already there.
+  const [loadError,      setLoadError]      = useState(null);
+  const [search,         setSearch]         = useState("");
+  const [inputVal,       setInputVal]       = useState("");
+  const [levelFilter,    setLevelFilter]    = useState("");
+  const [gradeFilter,    setGradeFilter]    = useState("");
+  const [templateFilter, setTemplateFilter] = useState("");
+  const [page,           setPage]           = useState(1);
+  const [pageMeta,       setPageMeta]       = useState({ count: 0, next: null, previous: null });
+  const [modal,          setModal]          = useState(null);
+  const [toDelete,       setToDelete]       = useState(null);
+  const [deleteError,    setDeleteError]    = useState("");
+  const [countsReload,   setCountsReload]   = useState(0);
+  const searchRef = useRef(null);
 
-  const gradeOptions = levelFilter !== "all" ? (GRADE_LEVELS_BY_LEVEL[levelFilter] ?? []) : [];
+  const template = TEMPLATE_FILTERS.find((f) => f.value === templateFilter);
+  const hasTemplate = template?.param;
 
-  const fetchSubjects = useCallback(async (p = 1, term = search, level = levelFilter, grade = gradeFilter) => {
+  const fetchSubjects = useCallback(async (p = 1) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = { page: p, school_year: schoolYear };
-      if (term)              params.search       = term;
-      if (level !== "all")   params.school_level = level;
-      if (grade)             params.grade_level  = grade;
+      if (search)      params.search       = search;
+      if (levelFilter) params.school_level = levelFilter;
+      if (gradeFilter) params.grade_level  = gradeFilter;
+      if (hasTemplate !== undefined) params.has_template = hasTemplate;
       const data = await getSubjects(params);
       setSubjects(data.results || []);
       setPageMeta({ count: data.count, next: data.next, previous: data.previous });
       setPage(p);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, [search, levelFilter, gradeFilter, schoolYear]);
+    } catch (e) {
+      console.error(e);
+      setLoadError(e);
+      setSubjects([]);
+      setPageMeta({ count: 0, next: null, previous: null });
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolYear, search, levelFilter, gradeFilter, hasTemplate]);
 
-  // First load only; filter changes call fetchSubjects themselves.
+  // Any filter, or another year, is another list: back to its first page.
+  useEffect(() => { fetchSubjects(1); }, [fetchSubjects]); // eslint-disable-line react-hooks/set-state-in-effect
+
   useEffect(() => {
     getTemplates().then((d) => setTemplates(Array.isArray(d) ? d : d?.results ?? [])).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Another year's subjects are another list: back to its first page.
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the fetch above reads, so Enter only skips the wait.
   useEffect(() => {
-    fetchSubjects(1, search, levelFilter, gradeFilter); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [schoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (inputVal === search) return;
+    const timer = setTimeout(() => setSearch(inputVal), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [inputVal, search]);
+
+  // The band's numbers: the year's subjects (in the level and grade, when
+  // set), with and without a template. Search and the template filter narrow
+  // the rows, not the band, as on the other list pages. Kept with the scope
+  // they were asked for, so a stale answer never shows.
+  const countsKey = JSON.stringify({ schoolYear, levelFilter, gradeFilter, countsReload });
+  const [counts, setCounts] = useState({ key: null, data: null });
+  useEffect(() => {
+    let cancelled = false;
+    const { schoolYear: year, levelFilter: level, gradeFilter: grade } = JSON.parse(countsKey);
+    const scope = {
+      school_year: year,
+      page_size: 1,
+      ...(level && { school_level: level }),
+      ...(grade && { grade_level: grade }),
+    };
+    Promise.all([
+      getSubjects(scope),
+      getSubjects({ ...scope, has_template: true }),
+      getSubjects({ ...scope, has_template: false }),
+    ])
+      .then(([all, yes, no]) => {
+        if (!cancelled) setCounts({ key: countsKey, data: { "": all.count, yes: yes.count, no: no.count } });
+      })
+      // Non-critical: the band reads "—" and the list still works.
+      .catch(() => { if (!cancelled) setCounts({ key: countsKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [countsKey]);
+  const bandCounts = counts.key === countsKey ? counts.data : null;
+
+  const refresh = () => {
+    fetchSubjects(page);
+    setCountsReload((k) => k + 1);
+  };
 
   const handleSave = async (id, payload) => {
     if (id) await updateSubject(id, payload);
     else    await createSubject(payload);
     toast.success(id ? "Subject updated." : "Subject created.");
     setModal(null);
-    fetchSubjects(page, search, levelFilter, gradeFilter);
+    refresh();
   };
 
   const [deletingSubject, setDeletingSubject] = useState(false);
@@ -328,7 +430,7 @@ export default function SubjectsPage() {
       await deleteSubject(toDelete.subject_id);
       toast.success("Subject deleted.");
       setToDelete(null);
-      fetchSubjects(page, search, levelFilter, gradeFilter);
+      refresh();
     } catch (e) {
       const msg = e.message || "Delete failed.";
       setDeleteError(msg);
@@ -338,213 +440,254 @@ export default function SubjectsPage() {
     }
   };
 
-  const totalPages = Math.ceil(pageMeta.count / 20);
+  // What narrows the list. The year doesn't: every visit opens on one.
+  const narrowed = Boolean(search || levelFilter || gradeFilter || templateFilter);
+  // The current year is where the page opens, so it isn't a filter to clear.
+  const hasFilters = narrowed || !yearIsDefault;
+  const clearFilters = () => {
+    setSchoolYear(null); // back to the current school year
+    setInputVal(""); setSearch("");
+    setLevelFilter(""); setGradeFilter(""); setTemplateFilter("");
+    searchRef.current?.focus();
+  };
 
+  const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
   const isFirstRender = useIsFirstRender();
+
+  // What the band counts: the year, and the level and grade when set.
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === levelFilter)?.label;
+  const bandCaption = [
+    `subject${bandCounts?.[""] === 1 ? "" : "s"} in S.Y. ${schoolYear}`,
+    levelFilter && levelLabel,
+    gradeFilter,
+  ].filter(Boolean).join(" · ");
+
+  const gradeMenuOptions = [
+    { value: "", label: "All grades" },
+    ...(GRADE_LEVELS_BY_LEVEL[levelFilter] ?? []).map((g) => ({ value: g, label: g })),
+  ];
 
   return (
     <>
-      {/* Topbar */}
       <PageHeader
         title="Subjects"
-        icon="ti-book"
-        subtitle={loading ? "Loading…" : `${pageMeta.count.toLocaleString()} subjects in S.Y. ${schoolYear}'s curriculum`}
         actions={
-          <>
-            {canCopy && !archived && (
-              <Button variant="secondary" icon="ti-copy" onClick={() => setCopying(true)}>
-                Copy from an earlier year
+          canManage && (
+            <>
+              {canCopy && !archived && (
+                <Button variant="secondary" icon="ti-copy" onClick={() => setCopying(true)}>
+                  Copy from an earlier year
+                </Button>
+              )}
+              <Button
+                icon={archived ? "ti-lock" : "ti-plus"}
+                disabled={archived}
+                title={archived ? `S.Y. ${schoolYear} is archived, so its subjects are read-only` : undefined}
+                onClick={() => setModal({ mode: "create" })}
+              >
+                New Subject
               </Button>
-            )}
-            <Button
-              icon={archived ? "ti-lock" : "ti-plus"}
-              disabled={archived}
-              title={archived ? `S.Y. ${schoolYear} is archived, so its subjects are read-only` : undefined}
-              onClick={() => setModal({ mode: "create" })}
-            >
-              New Subject
-            </Button>
-          </>
+            </>
+          )
         }
       />
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-        {/* Search + filters */}
-        <FilterBar
-          animate={isFirstRender}
-          animateDelay={0.22}
-          searchValue={inputVal}
-          onSearchChange={setInputVal}
-          onSearch={() => { setSearch(inputVal); fetchSubjects(1, inputVal, levelFilter, gradeFilter); }}
-          onClearSearch={() => { setInputVal(""); setSearch(""); fetchSubjects(1, "", levelFilter, gradeFilter); }}
-          searchPlaceholder="Search by code or name…"
-          searchLabel="Search subjects"
-          searchInputId="subjects-search"
-          scope={<SchoolYearPicker value={schoolYear} onChange={setSchoolYear} includeAllYears={false} counts={{}} />}
-          hasFilters={Boolean(search || levelFilter !== "all" || gradeFilter)}
-          onClearFilters={() => {
-            setInputVal(""); setSearch("");
-            setLevelFilter("all"); setGradeFilter("");
-            fetchSubjects(1, "", "all", "");
-          }}
-        >
-          <FilterRow label="School Level">
-            <ChipGroup
-              options={[
-                { value: "all", label: "All Subjects", icon: "ti-books", tone: "brand", count: !loading ? pageMeta.count : null },
-                ...SCHOOL_LEVELS.map((l) => ({ value: l.value, label: l.label, icon: l.icon, tone: l.tone })),
-              ]}
-              value={levelFilter}
-              onChange={(v) => {
-                setLevelFilter(v);
-                setGradeFilter("");
-                fetchSubjects(1, inputVal, v, "");
-              }}
-              label="Filter by school level"
-            />
-          </FilterRow>
+        {/* ── The template split, and its filter ──
+            The school year sits in the band because its numbers are counted
+            for it. A curriculum is always one year's, so there's no All years. */}
+        <StatusBand
+          total={bandCounts?.[""]}
+          caption={bandCaption}
+          aside={<SchoolYearMenu value={schoolYear} onChange={setSchoolYear} includeAllYears={false} />}
+          options={TEMPLATE_FILTERS.map((f) => ({
+            value: f.value,
+            label: f.label,
+            count: bandCounts?.[f.value],
+            variant: f.variant,
+          }))}
+          value={templateFilter}
+          allValue=""
+          onChange={setTemplateFilter}
+          label="Filter by grading template"
+        />
 
-          <CollapsibleFilterRow open={levelFilter !== "all"} label="Grade Level">
-            <ChipGroup
-              options={["All Grades", ...gradeOptions].map((g) => ({
-                value: g === "All Grades" ? "" : g,
-                label: g,
-              }))}
+        {/* ── Toolbar: search, the filter menus, Clear ──
+            The menus open to the right edge, where the pills sit. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="subjects-search"
+            label="Search subjects by code or name"
+            placeholder="Search by code or name…"
+            inputRef={searchRef}
+            value={inputVal}
+            onChange={setInputVal}
+            onEnter={() => setSearch(inputVal)}
+            onClear={() => { setInputVal(""); setSearch(""); }}
+          />
+
+          <FilterMenu
+            label="Level"
+            valueLabel={levelLabel ?? "All levels"}
+            active={Boolean(levelFilter)}
+            options={LEVEL_FILTER_OPTIONS}
+            value={levelFilter}
+            onChange={(v) => { setLevelFilter(v); setGradeFilter(""); }}
+            align="end"
+            menuWidth={220}
+          />
+
+          {/* A grade only narrows within a level. */}
+          {levelFilter && (
+            <FilterMenu
+              label="Grade"
+              valueLabel={gradeFilter || "All grades"}
+              active={Boolean(gradeFilter)}
+              options={gradeMenuOptions}
               value={gradeFilter}
-              onChange={(v) => { setGradeFilter(v); fetchSubjects(1, inputVal, levelFilter, v); }}
-              label="Filter by grade level"
-              stagger
-              generation={levelFilter}
+              onChange={setGradeFilter}
+              align="end"
+              menuWidth={180}
             />
-          </CollapsibleFilterRow>
-        </FilterBar>
+          )}
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
 
         <ArchivedYearNotice schoolYear={schoolYear} records="subjects" />
 
-        {/* Table */}
+        {/* ── Table ── */}
         <motion.div
           initial={isFirstRender ? { opacity: 0, y: 10 } : false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.34 : 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
         >
           <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">{template?.title ?? "All subjects"}</h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">
+                  {pageMeta.count.toLocaleString()}
+                </span>
+              )}
+            </div>
             <Table
+              headerVariant="quiet"
               columns={TABLE_COLUMNS}
               loading={loading}
+              error={loadError}
+              onRetry={() => fetchSubjects(page)}
+              errorSubject="subjects"
               isEmpty={subjects.length === 0}
               skeletonRows={8}
               empty={{
                 icon: "ti-book-off",
-                title: search || levelFilter !== "all" ? "No subjects found" : `No subjects for S.Y. ${schoolYear} yet`,
-                subtitle: search || levelFilter !== "all"
-                  ? "Try a different search or add a new subject"
+                withAvatar: false,
+                title: narrowed ? "No subjects match these filters" : `No subjects for S.Y. ${schoolYear} yet`,
+                subtitle: narrowed
+                  ? "Try a different search, or clear the filters to see the whole year."
                   : canCopy
                     ? "Copy them from an earlier year, or add them one by one"
                     : "Add them one by one, or ask an admin to copy them from an earlier year",
+                action: narrowed ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : null,
               }}
             >
-              {subjects.map((sub) => {
-                const lvlMeta = getLevelMeta(sub.school_level);
-                const hasTpl  = sub.grading_template_detail;
-                return (
-                  <TableRow
-                    key={sub.subject_id}
-                    onClick={archived ? undefined : () => setModal({ mode: "edit", subject: sub })}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <div className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] ${lvlMeta.chip}`}>
-                          <i className={`ti ${lvlMeta.icon} text-[15px]`} aria-hidden="true" />
-                        </div>
-                        <div className="text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
-                          {sub.subject_name}
-                        </div>
-                      </div>
-                    </TableCell>
+              {subjects.map((sub) => (
+                <TableRow
+                  key={sub.subject_id}
+                  onClick={canEdit ? () => setModal({ mode: "edit", subject: sub }) : undefined}
+                >
+                  <TableCell>
+                    <div className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+                      {sub.subject_name}
+                    </div>
+                  </TableCell>
 
-                    <TableCell>
-                      <span className="rounded-md bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700">
-                        {sub.subject_code}
-                      </span>
-                    </TableCell>
+                  <TableCell>
+                    <span className="font-mono text-[12px] text-neutral-800">{sub.subject_code}</span>
+                  </TableCell>
 
-                    <TableCell>
-                      <Badge variant={lvlMeta.tone} icon={lvlMeta.icon} size="sm">
-                        {lvlMeta.label}
-                      </Badge>
-                    </TableCell>
+                  {/* The same dot as the Level menu, so a level reads the
+                      same in both. */}
+                  <TableCell>
+                    <span className="flex min-w-0 items-center gap-2 text-sm text-neutral-800">
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOTS[sub.school_level] ?? "bg-neutral-400"}`}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{LEVEL_LABELS[sub.school_level] ?? sub.school_level}</span>
+                    </span>
+                  </TableCell>
 
-                    <TableCell className="text-[13px] text-neutral-700">{sub.grade_level}</TableCell>
+                  <TableCell>
+                    <span className="text-sm font-medium text-neutral-900">{sub.grade_level}</span>
+                  </TableCell>
 
-                    <TableCell>
-                      {sub.strand || sub.semester ? (
-                        <div className="text-xs text-neutral-700">
-                          {sub.strand && <span className="block">{sub.strand}</span>}
-                          {sub.semester && (
-                            <span className="text-xs text-neutral-500">
-                              {sub.semester === "1st" ? "1st Semester" : "2nd Semester"}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs italic text-neutral-500">—</span>
-                      )}
-                    </TableCell>
+                  <TableCell>
+                    {sub.strand || sub.semester ? (
+                      <>
+                        {sub.strand && <div className="text-sm text-neutral-800">{sub.strand}</div>}
+                        {sub.semester && (
+                          <div className="text-[11.5px] text-neutral-500">
+                            {sub.semester === "1st" ? "1st Semester" : "2nd Semester"}
+                          </div>
+                        )}
+                      </>
+                    ) : <Blank />}
+                  </TableCell>
 
-                    <TableCell>
-                      {hasTpl ? (
-                        <div className="inline-flex flex-col gap-0.5">
-                          <Badge variant="success" icon="ti-check" size="sm">
-                            {hasTpl.template_name}
-                          </Badge>
-                          <span className="pl-0.5 text-xs text-neutral-500">
-                            {hasTpl.components?.length ?? 0} components · {hasTpl.total_weight ?? 0}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-neutral-300 px-2.5 py-0.5 text-xs italic text-neutral-500">
-                          <i className="ti ti-minus text-[10px]" aria-hidden="true" />No template
-                        </span>
-                      )}
-                    </TableCell>
+                  <TableCell>
+                    <TemplateCell template={sub.grading_template_detail} />
+                  </TableCell>
 
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      {archived ? (
-                        <span className="text-xs text-neutral-500">Archived</span>
-                      ) : (
+                  {/* Row actions must not trigger the row's own click. */}
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {archived ? (
+                      <span className="text-xs text-neutral-500">Archived</span>
+                    ) : canManage ? (
                       <div className="flex gap-1">
                         <Button
                           variant="ghost" size="sm" icon="ti-pencil"
                           aria-label={`Edit ${sub.subject_name}`}
                           onClick={() => setModal({ mode: "edit", subject: sub })}
                         />
-                        {canManage && (
-                          <Button
-                            variant="ghost" size="sm" icon="ti-trash"
-                            aria-label={`Delete ${sub.subject_name}`}
-                            onClick={() => setToDelete(sub)}
-                          />
-                        )}
+                        <Button
+                          variant="ghost" size="sm" icon="ti-trash"
+                          aria-label={`Delete ${sub.subject_name}`}
+                          className="hover:bg-error-50 hover:text-error-500"
+                          onClick={() => setToDelete(sub)}
+                        />
                       </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
             </Table>
           </Card>
         </motion.div>
 
-        {!loading && pageMeta.count > 0 && (
+        {!loading && !loadError && pageMeta.count > 0 && (
           <Pagination
             page={page}
             totalPages={totalPages}
             count={pageMeta.count}
             hasPrevious={Boolean(pageMeta.previous)}
             hasNext={Boolean(pageMeta.next)}
-            onPageChange={(p) => fetchSubjects(p, search, levelFilter, gradeFilter)}
+            onPageChange={(p) => fetchSubjects(p)}
           />
         )}
 
@@ -569,7 +712,7 @@ export default function SubjectsPage() {
             key="delete-modal"
             icon="ti-trash"
             title="Delete subject?"
-            message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{toDelete.subject_name}</strong>. This cannot be undone and may affect existing grades.</>}
+            message={<>You&apos;re about to delete <strong className="text-neutral-900">{toDelete.subject_name}</strong>. This cannot be undone. A subject with grades or scores already recorded can&apos;t be deleted.</>}
             loading={deletingSubject}
             error={deleteError}
             onConfirm={handleDelete}
@@ -586,12 +729,10 @@ export default function SubjectsPage() {
             availableParts={["subjects"]}
             initialParts={["subjects"]}
             onClose={() => setCopying(false)}
-            onDone={() => fetchSubjects(1, search, levelFilter, gradeFilter)}
+            onDone={() => { fetchSubjects(1); setCountsReload((k) => k + 1); }}
           />
         )}
       </AnimatePresence>
     </>
   );
 }
-
-
