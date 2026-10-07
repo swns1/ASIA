@@ -17,10 +17,14 @@ import { STATUS_DOT } from "../../constants/statusTones";
 //   />
 //
 // `options` lists "all" first, then each status with its Badge variant
-// (statusMaps.js), which picks its dot colour. A count left undefined reads as
-// "—" and draws no segment, which is how the band shows counts still loading.
+// (statusMaps.js), which picks its dot colour. A band split by categories
+// instead (payment methods) gives each option a literal `dot` class from
+// statusTones.SERIES_DOT. A count left undefined reads as "—" and draws no
+// segment, which is how the band shows counts still loading. `format` writes
+// the numbers, for a band that counts money.
 
-const fmt = (n) => (n == null ? "—" : n.toLocaleString());
+const plain = (n) => (n == null ? "—" : n.toLocaleString());
+const dotOf = (o) => o.dot ?? STATUS_DOT[o.variant] ?? STATUS_DOT.muted;
 
 export default function StatusBand({
   total,
@@ -32,7 +36,9 @@ export default function StatusBand({
   allValue = "",
   onChange,
   label = "Filter by status",
+  format = plain,
 }) {
+  const fmt = (n) => (n == null ? "—" : format(n));
   // A status with nobody in it gets no segment rather than a 6px sliver,
   // which would claim there was someone.
   const segments = options.filter((o) => o.value !== allValue && o.count > 0);
@@ -62,7 +68,7 @@ export default function StatusBand({
         {segments.map((o) => (
           <span
             key={o.value}
-            className={`transition-opacity duration-[180ms] ${STATUS_DOT[o.variant] ?? STATUS_DOT.muted} ${
+            className={`transition-opacity duration-[180ms] ${dotOf(o)} ${
               showingAll || value === o.value ? "opacity-100" : "opacity-[0.28]"
             }`}
             style={{ flexGrow: o.count, flexBasis: 0, minWidth: 6 }}
@@ -88,7 +94,7 @@ export default function StatusBand({
             >
               {!isAll && (
                 <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[o.variant] ?? STATUS_DOT.muted}`}
+                  className={`h-2 w-2 shrink-0 rounded-full ${dotOf(o)}`}
                   aria-hidden="true"
                 />
               )}

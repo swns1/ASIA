@@ -68,19 +68,11 @@ async function runScan() {
     </MemoryRouter>,
   );
   fireEvent.click(screen.getByRole("tab", { name: /Grade-Based Eligibility/ }));
-  // The tab adopts the global year in an effect; scanning before that lands
-  // is a no-op, so wait for the year chip to show as chosen.
-  //
-  // Queried through `pressed` rather than read off getAttribute inside a
-  // waitFor: the latter re-throws on the FIRST miss if getByRole itself
-  // cannot find the chip yet, and its 1s default lost the race whenever the
-  // suite ran all 26 files in parallel on a loaded machine. This form retries
-  // the whole query, and says what it is waiting for.
-  await screen.findByRole(
-    "button",
-    { name: /2026-2027/, pressed: true },
-    { timeout: 5000 },
-  );
+  // The awards tab fades out first, and it has a year menu of its own, so
+  // wait for this tab's: its Period menu, and the year it scans. findByRole
+  // retries the whole query, which a getAttribute read inside waitFor did not.
+  await screen.findByRole("button", { name: /^Period:/ }, { timeout: 5000 });
+  expect(screen.getByRole("button", { name: "School year: 2026-2027" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /Scan Now/ }));
 }
 

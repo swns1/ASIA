@@ -18,6 +18,24 @@ export const STATUS_DOT = {
   brand:   "bg-brand-500",
 };
 
+/**
+ * Dots for a band split by categories rather than statuses (payment methods,
+ * scholarship types) — tokens.css `--color-series-*`. Hand them out in the
+ * categories' own fixed order with seriesDot(i), so a category keeps its
+ * colour whatever the filters do. Past the sixth, a category goes grey; its
+ * label still names it.
+ */
+export const SERIES_DOT = [
+  "bg-series-1",
+  "bg-series-2",
+  "bg-series-3",
+  "bg-series-4",
+  "bg-series-5",
+  "bg-series-6",
+];
+
+export const seriesDot = (index) => SERIES_DOT[index] ?? STATUS_DOT.muted;
+
 /** The text tone for each variant, contrast-checked for labels. */
 export const STATUS_TEXT = {
   success: "text-success-500",

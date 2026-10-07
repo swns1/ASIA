@@ -111,6 +111,22 @@
   --color-seniorhigh-50:    #fde8f8;
   --color-seniorhigh-500:   #be185d;
 
+  /* ── Categories in a status band ───────────────────────────────────────
+     For a band split by something that isn't a status: payment methods,
+     scholarship types. The status dots fail as a six-way palette (green and
+     orange nearly merge for red-green colour blindness), so these are a
+     validated categorical set instead: assigned in the categories' own
+     fixed order, never by rank, and the order is what keeps neighbouring
+     segments apart. Checked on the band (#180c0c) and on white rows: every
+     adjacent pair clears the colour-blind and normal-vision floors, and all
+     six clear 3:1. The legend's labels say what each one is. */
+  --color-series-1: #3987e5;  /* blue */
+  --color-series-2: #d95926;  /* orange */
+  --color-series-3: #199e70;  /* aqua */
+  --color-series-4: #c98500;  /* yellow */
+  --color-series-5: #d55181;  /* magenta */
+  --color-series-6: #9085e9;  /* violet */
+
   /* ── Typography ────────────────────────────────────────────────────────
      11px is a hard floor: the old 9.5px/10.5px labels were unreadable. */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;

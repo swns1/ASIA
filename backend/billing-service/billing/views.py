@@ -42,6 +42,39 @@ from .services import (
 PAYMENT_PLANS = {"monthly", "quarterly", "semi_annual", "annual"}
 
 
+def _per_invoice_sum(model, field):
+    """One invoice's total of `field` across `model`'s rows, 0 when it has none."""
+    from django.db.models import DecimalField, OuterRef, Subquery, Value
+    from django.db.models.functions import Coalesce
+
+    total = (
+        model.objects.filter(invoice_id=OuterRef("pk"))
+        .order_by().values("invoice_id").annotate(t=Sum(field)).values("t")[:1]
+    )
+    return Coalesce(
+        Subquery(total), Value(Decimal("0")),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+
+
+def with_amounts(queryset):
+    """
+    Invoices annotated with `net_amount` (items less discounts) and `balance`
+    (net less payments), worked out exactly as StudentInvoiceSerializer does,
+    so the list can be sorted by what is owed. Both are computed, not stored:
+    sorting on them used to be offered and silently ignored, leaving the list
+    newest first under an "Amount" or "Balance" label.
+    """
+    from django.db.models import F
+
+    return queryset.annotate(
+        net_amount=_per_invoice_sum(StudentInvoiceItem, "amount")
+        - _per_invoice_sum(StudentInvoiceDiscount, "amount"),
+    ).annotate(
+        balance=F("net_amount") - _per_invoice_sum(StudentPayment, "amount_paid"),
+    )
+
+
 def _parse_date(value):
     """Parse a 'YYYY-MM-DD' string into a date; returns None if missing/invalid."""
     if not value:
@@ -449,11 +482,11 @@ class StudentInvoiceViewSet(
     owner_enrollment_id_field = "enrollment_id"
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_fields = ("status", "payment_plan", "enrollment_id")
-    ordering_fields = ("invoice_id", "invoice_date", "due_date")
+    ordering_fields = ("invoice_id", "invoice_date", "due_date", "net_amount", "balance")
     ordering = ("-invoice_id",)
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = with_amounts(super().get_queryset())
         # Guardians only ever see invoices for their own child(ren)'s
         # enrollments; an unlinked guardian gets an empty list (fail closed).
         if getattr(self.request.user, "role", None) == "guardian":
