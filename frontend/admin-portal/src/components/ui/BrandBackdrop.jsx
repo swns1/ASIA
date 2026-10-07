@@ -9,17 +9,36 @@
 // container's corners, so the container doesn't need `overflow-hidden` and
 // can hold a menu that opens past its edge (the Enrollments school year).
 //
+// `tone="light"` draws the same texture in faint red for a white container
+// (the light status band), where the dark tone's white dots wouldn't show.
+//
 // The login's glows drift; these hold still, since the panels that use them
 // are read, not glanced at.
-export default function BrandBackdrop() {
+
+// Every class string is a complete literal, as Tailwind needs.
+const LAYERS = {
+  dark: {
+    dots: "bg-[radial-gradient(circle,rgba(255,255,255,0.035)_1px,transparent_1px)]",
+    low: "bg-[radial-gradient(circle,rgba(224,49,49,0.26)_0%,transparent_70%)]",
+    high: "bg-[radial-gradient(circle,rgba(224,49,49,0.10)_0%,transparent_70%)]",
+  },
+  light: {
+    dots: "bg-[radial-gradient(circle,rgba(224,49,49,0.06)_1px,transparent_1px)]",
+    low: "bg-[radial-gradient(circle,rgba(224,49,49,0.08)_0%,transparent_70%)]",
+    high: "bg-[radial-gradient(circle,rgba(224,49,49,0.04)_0%,transparent_70%)]",
+  },
+};
+
+export default function BrandBackdrop({ tone = "dark" }) {
+  const l = LAYERS[tone] ?? LAYERS.dark;
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[length:20px_20px]" />
-      <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(224,49,49,0.26)_0%,transparent_70%)]" />
-      <div className="absolute -right-16 -top-20 h-60 w-60 rounded-full bg-[radial-gradient(circle,rgba(224,49,49,0.10)_0%,transparent_70%)]" />
+      <div className={`absolute inset-0 bg-[length:20px_20px] ${l.dots}`} />
+      <div className={`absolute -bottom-32 -left-24 h-80 w-80 rounded-full ${l.low}`} />
+      <div className={`absolute -right-16 -top-20 h-60 w-60 rounded-full ${l.high}`} />
     </div>
   );
 }

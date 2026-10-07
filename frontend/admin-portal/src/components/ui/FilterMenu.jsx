@@ -16,9 +16,9 @@ const ALIGN = {
   end: "right-0",
 };
 
-// The pill. "light" sits on the page; "dark" sits on a StatusBand, where it
-// stays outlined whatever it's set to, since the band has no pale tint to
-// mark "set" with.
+// The pill. "light" sits on the page or a light StatusBand; "dark" sits on a
+// dark StatusBand, where it stays outlined whatever it's set to, since the
+// band has no pale tint to mark "set" with.
 const TONES = {
   light: {
     trigger: "h-10 rounded-lg",

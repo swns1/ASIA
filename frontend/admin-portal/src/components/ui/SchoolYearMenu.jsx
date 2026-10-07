@@ -1,4 +1,6 @@
+import { useContext } from "react";
 import FilterMenu from "./FilterMenu";
+import { BandToneContext } from "../../hooks/useBandTone";
 import { useSchoolYear } from "../../context/SchoolYearContext";
 import useArchivedYears from "../../hooks/useArchivedYears";
 import { groupYears } from "../../utils/schoolYear";
@@ -15,13 +17,14 @@ import { groupYears } from "../../utils/schoolYear";
 // useYearFilter({ allowAll: false }). `years` replaces the registered years
 // when a page lists only those it has records for (Invoices, Payments); the
 // year on screen is kept in the list either way, so the pill never names a
-// year the menu doesn't offer.
+// year the menu doesn't offer. It takes the band's tone, light or dark.
 export default function SchoolYearMenu({ value, onChange, includeAllYears = true, years }) {
   const { options: registered = [], currentYear } = useSchoolYear();
   const options = years
     ? [...new Set([...years, ...(value ? [value] : [])])].sort().reverse() // newest first
     : registered;
   const isArchived = useArchivedYears();
+  const tone = useContext(BandToneContext);
 
   const menuOptions = [
     ...groupYears(options, currentYear).flatMap(([, group]) => group).map((y) => ({
@@ -38,7 +41,7 @@ export default function SchoolYearMenu({ value, onChange, includeAllYears = true
 
   return (
     <FilterMenu
-      tone="dark"
+      tone={tone}
       label="School year"
       valueLabel={value || "All years"}
       options={menuOptions}

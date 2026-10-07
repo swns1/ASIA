@@ -15,6 +15,7 @@ import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
+import DeveloperTab from "./billingSettings/DeveloperTab";
 
 import {
   getSchoolSettings as _getSettings,
@@ -71,6 +72,8 @@ const baseCss = `
 const TABS = [
   { id: "general", label: "General",       icon: "ti-settings" },
   { id: "fees",    label: "Fee Schedules", icon: "ti-cash"     },
+  // Developer switches (the status band's dark look): a dev build only.
+  ...(import.meta.env.DEV ? [{ id: "developer", label: "Developer", icon: "ti-code" }] : []),
 ];
 
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
@@ -101,7 +104,13 @@ export default function BillingSettingsPage() {
       {/* Content */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <AnimatePresence mode="wait">
-          {tab === "general" ? <GeneralSettingsTab key="general" /> : <FeeSchedulesTab key="fees" />}
+          {tab === "general" ? (
+            <GeneralSettingsTab key="general" />
+          ) : tab === "fees" ? (
+            <FeeSchedulesTab key="fees" />
+          ) : (
+            <DeveloperTab key="developer" />
+          )}
         </AnimatePresence>
       </div>
     </>

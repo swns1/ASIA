@@ -1,5 +1,6 @@
 import BrandBackdrop from "./BrandBackdrop";
 import { STATUS_DOT } from "../../constants/statusTones";
+import useBandTone, { BandToneContext } from "../../hooks/useBandTone";
 
 // StatusBand — a list page's status mix, and its status filter.
 //
@@ -22,6 +23,35 @@ import { STATUS_DOT } from "../../constants/statusTones";
 // statusTones.SERIES_DOT. A count left undefined reads as "—" and draws no
 // segment, which is how the band shows counts still loading. `format` writes
 // the numbers, for a band that counts money.
+//
+// The band is a white card by default. `tone` forces "light" or "dark" (the
+// brand panel); left out, it follows hooks/useBandTone, a developer switch.
+
+// Every class string is a complete literal, as Tailwind needs.
+const TONES = {
+  light: {
+    panel: "border border-neutral-200 bg-white shadow-sm",
+    total: "text-neutral-900",
+    caption: "text-neutral-600",
+    hint: "text-neutral-500",
+    track: "bg-neutral-200",
+    chip: "border-neutral-300 bg-white text-neutral-700 hover:border-brand-500",
+    chipOn: "border-brand-500 bg-brand-100 text-brand-600",
+    count: "text-neutral-900",
+    countOn: "text-brand-600",
+  },
+  dark: {
+    panel: "bg-brand-950 shadow-lg",
+    total: "text-white",
+    caption: "text-brand-300",
+    hint: "text-brand-border",
+    track: "bg-white/6",
+    chip: "border-white/16 bg-transparent text-neutral-50 hover:border-white/30",
+    chipOn: "border-brand-300 bg-white/12 text-neutral-50",
+    count: "text-white",
+    countOn: "text-white",
+  },
+};
 
 const plain = (n) => (n == null ? "—" : n.toLocaleString());
 const dotOf = (o) => o.dot ?? STATUS_DOT[o.variant] ?? STATUS_DOT.muted;
@@ -29,15 +59,22 @@ const dotOf = (o) => o.dot ?? STATUS_DOT[o.variant] ?? STATUS_DOT.muted;
 export default function StatusBand({
   total,
   caption,
-  // Top right: the hint on Students, the school year menu on Enrollments.
+  // Top right: the school year menu on most pages.
   aside,
+  // Top right instead of `aside`: a line of help ("Pick a role to filter the
+  // list"), in the band's own hint colour. Hidden on a phone.
+  hint,
   options,
   value,
   allValue = "",
   onChange,
   label = "Filter by status",
   format = plain,
+  tone: toneProp,
 }) {
+  const storedTone = useBandTone();
+  const tone = toneProp ?? storedTone;
+  const t = TONES[tone] ?? TONES.light;
   const fmt = (n) => (n == null ? "—" : format(n));
   // A status with nobody in it gets no segment rather than a 6px sliver,
   // which would claim there was someone.
@@ -49,22 +86,24 @@ export default function StatusBand({
     // below, which are later in the page and would otherwise paint on top.
     <section
       aria-label="Status summary"
-      className="relative isolate z-20 flex flex-col gap-4 rounded-2xl bg-brand-950 px-6 py-[22px] shadow-lg"
+      className={`relative isolate z-20 flex flex-col gap-4 rounded-2xl px-6 py-[22px] ${t.panel}`}
     >
-      <BrandBackdrop />
+      <BrandBackdrop tone={tone} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-baseline gap-3">
-          <span className="text-3xl font-bold leading-none tracking-[-0.02em] text-white tabular-nums">
+          <span className={`text-3xl font-bold leading-none tracking-[-0.02em] tabular-nums ${t.total}`}>
             {fmt(total)}
           </span>
-          <span className="text-base text-brand-300">{caption}</span>
+          <span className={`text-base ${t.caption}`}>{caption}</span>
         </div>
-        {aside}
+        <BandToneContext.Provider value={tone}>
+          {aside ?? (hint && <span className={`hidden text-sm sm:block ${t.hint}`}>{hint}</span>)}
+        </BandToneContext.Provider>
       </div>
 
       {/* Decorative: the legend below states every number the bar draws. */}
-      <div className="flex h-2.5 gap-[3px] overflow-hidden rounded-full bg-white/6" aria-hidden="true">
+      <div className={`flex h-2.5 gap-[3px] overflow-hidden rounded-full ${t.track}`} aria-hidden="true">
         {segments.map((o) => (
           <span
             key={o.value}
@@ -88,8 +127,8 @@ export default function StatusBand({
               // Picking the selected status again goes back to everyone, as
               // the stat tiles did.
               onClick={() => onChange(selected && !isAll ? allValue : o.value)}
-              className={`focus-ring inline-flex h-[34px] items-center gap-2 rounded-full border-[1.5px] px-3.5 text-[12.5px] font-semibold text-neutral-50 transition-colors duration-150 ${
-                selected ? "border-brand-300 bg-white/12" : "border-white/16 bg-transparent hover:border-white/30"
+              className={`focus-ring inline-flex h-[34px] items-center gap-2 rounded-full border-[1.5px] px-3.5 text-[12.5px] font-semibold transition-colors duration-150 ${
+                selected ? t.chipOn : t.chip
               }`}
             >
               {!isAll && (
@@ -101,7 +140,7 @@ export default function StatusBand({
               {/* The space keeps the name "Active 1,102", not "Active1,102";
                   a flex row doesn't draw it. */}
               {o.label}{" "}
-              <span className="font-bold text-white tabular-nums">{fmt(o.count)}</span>
+              <span className={`font-bold tabular-nums ${selected ? t.countOn : t.count}`}>{fmt(o.count)}</span>
             </button>
           );
         })}
