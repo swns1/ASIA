@@ -7,15 +7,18 @@ import { useNavigate } from "react-router-dom";
 import Modal from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import Card, { StatCard } from "../components/ui/Card";
-import FilterBar, { FilterRow } from "../components/ui/FilterBar";
+import Card from "../components/ui/Card";
 import ChipGroup from "../components/ui/ChipGroup";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
-import Badge from "../components/ui/Badge";
+import Badge, { StatusDot } from "../components/ui/Badge";
 import Pagination from "../components/Pagination";
 import Alert from "../components/ui/Alert";
 import { Field, Input } from "../components/FormField";
 import { ROLE_MAP } from "../constants/statusMaps";
+import { ROLE_DOT, ROLE_ORDER } from "../constants/roleDots";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 import { fieldErrorsFrom, firstMessageFrom } from "../utils/apiError";
 import { collect, required, email as emailCheck, minLength, hasErrors, focusFirstError } from "../utils/validation";
@@ -34,17 +37,12 @@ import {
 const ROLES = ["admin", "super_admin", "registrar", "accounting", "teacher", "guardian"];
 
 const TABLE_COLUMNS = [
-  { key: "user",    label: "User",    width: "45%" },
-  { key: "role",    label: "Role",    width: "20%" },
-  { key: "id",      label: "ID",      width: "15%" },
-  { key: "actions", label: "Actions", width: "20%", align: "right" },
+  { key: "user",    label: "User",    width: "42%" },
+  { key: "role",    label: "Role",    width: "18%" },
+  { key: "status",  label: "Status",  width: "14%" },
+  { key: "id",      label: "ID",      width: "10%" },
+  { key: "actions", label: "Actions", width: "16%", align: "right" },
 ];
-
-// The role chips and stat cards filter by these groups.
-const ROLE_FILTER_PARAM = {
-  admin: "admin,super_admin",
-  staff: "registrar,teacher,accounting",
-};
 
 // A deactivated account's avatar goes grey, so the row reads as retired at a
 // glance even with the Inactive badge out of view.
@@ -614,7 +612,20 @@ function DeactivateUserModal({ user, onClose, onDeactivated }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+/// ── Page ──────────────────────────────────────────────────────────────────────
+
+// Whether an account can sign in. Deactivated staff stay listed, with their
+// name on everything they recorded; the page opens on the active ones.
+const ACCOUNT_STATUS_MAP = {
+  active:   { label: "Active",   variant: "success" },
+  inactive: { label: "Inactive", variant: "muted" },
+};
+const STATUS_FILTERS = [
+  { value: "active",   label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "all",      label: "Active and inactive" },
+];
+const DEFAULT_STATUS = "active";
 
 export default function UsersPage() {
   usePageTitle("Users");
@@ -635,11 +646,12 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   // Opens on active accounts: staff who have left stay out of the way, one
   // click from view.
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_STATUS);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deactivating, setDeactivating] = useState(null);
   const [reactivatingId, setReactivatingId] = useState(null);
+  const searchRef = useRef(null);
 
   // Search as you type, without a request per keystroke.
   useEffect(() => {
@@ -654,10 +666,9 @@ export default function UsersPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const role = ROLE_FILTER_PARAM[roleFilter] ?? (roleFilter === "all" ? null : roleFilter);
       const data = await _getUsers({
         page,
-        ...(role ? { role } : null),
+        ...(roleFilter !== "all" ? { role: roleFilter } : null),
         ...(statusFilter !== "all" ? { status: statusFilter } : null),
         ...(query ? { search: query } : null),
       });
@@ -679,48 +690,34 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchUsers]);
 
-  const byRole = counts?.by_role ?? {};
-  const stats = {
-    total: counts?.total ?? 0,
-    admins: (byRole.admin ?? 0) + (byRole.super_admin ?? 0),
-    staff: (byRole.registrar ?? 0) + (byRole.teacher ?? 0) + (byRole.accounting ?? 0),
-    guardians: byRole.guardian ?? 0,
+  // The band counts each role among the accounts the Status menu shows --
+  // active ones unless asked otherwise -- and not the search, which narrows
+  // only the rows, as on the other list pages.
+  const roleCount = (role) => {
+    if (!counts) return undefined;
+    const every = counts.by_role?.[role] ?? 0;
+    const inactive = counts.inactive_by_role?.[role] ?? 0;
+    if (statusFilter === "active") return every - inactive;
+    if (statusFilter === "inactive") return inactive;
+    return every;
   };
+  const bandTotal = counts ? ROLE_ORDER.reduce((sum, r) => sum + roleCount(r), 0) : undefined;
 
   // Every filter change returns to page 1 -- staying on page 4 of a narrower
   // result would land on an empty table.
   const applyRole = (value) => { setRoleFilter(value); setPage(1); };
   const applyStatus = (value) => { setStatusFilter(value); setPage(1); };
 
-  const hasActiveFilters = roleFilter !== "all" || statusFilter !== "active" || Boolean(search);
+  const hasActiveFilters = roleFilter !== "all" || statusFilter !== DEFAULT_STATUS || Boolean(search);
   const clearFilters = () => {
-    setRoleFilter("all"); setStatusFilter("active"); setSearch(""); setQuery(""); setPage(1);
+    setRoleFilter("all"); setStatusFilter(DEFAULT_STATUS); setSearch(""); setQuery(""); setPage(1);
+    searchRef.current?.focus();
   };
   const onlyInactiveFilter = statusFilter === "inactive" && roleFilter === "all" && !search;
   const totalPages = Math.max(1, Math.ceil(pageMeta.count / 25));
-  // Headline numbers are people who can use the portal; the counts cover
-  // every account the caller may see.
-  const inactiveCount = counts?.inactive ?? 0;
-  const activeCount = Math.max(0, (counts?.total ?? 0) - inactiveCount);
 
-  const roleFilterOptions = [
-    { value: "all", label: "All", tone: "brand", count: stats.total },
-    // Tone and icon come from the shared role map, so a chip lights up in the
-    // same colour as that role's badge in the table below.
-    ...ROLES.map((r) => ({
-      value: r,
-      label: ROLE_MAP[r]?.label ?? r,
-      tone: ROLE_MAP[r]?.variant ?? "brand",
-      icon: ROLE_MAP[r]?.icon,
-      count: byRole[r] ?? 0,
-    })),
-  ];
-
-  const statusFilterOptions = [
-    { value: "active",   label: "Active",   tone: "success", dot: "#4caf50", count: activeCount },
-    { value: "inactive", label: "Inactive", tone: "muted",   dot: "#9e9e9e", count: inactiveCount },
-    { value: "all",      label: "All",      tone: "brand",   count: counts?.total ?? 0 },
-  ];
+  const bandCaption = `${statusFilter === "all" ? "" : `${statusFilter} `}account${bandTotal === 1 ? "" : "s"}`;
+  const roleMeta = ROLE_MAP[roleFilter];
 
   async function handleReactivate(u) {
     setReactivatingId(u.user_id);
@@ -739,13 +736,6 @@ export default function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        icon="ti-user-cog"
-        subtitle={
-          loading
-            ? "Loading…"
-            : `${activeCount} active account${activeCount === 1 ? "" : "s"}` +
-              (inactiveCount ? ` · ${inactiveCount} inactive` : "")
-        }
         actions={
           isAdmin && (
             <Button icon="ti-user-plus" onClick={() => setShowCreate(true)}>
@@ -755,82 +745,77 @@ export default function UsersPage() {
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-6">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard
-            label="Total Users"
-            value={stats.total}
-            icon="ti-users"
-            iconTone="brand"
-            layout="horizontal"
-            loading={loading}
-            active={roleFilter === "all"}
-            onClick={() => applyRole("all")}
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
+        {/* ── Who has an account, by role, and the role filter ── */}
+        <StatusBand
+          total={bandTotal}
+          caption={bandCaption}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              Pick a role to filter the list
+            </span>
+          }
+          options={[
+            { value: "all", label: "All", count: bandTotal },
+            ...ROLE_ORDER.map((r) => ({
+              value: r,
+              label: ROLE_MAP[r]?.label ?? r,
+              count: roleCount(r),
+              dot: ROLE_DOT[r],
+            })),
+          ]}
+          value={roleFilter}
+          allValue="all"
+          onChange={applyRole}
+          label="Filter by role"
+        />
+
+        {/* ── Toolbar: search, the status menu, Clear ── */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="user-search"
+            label="Search users by name or email"
+            placeholder="Search by name or email…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
           />
-          <StatCard
-            label="Admins"
-            value={stats.admins}
-            icon="ti-shield-check"
-            iconTone="accent"
-            layout="horizontal"
-            loading={loading}
-            active={roleFilter === "admin"}
-            onClick={() => applyRole(roleFilter === "admin" ? "all" : "admin")}
+
+          <FilterMenu
+            label="Status"
+            valueLabel={STATUS_FILTERS.find((f) => f.value === statusFilter)?.label ?? "Active"}
+            active={statusFilter !== DEFAULT_STATUS}
+            options={STATUS_FILTERS}
+            value={statusFilter}
+            onChange={applyStatus}
+            align="end"
+            menuWidth={200}
           />
-          <StatCard
-            label="Staff"
-            value={stats.staff}
-            icon="ti-user"
-            iconTone="info"
-            layout="horizontal"
-            loading={loading}
-            active={roleFilter === "staff"}
-            onClick={() => applyRole(roleFilter === "staff" ? "all" : "staff")}
-          />
-          <StatCard
-            label="Guardians"
-            value={stats.guardians}
-            icon="ti-users-group"
-            iconTone="muted"
-            layout="horizontal"
-            loading={loading}
-            active={roleFilter === "guardian"}
-            onClick={() => applyRole(roleFilter === "guardian" ? "all" : "guardian")}
-          />
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
         </div>
 
-        {/* Search filters as you type — no Search button, so FilterBar omits
-            one rather than implying a submit step that doesn't exist. */}
-        <FilterBar
-          searchInputId="user-search"
-          searchLabel="Search users by name or email"
-          searchPlaceholder="Search by name or email…"
-          searchValue={search}
-          onSearchChange={setSearch}
-          onClearSearch={() => setSearch("")}
-          hasFilters={hasActiveFilters}
-          onClearFilters={clearFilters}
-        >
-          <FilterRow label="Role">
-            <ChipGroup
-              label="Filter by role"
-              options={roleFilterOptions}
-              value={roleFilter}
-              onChange={applyRole}
-            />
-          </FilterRow>
-          <FilterRow label="Status">
-            <ChipGroup
-              label="Filter by status"
-              options={statusFilterOptions}
-              value={statusFilter}
-              onChange={applyStatus}
-            />
-          </FilterRow>
-        </FilterBar>
-
         <Card padding="none" className="overflow-hidden">
+          <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+            <h2 className="text-md font-bold text-neutral-900">
+              {roleMeta ? `${roleMeta.label} accounts` : "All accounts"}
+            </h2>
+            {!loading && !loadError && (
+              <span className="text-sm text-neutral-500 tabular-nums">{pageMeta.count.toLocaleString()}</span>
+            )}
+          </div>
           <Table
+            headerVariant="quiet"
             columns={TABLE_COLUMNS}
             loading={loading}
             error={loadError}
@@ -861,47 +846,45 @@ export default function UsersPage() {
           >
             {users.map((u) => {
               const isSelf = currentUser?.id === u.user_id;
-              const meta = ROLE_MAP[u.role];
               // A super admin account is only a super admin's to edit or
-              // delete; a plain admin was offered both and met a 403.
+              // deactivate; a plain admin was offered both and met a 403.
               const outranked = isSuperAdminRole(u.role) && !isSuperAdminRole(currentUser?.role);
               const canEdit = isSelf || (isAdmin && !outranked);
               const canChangeStatus = isAdmin && !isSelf && !outranked;
               const inactive = u.is_active === false;
               return (
-                <TableRow key={u.user_id} className={inactive ? "opacity-60" : undefined}>
+                <TableRow key={u.user_id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar user={u} dimmed={inactive} />
+                      <Avatar user={u} size={32} dimmed={inactive} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`truncate text-sm font-bold ${inactive ? "text-neutral-500" : "text-neutral-900"}`}>
+                          <span className={`truncate text-[13px] font-semibold ${inactive ? "text-neutral-500" : "text-neutral-900"}`}>
                             {u.name}
                           </span>
                           {isSelf && (
                             <Badge variant="success" size="sm">You</Badge>
                           )}
-                          {inactive && (
-                            <Badge variant="muted" size="sm" dot>Inactive</Badge>
-                          )}
                         </div>
-                        <div className="truncate text-xs text-neutral-500">{u.email}</div>
+                        <div className="truncate text-[11.5px] text-neutral-500">{u.email}</div>
                       </div>
                     </div>
                   </TableCell>
 
+                  {/* The same dot as the band's legend. */}
                   <TableCell>
-                    <Badge
-                      variant={meta?.variant ?? "muted"}
-                      icon={meta?.icon}
-                      className={inactive ? "opacity-60" : ""}
-                    >
-                      {meta?.label ?? u.role}
-                    </Badge>
+                    <span className="inline-flex items-center gap-2 text-sm text-neutral-800">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${ROLE_DOT[u.role] ?? "bg-neutral-400"}`} aria-hidden="true" />
+                      {ROLE_MAP[u.role]?.label ?? u.role}
+                    </span>
                   </TableCell>
 
                   <TableCell>
-                    <span className="font-mono text-xs text-neutral-500">#{u.user_id}</span>
+                    <StatusDot status={inactive ? "inactive" : "active"} map={ACCOUNT_STATUS_MAP} />
+                  </TableCell>
+
+                  <TableCell>
+                    <span className="font-mono text-[12px] text-neutral-800">#{u.user_id}</span>
                   </TableCell>
 
                   <TableCell align="right">
@@ -919,6 +902,7 @@ export default function UsersPage() {
                           variant="ghost" size="sm" iconOnly icon="ti-user-off"
                           title="Deactivate account"
                           aria-label={`Deactivate ${u.name}`}
+                          className="hover:bg-error-50 hover:text-error-500"
                           onClick={() => setDeactivating(u)}
                         />
                       )}

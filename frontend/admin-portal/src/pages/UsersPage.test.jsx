@@ -44,12 +44,17 @@ function serveUsers(params) {
   const rows = accounts.filter((u) =>
     !params.status || (params.status === "active") === u.is_active);
   const byRole = {};
-  accounts.forEach((u) => { byRole[u.role] = (byRole[u.role] ?? 0) + 1; });
+  const inactiveByRole = {};
+  accounts.forEach((u) => {
+    byRole[u.role] = (byRole[u.role] ?? 0) + 1;
+    if (!u.is_active) inactiveByRole[u.role] = (inactiveByRole[u.role] ?? 0) + 1;
+  });
   return Promise.resolve({
     count: rows.length, next: null, previous: null, results: rows,
     counts: {
       total: accounts.length, by_role: byRole,
       inactive: accounts.filter((u) => !u.is_active).length,
+      inactive_by_role: inactiveByRole,
     },
   });
 }
@@ -69,13 +74,18 @@ describe("UsersPage — active status", () => {
     renderPage();
     expect(await screen.findByText("Maria Santos")).toBeTruthy();
     expect(screen.queryByText("Ana Lim")).toBeNull();
-    expect(screen.getByText("2 active accounts · 1 inactive")).toBeTruthy();
+    // The band counts the active accounts, by role.
+    const legend = within(screen.getByRole("group", { name: "Filter by role" }));
+    expect(legend.getByRole("button", { name: "All 2" })).toBeTruthy();
+    expect(legend.getByRole("button", { name: "Teacher 1" })).toBeTruthy();
+    expect(screen.getByText("active accounts")).toBeTruthy();
   });
 
   it("shows inactive accounts on request, badged, and reactivates one", async () => {
     renderPage();
     await screen.findByText("Maria Santos");
-    fireEvent.click(within(screen.getByRole("group", { name: "Filter by status" })).getByRole("button", { name: /Inactive/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Status:/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Inactive" }));
 
     // Filtered on the server, so the inactive list arrives with the next page.
     await screen.findByText("Ana Lim");
@@ -110,7 +120,8 @@ describe("UsersPage — active status", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate account" }));
     await waitFor(() => expect(updateUser).toHaveBeenCalledWith(5, { is_active: false }));
     await waitFor(() => expect(screen.queryByText("Maria Santos")).toBeNull());
-    expect(screen.getByText("1 active account · 2 inactive")).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: "Filter by role" })).getByRole("button", { name: "All 1" })).toBeTruthy();
+    expect(screen.getByText("active account")).toBeTruthy();
   });
 
   it("offers no deactivate button on your own account", async () => {

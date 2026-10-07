@@ -92,7 +92,7 @@ describe("TeacherAdvisoriesPage", () => {
     inRouter(<TeacherAdvisoriesPage />, "/teacher-advisories");
     // All years, so both show.
     fireEvent.click(await screen.findByRole("button", { name: /^School year:/ }));
-    fireEvent.click(screen.getByRole("option", { name: /All years/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /All years/ }));
 
     const archivedRow = (await screen.findByText("Grade 7 · Rizal")).closest("tr");
     expect(within(archivedRow).getByText("Archived")).toBeTruthy();

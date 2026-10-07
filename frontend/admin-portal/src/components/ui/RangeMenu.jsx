@@ -19,7 +19,8 @@ import { motion } from "framer-motion";
  * @param {string} label  what the filter is ("Date")
  * @param {string} valueLabel  what it's set to ("Any", "Jun 1 – Jun 30")
  * @param {boolean} active  whether it's narrowing the list right now
- * @param {{ key: string, label: string, type: "date"|"number", value: string, prefix?: string }[]} fields
+ * @param {{ key: string, label: string, type: "date"|"time"|"number", value: string, prefix?: string, wide?: boolean }[]} fields
+ *   `wide` gives a field the panel's full width (a day above a time range).
  * @param {{ label: string, values: Record<string, string> }[]} [presets]
  * @param {(values: Record<string, string>) => void} onApply
  * @param {"start"|"end"} [align]
@@ -110,7 +111,7 @@ export default function RangeMenu({
           >
             <div className="grid grid-cols-2 gap-2.5">
               {fields.map((f, i) => (
-                <label key={f.key} htmlFor={`${fieldId}-${f.key}`} className="flex flex-col gap-1">
+                <label key={f.key} htmlFor={`${fieldId}-${f.key}`} className={`flex flex-col gap-1 ${f.wide ? "col-span-2" : ""}`}>
                   <span className="text-[11px] font-semibold text-neutral-600">{f.label}</span>
                   <span className="flex h-9 items-center gap-1 rounded-sm border-[1.5px] border-neutral-300 bg-white px-2 focus-within:border-brand-500">
                     {f.prefix && <span className="text-[12px] font-semibold text-neutral-500">{f.prefix}</span>}

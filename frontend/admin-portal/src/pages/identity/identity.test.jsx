@@ -272,24 +272,35 @@ describe("UsersPage — one page at a time, from the server", () => {
     expect(api.getUsers).toHaveBeenLastCalledWith({ page: 1, status: "active" });
   });
 
-  it("draws the stat cards from the server's counts", async () => {
+  it("draws the band from the server's counts, active accounts by role", async () => {
     signInAs({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });
     api.getUsers.mockResolvedValue(page([TEACHER], {
-      counts: { total: 480, by_role: { admin: 2, teacher: 40, guardian: 438 }, inactive: 5 },
+      counts: {
+        total: 480, by_role: { admin: 2, teacher: 40, guardian: 438 },
+        inactive: 5, inactive_by_role: { teacher: 3, guardian: 2 },
+      },
     }));
     render(<MemoryRouter><UsersPage /></MemoryRouter>);
 
-    expect(await screen.findByText("475 active accounts · 5 inactive")).toBeTruthy();
+    const legend = within(await screen.findByRole("group", { name: "Filter by role" }));
+    expect(await legend.findByRole("button", { name: "All 475" })).toBeTruthy();
+    expect(legend.getByRole("button", { name: "Teacher 37" })).toBeTruthy();
+    expect(legend.getByRole("button", { name: "Guardian 436" })).toBeTruthy();
+
+    // All of them once the Status menu says so.
+    fireEvent.click(screen.getByRole("button", { name: /^Status:/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Active and inactive" }));
+    expect(await legend.findByRole("button", { name: "All 480" })).toBeTruthy();
   });
 
-  it("filters by a role group on the server", async () => {
+  it("filters by role on the server from the band's legend", async () => {
     renderUsers({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });
     await screen.findByText("Tina Teacher");
 
-    fireEvent.click(screen.getByText("Staff").closest("button"));
+    fireEvent.click(within(screen.getByRole("group", { name: "Filter by role" })).getByRole("button", { name: /^Teacher/ }));
 
     await waitFor(() => expect(api.getUsers).toHaveBeenLastCalledWith({
-      page: 1, role: "registrar,teacher,accounting", status: "active",
+      page: 1, role: "teacher", status: "active",
     }));
   });
 

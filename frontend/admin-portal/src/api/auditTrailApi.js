@@ -46,10 +46,14 @@ export async function fetchAuditLogs(params = {}) {
  * The distinct roles and modules present across the whole log, plus per-status
  * counts. Needed because the filter options can no longer be derived from the
  * rows on screen once the list is paginated server-side.
+ *
+ * Accepts: role, module, date, time_from, time_to. They narrow the status
+ * counts -- the page's band counts what its menus narrowed to -- never the
+ * role and module lists.
  */
-export async function fetchAuditFacets() {
+export async function fetchAuditFacets(params = {}) {
   try {
-    const res = await client.get(AUDIT_FACETS_API);
+    const res = await client.get(AUDIT_FACETS_API, { params });
     return {
       roles: res.data?.roles ?? [],
       modules: res.data?.modules ?? [],

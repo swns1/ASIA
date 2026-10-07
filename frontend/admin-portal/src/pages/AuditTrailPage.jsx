@@ -1,17 +1,21 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useIsFirstRender } from "../hooks/useIsFirstRender";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
-import ChipGroup from "../components/ui/ChipGroup";
-import FilterBar, { FilterRow } from "../components/ui/FilterBar";
 import Pagination from "../components/Pagination";
 import Card from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Alert from "../components/ui/Alert";
-import { StatusBadge } from "../components/ui/Badge";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import RangeMenu from "../components/ui/RangeMenu";
+import SearchField from "../components/ui/SearchField";
+import { StatusDot } from "../components/ui/Badge";
 import { AUDIT_STATUS_MAP, ROLE_MAP } from "../constants/statusMaps";
+import { ROLE_DOT } from "../constants/roleDots";
+import { fmtDate, localISODate, todayISO } from "../utils/format";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs, fetchAuditFacets } from "../api/auditTrailApi";
@@ -30,14 +34,14 @@ const C = {
 // `key` doubles as the sort key for sortable columns — toggleSort maps
 // role/date/time onto the API's `ordering` values.
 const TABLE_COLUMNS = [
-  { key: "user",    label: "User" },
-  { key: "role",    label: "Role",    sortable: true },
-  { key: "action",  label: "Action" },
-  { key: "module",  label: "Module" },
-  { key: "date",    label: "Date",    sortable: true },
-  { key: "time",    label: "Time",    sortable: true },
-  { key: "status",  label: "Status" },
-  { key: "details", label: "Details" },
+  { key: "user",    label: "User",    width: "13%" },
+  { key: "role",    label: "Role",    width: "11%", sortable: true },
+  { key: "action",  label: "Action",  width: "17%" },
+  { key: "module",  label: "Module",  width: "10%" },
+  { key: "date",    label: "Date",    width: "10%", sortable: true },
+  { key: "time",    label: "Time",    width: "8%",  sortable: true },
+  { key: "status",  label: "Status",  width: "9%" },
+  { key: "details", label: "Details", width: "22%" },
 ];
 
 function normalizeRole(role) {
@@ -192,43 +196,44 @@ function formatTime(log) {
 }
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-// ── Log Row ───────────────────────────────────────────────────────────────────
+/// ── Log Row ───────────────────────────────────────────────────────────────────
 
 function LogRow({ log }) {
   return (
     <TableRow>
-      <TableCell className="whitespace-nowrap text-sm font-bold text-neutral-900">
-        {log.userName}
+      <TableCell>
+        <span className="whitespace-nowrap text-[13px] font-semibold text-neutral-900">{log.userName}</span>
       </TableCell>
 
+      {/* The same dot as the Role menu and the Users page. */}
       <TableCell>
-        <StatusBadge status={log.userRole} map={ROLE_MAP} size="sm" />
+        <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm text-neutral-800">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${ROLE_DOT[log.userRole] ?? "bg-neutral-400"}`} aria-hidden="true" />
+          {ROLE_MAP[log.userRole]?.label ?? normalizeRole(log.userRole)}
+        </span>
       </TableCell>
 
       <TableCell className="max-w-[240px] text-sm text-neutral-900">{log.action}</TableCell>
 
       <TableCell>
-        <span className="inline-flex items-center gap-1.5 text-xs text-neutral-700">
-          <i className="ti ti-folder text-[13px] text-brand-500" aria-hidden="true" />
-          {log.module}
-        </span>
+        <span className="text-sm text-neutral-800">{log.module}</span>
       </TableCell>
 
       {/* A missing or unparseable timestamp is called out in red — an audit
           record without a reliable time is the one thing worth noticing here. */}
-      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-900"}`}>
+      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-800"}`}>
         {formatDate(log)}
       </TableCell>
 
-      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-900"}`}>
+      <TableCell className={`whitespace-nowrap text-sm ${log.invalidDate ? "font-bold text-error-600" : "text-neutral-800"}`}>
         {formatTime(log)}
       </TableCell>
 
       <TableCell>
-        <StatusBadge status={log.status} map={AUDIT_STATUS_MAP} size="sm" />
+        <StatusDot status={log.status} map={AUDIT_STATUS_MAP} />
       </TableCell>
 
-      <TableCell className="max-w-[260px] text-xs text-neutral-700">
+      <TableCell className="max-w-[260px] text-[12.5px] text-neutral-700">
         {log.details || "No remarks"}
       </TableCell>
     </TableRow>
@@ -263,6 +268,34 @@ function AccessDenied({ navigate }) {
   );
 }
 
+// ── When a record happened, as the When pill says it ─────────────────────────
+
+const shortTime = (t) => {
+  const [h, m] = t.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+};
+
+function whenLabel(date, timeFrom, timeTo) {
+  const day = date ? (date === todayISO() ? "Today" : fmtDate(date)) : "";
+  const time = timeFrom && timeTo ? `${shortTime(timeFrom)} – ${shortTime(timeTo)}`
+    : timeFrom ? `after ${shortTime(timeFrom)}`
+    : timeTo ? `before ${shortTime(timeTo)}`
+    : "";
+  return [day, time].filter(Boolean).join(", ") || "Any time";
+}
+
+function whenPresets(now = new Date()) {
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  return [
+    { label: "Today",     values: { date: todayISO() } },
+    { label: "Yesterday", values: { date: localISODate(yesterday) } },
+  ];
+}
+
+// Long enough that a word is finished, short enough that the list keeps up.
+// The same wait as the other list pages.
+const SEARCH_DEBOUNCE_MS = 300;
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AuditTrailPage() {
@@ -272,10 +305,10 @@ export default function AuditTrailPage() {
   const allowed = canViewAuditTrail(currentUser);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // The failure itself, not a sentence: the table's error state words it
+  // from the response, and offers a retry.
+  const [error, setError] = useState(null);
   const [logs, setLogs] = useState([]);
-  // No `source` state: it only ever fed the unreachable "sample records"
-  // banner (see the note where that banner used to render).
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -289,13 +322,7 @@ export default function AuditTrailPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
-
-  // Filter options come from the whole log, not the page on screen — with
-  // server-side paging there's no complete set in the browser to derive from.
-  const [facets, setFacets] = useState({ roles: [], modules: [], statusCounts: {} });
-
-  const roles = facets.roles;
-  const modules = facets.modules;
+  const searchRef = useRef(null);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const invalidCount = logs.filter(l => l.invalidDate).length;
@@ -312,29 +339,38 @@ export default function AuditTrailPage() {
     return `${prefix}occurred_at`;
   }, [sort]);
 
+  // Who, where and when: what the band counts. The status and search narrow
+  // only the rows, as on the other list pages.
+  const scope = useMemo(() => ({
+    ...(roleFilter !== "all" ? { role: roleFilter } : null),
+    ...(moduleFilter !== "all" ? { module: moduleFilter } : null),
+    ...(dateFilter ? { date: dateFilter } : null),
+    ...(timeFrom ? { time_from: timeFrom } : null),
+    ...(timeTo ? { time_to: timeTo } : null),
+  }), [roleFilter, moduleFilter, dateFilter, timeFrom, timeTo]);
+  const scopeKey = JSON.stringify(scope);
+
   const loadLogs = useCallback(async () => {
-    setLoading(true); setError("");
+    setLoading(true); setError(null);
     try {
       const data = await fetchAuditLogs({
         page,
         page_size: pageSize,
         ordering: orderingParam,
+        ...JSON.parse(scopeKey),
         ...(statusFilter !== "all" ? { status: statusFilter } : null),
-        ...(roleFilter !== "all" ? { role: roleFilter } : null),
-        ...(moduleFilter !== "all" ? { module: moduleFilter } : null),
-        ...(dateFilter ? { date: dateFilter } : null),
-        ...(timeFrom ? { time_from: timeFrom } : null),
-        ...(timeTo ? { time_to: timeTo } : null),
         ...(search.trim() ? { search: search.trim() } : null),
       });
       setLogs((data.results || []).map(normalizeLog));
       setTotalCount(data.count ?? 0);
     } catch (e) {
-      setError(e.message || "Failed to load log records.");
+      setError(e.cause ?? e);
+      setLogs([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, orderingParam, statusFilter, roleFilter, moduleFilter, dateFilter, timeFrom, timeTo, search]);
+  }, [page, pageSize, orderingParam, scopeKey, statusFilter, search]);
 
   useEffect(() => {
     const token = sessionStorage.getItem("access_token");
@@ -343,13 +379,28 @@ export default function AuditTrailPage() {
     loadLogs();
   }, [allowed, navigate, loadLogs]);
 
-  // Facets describe the whole log, so they're fetched once rather than with
-  // every filter change. A failure here is non-fatal: the chip rows just fall
-  // back to empty and the list still works.
+  // The band's numbers, and the Role and Module menus' choices. The counts
+  // follow the scope; the choices always cover the whole log, so they're
+  // kept from the last answer rather than emptied while the next one loads.
+  // A failure is non-fatal: the band reads "—" and the list still works.
+  const [facets, setFacets] = useState({ key: null, roles: [], modules: [], statusCounts: null });
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     if (!allowed) return;
-    fetchAuditFacets().then(setFacets).catch(() => {});
-  }, [allowed]);
+    let cancelled = false;
+    fetchAuditFacets(JSON.parse(scopeKey))
+      .then((f) => { if (!cancelled) setFacets({ key: scopeKey, ...f }); })
+      .catch(() => { if (!cancelled) setFacets((cur) => ({ ...cur, key: scopeKey, statusCounts: null })); });
+    return () => { cancelled = true; };
+  }, [allowed, scopeKey, refreshKey]);
+  const statusCounts = facets.key === scopeKey ? facets.statusCounts : null;
+
+  // Search as you type: the box applies itself once typing pauses.
+  useEffect(() => {
+    if (searchInput === search) return;
+    const timer = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput, search]);
 
   function toggleSort(key) {
     setSort(cur => ({ key, direction: cur.key === key && cur.direction === "asc" ? "desc" : "asc" }));
@@ -365,30 +416,33 @@ export default function AuditTrailPage() {
     setDateFilter(""); setTimeFrom(""); setTimeTo("");
     setSearch(""); setSearchInput("");
     setPage(1);
+    searchRef.current?.focus();
   }
 
-  const statusOptions = useMemo(() => {
-    const counts = facets.statusCounts || {};
-    return [
-      { value: "all", label: "All", count: counts.total ?? null },
-      ...Object.entries(AUDIT_STATUS_MAP).map(([key, meta]) => ({
-        value: key,
-        label: meta.label,
-        tone: meta.variant,
-        icon: meta.icon,
-        count: counts[key] ?? 0,
-      })),
-    ];
-  }, [facets.statusCounts]);
+  const refresh = () => { loadLogs(); setRefreshKey((k) => k + 1); };
 
-  const roleOptions = useMemo(() => ([
-    { value: "all", label: "All" },
-    ...roles.map(r => ({
+  const roleOptions = [
+    { value: "all", label: "All roles" },
+    ...facets.roles.map((r) => ({
       value: r,
       label: ROLE_MAP[r]?.label ?? normalizeRole(r),
-      tone: ROLE_MAP[r]?.variant ?? "muted",
+      dot: ROLE_DOT[r] ?? "bg-neutral-400",
     })),
-  ]), [roles]);
+  ];
+  const moduleOptions = [
+    { value: "all", label: "All modules" },
+    ...facets.modules.map((m) => ({ value: m, label: m })),
+  ];
+  const roleLabel = roleOptions.find((o) => o.value === roleFilter)?.label;
+  const when = whenLabel(dateFilter, timeFrom, timeTo);
+
+  // What the band counts: the whole log, or the role, module and time picked.
+  const bandCaption = [
+    `record${statusCounts?.total === 1 ? "" : "s"}`,
+    roleFilter !== "all" && roleLabel,
+    moduleFilter !== "all" && moduleFilter,
+    (dateFilter || timeFrom || timeTo) && when,
+  ].filter(Boolean).join(" · ");
 
   const isFirstRender = useIsFirstRender();
 
@@ -398,30 +452,103 @@ export default function AuditTrailPage() {
     <>
       <PageHeader
         title="Audit Trail"
-        icon="ti-shield-check"
-        subtitle={loading ? "Loading…" : `${logs.length} log record${logs.length !== 1 ? "s" : ""}`}
         actions={
-          <Button variant="secondary" icon="ti-refresh" onClick={loadLogs}>
+          <Button variant="secondary" icon="ti-refresh" onClick={refresh}>
             Refresh
           </Button>
         }
       />
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
 
-        {/* Banners */}
-        {/* The "Showing local sample records until the audit API endpoint is
-            connected" banner used to sit here. It was unreachable:
-            auditTrailApi hardcodes source: "api" on success and throws on
-            failure, so `source` can never be "sample", and the local sample
-            dataset it referred to no longer exists. Unreachable UI that
-            promises mock data is worse than none — it suggests to anyone
-            reading the file that this page might not be live. */}
-        <AnimatePresence>
-          {error && (
-            <Alert key="error" variant="error" icon="ti-alert-circle">{error}</Alert>
+        {/* ── How the records in view went, and the status filter ── */}
+        <StatusBand
+          total={statusCounts?.total}
+          caption={bandCaption}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              Pick a status to filter the list
+            </span>
+          }
+          options={[
+            { value: "all", label: "All", count: statusCounts?.total },
+            ...Object.entries(AUDIT_STATUS_MAP).map(([key, meta]) => ({
+              value: key,
+              label: meta.label,
+              count: statusCounts ? (statusCounts[key] ?? 0) : undefined,
+              variant: meta.variant,
+            })),
+          ]}
+          value={statusFilter}
+          allValue="all"
+          onChange={applyFilter(setStatusFilter)}
+        />
+
+        {/* ── Toolbar: search, the filter menus, Clear ──
+            The menus open to the right edge, where the pills sit. */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="audit-search"
+            label="Search audit records"
+            placeholder="Search by user, action, or details…"
+            inputRef={searchRef}
+            value={searchInput}
+            onChange={setSearchInput}
+            onEnter={() => { setSearch(searchInput); setPage(1); }}
+            onClear={() => { setSearchInput(""); setSearch(""); setPage(1); }}
+          />
+
+          <FilterMenu
+            label="Role"
+            valueLabel={roleFilter === "all" ? "All" : roleLabel}
+            active={roleFilter !== "all"}
+            options={roleOptions}
+            value={roleFilter}
+            onChange={applyFilter(setRoleFilter)}
+            align="end"
+            menuWidth={200}
+          />
+
+          <FilterMenu
+            label="Module"
+            valueLabel={moduleFilter === "all" ? "All" : moduleFilter}
+            active={moduleFilter !== "all"}
+            options={moduleOptions}
+            value={moduleFilter}
+            onChange={applyFilter(setModuleFilter)}
+            align="end"
+            menuWidth={220}
+          />
+
+          <RangeMenu
+            label="When"
+            valueLabel={when}
+            active={Boolean(dateFilter || timeFrom || timeTo)}
+            fields={[
+              { key: "date", label: "Day",       type: "date", value: dateFilter, wide: true },
+              { key: "from", label: "From time", type: "time", value: timeFrom },
+              { key: "to",   label: "To time",   type: "time", value: timeTo },
+            ]}
+            presets={whenPresets()}
+            onApply={({ date, from, to }) => {
+              setDateFilter(date ?? ""); setTimeFrom(from ?? ""); setTimeTo(to ?? "");
+              setPage(1);
+            }}
+          />
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100"
+            >
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
           )}
+        </div>
+
+        <AnimatePresence>
           {invalidCount > 0 && (
             <Alert key="warn" variant="warning" icon="ti-alert-triangle">
               {invalidCount} log record{invalidCount === 1 ? "" : "s"} contain missing or invalid date/time values.
@@ -429,101 +556,39 @@ export default function AuditTrailPage() {
           )}
         </AnimatePresence>
 
-        <FilterBar
-          animate={isFirstRender}
-          animateDelay={0.14}
-          searchValue={searchInput}
-          onSearchChange={setSearchInput}
-          onSearch={() => { setSearch(searchInput); setPage(1); }}
-          onClearSearch={() => { setSearchInput(""); setSearch(""); setPage(1); }}
-          searchPlaceholder="Search by user, action, or details…"
-          searchLabel="Search audit records"
-          searchInputId="audit-search"
-          hasFilters={Boolean(hasActiveFilters)}
-          onClearFilters={clearFilters}
-          advancedLabel="Date & time"
-          advancedIcon="ti-calendar-clock"
-          advancedActive={Boolean(dateFilter || timeFrom || timeTo)}
-          advanced={
-            <>
-              <div>
-                <label htmlFor="audit-date" className={fieldLabelCls}>Date</label>
-                <input id="audit-date" type="date" value={dateFilter}
-                  onChange={e => { setDateFilter(e.target.value); setPage(1); }}
-                  className={fieldInputCls} />
-              </div>
-              <div>
-                <label htmlFor="audit-time-from" className={fieldLabelCls}>From time</label>
-                <input id="audit-time-from" type="time" value={timeFrom}
-                  onChange={e => { setTimeFrom(e.target.value); setPage(1); }}
-                  className={fieldInputCls} />
-              </div>
-              <div>
-                <label htmlFor="audit-time-to" className={fieldLabelCls}>To time</label>
-                <input id="audit-time-to" type="time" value={timeTo}
-                  onChange={e => { setTimeTo(e.target.value); setPage(1); }}
-                  className={fieldInputCls} />
-              </div>
-            </>
-          }
-          extraControls={
-            modules.length > 0 && (
-              <select
-                aria-label="Filter by module"
-                value={moduleFilter}
-                onChange={e => { setModuleFilter(e.target.value); setPage(1); }}
-                className={`focus-ring h-[42px] shrink-0 rounded-lg border-[1.5px] px-3 text-[13px] outline-none ${
-                  moduleFilter !== "all"
-                    ? "border-brand-500 bg-brand-100 font-semibold text-brand-600"
-                    : "border-neutral-300 bg-white text-neutral-700"
-                }`}
-              >
-                <option value="all">All modules</option>
-                {modules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
-              </select>
-            )
-          }
-        >
-          <FilterRow label="Status">
-            <ChipGroup
-              options={statusOptions}
-              value={statusFilter}
-              onChange={applyFilter(setStatusFilter)}
-              label="Filter by status"
-            />
-          </FilterRow>
-
-          {roleOptions.length > 1 && (
-            <FilterRow label="Role">
-              <ChipGroup
-                options={roleOptions}
-                value={roleFilter}
-                onChange={applyFilter(setRoleFilter)}
-                label="Filter by role"
-              />
-            </FilterRow>
-          )}
-        </FilterBar>
-
-        {/* Table panel */}
+        {/* ── Table ── */}
         <motion.div
           initial={isFirstRender ? { y: 10, opacity: 0 } : false}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.2, ease: "easeOut" }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
         >
           <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">
+                {statusFilter === "all" ? "All records" : `${AUDIT_STATUS_MAP[statusFilter]?.label} records`}
+              </h2>
+              {!loading && !error && (
+                <span className="text-sm text-neutral-500 tabular-nums">{totalCount.toLocaleString()}</span>
+              )}
+            </div>
             <Table
+              headerVariant="quiet"
               columns={TABLE_COLUMNS}
               loading={loading}
+              error={error}
+              onRetry={loadLogs}
+              errorSubject="the audit trail"
               isEmpty={logs.length === 0}
-              skeletonRows={pageSize}
+              skeletonRows={Math.min(pageSize, 10)}
               sortKey={sort.key}
               sortDir={sort.direction}
               onSort={toggleSort}
               empty={{
                 icon: "ti-file-search",
-                title: "No log records found",
-                subtitle: "Try adjusting your status, role, module, or date filters.",
+                title: hasActiveFilters ? "No records match these filters" : "No records yet",
+                subtitle: hasActiveFilters
+                  ? "Try a different status, role, module or time."
+                  : "Sign-ins and changes show here as they happen.",
                 withAvatar: false,
                 action: hasActiveFilters && (
                   <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
@@ -537,7 +602,7 @@ export default function AuditTrailPage() {
           </Card>
         </motion.div>
 
-        {!loading && totalCount > 0 && (
+        {!loading && !error && totalCount > 0 && (
           <div className="flex items-center justify-between gap-3">
             {/* Rows-per-page isn't part of the shared Pagination component, so
                 it sits beside it rather than being folded in. */}
@@ -568,6 +633,3 @@ export default function AuditTrailPage() {
     </>
   );
 }
-
-const fieldLabelCls = "mb-2 block text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500";
-const fieldInputCls = "h-[34px] rounded-lg border-[1.5px] border-neutral-300 bg-white px-2.5 text-[12px] text-neutral-900 outline-none focus:border-brand-500";

@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useIsFirstRender } from "../hooks/useIsFirstRender";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import Tabs from "../components/ui/Tabs";
@@ -9,7 +10,16 @@ import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
-import { listVariants } from "../utils/motion";
+import Card from "../components/ui/Card";
+import Table, { TableRow, TableCell } from "../components/ui/Table";
+import StatusBand from "../components/ui/StatusBand";
+import FilterMenu from "../components/ui/FilterMenu";
+import SearchField from "../components/ui/SearchField";
+import ErrorState from "../components/ui/ErrorState";
+import EmptyState from "../components/EmptyState";
+import { StatusDot } from "../components/ui/Badge";
+import { LEVEL_DOTS, LEVEL_FILTER_OPTIONS, LEVEL_LABELS } from "../constants/schoolLevels";
+import { COMPONENT_COLORS } from "./grades/gradeRules";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 
 import {
@@ -40,167 +50,95 @@ const updateCategory = (id, p)  => _updateCategory(id, p);
 const deleteCategory = (id)     => _deleteCategory(id);
 
 // ── Shared constants ─────────────────────────────────────────────────────────
-const C = { red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", border: "#f5eaea", muted: "#7a5050", pale: "#8a6a6a" };
-
-const baseCss = `
-  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  @keyframes spin    { to{transform:rotate(360deg)} }
-`;
-
 const TABS = [
   { id: "templates", label: "Grading Templates",   icon: "ti-report-analytics" },
   { id: "narrative", label: "Narrative Categories", icon: "ti-clipboard-text"  },
 ];
 
-const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
-);
+/** Whether something is in use, for the active/inactive band and rows. */
+const ACTIVE_STATUS_MAP = {
+  active:   { label: "Active",   variant: "success" },
+  inactive: { label: "Inactive", variant: "muted" },
+};
+
+const clearButtonClass =
+  "focus-ring flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-error-600 transition-colors duration-150 hover:bg-brand-100";
 
 // ════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE — shared AppLayout + tab switcher; each tab below is otherwise a
-// self-contained port of the former standalone GradingTemplatesPage.jsx and
-// NarrativeCategoriesPage.jsx (own state/effects/handlers). The Narrative tab
-// is reskinned from its former purple theme to the app's standard red/DM Sans
-// system, and its duplicated title (topbar + body heading) is collapsed to one.
+// MAIN PAGE — the tab switcher. Each tab is self-contained (own state,
+// effects, handlers) and draws the page header itself, so its New button
+// sits there beside the tabs, as on every other list page.
 // ════════════════════════════════════════════════════════════════════════════
 export default function GradingSettingsPage() {
-  usePageTitle("Grading Settings");
+  usePageTitle("Grading Setup");
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get("tab") === "narrative" ? "narrative" : "templates");
 
-  return (
-    <>
-      <style>{baseCss}</style>
-
-      <PageHeader
-        title="Grading Settings"
-        icon="ti-report-analytics"
-        actions={<Tabs variant="pill" tabs={TABS} value={tab} onChange={setTab} />}
-      />
-
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        <AnimatePresence mode="wait">
-          {tab === "templates" ? <GradingTemplatesTab key="templates" /> : <NarrativeCategoriesTab key="narrative" />}
-        </AnimatePresence>
-      </div>
-    </>
+  const header = (action) => (
+    <PageHeader
+      title="Grading Setup"
+      actions={<><Tabs variant="pill" tabs={TABS} value={tab} onChange={setTab} />{action}</>}
+    />
   );
+
+  return tab === "templates"
+    ? <GradingTemplatesTab key="templates" header={header} />
+    : <NarrativeCategoriesTab key="narrative" header={header} />;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// GRADING TEMPLATES TAB — ported from the former GradingTemplatesPage.jsx
+// GRADING TEMPLATES TAB
 // ════════════════════════════════════════════════════════════════════════════
 
+// The template form's level choices, in the app's level colours. `chip` is
+// spelled out rather than interpolated: Tailwind extracts class names
+// statically, so `bg-${tone}-50` would never ship.
 const SCHOOL_LEVELS = [
-  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", color: "#be185d", bg: "#fde8f8" },
-  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          color: "#854f0b", bg: "#fdf5e8" },
-  { value: "elementary",        label: "Elementary",   icon: "ti-book",          color: "#2e6b0d", bg: "#e8f5e0" },
-  { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        color: "#1455a0", bg: "#e3f0fd" },
-  { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   color: "#7c3aed", bg: "#f0e8fd" },
+  { value: "nursery",           label: "Nursery",      icon: "ti-baby-carriage", chip: "bg-nursery-50 text-nursery-500" },
+  { value: "kindergarten",      label: "Kindergarten", icon: "ti-star",          chip: "bg-kindergarten-50 text-kindergarten-500" },
+  { value: "elementary",        label: "Elementary",   icon: "ti-book",          chip: "bg-elementary-50 text-elementary-500" },
+  { value: "junior_highschool", label: "Junior HS",    icon: "ti-school",        chip: "bg-juniorhigh-50 text-juniorhigh-500" },
+  { value: "senior_highschool", label: "Senior HS",    icon: "ti-certificate",   chip: "bg-seniorhigh-50 text-seniorhigh-500" },
 ];
-
-const getLevelMeta = (level) => SCHOOL_LEVELS.find((l) => l.value === level) ?? SCHOOL_LEVELS[2];
-
-const COMPONENT_COLORS = ["#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2"];
 
 function calcTotal(components) {
   return components?.reduce((s, c) => s + parseFloat(c.weight || 0), 0) ?? 0;
 }
 
+const weightsComplete = (template) => Math.abs(calcTotal(template.components) - 100) < 0.01;
+
+// The band's legend. A template whose weights don't add up to 100 works a
+// grade out wrong; an inactive one can't be given to a subject.
+const TEMPLATE_STATUS_MAP = {
+  ready:      { label: "Ready",            variant: "success", title: "Ready templates" },
+  incomplete: { label: "Weights not 100%", variant: "warning", title: "Templates whose weights don't add up to 100%" },
+  inactive:   { label: "Inactive",         variant: "muted",   title: "Inactive templates" },
+};
+const templateStatus = (t) => (!t.is_active ? "inactive" : weightsComplete(t) ? "ready" : "incomplete");
+
+const TEMPLATE_COLUMNS = [
+  { key: "name",       label: "Template",   width: "26%" },
+  { key: "level",      label: "Level",      width: "14%" },
+  { key: "components", label: "Components", width: "32%" },
+  { key: "weights",    label: "Weights",    width: "9%", align: "right" },
+  { key: "status",     label: "Status",     width: "12%" },
+  { key: "actions",    label: "",           width: "7%" },
+];
+
+/** A template's components as one bar, each its share of the grade. */
 function WeightBar({ components }) {
-  if (!components || components.length === 0) return null;
+  if (!components?.length) return null;
   const total = calcTotal(components);
   return (
-    <div style={{ display: "flex", height: 8, borderRadius: 99, overflow: "hidden", gap: 1 }}>
+    <div className="flex h-1.5 gap-[2px] overflow-hidden rounded-full bg-neutral-100" aria-hidden="true">
       {components.map((c, i) => (
-        <div key={c.grading_component_id ?? i}
-          style={{ flex: parseFloat(c.weight), background: COMPONENT_COLORS[i % COMPONENT_COLORS.length], minWidth: 2 }}
-          title={`${c.component_name}: ${c.weight}%`}
+        <span
+          key={c.grading_component_id ?? i}
+          style={{ flexGrow: parseFloat(c.weight), flexBasis: 0, minWidth: 2, background: COMPONENT_COLORS[i % COMPONENT_COLORS.length] }}
         />
       ))}
-      {total < 100 && (
-        <div style={{ flex: 100 - total, background: "#f0e8e8", minWidth: 2 }} title="Unassigned" />
-      )}
+      {total < 100 && <span style={{ flexGrow: 100 - total, flexBasis: 0 }} />}
     </div>
-  );
-}
-
-function TemplateCard({ template, onEdit, onDelete, canManage }) {
-  const lvl    = getLevelMeta(template.school_level);
-  const total  = calcTotal(template.components);
-  const totalOk = Math.abs(total - 100) < 0.01;
-
-  return (
-    <motion.div
-      variants={listVariants.item}
-      whileHover={{ y: -3, boxShadow: "0 10px 36px rgba(224,49,49,0.13)" }}
-      transition={{ duration: 0.18 }}
-      style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.05)", overflow: "hidden" }}
-    >
-      <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f9f0f0" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: lvl.bg, color: lvl.color }}>
-                <i className={`ti ${lvl.icon}`} style={{ fontSize: 11 }} />{lvl.label}
-              </span>
-              {!template.is_active && (
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#f0ede8", color: "#7a5050" }}>Inactive</span>
-              )}
-              {!totalOk && (
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "#faeeda", color: "#854f0b" }}>Incomplete</span>
-              )}
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a", lineHeight: 1.3 }}>{template.template_name}</div>
-            {template.description && (
-              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 4, lineHeight: 1.5 }}>{template.description}</div>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <motion.button onClick={() => onEdit(template)} title="Edit"
-              whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-              whileTap={{ scale: 0.93 }}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
-              <i className="ti ti-pencil" style={{ fontSize: 13 }} />
-            </motion.button>
-            {canManage && (
-              <motion.button onClick={() => onDelete(template)} title="Delete"
-                whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
-                whileTap={{ scale: 0.93 }}
-                style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
-                <i className="ti ti-trash" style={{ fontSize: 13 }} />
-              </motion.button>
-            )}
-          </div>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <WeightBar components={template.components} />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: "#8a6a6a" }}>{template.components?.length ?? 0} components</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: totalOk ? "#2e6b0d" : "#a32d2d" }}>
-              {total.toFixed(0)}% {totalOk ? "✓" : "⚠ not 100%"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: "10px 20px 14px" }}>
-        {(!template.components || template.components.length === 0) ? (
-          <div style={{ fontSize: 12, color: "#8a6a6a", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No components defined yet</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {template.components.map((comp, i) => (
-              <div key={comp.grading_component_id ?? i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: COMPONENT_COLORS[i % COMPONENT_COLORS.length], flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 13, color: "#1a0a0a" }}>{comp.component_name}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#7a5050", background: "#f9f4f4", padding: "2px 8px", borderRadius: 6 }}>{comp.weight}%</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
   );
 }
 
@@ -362,16 +300,14 @@ function TemplateModal({ template, onClose, onRefresh }) {
               {SCHOOL_LEVELS.map((lvl) => {
                 const active = form.school_level === lvl.value;
                 return (
-                  <button key={lvl.value} type="button" onClick={() => setForm((f) => ({ ...f, school_level: lvl.value }))}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
-                      borderRadius: 99, border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
-                      background: active ? lvl.bg : "white", color: active ? lvl.color : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans', sans-serif",
-                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                    }}>
-                    <i className={`ti ${lvl.icon}`} style={{ fontSize: 13 }} />{lvl.label}
+                  <button key={lvl.value} type="button" aria-pressed={active}
+                    onClick={() => setForm((f) => ({ ...f, school_level: lvl.value }))}
+                    className={`focus-ring inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-3 py-[7px] text-[12px] transition-colors duration-150 ${
+                      active
+                        ? `${lvl.chip} border-current font-bold`
+                        : "border-neutral-200 bg-white font-medium text-neutral-600 hover:border-neutral-300"
+                    }`}>
+                    <i className={`ti ${lvl.icon} text-[13px]`} aria-hidden="true" />{lvl.label}
                   </button>
                 );
               })}
@@ -472,52 +408,67 @@ function DeleteTemplateModal({ template, onConfirm, onCancel, deleting, deleteEr
   );
 }
 
-function GradingTemplatesTab() {
+function GradingTemplatesTab({ header }) {
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  const isFirstRender = useIsFirstRender();
 
-  const [templates,   setTemplates]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [levelFilter, setLevelFilter] = useState("all");
-  const [statusFilter,setStatusFilter]= useState("all");
-  const [search,      setSearch]      = useState("");
-  const [modal,       setModal]       = useState(null);
-  const [toDelete,    setToDelete]    = useState(null);
-  const [deleting,    setDeleting]    = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [templates,    setTemplates]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  // A failed load used to read as "No templates found".
+  const [loadError,    setLoadError]    = useState(null);
+  const [levelFilter,  setLevelFilter]  = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search,       setSearch]       = useState("");
+  const [modal,        setModal]        = useState(null);
+  const [toDelete,     setToDelete]     = useState(null);
+  const [deleting,     setDeleting]     = useState(false);
+  const [deleteError,  setDeleteError]  = useState("");
+  const searchRef = useRef(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getTemplates({});
       setTemplates(Array.isArray(data) ? data : data?.results ?? []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+      setLoadError(e);
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     fetchTemplates(); // eslint-disable-line react-hooks/set-state-in-effect
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchTemplates]);
 
-  const totalCount    = templates.length;
-  const activeCount   = templates.filter((t) => t.is_active).length;
-  const completeCount = templates.filter((t) => Math.abs(calcTotal(t.components) - 100) < 0.01).length;
+  // Every template loads at once, so the band counts here: the Level menu
+  // narrows it, the search only the rows.
+  const inScope = useMemo(
+    () => templates.filter((t) => !levelFilter || t.school_level === levelFilter),
+    [templates, levelFilter],
+  );
+  const counts = loading || loadError ? null : {
+    "": inScope.length,
+    ...Object.fromEntries(Object.keys(TEMPLATE_STATUS_MAP).map((k) => [k, inScope.filter((t) => templateStatus(t) === k).length])),
+  };
 
   const filtered = useMemo(() => {
-    let list = templates;
-    if (levelFilter !== "all") list = list.filter((t) => t.school_level === levelFilter);
-    if (statusFilter === "active")   list = list.filter((t) => t.is_active);
-    if (statusFilter === "inactive") list = list.filter((t) => !t.is_active);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((t) =>
-        t.template_name.toLowerCase().includes(q) ||
-        (t.description || "").toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [templates, levelFilter, statusFilter, search]);
+    const q = search.trim().toLowerCase();
+    return inScope.filter((t) => {
+      if (statusFilter && templateStatus(t) !== statusFilter) return false;
+      if (!q) return true;
+      return t.template_name.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q);
+    });
+  }, [inScope, statusFilter, search]);
 
-  const hasFilters = levelFilter !== "all" || statusFilter !== "all" || search.trim() !== "";
+  const hasFilters = Boolean(levelFilter || statusFilter || search.trim());
+  const clearFilters = () => {
+    setLevelFilter(""); setStatusFilter(""); setSearch("");
+    searchRef.current?.focus();
+  };
 
   const handleDelete = async () => {
     if (!toDelete) return;
@@ -541,163 +492,188 @@ function GradingTemplatesTab() {
     }
   };
 
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === levelFilter)?.label;
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-      style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+    <>
+      {header(
+        <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+          New Template
+        </Button>,
+      )}
 
-      <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ fontSize: 12, color: C.pale }}>
-          {loading ? "Loading…" : `${totalCount} templates · ${activeCount} active · ${completeCount} complete`}
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
+        {/* ── Which templates can grade, and the filter ── */}
+        <StatusBand
+          total={counts?.[""]}
+          caption={[`grading template${counts?.[""] === 1 ? "" : "s"}`, levelFilter && levelLabel].filter(Boolean).join(" · ")}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              A template&apos;s weights must add up to 100%
+            </span>
+          }
+          options={[
+            { value: "", label: "All", count: counts?.[""] },
+            ...Object.entries(TEMPLATE_STATUS_MAP).map(([key, meta]) => ({
+              value: key, label: meta.label, count: counts?.[key], variant: meta.variant,
+            })),
+          ]}
+          value={statusFilter}
+          allValue=""
+          onChange={setStatusFilter}
+        />
+
+        {/* ── Toolbar: search, the filter menu, Clear ── */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="templates-search"
+            label="Search grading templates"
+            placeholder="Search templates…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+          />
+          <FilterMenu
+            label="Level"
+            valueLabel={levelLabel ?? "All levels"}
+            active={Boolean(levelFilter)}
+            options={LEVEL_FILTER_OPTIONS}
+            value={levelFilter}
+            onChange={setLevelFilter}
+            align="end"
+            menuWidth={220}
+          />
+          {hasFilters && (
+            <button type="button" onClick={clearFilters} className={clearButtonClass}>
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-          whileTap={{ scale: 0.96 }}
-          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-          onClick={() => setModal({ mode: "create" })}>
-          <i className="ti ti-plus" style={{ fontSize: 15 }} />New Template
-        </motion.button>
-      </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
-
+        {/* ── Table ── */}
         <motion.div
-          initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.28, delay: 0.06, ease: "easeOut" }}
-          style={{ background: "white", borderRadius: 14, padding: "16px 20px", border: "1px solid #f5eaea", boxShadow: "0 2px 12px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", gap: 12 }}
+          initial={isFirstRender ? { opacity: 0, y: 10 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1.5px solid #f0e4e4", borderRadius: 12, padding: "0 14px", height: 38, width: "100%", boxSizing: "border-box" }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a", flexShrink: 0 }} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search templates…"
-              style={{ border: "none", outline: "none", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "transparent", width: "100%" }}
-            />
-            <AnimatePresence>
-              {search && (
-                <motion.button
-                  initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
-                  onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", display: "flex", alignItems: "center", padding: 0 }}>
-                  <i className="ti ti-x" style={{ fontSize: 12 }} />
-                </motion.button>
+          <Card padding="none" className="overflow-hidden">
+            <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+              <h2 className="text-md font-bold text-neutral-900">
+                {statusFilter ? TEMPLATE_STATUS_MAP[statusFilter].title : "All templates"}
+              </h2>
+              {!loading && !loadError && (
+                <span className="text-sm text-neutral-500 tabular-nums">{filtered.length}</span>
               )}
-            </AnimatePresence>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Level</span>
-              {[{ value: "all", label: "All", color: "#c92a2a", bg: "#fff0f0" }, ...SCHOOL_LEVELS].map((lvl) => {
-                const active = levelFilter === lvl.value;
+            </div>
+            <Table
+              headerVariant="quiet"
+              columns={TEMPLATE_COLUMNS}
+              loading={loading}
+              error={loadError}
+              onRetry={fetchTemplates}
+              errorSubject="the grading templates"
+              isEmpty={filtered.length === 0}
+              skeletonRows={4}
+              empty={{
+                icon: "ti-report-analytics",
+                withAvatar: false,
+                title: hasFilters ? "No templates match these filters" : "No grading templates yet",
+                subtitle: hasFilters
+                  ? "Try a different search, or clear the filters."
+                  : "Create one to say how each subject's scores make up its grade.",
+                action: hasFilters ? (
+                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button size="sm" icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
+                    New Template
+                  </Button>
+                ),
+              }}
+            >
+              {filtered.map((tpl) => {
+                const total = calcTotal(tpl.components);
+                const complete = weightsComplete(tpl);
                 return (
-                  <motion.button key={lvl.value} onClick={() => setLevelFilter(lvl.value)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      height: 32, padding: "0 14px", borderRadius: 99,
-                      border: `1.5px solid ${active ? lvl.color : "#f0e4e4"}`,
-                      background: active ? lvl.bg : "white",
-                      color: active ? lvl.color : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {lvl.icon && <i className={`ti ${lvl.icon}`} style={{ fontSize: 12 }} />}
-                    {lvl.label}
-                  </motion.button>
+                  <TableRow key={tpl.grading_template_id} onClick={() => setModal({ mode: "edit", template: tpl })}>
+                    <TableCell>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-semibold text-neutral-900 transition-colors group-hover:text-brand-600">
+                          {tpl.template_name}
+                        </div>
+                        {tpl.description && (
+                          <div className="truncate text-[11.5px] text-neutral-500">{tpl.description}</div>
+                        )}
+                      </div>
+                    </TableCell>
+
+                    {/* The same dot as the Level menu. */}
+                    <TableCell>
+                      <span className="flex min-w-0 items-center gap-2 text-sm text-neutral-800">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOTS[tpl.school_level] ?? "bg-neutral-400"}`} aria-hidden="true" />
+                        <span className="truncate">{LEVEL_LABELS[tpl.school_level] ?? tpl.school_level}</span>
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
+                      {tpl.components?.length ? (
+                        <div className="flex flex-col gap-1.5">
+                          <WeightBar components={tpl.components} />
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-neutral-600">
+                            {tpl.components.map((c, i) => (
+                              <span key={c.grading_component_id ?? i} className="inline-flex items-center gap-1.5">
+                                <span
+                                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                  style={{ background: COMPONENT_COLORS[i % COMPONENT_COLORS.length] }}
+                                  aria-hidden="true"
+                                />
+                                {c.component_name} <span className="font-semibold text-neutral-800 tabular-nums">{parseFloat(c.weight)}%</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm italic text-neutral-500">No components yet</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      <span className={`text-[13px] font-bold tabular-nums ${complete ? "text-neutral-900" : "text-warning-500"}`}>
+                        {total.toFixed(0)}%
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
+                      <StatusDot status={templateStatus(tpl)} map={TEMPLATE_STATUS_MAP} />
+                    </TableCell>
+
+                    {/* Row actions must not trigger the row's own click. */}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost" size="sm" icon="ti-pencil"
+                          aria-label={`Edit ${tpl.template_name}`}
+                          onClick={() => setModal({ mode: "edit", template: tpl })}
+                        />
+                        {canManage && (
+                          <Button
+                            variant="ghost" size="sm" icon="ti-trash"
+                            aria-label={`Delete ${tpl.template_name}`}
+                            className="hover:bg-error-50 hover:text-error-500"
+                            onClick={() => { setToDelete(tpl); setDeleteError(""); }}
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </div>
-
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 2 }}>Status</span>
-              {[
-                { value: "all",      label: "All",      color: "#c92a2a", bg: "#fff0f0" },
-                { value: "active",   label: "Active",   color: "#2e6b0d", bg: "#e8f5e0" },
-                { value: "inactive", label: "Inactive", color: "#7a5050", bg: "#f0ede8" },
-              ].map((s) => {
-                const active = statusFilter === s.value;
-                return (
-                  <motion.button key={s.value} onClick={() => setStatusFilter(s.value)}
-                    style={{
-                      height: 32, padding: "0 14px", borderRadius: 99,
-                      border: `1.5px solid ${active ? s.color : "#f0e4e4"}`,
-                      background: active ? s.bg : "white",
-                      color: active ? s.color : "#855c5c",
-                      fontSize: 12, fontWeight: active ? 700 : 500, cursor: "pointer",
-                      fontFamily: "'DM Sans',sans-serif",
-                      transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    {s.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            <AnimatePresence>
-              {hasFilters && (
-                <motion.button
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  onClick={() => { setLevelFilter("all"); setStatusFilter("all"); setSearch(""); }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 99, border: "1.5px solid #fde2de", background: "white", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                  <i className="ti ti-x" style={{ fontSize: 11 }} />Clear
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+            </Table>
+          </Card>
         </motion.div>
-
-        {loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
-                <Sk w={100} h={20} /><Sk w="80%" h={14} /><Sk w="60%" h={8} r={99} />
-                <div style={{ height: 1, background: "#f5eaea" }} />
-                <Sk w={120} h={13} /><Sk w={140} h={13} />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "64px 24px", textAlign: "center" }}
-          >
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-              <i className="ti ti-report-analytics" style={{ fontSize: 22, color: "#8a6a6a" }} />
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
-              {hasFilters ? "No templates match your filters" : "No templates found"}
-            </div>
-            <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 6 }}>
-              {hasFilters ? "Try adjusting your search or filters" : "Create your first grading template to get started"}
-            </div>
-            {!hasFilters && (
-              <motion.button
-                whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-                whileTap={{ scale: 0.96 }}
-                onClick={() => setModal({ mode: "create" })}
-                style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-                <i className="ti ti-plus" style={{ fontSize: 14 }} />Create Template
-              </motion.button>
-            )}
-          </motion.div>
-        ) : (
-          <motion.div
-            variants={listVariants.container}
-            initial="hidden" animate="visible"
-            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}
-          >
-            {filtered.map((tpl) => (
-              <TemplateCard key={tpl.grading_template_id} template={tpl}
-                onEdit={(t) => setModal({ mode: "edit", template: t })}
-                onDelete={(t) => { setToDelete(t); setDeleteError(""); }}
-                canManage={canManage} />
-            ))}
-          </motion.div>
-        )}
       </div>
 
       <AnimatePresence>
@@ -723,14 +699,16 @@ function GradingTemplatesTab() {
           />
         )}
       </AnimatePresence>
-    </motion.div>
+    </>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// NARRATIVE CATEGORIES TAB — ported from the former NarrativeCategoriesPage.jsx,
-// reskinned from its former purple (#7c3aed) theme to the app's standard red.
+// NARRATIVE CATEGORIES TAB
 // ════════════════════════════════════════════════════════════════════════════
+
+const textInput =
+  "h-9 rounded-sm border-[1.5px] border-neutral-300 bg-white px-2.5 text-[13px] text-neutral-900 outline-none focus:border-brand-500";
 
 function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
   const [editing,  setEditing]  = useState(false);
@@ -776,95 +754,98 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
     finally { setDeleting(false); setConfirm(false); }
   };
 
-  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-2.5 bg-brand-50 px-5 py-4">
+        <div className="flex gap-2.5">
+          <input aria-label="Category name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className={`${textInput} flex-1`} />
+          <input aria-label="Sort order" type="number" value={order} onChange={(e) => setOrder(e.target.value)} placeholder="Order" className={`${textInput} w-24 text-right`} />
+        </div>
+        <input aria-label="Description" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description (optional)" className={textInput} />
+        <div className="flex items-center gap-2">
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-[12.5px] text-neutral-700">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-brand-500" />
+            Active
+          </label>
+          <div className="flex-1" />
+          <Button
+            variant="secondary" size="sm"
+            onClick={() => { setEditing(false); setName(cat.name); setDesc(cat.description ?? ""); setOrder(String(cat.sort_order)); setActive(cat.is_active); }}
+          >
+            Cancel
+          </Button>
+          <Button size="sm" icon="ti-check" loading={saving} disabled={!name.trim()} onClick={handleSave}>
+            Save
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}
-      style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 1px 6px rgba(224,49,49,0.05)" }}>
-      {editing ? (
-        <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" style={{ ...inp, flex: 1 }} />
-            <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} placeholder="Sort order" style={{ ...inp, width: 90, textAlign: "right" }} />
-          </div>
-          <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description (optional)" style={{ ...inp, width: "100%" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7a5050", cursor: "pointer", userSelect: "none" }}>
-              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} style={{ accentColor: "#e03131" }} />Active
-            </label>
-            <div style={{ flex: 1 }} />
-            <button onClick={() => { setEditing(false); setName(cat.name); setDesc(cat.description ?? ""); setOrder(String(cat.sort_order)); setActive(cat.is_active); }}
-              style={{ height: 32, padding: "0 12px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving || !name.trim()}
-              style={{ height: 32, padding: "0 14px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
-              {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Save
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? "#fff0f0" : "#f5f0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-clipboard-text" style={{ fontSize: 16, color: active ? "#c92a2a" : "#8a6a6a" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: active ? "#1a0a0a" : "#9a8080" }}>{cat.name}</div>
-            {cat.description && <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: active ? "#fff0f0" : "#f5f0f0", color: active ? "#c92a2a" : "#9a8080" }}>{active ? "Active" : "Inactive"}</span>
-            <span style={{ fontSize: 11, color: "#8a6a6a", background: "#fdfafa", border: "1px solid #f5eaea", padding: "2px 8px", borderRadius: 6 }}>#{cat.sort_order}</span>
-            <button onClick={handleToggleActive} disabled={saving}
-              style={{ height: 28, padding: "0 10px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
-              {active ? "Deactivate" : "Activate"}
-            </button>
-            <button onClick={() => setEditing(true)}
-              style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#855c5c"; }}>
-              <i className="ti ti-pencil" style={{ fontSize: 12 }} />
-            </button>
-            {canManage && (confirm ? (
-              <div style={{ display: "flex", gap: 4 }}>
-                <button onClick={handleDelete} disabled={deleting}
-                  style={{ height: 28, padding: "0 10px", border: "none", borderRadius: 7, background: "#e03131", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
-                  {deleting && <i className="ti ti-loader-2" style={{ fontSize: 11, animation: "spin 1s linear infinite" }} />}Confirm
-                </button>
-                <button onClick={() => setConfirm(false)}
-                  style={{ height: 28, padding: "0 8px", border: "1px solid #f0e4e4", borderRadius: 7, background: "white", fontSize: 11, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
-              </div>
-            ) : (
-              <button onClick={() => setConfirm(true)}
-                style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#8a6a6a"; }}>
-                <i className="ti ti-trash" style={{ fontSize: 12 }} />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </motion.div>
+    <div className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-brand-50">
+      <span className="w-8 shrink-0 font-mono text-[12px] text-neutral-500 tabular-nums" title="Sort order">#{cat.sort_order}</span>
+      <div className="min-w-0 flex-1">
+        <div className={`truncate text-[13px] font-semibold ${active ? "text-neutral-900" : "text-neutral-500"}`}>{cat.name}</div>
+        {cat.description && <div className="truncate text-[11.5px] text-neutral-500">{cat.description}</div>}
+      </div>
+      <StatusDot status={active ? "active" : "inactive"} map={ACTIVE_STATUS_MAP} className="w-[88px] shrink-0" />
+      <div className="flex shrink-0 items-center gap-1">
+        <Button variant="ghost" size="sm" disabled={saving} onClick={handleToggleActive}>
+          {active ? "Deactivate" : "Activate"}
+        </Button>
+        <Button variant="ghost" size="sm" icon="ti-pencil" aria-label={`Edit ${cat.name}`} onClick={() => setEditing(true)} />
+        {canManage && (confirm ? (
+          <>
+            <Button size="sm" loading={deleting} onClick={handleDelete}>Confirm</Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirm(false)}>Cancel</Button>
+          </>
+        ) : (
+          <Button
+            variant="ghost" size="sm" icon="ti-trash"
+            aria-label={`Delete ${cat.name}`}
+            className="hover:bg-error-50 hover:text-error-500"
+            onClick={() => setConfirm(true)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
-function NarrativeCategoriesTab() {
+const CATEGORY_FILTERS = [
+  { value: "",         label: "All" },
+  { value: "active",   label: "Active",   variant: "success", title: "Active categories" },
+  { value: "inactive", label: "Inactive", variant: "muted",   title: "Inactive categories" },
+];
+
+function NarrativeCategoriesTab({ header }) {
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const [categories, setCategories] = useState([]);
-  const [loading,    setLoading]    = useState(false);
+  const [loading,    setLoading]    = useState(true);
+  // A failed load used to read as "No categories yet".
+  const [loadError,  setLoadError]  = useState(null);
+  const [reload,     setReload]     = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search,     setSearch]     = useState("");
   const [adding,     setAdding]     = useState(false);
   const [newName,    setNewName]    = useState("");
   const [newDesc,    setNewDesc]    = useState("");
   const [newOrder,   setNewOrder]   = useState("");
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState("");
+  const searchRef = useRef(null);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setLoadError(null);
     getCategories({ page_size: 200 })
-      .then((d) => setCategories(Array.isArray(d) ? d : d?.results ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .then((d) => { if (!cancelled) setCategories(Array.isArray(d) ? d : d?.results ?? []); })
+      .catch((e) => { if (!cancelled) { setLoadError(e); setCategories([]); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [reload]);
 
   const handleAdd = async () => {
     if (!newName.trim()) { setError("Name is required."); return; }
@@ -882,100 +863,132 @@ function NarrativeCategoriesTab() {
     finally { setSaving(false); }
   };
 
-  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
-  const activeCount   = categories.filter((c) => c.is_active).length;
-  const inactiveCount = categories.filter((c) => !c.is_active).length;
+  // Every category loads at once, so the band counts here; the search
+  // narrows only the rows.
+  const counts = loading || loadError ? null : {
+    "": categories.length,
+    active: categories.filter((c) => c.is_active).length,
+    inactive: categories.filter((c) => !c.is_active).length,
+  };
+  const filtered = categories.filter((c) => {
+    if (statusFilter === "active" && !c.is_active) return false;
+    if (statusFilter === "inactive" && c.is_active) return false;
+    const q = search.trim().toLowerCase();
+    return !q || c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q);
+  });
+  const hasFilters = Boolean(statusFilter || search.trim());
+  const clearFilters = () => { setStatusFilter(""); setSearch(""); searchRef.current?.focus(); };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-      style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+    <>
+      {header(
+        <Button icon="ti-plus" onClick={() => { setAdding(true); setNewName(""); setNewDesc(""); setNewOrder(""); setError(""); }}>
+          Add Category
+        </Button>,
+      )}
 
-      <div style={{ padding: "14px 28px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ fontSize: 12, color: C.pale }}>Behavioral and learning categories used in student narrative reports</div>
-        <motion.button onClick={() => { setAdding(true); setNewName(""); setNewDesc(""); setNewOrder(""); setError(""); }}
-          whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.96 }}
-          style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
-          <i className="ti ti-plus" style={{ fontSize: 15 }} />Add Category
-        </motion.button>
-      </div>
+      <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
+        {/* ── Which categories teachers rate, and the filter ── */}
+        <StatusBand
+          total={counts?.[""]}
+          caption={`narrative categor${counts?.[""] === 1 ? "y" : "ies"}`}
+          aside={
+            <span className="hidden text-sm text-brand-border sm:block">
+              Teachers rate the active ones for each learner
+            </span>
+          }
+          options={CATEGORY_FILTERS.map((f) => ({
+            value: f.value, label: f.label, count: counts?.[f.value], variant: f.variant,
+          }))}
+          value={statusFilter}
+          allValue=""
+          onChange={setStatusFilter}
+        />
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
-        {!loading && categories.length > 0 && (
-          <div style={{ display: "flex", gap: 10 }}>
-            {[
-              { label: "Total",    value: categories.length, color: "#c92a2a", bg: "#fff0f0", icon: "ti-list" },
-              { label: "Active",   value: activeCount,       color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-circle-check" },
-              { label: "Inactive", value: inactiveCount,     color: "#854f0b", bg: "#faeeda", icon: "ti-circle-x" },
-            ].map((s) => (
-              <div key={s.label} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(224,49,49,0.04)" }}>
-                <div style={{ width: 36, height: 36, borderRadius: 9, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <i className={`ti ${s.icon}`} style={{ fontSize: 16, color: s.color }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "#1a0a0a", lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontSize: 10, color: "#8a6a6a", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>{s.label}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchField
+            id="categories-search"
+            label="Search narrative categories"
+            placeholder="Search categories…"
+            inputRef={searchRef}
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+          />
+          {hasFilters && (
+            <button type="button" onClick={clearFilters} className={clearButtonClass}>
+              <i className="ti ti-filter-off text-[14px]" aria-hidden="true" />
+              Clear
+            </button>
+          )}
+        </div>
 
         <AnimatePresence>
           {adding && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}
-              style={{ background: "white", borderRadius: 14, border: "2px solid #fca5a5", padding: "18px 20px", boxShadow: "0 4px 20px rgba(224,49,49,0.12)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#c92a2a", display: "flex", alignItems: "center", gap: 6 }}>
-                <i className="ti ti-plus" style={{ fontSize: 13 }} />New Category
-              </div>
-              {error && <div style={{ fontSize: 11, color: "#b91c1c" }}>{error}</div>}
-              <div style={{ display: "flex", gap: 10 }}>
-                <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Category name (e.g., Attentive in Class)"
-                  style={{ ...inp, flex: 1 }} onKeyDown={(e) => e.key === "Enter" && handleAdd()} autoFocus />
-                <input type="number" value={newOrder} onChange={(e) => setNewOrder(e.target.value)} placeholder="Sort order"
-                  style={{ ...inp, width: 100, textAlign: "right" }} />
-              </div>
-              <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Description (optional)"
-                style={{ ...inp, width: "100%" }} onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => { setAdding(false); setError(""); }}
-                  style={{ height: 34, padding: "0 14px", border: "1px solid #f0e4e4", borderRadius: 8, background: "white", fontSize: 12, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>Cancel</button>
-                <button onClick={handleAdd} disabled={saving || !newName.trim()}
-                  style={{ height: 34, padding: "0 16px", border: "none", borderRadius: 8, background: saving ? "#e87474" : "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5 }}>
-                  {saving ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} /> : <i className="ti ti-check" style={{ fontSize: 12 }} />}Add Category
-                </button>
-              </div>
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+              <Card padding="none">
+                <div className="flex flex-col gap-2.5 px-5 py-4">
+                  <h2 className="text-md font-bold text-neutral-900">New category</h2>
+                  {error && <Alert variant="error">{error}</Alert>}
+                  <div className="flex gap-2.5">
+                    <input aria-label="Category name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Category name (e.g., Attentive in Class)"
+                      className={`${textInput} flex-1`} onKeyDown={(e) => e.key === "Enter" && handleAdd()} autoFocus />
+                    <input aria-label="Sort order" type="number" value={newOrder} onChange={(e) => setNewOrder(e.target.value)} placeholder="Order"
+                      className={`${textInput} w-24 text-right`} />
+                  </div>
+                  <input aria-label="Description" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Description (optional)"
+                    className={textInput} onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => { setAdding(false); setError(""); }}>Cancel</Button>
+                    <Button size="sm" icon="ti-check" loading={saving} disabled={!newName.trim()} onClick={handleAdd}>
+                      Add Category
+                    </Button>
+                  </div>
+                </div>
+              </Card>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <motion.div layout style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Card padding="none" className="overflow-hidden">
+          <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
+            <h2 className="text-md font-bold text-neutral-900">
+              {CATEGORY_FILTERS.find((f) => f.value === statusFilter)?.title ?? "All categories"}
+            </h2>
+            {!loading && !loadError && (
+              <span className="text-sm text-neutral-500 tabular-nums">{filtered.length}</span>
+            )}
+          </div>
           {loading ? (
-            [1,2,3,4].map((i) => (
-              <div key={i} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "14px 18px", display: "flex", gap: 12, alignItems: "center" }}>
-                <Sk w={36} h={36} r={10} /><div style={{ flex: 1 }}><Sk w="40%" h={14} /><div style={{ marginTop: 6 }}><Sk w="25%" h={11} /></div></div>
-              </div>
-            ))
-          ) : categories.length === 0 ? (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "60px 24px", textAlign: "center" }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-                <i className="ti ti-clipboard-text" style={{ fontSize: 24, color: "#c92a2a" }} />
-              </div>
-              <div style={{ fontSize: 15, color: "#7a5050", fontWeight: 600 }}>No categories yet</div>
-              <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 6 }}>Click "Add Category" to get started.</div>
+            <div className="divide-y divide-neutral-200/70">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+                  <div className="h-3 w-6 animate-pulse rounded bg-neutral-100" />
+                  <div className="h-3.5 flex-1 animate-pulse rounded bg-neutral-100" />
+                </div>
+              ))}
             </div>
+          ) : loadError ? (
+            <ErrorState error={loadError} subject="the narrative categories" onRetry={() => setReload((k) => k + 1)} />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="ti-clipboard-text"
+              title={hasFilters ? "No categories match these filters" : "No categories yet"}
+              subtitle={hasFilters ? "Try a different search, or clear the filters." : 'Click "Add Category" to get started.'}
+            />
           ) : (
-            <AnimatePresence>
-              {categories.map((cat) => (
+            <div className="divide-y divide-neutral-200/70">
+              {filtered.map((cat) => (
                 <CategoryRow key={cat.category_id} cat={cat}
                   onUpdated={(updated) => setCategories((prev) => prev.map((c) => c.category_id === updated.category_id ? updated : c))}
                   onDeleted={(id) => setCategories((prev) => prev.filter((c) => c.category_id !== id))}
                   canManage={canManage}
                 />
               ))}
-            </AnimatePresence>
+            </div>
           )}
-        </motion.div>
+        </Card>
       </div>
-    </motion.div>
+    </>
   );
 }
