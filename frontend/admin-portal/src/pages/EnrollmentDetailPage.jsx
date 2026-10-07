@@ -481,7 +481,9 @@ export default function EnrollmentDetailPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => navigate(`/requirements?student=${enrollment.student_id ?? enrollment.student}`)}
+                  // With the year, so the page opens on this enrollment's
+                  // placement and lists what it asks for.
+                  onClick={() => navigate(`/requirements?student=${enrollment.student_id ?? enrollment.student}&school_year=${encodeURIComponent(enrollment.school_year)}`)}
                   style={{ marginTop: 12, background: "none", border: "none", padding: 0,
                            cursor: "pointer", fontSize: 11.5, fontWeight: 600, color: C.red }}
                 >

@@ -104,6 +104,13 @@ export const getEnrollments = (params = {}) =>
 export const getGradeAverages = (params = {}) =>
   enrollmentClient.get("/enrollments/grade-averages/", { params }).then((r) => r.data);
 
+// A school year's learners, each with the required documents they still owe —
+// a page of rows plus `summary` ({ learners, complete, missing }), which counts
+// the year, level and grade whatever search or `documents` (missing/complete)
+// narrow the rows to. The Requirements page lists it.
+export const getDocumentStatus = (params = {}) =>
+  enrollmentClient.get("/enrollments/documents/", { params }).then((r) => r.data);
+
 export const getEnrollment = (id) =>
   enrollmentClient.get(`/enrollments/${id}/`).then((r) => r.data);
 

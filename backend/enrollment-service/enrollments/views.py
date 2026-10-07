@@ -85,6 +85,11 @@ def _bulk_failure_reason(exc, *, context):
 
 ACADEMIC_STAFF_ROLES = ("super_admin", "admin", "registrar")
 
+# The learners whose documents the Requirements page follows in a year: those
+# placed there or waiting to be. A cancelled row never attended, and a learner
+# who transferred out has left, so nobody chases their papers.
+DOCUMENT_TRACKED_STATUSES = ("pending", "enrolled", "completed")
+
 
 def _parse_date(value):
     """Parse a 'YYYY-MM-DD' string into a date; returns None if missing/invalid."""
@@ -1532,6 +1537,104 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             .values_list("avg", flat=True)
         )
         return Response(tally_averages(enrollments.count(), averages))
+
+    @action(detail=False, methods=["get"], url_path="documents")
+    def documents(self, request):
+        """
+        GET /api/enrollments/documents/?school_year=2026-2027
+            [&school_level=…&grade_level=…&search=…&documents=missing|complete
+             &student=…&page=…&page_size=…]
+
+        Each learner in a school year with the required documents their
+        placement asks for: how many are in, and which are still missing. The
+        Requirements page lists these rows, and `summary` is the split its
+        status band draws -- {"learners", "complete", "missing"}.
+
+        What a learner owes is the activation gate's own rule
+        (requirements.rules), applied to the row they entered the year on, so
+        this never calls someone complete whom the gate would hold back. Like
+        the other list pages' bands, `summary` counts the year, level and
+        grade, and ignores the search and the documents filter, which only
+        narrow the rows.
+        """
+        from requirements.models import RequirementType, StudentRequirementSubmission
+        from requirements.rules import document_rows
+
+        # The submissions these rows are read from are closed to both: a
+        # guardian sees only their own child's, and document status isn't
+        # billing's business (see requirements.views).
+        role = getattr(request.user, "role", None)
+        if role in ("guardian", "accounting"):
+            return Response({"detail": "You do not have access to this record."}, status=403)
+
+        params = request.query_params
+        year = (params.get("school_year") or "").strip()
+        if not year:
+            return Response({"detail": "school_year is required."}, status=400)
+
+        # get_queryset() is the list's own, so a teacher sees only their
+        # advisory, as everywhere else on this viewset.
+        scope = self.get_queryset().filter(
+            school_year=year, enrollment_status__in=DOCUMENT_TRACKED_STATUSES,
+        )
+        if params.get("school_level"):
+            scope = scope.filter(school_level__iexact=params["school_level"])
+        if params.get("grade_level"):
+            scope = scope.filter(grade_level__iexact=params["grade_level"])
+        enrollments = list(scope.order_by("enrollment_id"))
+        student_ids = {e.student_id for e in enrollments}
+
+        # Only years actually spent here make a learner continuing -- the
+        # gate's rule. Labels read "2025-2026", so string order is year order.
+        attended_before = set(
+            Enrollment.objects.filter(
+                student_id__in=student_ids,
+                school_year__lt=year,
+                enrollment_status__in=ATTENDED_STATUSES,
+            ).values_list("student_id", flat=True)
+        )
+        transferred_in = set(
+            EnrollmentTransfer.objects.filter(
+                enrollment_id__in=[e.enrollment_id for e in enrollments],
+                transfer_type="transfer_in",
+            ).values_list("enrollment_id", flat=True)
+        )
+        submitted = {}
+        for student_id, type_id in StudentRequirementSubmission.objects.filter(
+            student_id__in=student_ids, is_submitted=True,
+        ).values_list("student_id", "requirement_type_id"):
+            submitted.setdefault(student_id, set()).add(type_id)
+
+        rows = document_rows(
+            enrollments,
+            attended_before=attended_before,
+            transferred_in=transferred_in,
+            submitted=submitted,
+            req_types=list(RequirementType.objects.filter(is_active=True)),
+        )
+        complete = sum(1 for r in rows if not r["missing"])
+        summary = {"learners": len(rows), "complete": complete, "missing": len(rows) - complete}
+
+        # One learner, for a link that opens on them (?student=).
+        if params.get("student"):
+            wanted_student = _int_param(params["student"], "student")
+            rows = [r for r in rows if r["student_id"] == wanted_student]
+        # The Enrollments list's own search, so a name finds the same learners.
+        if params.get("search", "").strip():
+            found = set(
+                SearchFilter().filter_queryset(request, scope, self)
+                .values_list("student_id", flat=True)
+            )
+            rows = [r for r in rows if r["student_id"] in found]
+        documents_filter = params.get("documents")
+        if documents_filter == "missing":
+            rows = [r for r in rows if r["missing"]]
+        elif documents_filter == "complete":
+            rows = [r for r in rows if not r["missing"]]
+
+        response = self.get_paginated_response(self.paginate_queryset(rows))
+        response.data["summary"] = summary
+        return response
 
     @action(detail=False, methods=["get"], url_path="unplaced")
     def unplaced(self, request):

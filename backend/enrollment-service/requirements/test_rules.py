@@ -17,7 +17,9 @@ from .rules import (
     SCHOOL_LEVELS,
     applies_to,
     derive_entry_status,
+    document_rows,
     missing_required,
+    required_standing,
     split_missing,
 )
 
@@ -185,3 +187,93 @@ def test_ordering_is_preserved():
     required, _ = split_missing(types, set(),
                                 school_level="elementary", entry_status="new")
     assert [r.requirement_type_id for r in required] == [3, 1, 2]
+
+
+# ── required_standing / document_rows ────────────────────────────────────
+
+CATALOGUE = [
+    req(1, required=True),                                          # psa birth cert
+    req(2, required=True),                                          # health record
+    req(3, required=True, levels=["elementary", "junior_highschool", "senior_highschool"],
+        statuses=["transferee"]),                                   # form 137/138
+    req(4, required=False),                                         # recommendation letter
+]
+
+
+@pytest.mark.parametrize("submitted", [set(), {1}, {1, 2, 3, 4}, {4}])
+def test_what_is_missing_is_exactly_what_the_gate_blocks_on(submitted):
+    """The Requirements list and the activation gate read one rule."""
+    for level, status in [("elementary", "transferee"), ("kindergarten", "new"),
+                          ("junior_highschool", "continuing")]:
+        _, missing = required_standing(CATALOGUE, submitted, school_level=level, entry_status=status)
+        assert missing == missing_required(CATALOGUE, submitted, school_level=level, entry_status=status)
+
+
+def test_only_the_required_documents_a_placement_asks_for_are_owed():
+    owed, missing = required_standing(CATALOGUE, {1, 4},
+                                      school_level="elementary", entry_status="transferee")
+    assert [r.requirement_type_id for r in owed] == [1, 2, 3]  # never the optional letter
+    assert [r.requirement_type_id for r in missing] == [2, 3]
+
+    owed, _ = required_standing(CATALOGUE, set(), school_level="kindergarten", entry_status="new")
+    assert [r.requirement_type_id for r in owed] == [1, 2]
+
+
+def enrollment(id_, student_id, *, grade="Grade 7", level="junior_highschool",
+               status="enrolled", section="Rizal", last="Cruz", first="Ana"):
+    return SimpleNamespace(
+        enrollment_id=id_, student_id=student_id, grade_level=grade, school_level=level,
+        enrollment_status=status, section=section,
+        student=SimpleNamespace(first_name=first, middle_name=None, last_name=last, suffix=None,
+                                lrn=f"LRN{student_id}", student_number=f"S-{student_id}"),
+    )
+
+
+def rows_for(enrollments, *, attended_before=(), transferred_in=(), submitted=None):
+    return document_rows(
+        enrollments, attended_before=set(attended_before), transferred_in=set(transferred_in),
+        submitted=submitted or {}, req_types=CATALOGUE,
+    )
+
+
+def test_a_walk_in_above_grade_one_owes_the_transferee_documents():
+    [row] = rows_for([enrollment(10, 1)], submitted={1: {1, 2}})
+    assert row["entry_status"] == "transferee"
+    assert (row["required"], row["submitted"]) == (3, 2)
+    assert row["missing"] == [{"requirement_type_id": 3, "requirement_name": "Doc 3"}]
+
+
+def test_a_year_spent_here_before_makes_a_learner_continuing():
+    [row] = rows_for([enrollment(10, 1)], attended_before={1}, submitted={1: {1, 2}})
+    assert row["entry_status"] == "continuing"
+    assert row["missing"] == []
+
+
+def test_a_recorded_transfer_in_counts_even_at_an_entry_grade():
+    """Grade 1 alone derives as new; the registrar's Transfer In says otherwise."""
+    grade_one = enrollment(10, 1, grade="Grade 1", level="elementary")
+    assert rows_for([grade_one])[0]["entry_status"] == "new"
+    assert rows_for([grade_one], transferred_in={10})[0]["entry_status"] == "transferee"
+
+
+def test_one_row_per_learner_owed_from_the_row_they_entered_on():
+    """
+    A senior high learner has a row per semester. The 1st semester's decided
+    what they owed coming in; the 2nd says where they are now.
+    """
+    first = enrollment(10, 1, grade="Grade 11", level="senior_highschool", status="completed", section="STEM-A")
+    second = enrollment(11, 1, grade="Grade 11", level="senior_highschool", status="pending", section="STEM-B")
+    [row] = rows_for([first, second], transferred_in={10})
+
+    assert row["entry_status"] == "transferee"
+    assert (row["enrollment_id"], row["enrollment_status"], row["section"]) == (11, "pending", "STEM-B")
+
+
+def test_rows_are_sorted_by_last_name_then_first():
+    rows = rows_for([
+        enrollment(1, 1, last="dela Cruz", first="Ben"),
+        enrollment(2, 2, last="Abad", first="Cora"),
+        enrollment(3, 3, last="Dela Cruz", first="Ana"),
+    ])
+    assert [r["student_id"] for r in rows] == [2, 3, 1]
+    assert rows[0]["lrn"] == "LRN2" and rows[0]["student_number"] == "S-2"

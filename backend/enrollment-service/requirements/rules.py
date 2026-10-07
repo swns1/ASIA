@@ -127,3 +127,81 @@ def missing_required(req_types, submitted_ids, *, school_level, entry_status):
         school_level=school_level, entry_status=entry_status,
     )
     return required_missing
+
+
+def required_standing(req_types, submitted_ids, *, school_level, entry_status):
+    """
+    (owed, missing) — the required documents this placement asks for, and
+    those of them not yet submitted. One row of the Requirements page's list.
+
+    `missing` is exactly what missing_required() returns, so the list and the
+    gate can't disagree about who is held back. `owed` is there for the
+    "3 of 4 in" count beside it.
+    """
+    owed = [
+        rt for rt in req_types
+        if getattr(rt, "is_required", False)
+        and applies_to(rt, school_level=school_level, entry_status=entry_status)
+    ]
+    missing = [rt for rt in owed if rt.requirement_type_id not in submitted_ids]
+    return owed, missing
+
+
+def document_rows(enrollments, *, attended_before, transferred_in, submitted, req_types):
+    """
+    One row per learner in a school year: the required documents their
+    placement asks for, and which are still missing -- the Requirements
+    page's list, sorted by name.
+
+    `enrollments` are that year's rows, oldest first; a senior high learner
+    has one per semester. The first decides what they owe, being the one that
+    went through the gate as they entered the year, and the latest says where
+    they are now. `attended_before` holds the students with an earlier year
+    here, `transferred_in` the enrollment ids recorded as a transfer in, and
+    `submitted` maps a student_id to the requirement type ids they've handed
+    in. Rows are duck-typed, as everywhere in this module.
+    """
+    first, latest = {}, {}
+    for e in enrollments:
+        first.setdefault(e.student_id, e)
+        latest[e.student_id] = e
+
+    rows = []
+    for student_id, entered in first.items():
+        now = latest[student_id]
+        entry_status = derive_entry_status(
+            has_prior_enrollment=student_id in attended_before,
+            is_transfer_in=entered.enrollment_id in transferred_in,
+            grade_level=entered.grade_level,
+        )
+        owed, missing = required_standing(
+            req_types, submitted.get(student_id, set()),
+            school_level=entered.school_level, entry_status=entry_status,
+        )
+        student = getattr(now, "student", None)
+        rows.append({
+            "student_id": student_id,
+            "first_name": getattr(student, "first_name", None),
+            "middle_name": getattr(student, "middle_name", None),
+            "last_name": getattr(student, "last_name", None),
+            "suffix": getattr(student, "suffix", None),
+            "lrn": getattr(student, "lrn", None),
+            "student_number": getattr(student, "student_number", None),
+            "enrollment_id": now.enrollment_id,
+            "enrollment_status": now.enrollment_status,
+            "school_level": entered.school_level,
+            "grade_level": now.grade_level,
+            "section": now.section,
+            "entry_status": entry_status,
+            "required": len(owed),
+            "submitted": len(owed) - len(missing),
+            "missing": [
+                {"requirement_type_id": rt.requirement_type_id, "requirement_name": rt.requirement_name}
+                for rt in missing
+            ],
+        })
+
+    rows.sort(key=lambda r: (
+        (r["last_name"] or "").casefold(), (r["first_name"] or "").casefold(), r["student_id"],
+    ))
+    return rows
