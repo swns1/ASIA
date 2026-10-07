@@ -67,7 +67,11 @@ describe("StudentsPage — status band", () => {
 
     expect(await legend().findByRole("button", { name: "Active 6" })).toBeTruthy();
     expect(legend().getByRole("button", { name: "All 10" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("learners in S.Y. 2026-2027").previousSibling.textContent).toBe("10");
+    // The total rolls up to its count.
+    await waitFor(
+      () => expect(screen.getByText("learners in S.Y. 2026-2027").previousSibling.textContent).toBe("10"),
+      { timeout: 2000 },
+    );
   });
 
   it("filters by a status from its legend button, and goes back to all on a second click", async () => {

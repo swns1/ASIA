@@ -396,7 +396,7 @@ function OverviewTab({ onNavigate }) {
       <motion.div
         initial={isFirstRender ? { opacity: 0, y: 10 } : false}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.38 : 0 }}
+        transition={{ duration: 0.26, ease: "easeOut", delay: isFirstRender ? 0.1 : 0 }}
       >
         <Card padding="none">
           <div className="flex items-baseline gap-2.5 border-b border-neutral-200 px-5 py-4">
