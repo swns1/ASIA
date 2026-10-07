@@ -1,8 +1,10 @@
 /**
  * StudentsPage — the masterlist's "Last enrolled" column.
  *
- * The page lists every learner the school has, so it says where each one was:
- * their latest enrollment that wasn't cancelled, sent with the list itself.
+ * On All years the page lists every learner the school has, so it says where
+ * each one was: their latest enrollment that wasn't cancelled, sent with the
+ * list itself. (A single year shows that year's Grade · Section instead --
+ * see masterlist.test.jsx.)
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -12,6 +14,7 @@ const getStudents = vi.fn();
 
 vi.mock("../../api/studentApi", () => ({
   getStudents: (...a) => getStudents(...a),
+  getStudentCounts: () => Promise.resolve({ status: { active: 3 }, sex: { male: 3 }, registered: 3 }),
   deleteStudent: vi.fn(),
 }));
 vi.mock("../../context/SchoolYearContext", () => ({
@@ -57,11 +60,11 @@ beforeEach(() => {
 describe("StudentsPage — Last enrolled", () => {
   it("shows the school year, grade and section of each student's latest enrollment", async () => {
     render(
-      <MemoryRouter initialEntries={["/students"]}>
+      <MemoryRouter initialEntries={["/students?school_year=all"]}>
         <StudentsPage />
       </MemoryRouter>,
     );
-    await screen.findByText("3 students registered");
+    await screen.findByText("3 students on record");
 
     expect(screen.getByRole("columnheader", { name: /last enrolled/i })).toBeTruthy();
     const castillo = within(rowOf("Castillo"));
@@ -71,11 +74,11 @@ describe("StudentsPage — Last enrolled", () => {
 
   it("says so when a student was never enrolled, and guesses nothing when the server didn't say", async () => {
     render(
-      <MemoryRouter initialEntries={["/students"]}>
+      <MemoryRouter initialEntries={["/students?school_year=all"]}>
         <StudentsPage />
       </MemoryRouter>,
     );
-    await screen.findByText("3 students registered");
+    await screen.findByText("3 students on record");
 
     expect(within(rowOf("Pascual")).getByText("Not enrolled yet")).toBeTruthy();
     expect(within(rowOf("Uy")).queryByText("Not enrolled yet")).toBeNull();

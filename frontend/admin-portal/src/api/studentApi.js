@@ -6,23 +6,40 @@ const studentClient = createApiClient({
   timeout: 10000,
 });
 
-export async function getStudents({ page = 1, page_size, search = "", status = "", sex = "", ordering = "", school_level = "", grade_level = "", school_year = "", unenrolled = "" } = {}) {
+// The list's filters as query params, blanks left out. Shared by the list
+// and its counts so both always describe the same students.
+function studentFilterParams({ search = "", status = "", sex = "", school_level = "", grade_level = "", section = "", school_year = "", unenrolled = "" }) {
+  return {
+    ...(search       && { search }),
+    ...(status       && { status }),
+    ...(sex          && { sex }),
+    // A school year alone: that year's learners (any row not cancelled).
+    // With level/grade/section: placed there in that year.
+    ...(school_year  && { school_year }),
+    ...(school_level && { school_level }),
+    ...(grade_level  && { grade_level }),
+    ...(section      && { section }),
+    // A school year: active students with no place in it.
+    ...(unenrolled   && { unenrolled }),
+  };
+}
+
+export async function getStudents({ page = 1, page_size, ordering = "", ...filters } = {}) {
   const res = await studentClient.get("/students/", {
     params: {
       page,
-      ...(page_size    && { page_size }),
-      search,
-      ...(status       && { status }),
-      ...(sex          && { sex }),
-      ...(ordering     && { ordering }),
-      ...(school_level && { school_level }),
-      ...(grade_level  && { grade_level }),
-      // Narrows school_level/grade_level to placements in that year.
-      ...(school_year  && { school_year }),
-      // A school year: students with no live enrollment for it.
-      ...(unenrolled   && { unenrolled }),
+      ...(page_size && { page_size }),
+      ...(ordering  && { ordering }),
+      ...studentFilterParams(filters),
     },
   });
+  return res.data;
+}
+
+// The masterlist's tiles and chip counts, each counted inside every other
+// filter that is on. See StudentViewSet.counts for what comes back.
+export async function getStudentCounts(filters = {}) {
+  const res = await studentClient.get("/students/counts/", { params: studentFilterParams(filters) });
   return res.data;
 }
 

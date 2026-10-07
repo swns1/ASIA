@@ -14,6 +14,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from accounts.guardian_provisioning import provision_for_enrollment
+from shared import placement
 from shared import school_year as school_year_rules
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from grading.deped import BLOCKING_REMARKS, summarize_subjects
@@ -1504,9 +1505,9 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         """
         GET /api/enrollments/unplaced/?school_year=2026-2027
 
-        Active students with no enrolled or pending row in that school year
-        (default: the current one) -- the registrar's worklist of learners
-        nobody has placed.
+        Active students with no row holding a place in that school year
+        (shared.placement; default year: the registry's current one) -- the
+        registrar's worklist of learners nobody has placed.
 
         The rule this checks: every `active` student holds exactly one active
         enrollment per school year. The unique index uq_enrollments_student_sy
@@ -1528,20 +1529,29 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             year = (
                 school_year_rules.normalize(raw_year)
                 if raw_year
-                else school_year_rules.current(timezone.localdate())
+                else school_year_rules.configured_current()
+                or school_year_rules.current(timezone.localdate())
             )
         except school_year_rules.InvalidSchoolYear as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # A learner who transferred out this year left the school; there is
-        # nothing to place. Their student record should say "transferred", but
-        # that is a second call from the browser after Transfer Out, and a
-        # learner it missed still reads as active -- 5 of the 68 names on this
-        # list had left.
-        placed = Enrollment.objects.filter(
-            school_year=year,
-            enrollment_status__in=("enrolled", "pending", "transferred_out"),
-        ).values("student_id")
+        # Which rows hold a place is shared.placement's rule, the same one the
+        # Students page's "Not enrolled" filter applies. A learner who
+        # transferred out this year left the school; there is nothing to
+        # place. Their student record should say "transferred", but that is a
+        # second call from the browser after Transfer Out, and a learner it
+        # missed still reads as active -- 5 of the 68 names on this list had
+        # left. A completed row holds the place too: without it, every learner
+        # of a closed year was listed as waiting for a class in it.
+        placed = {
+            row["student_id"]
+            for row in (
+                Enrollment.objects.filter(school_year=year)
+                .exclude(enrollment_status="cancelled")
+                .values("student_id", "enrollment_status", "semester")
+            )
+            if placement.holds_place(row["enrollment_status"], row["semester"])
+        }
         students = list(
             Student.objects.filter(status="active")
             .exclude(student_id__in=placed)

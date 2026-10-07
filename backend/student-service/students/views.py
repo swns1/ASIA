@@ -9,12 +9,14 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework import serializers
 from django.conf import settings
 from django.db import transaction
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Case, CharField, Count, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.http import FileResponse, Http404
 from django.utils import timezone
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
 from accounts.users import guardian_account_problem
+from shared import placement
+from shared import school_year as school_year_rules
 from shared.uploads import resolve_stored_path, verify_download_token
 from .services import create_student_bundle
 from .models import (
@@ -40,8 +42,9 @@ from .serializers import (
 )
 
 
-# An enrollment that places a learner for its school year. Cancelled and
-# completed rows are history, not a placement.
+# An enrollment still running: where a learner is placed right now. Cancelled
+# and completed rows are history. (Whether a row placed its learner for its
+# school year at all -- a completed one did -- is shared.placement's rule.)
 LIVE_ENROLLMENT_STATUSES = ("enrolled", "pending")
 
 
@@ -120,6 +123,130 @@ def _annotate_last_enrollment(queryset):
     )
 
 
+def _school_year_param(params, name):
+    """`?<name>=` as a canonical school year, or None when it is absent.
+
+    These values are matched as text against `school_year` columns, so a
+    "2026-27" used to match nothing and answer an empty list as if that were
+    the truth. A 400 naming the parameter says what actually happened."""
+    raw = (params.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return school_year_rules.normalize(raw)
+    except school_year_rules.InvalidSchoolYear as exc:
+        raise serializers.ValidationError({name: str(exc)})
+
+
+def _placements(params):
+    """
+    The enrollment rows the placement filters pick, or None when none is set.
+
+    ?school_year= scopes the list to that year's learners: anyone with a row
+    in it that wasn't cancelled. A completed row still counts -- it is the
+    year they attended -- so a closed year's masterlist doesn't come up empty.
+    ?school_level=, ?grade_level= and ?section= narrow it to a level, grade
+    or class. Without a year those three read the live placement (enrolled or
+    pending) in any year, as the Requirements page has always used them.
+    """
+    year = _school_year_param(params, "school_year")
+    school_level = (params.get("school_level") or "").strip()
+    grade_level = (params.get("grade_level") or "").strip()
+    section = (params.get("section") or "").strip()
+    if not (year or school_level or grade_level or section):
+        return None
+
+    from accounts.enrollment_mirror import EnrollmentMirror
+    if year:
+        rows = EnrollmentMirror.objects.filter(school_year=year).exclude(enrollment_status="cancelled")
+    else:
+        rows = EnrollmentMirror.objects.filter(enrollment_status__in=LIVE_ENROLLMENT_STATUSES)
+    if school_level:
+        rows = rows.filter(school_level=school_level)
+    if grade_level:
+        rows = rows.filter(grade_level=grade_level)
+    if section:
+        rows = rows.filter(section=section)
+    return rows
+
+
+def _filter_students(queryset, params, skip=()):
+    """
+    Every filter the student list takes, applied to `queryset`. The search
+    box is the one exception: SearchFilter applies it, after this.
+
+    `skip` leaves out the named filters ("status", "sex"); that is how
+    /counts/ counts each tile or chip inside every *other* filter that is on.
+    """
+    if "status" not in skip and params.get("status"):
+        queryset = queryset.filter(status=params["status"])
+    if "sex" not in skip and params.get("sex"):
+        queryset = queryset.filter(sex=params["sex"])
+    household_id = _int_param(params, "household_id")
+    if household_id is not None:
+        queryset = queryset.filter(household_id=household_id)
+    if params.get("student_number"):
+        queryset = queryset.filter(student_number=params["student_number"])
+    if params.get("lrn"):
+        queryset = queryset.filter(lrn=params["lrn"])
+    if params.get("name"):
+        name = params["name"]
+        queryset = queryset.filter(
+            Q(first_name__icontains=name) |
+            Q(middle_name__icontains=name) |
+            Q(last_name__icontains=name)
+        )
+
+    # ?unenrolled=<school_year> -- active students with no place in that
+    # year. A student registered but never enrolled has no section, appears
+    # in no SF1 or SF2 and can be given no grades, and until this filter
+    # existed nothing in the app could list them: the registration and
+    # enrolment forms both warn that someone must "enrol them later", with no
+    # way to find out who that is. Which rows hold a place is
+    # shared.placement's rule, the one the Enrollments page's "not yet
+    # placed" list applies too, so the two pages agree.
+    unenrolled_year = _school_year_param(params, "unenrolled")
+    if unenrolled_year:
+        from accounts.enrollment_mirror import EnrollmentMirror
+        placed = (
+            EnrollmentMirror.objects
+            .filter(school_year=unenrolled_year)
+            .filter(placement.holds_place_q())
+            .values("student_id")
+        )
+        queryset = queryset.filter(status="active").exclude(student_id__in=placed)
+
+    rows = _placements(params)
+    if rows is not None:
+        queryset = queryset.filter(student_id__in=rows.values("student_id"))
+    return queryset
+
+
+def _annotate_placement(queryset, rows, year):
+    """
+    Each student's place in the school year the list is scoped to: grade,
+    section and status of their latest row among `rows`. Those are the rows
+    the placement filters matched, so a senior high learner who changed
+    section between semesters is shown in the one that was filtered on.
+    `placement_rank` is the grade's position in GRADE_ORDER, which the
+    `placement` ordering sorts on (StudentOrderingFilter). Read by
+    PlacementMixin.
+    """
+    ranked = rows.annotate(grade_rank=Case(
+        *(When(grade_level=grade, then=Value(i)) for i, grade in enumerate(placement.GRADE_ORDER)),
+        default=Value(len(placement.GRADE_ORDER)),
+        output_field=IntegerField(),
+    ))
+    latest = ranked.filter(student_id=OuterRef("student_id")).order_by("-enrollment_id")
+    return queryset.annotate(
+        placement_school_year=Value(year, output_field=CharField()),
+        placement_grade_level=Subquery(latest.values("grade_level")[:1]),
+        placement_section=Subquery(latest.values("section")[:1]),
+        placement_status=Subquery(latest.values("enrollment_status")[:1]),
+        placement_semester=Subquery(latest.values("semester")[:1]),
+        placement_rank=Subquery(latest.values("grade_rank")[:1]),
+    )
+
 # Household fields that carry real meaning downstream. parent_marital_status,
 # living_arrangement, is_4ps_beneficiary and four_ps_id drive fee discounts and
 # scholarship eligibility (see HouseholdViewSet.get_queryset), which is why
@@ -166,83 +293,160 @@ def _merge_household_details(source_id, target_id):
     return conflicts
 
 
+class StudentOrderingFilter(filters.OrderingFilter):
+    """
+    DRF's ordering, plus two things the masterlist needs:
+
+    - `placement` sorts the way a class list reads: grade (Nursery first, and
+      Grade 2 before Grade 10, which a text sort gets wrong), then section,
+      then surname. Only a list scoped to one school year knows each
+      learner's placement (_annotate_placement); anywhere else the term falls
+      back to surname.
+    - Every ordering ends on student_id. Sorting by surname alone left ties
+      in no fixed order, so the database was free to put a learner on two
+      pages and leave another off both.
+    """
+
+    PLACEMENT_FIELDS = ("placement_rank", "placement_section", "last_name", "first_name")
+
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not ordering:
+            return ordering
+        placed = "placement_rank" in queryset.query.annotations
+        terms = []
+        for term in ordering:
+            if term.lstrip("-") != "placement":
+                terms.append(term)
+                continue
+            sign = "-" if term.startswith("-") else ""
+            fields = self.PLACEMENT_FIELDS if placed else self.PLACEMENT_FIELDS[2:]
+            terms.extend(sign + field for field in fields)
+        if not any(term.lstrip("-") == "student_id" for term in terms):
+            terms.append("student_id")
+        return terms
+
+
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
     permission_classes = [IsAdminRegistrarOrReadOnly]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [filters.SearchFilter, StudentOrderingFilter]
     search_fields = ["student_number", "lrn", "first_name", "middle_name", "last_name", "email"]
-    ordering_fields = ["student_id", "student_number", "last_name", "birth_date", "status"]
+    ordering_fields = ["student_id", "student_number", "last_name", "birth_date", "status", "placement"]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
         params = self.request.query_params
+        queryset = _filter_students(super().get_queryset(), params)
 
-        if params.get("status"):
-            queryset = queryset.filter(status=params["status"])
-        if params.get("sex"):
-            queryset = queryset.filter(sex=params["sex"])
-        household_id = _int_param(params, "household_id")
-        if household_id is not None:
-            queryset = queryset.filter(household_id=household_id)
-        if params.get("student_number"):
-            queryset = queryset.filter(student_number=params["student_number"])
-        if params.get("lrn"):
-            queryset = queryset.filter(lrn=params["lrn"])
-        if params.get("name"):
-            name = params["name"]
-            queryset = queryset.filter(
-                Q(first_name__icontains=name) |
-                Q(middle_name__icontains=name) |
-                Q(last_name__icontains=name)
-            )
-        # ?unenrolled=<school_year> -- students with no live enrollment for
-        # that year. A student registered but never enrolled has no section,
-        # appears in no SF1 or SF2 and can be given no grades, and until this
-        # filter existed nothing in the app could list them: the registration
-        # and enrolment forms both warn that someone must "enrol them later",
-        # with no way to find out who that is. Cancelled and completed rows do
-        # not count as covering the year -- only a live one does.
-        unenrolled_year = (params.get("unenrolled") or "").strip()
-        if unenrolled_year:
-            from accounts.enrollment_mirror import EnrollmentMirror
-            covered = (
-                EnrollmentMirror.objects
-                .filter(school_year=unenrolled_year, enrollment_status__in=("enrolled", "pending"))
-                .values_list("student_id", flat=True)
-            )
-            queryset = queryset.exclude(student_id__in=list(covered))
-
-        # ?school_level= / ?grade_level= [&school_year=] -- students placed at
-        # that level or grade: a live enrollment matching it, in that school
-        # year when one is given. The Requirements page has always sent both,
-        # but nothing here read them, so its Level and Grade filters changed
-        # nothing and every student was listed whatever was picked.
-        school_level = (params.get("school_level") or "").strip()
-        grade_level = (params.get("grade_level") or "").strip()
-        if school_level or grade_level:
-            from accounts.enrollment_mirror import EnrollmentMirror
-            placed = EnrollmentMirror.objects.filter(enrollment_status__in=LIVE_ENROLLMENT_STATUSES)
-            if school_level:
-                placed = placed.filter(school_level=school_level)
-            if grade_level:
-                placed = placed.filter(grade_level=grade_level)
-            placed_year = (params.get("school_year") or "").strip()
-            if placed_year:
-                placed = placed.filter(school_year=placed_year)
-            queryset = queryset.filter(student_id__in=placed.values("student_id"))
-
-        # Only the masterlist shows it; other actions leave it off (and so
-        # does their serializer output -- see LastEnrollmentMixin). getattr:
-        # a view built outside DRF's routing has no `action` at all.
+        # Only the masterlist shows these; other actions leave them off (and
+        # so does their serializer output -- see LastEnrollmentMixin and
+        # PlacementMixin). getattr: a view built outside DRF's routing has no
+        # `action` at all.
         if getattr(self, "action", None) == "list":
             queryset = _annotate_last_enrollment(queryset)
+            year = _school_year_param(params, "school_year")
+            if year:
+                queryset = _annotate_placement(queryset, _placements(params), year)
 
         # accounting keeps roster-wide access (see get_serializer_class --
         # it gets a reduced field set instead, not a filtered queryset: any
         # student could need an invoice, so scoping by teacher-style roster
         # doesn't make sense here).
         return _scope_to_teacher_roster(queryset, self.request.user, deny_accounting=False)
+
+    def _visible(self, queryset, *, search=False):
+        """`queryset` cut to the students this user may see, as the list cuts
+        it, and searched like the list when `search` is set."""
+        if search:
+            queryset = filters.SearchFilter().filter_queryset(self.request, queryset, self)
+        return _scope_to_teacher_roster(queryset, self.request.user, deny_accounting=False)
+
+    @action(detail=False, methods=["get"], url_path="counts")
+    def counts(self, request):
+        """
+        GET /api/students/counts/?<the list's own filters>
+
+        The masterlist's numbers in one request. It used to send six, one per
+        status, and none of them heard the other filters: the tiles read 551
+        whatever was picked. Each facet here is counted inside every filter
+        that is on except its own, so a tile or chip says what picking it
+        would show:
+
+        - `status`, `sex`: every filter but that one.
+        - `school_level`, `grade_level`, `section` (with ?school_year=): the
+          year's learners per level; per grade inside the chosen level; per
+          section inside the chosen grade.
+        - `enrollment` (with ?school_year= or ?unenrolled=): how many are on
+          that year's roll and how many are not enrolled for it, inside
+          status, sex and search.
+        - `year_total`: everyone on that year's roll, no other filter.
+        - `registered`: every student this user can see.
+        """
+        from accounts.enrollment_mirror import EnrollmentMirror
+
+        params = request.query_params
+        year = _school_year_param(params, "school_year")
+        roll_year = year or _school_year_param(params, "unenrolled")
+
+        def matching(**changes):
+            """The students the list would show with these params changed --
+            a value of None drops that param."""
+            variant = {key: params.get(key) for key in params}
+            for key, value in changes.items():
+                if value is None:
+                    variant.pop(key, None)
+                else:
+                    variant[key] = value
+            return self._visible(_filter_students(Student.objects.all(), variant), search=True)
+
+        def tally(queryset, field):
+            rows = queryset.order_by().values(field).annotate(n=Count("student_id"))
+            return {row[field]: row["n"] for row in rows if row[field]}
+
+        data = {
+            "status": tally(matching(status=None), "status"),
+            "sex": tally(matching(sex=None), "sex"),
+            "registered": self._visible(Student.objects.all()).count(),
+        }
+
+        if roll_year:
+            no_placement = {"school_level": None, "grade_level": None, "section": None}
+            data["year_total"] = self._visible(
+                _filter_students(Student.objects.all(), {"school_year": roll_year})
+            ).count()
+            data["enrollment"] = {
+                "enrolled": matching(school_year=roll_year, unenrolled=None, **no_placement).count(),
+                "not_enrolled": matching(unenrolled=roll_year, school_year=None, **no_placement).count(),
+            }
+
+        if year:
+            level = (params.get("school_level") or "").strip()
+            grade = (params.get("grade_level") or "").strip()
+
+            def placed_by(students, field, **narrow):
+                rows = (
+                    EnrollmentMirror.objects
+                    .filter(school_year=year, student_id__in=students.values("student_id"), **narrow)
+                    .exclude(enrollment_status="cancelled")
+                    .order_by()
+                    .values(field)
+                    .annotate(n=Count("student_id", distinct=True))
+                )
+                return {row[field]: row["n"] for row in rows if row[field]}
+
+            data["school_level"] = placed_by(
+                matching(school_level=None, grade_level=None, section=None), "school_level"
+            )
+            if level:
+                data["grade_level"] = placed_by(
+                    matching(grade_level=None, section=None), "grade_level", school_level=level
+                )
+            if grade:
+                narrow = {"grade_level": grade, **({"school_level": level} if level else {})}
+                data["section"] = placed_by(matching(section=None), "section", **narrow)
+
+        return Response(data)
 
     def get_serializer_class(self):
         # accounting gets enough to identify a student for invoicing (name,

@@ -151,6 +151,46 @@ def test_a_learner_who_transferred_out_is_not_waiting_for_a_place():
     assert [r["student_id"] for r in response.data["results"]] == [1]
 
 
+def _learner(student_id, last):
+    return SimpleNamespace(student_id=student_id, pk=student_id, status="active",
+                           student_number=f"S-{student_id}", lrn=str(student_id),
+                           first_name="Ana", middle_name=None, last_name=last, suffix=None)
+
+
+def _year_row(e_id, student_id, status, *, grade="Grade 5", semester=None, year="2025-2026"):
+    return SimpleNamespace(enrollment_id=e_id, student_id=student_id, school_year=year,
+                           enrollment_status=status, grade_level=grade, semester=semester)
+
+
+def _unplaced_for(year, learners, rows):
+    view, request = _view("get", f"/api/enrollments/unplaced/?school_year={year}")
+    with patch("enrollments.views.Enrollment.objects", new=FakeQuerySet(rows)), \
+         patch("enrollments.views.Student.objects", new=FakeQuerySet(learners)):
+        response = view.unplaced(request)
+    return [r["student_id"] for r in response.data["results"]]
+
+
+def test_a_closed_year_places_everyone_who_finished_it():
+    """Closing a year marks every row completed. Only enrolled and pending
+    rows counted, so every learner of a closed year was listed as waiting
+    for a class in it -- the Students page said 551 for last year."""
+    finished = _learner(1, "Cruz")
+    cancelled = _learner(2, "Diaz")
+    rows = [_year_row(10, 1, "completed"), _year_row(20, 2, "cancelled")]
+    assert _unplaced_for("2025-2026", [finished, cancelled], rows) == [2]
+
+
+def test_a_senior_high_learner_between_semesters_still_needs_a_place():
+    between = _learner(1, "Cruz")
+    whole_year = _learner(2, "Diaz")
+    rows = [
+        _year_row(10, 1, "completed", grade="Grade 11", semester="1st"),
+        _year_row(20, 2, "completed", grade="Grade 11", semester="1st"),
+        _year_row(21, 2, "completed", grade="Grade 11", semester="2nd"),
+    ]
+    assert _unplaced_for("2025-2026", [between, whole_year], rows) == [1]
+
+
 # ── scholarships ────────────────────────────────────────────────────────────
 
 ACTIVE = SimpleNamespace(pk=1, is_active=True)

@@ -52,7 +52,7 @@ import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api
 import { getInvoices } from "../../api/billingApi";
 import { getStudentApplications } from "../../api/applicationApi";
 import { useSchoolYear } from "../../context/SchoolYearContext";
-import useYearFilter from "../../hooks/useYearFilter";
+import useYearFilter, { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import { getCurrentUser } from "../../utils/auth";
 import { pageVariants } from "../../utils/motion";
 import {
@@ -171,7 +171,12 @@ export default function AdminHome() {
 
         <motion.div variants={pageVariants.item} className="shrink-0">
           <QuickActions
-            onFind={(term) => navigate(term ? `/students?search=${encodeURIComponent(term)}` : "/students")}
+            // Every year, so a learner who left or graduated is found too.
+            onFind={(term) => navigate(
+              term
+                ? `/students?search=${encodeURIComponent(term)}&school_year=${ALL_YEARS_PARAM}`
+                : "/students",
+            )}
             onEnroll={() => navigate("/enrollments/new")}
             onRecordPayment={() => setShowPayment(true)}
           />

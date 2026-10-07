@@ -286,11 +286,13 @@ describe("AdminHome — teachers today", () => {
 });
 
 describe("AdminHome — start a task", () => {
-  it("finds a student through the Students page search", async () => {
+  it("finds a student through the Students page search, across every year", async () => {
     renderAs("admin");
     fireEvent.change(await screen.findByLabelText(/Find a student/), { target: { value: "Dela Cruz" } });
     fireEvent.click(screen.getByRole("button", { name: "Find" }));
-    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz");
+    // All years: the Students page otherwise opens on this year's learners,
+    // and someone who left or graduated would not be found.
+    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz&school_year=all");
   });
 });
 

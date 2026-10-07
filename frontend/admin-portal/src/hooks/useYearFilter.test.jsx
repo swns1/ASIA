@@ -46,6 +46,17 @@ describe("useYearFilter — where a page opens", () => {
     const { result } = setup({ url: "/page?school_year=" });
     expect(year(result)).toBe("2026-2027");
   });
+
+  it("opens on All years when the link asks for them", () => {
+    const { result } = setup({ url: "/page?school_year=all" });
+    expect(year(result)).toBe("");
+    expect(isDefault(result)).toBe(false);
+  });
+
+  it("opens on the current year instead where one year is required", () => {
+    const { result } = setup({ url: "/page?school_year=all", options: { allowAll: false } });
+    expect(year(result)).toBe("2026-2027");
+  });
 });
 
 describe("useYearFilter — the current year arriving late", () => {
