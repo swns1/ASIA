@@ -10,6 +10,9 @@ import Modal from "./Modal";
 import { StatusBadge } from "./Badge";
 import ChipGroup from "./ChipGroup";
 import SegmentedControl from "./SegmentedControl";
+import StatusBand from "./StatusBand";
+import Card from "./Card";
+import { ThemeContext } from "../../hooks/useTheme";
 import { Field, Input, Textarea } from "../FormField";
 import { STUDENT_STATUS_MAP } from "../../constants/statusMaps";
 
@@ -283,5 +286,60 @@ describe("SegmentedControl", () => {
     expect(screen.getByRole("button", { name: "Tables" }).getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: "Tables" }));
     expect(onChange).toHaveBeenCalledWith("tables");
+  });
+});
+
+describe("Card as a brand panel", () => {
+  const card = () => screen.getByText("Start a task").closest("div");
+
+  it("is an ordinary card on a light page", () => {
+    render(<Card brandPanel>Start a task</Card>);
+    expect(card().className).toContain("bg-surface");
+    expect(card().className).not.toContain("bg-brand-950");
+  });
+
+  it("is the login's brand panel on a dark page", () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <Card brandPanel>Start a task</Card>
+      </ThemeContext.Provider>
+    );
+    expect(card().className).toContain("bg-brand-950");
+  });
+});
+
+describe("StatusBand", () => {
+  const OPTIONS = [
+    { value: "all", label: "All", count: 3 },
+    { value: "active", label: "Active", count: 2, variant: "success" },
+    { value: "dropped", label: "Dropped", count: 1, variant: "error" },
+  ];
+  const band = (props = {}) => (
+    <StatusBand total={3} caption="learners" options={OPTIONS} value="all" allValue="all" onChange={() => {}} {...props} />
+  );
+  const panel = () => screen.getByRole("region", { name: "Status summary" });
+
+  it("is a light card by default, with its hint in the corner", () => {
+    render(band({ hint: "Pick a status to filter the list" }));
+    expect(panel().className).toContain("bg-surface");
+    expect(panel().className).not.toContain("bg-brand-950");
+    expect(screen.getByText("Pick a status to filter the list")).toBeTruthy();
+  });
+
+  it("is the brand panel on a dark page", () => {
+    render(<ThemeContext.Provider value="dark">{band()}</ThemeContext.Provider>);
+    expect(panel().className).toContain("bg-brand-950");
+  });
+
+  it("keeps a tone a page asks for, whatever the page's theme", () => {
+    render(<ThemeContext.Provider value="dark">{band({ tone: "light" })}</ThemeContext.Provider>);
+    expect(panel().className).toContain("bg-surface");
+  });
+
+  it("goes back to All when the selected status is picked again", () => {
+    const onChange = vi.fn();
+    render(band({ value: "active", onChange }));
+    fireEvent.click(screen.getByRole("button", { name: "Active 2" }));
+    expect(onChange).toHaveBeenCalledWith("all");
   });
 });

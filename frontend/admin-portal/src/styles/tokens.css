@@ -127,6 +127,31 @@
   --color-series-5: #d55181;  /* magenta */
   --color-series-6: #9085e9;  /* violet */
 
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+     What `bg-white` stood for before dark mode: the plane a card, header,
+     sidebar or table sits on. `raised` is for what floats over a page
+     (menus, popovers, dialogs). Both are white here; the dark set below
+     gives them their dark values. */
+  --color-surface:        #ffffff;
+  --color-surface-raised: #ffffff;
+
+  /* ── Solid fills under white text ──────────────────────────────────────
+     The brand and status -500/-600 tones are mostly used as TEXT, so the
+     dark set lightens them to stay readable on dark surfaces. A fill that
+     carries white text (the primary button's gradient, a destructive
+     button) can't follow them there, so it reads these, which never change. */
+  --color-action:   #e03131;
+  --color-action-2: #c92a2a;
+  --color-danger:   #9b2020;
+
+  /* ── On the brand panel ────────────────────────────────────────────────
+     Text and lines on the dark brand panel (brand-950: the login page, a
+     dark status band, the dark sidebar). The panel is the same in both
+     themes, so these are too. */
+  --color-on-panel:       #fdf8f6;  /* chip labels */
+  --color-on-panel-muted: #fca5a5;  /* captions, menu labels: 10:1 on the panel */
+  --color-on-panel-faint: #f0ceca;  /* hints, chevrons */
+
   /* ── Typography ────────────────────────────────────────────────────────
      11px is a hard floor: the old 9.5px/10.5px labels were unreadable. */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
@@ -167,11 +192,134 @@
   --shadow-brand:    0 4px 20px rgba(224, 49, 49, 0.28);
   --shadow-brand-lg: 0 8px 28px rgba(224, 49, 49, 0.38);
 
+  /* Dark-mode elevation, used through `dark:` (the shadow utilities above
+     bake their red tint in, so a theme can't re-colour them). A red-tinted
+     shadow vanishes on a dark page: these are black, and a card's adds a
+     hairline of light along its top edge. `panel-glow` is the brand panel's
+     red under-glow, like the login button's. */
+  --shadow-card-dark:  inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.5), 0 14px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-float-dark: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --shadow-panel-glow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 44px -16px rgba(224, 49, 49, 0.45);
+
   /* ── Motion ────────────────────────────────────────────────────────────
      Fast and purposeful. The login page uses a flat 0.15s everywhere. */
   --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Values read through var() rather than a utility, so they sit outside
+   @theme (which only emits what a utility uses). Each has a dark value in
+   the dark set below. */
+:root {
+  /* Avatar initials: seven tinted pairs, picked per name by
+     utils/avatarPalette.js. */
+  --avatar-1-bg: #fde8e8; --avatar-1-fg: #a52f22;
+  --avatar-2-bg: #e8f0fd; --avatar-2-fg: #1d4ed8;
+  --avatar-3-bg: #e8fdf0; --avatar-3-fg: #15803d;
+  --avatar-4-bg: #fdf5e8; --avatar-4-fg: #b45309;
+  --avatar-5-bg: #f0e8fd; --avatar-5-fg: #6d28d9;
+  --avatar-6-bg: #fde8f8; --avatar-6-fg: #a3155f;
+  --avatar-7-bg: #e8fdfd; --avatar-7-fg: #0e7490;
+
+  /* The loading sweep (ui/Skeleton.jsx). */
+  --skeleton:       #f0e8e8;
+  --skeleton-shine: #fde8e8;
+
+  --scrollbar-thumb: #f0dada;
+
+  /* Charts (components/charts). `surface` is the whole background, which
+     dark mode gives a red glow; `plane` is its plain colour, for a ring that
+     must match it; `dot` fills a hollow point and the halo behind a label;
+     `on-mark` is a label drawn on a filled bar. */
+  --chart-surface: #fdfcfb;
+  --chart-plane:   #fdfcfb;
+  --chart-dot:     #ffffff;
+  --chart-on-mark: #1a0a0a;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────────
+   Applied by `data-theme="dark"` on a container, not the whole document:
+   AppLayout puts it on the sidebar, and on the page area only for pages
+   that have been converted (hooks/useTheme.js, constants/darkReady.js).
+   Every utility reads its colour through var(--color-*), so everything
+   token-based inside re-colours with no class changes.
+
+   Warm near-black, not grey, so it stays on brand. Every text tone below
+   clears WCAG AA (4.5:1) on the surface and on the page. The scales flip:
+   50 is still the quietest wash and 900 the strongest text. brand-900 and
+   brand-950 don't change: they are the brand panel and the dialog
+   backdrop, dark in both themes. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* body's text colour reaches here already resolved to the light value, so
+     text with no colour of its own would be near-black on dark. */
+  color: var(--color-neutral-900);
+
+  --color-neutral-50:  #110b0b;  /* page */
+  --color-neutral-100: #160f0f;  /* input fill */
+  --color-neutral-200: #302424;  /* borders */
+  --color-neutral-300: #463535;  /* control borders */
+  --color-neutral-400: #604a4a;  /* decorative only */
+  --color-neutral-500: #a68c8c;  /* muted text: 5.8:1 on the surface */
+  --color-neutral-600: #b69b9b;
+  --color-neutral-700: #cab3b3;
+  --color-neutral-800: #ddcbcb;
+  --color-neutral-900: #f6eded;  /* headings */
+  --color-neutral-950: #fffafa;
+
+  --color-brand-50:  #221616;  /* row hover */
+  --color-brand-100: #2f1a1a;  /* active pill, chip */
+  --color-brand-200: #3d2020;  /* icon tiles, skeletons */
+  --color-brand-300: #7d3535;  /* hover and focus borders */
+  --color-brand-400: #b04a4a;
+  --color-brand-500: #ef4b4b;  /* red text and marks: 5.0:1 on the surface */
+  --color-brand-600: #ff8f8f;  /* red text: 8.3:1 */
+  --color-brand-700: #ffb0b0;
+  --color-brand-800: #e8cfcf;
+  --color-brand-border:      #4a3030;
+  --color-brand-border-soft: #3d2828;
+
+  --color-success-50: #13261a; --color-success-500: #7fcf8a; --color-success-600: #93dc9c;
+  --color-warning-50: #2b2010; --color-warning-500: #f2b866; --color-warning-600: #f5c27a;
+  --color-error-50:   #341717; --color-error-500:   #ff8f85; --color-error-600:   #ffa39b;
+  --color-info-50:    #132238; --color-info-500:    #8fbaf2; --color-info-600:    #a3c7f5;
+  --color-muted-50:   #262220; --color-muted-500:   #c2b9b0;
+  --color-accent-50:  #251a3a; --color-accent-500:  #c3a6fb;
+
+  --color-nursery-50:      #2b2010; --color-nursery-500:      #e3a857;
+  --color-kindergarten-50: #251a3a; --color-kindergarten-500: #b99af7;
+  --color-elementary-50:   #13213a; --color-elementary-500:   #7ba8f7;
+  --color-juniorhigh-50:   #13261a; --color-juniorhigh-500:   #86c98a;
+  --color-seniorhigh-50:   #361a2c; --color-seniorhigh-500:   #f17db7;
+
+  --color-surface:        #1c1414;
+  --color-surface-raised: #261c1c;
+
+  --avatar-1-bg: #3a1c1c; --avatar-1-fg: #ff9c90;
+  --avatar-2-bg: #172640; --avatar-2-fg: #9dbcf6;
+  --avatar-3-bg: #142b1d; --avatar-3-fg: #8fd6a1;
+  --avatar-4-bg: #2f2412; --avatar-4-fg: #f0bd6e;
+  --avatar-5-bg: #281c40; --avatar-5-fg: #c9adfb;
+  --avatar-6-bg: #381b2e; --avatar-6-fg: #f39bc9;
+  --avatar-7-bg: #122b2f; --avatar-7-fg: #84d6e2;
+
+  --skeleton:       #2a2020;
+  --skeleton-shine: #3d2020;
+
+  --scrollbar-thumb: #3a2a2a;
+
+  /* Bars turn light in dark mode, so a label on one turns dark. */
+  --chart-surface: radial-gradient(ellipse 90% 80% at 100% 0%, rgba(224, 49, 49, 0.09), transparent 70%), #160f0f;
+  --chart-plane:   #160f0f;
+  --chart-dot:     #160f0f;
+  --chart-on-mark: #1c1414;
+}
+
+/* `dark:` means "inside a dark container", replacing Tailwind's default
+   (the OS setting), so dark mode only ever follows the app's own switch.
+   :where keeps the selector's weight at zero: a `dark:` class beats the
+   plain one only by coming later in the stylesheet, as variants do. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Focus ring — one definition, used by every interactive component.
  * Applied via the `.focus-ring` class so buttons, inputs, links, rows and

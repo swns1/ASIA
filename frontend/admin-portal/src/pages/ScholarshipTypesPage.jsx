@@ -410,11 +410,7 @@ export default function ScholarshipTypesPage() {
             `scholarship type${counts?.[""] === 1 ? "" : "s"}`,
             modeFilter && modeLabel,
           ].filter(Boolean).join(" · ")}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              Only active types can be awarded
-            </span>
-          }
+          hint="Only active types can be awarded"
           options={STATUS_FILTERS.map((f) => ({
             value: f.value,
             label: f.label,

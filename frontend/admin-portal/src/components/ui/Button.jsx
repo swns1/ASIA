@@ -16,14 +16,17 @@ const BASE =
   "rounded-full transition-all duration-150 outline-none select-none " +
   "focus-visible:ring-3 disabled:cursor-not-allowed";
 
+// The red fills read --color-action / --color-danger rather than the brand
+// and error scales: those lighten in dark mode for red text, and a fill under
+// white text has to stay deep.
 const VARIANTS = {
   primary:
-    "text-white bg-[linear-gradient(135deg,var(--color-brand-500),var(--color-brand-600))] " +
+    "text-white bg-[linear-gradient(135deg,var(--color-action),var(--color-action-2))] " +
     "shadow-brand hover:shadow-brand-lg hover:-translate-y-px " +
     "active:translate-y-0 active:scale-[0.98] focus-visible:ring-brand-500/35 " +
     "disabled:bg-none disabled:bg-brand-400 disabled:shadow-none disabled:translate-y-0",
   secondary:
-    "bg-white text-neutral-700 border-[1.5px] border-neutral-300 " +
+    "bg-surface text-neutral-700 border-[1.5px] border-neutral-300 " +
     "hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 " +
     "active:scale-[0.98] focus-visible:ring-brand-500/25 " +
     "disabled:bg-neutral-50 disabled:text-neutral-400 disabled:border-neutral-200 disabled:hover:bg-neutral-50",
@@ -36,7 +39,7 @@ const VARIANTS = {
   // destructive action is distinguishable from a primary one in an app whose
   // brand colour is itself red.
   destructive:
-    "text-white bg-error-500 hover:bg-[#7f1a1a] " +
+    "text-white bg-danger hover:bg-[#7f1a1a] " +
     "shadow-[0_4px_16px_rgba(155,32,32,0.32)] hover:shadow-[0_8px_24px_rgba(155,32,32,0.42)] " +
     "hover:-translate-y-px active:translate-y-0 active:scale-[0.98] focus-visible:ring-error-500/40 " +
     "disabled:bg-neutral-400 disabled:shadow-none disabled:translate-y-0",

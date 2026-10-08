@@ -10,11 +10,12 @@ import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
 import { listVariants } from "../utils/motion";
-import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, STAFF_ADMIN } from "../utils/auth";
 import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
+import DeveloperTab from "./billingSettings/DeveloperTab";
 
 import {
   getSchoolSettings as _getSettings,
@@ -73,6 +74,13 @@ const TABS = [
   { id: "fees",    label: "Fee Schedules", icon: "ti-cash"     },
 ];
 
+// Developer switches (dark mode while it's being built): a dev build only,
+// and only for super admins and admins. Accounting can open Billing
+// Settings, but the switch isn't for staff yet.
+const DEVELOPER_TAB = { id: "developer", label: "Developer", icon: "ti-code" };
+const tabsFor = (user) =>
+  import.meta.env.DEV && hasAnyRole(user, STAFF_ADMIN) ? [...TABS, DEVELOPER_TAB] : TABS;
+
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
@@ -87,6 +95,7 @@ export default function BillingSettingsPage() {
   usePageTitle("Billing Settings");
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get("tab") === "fees" ? "fees" : "general");
+  const tabs = tabsFor(getCurrentUser());
 
   return (
     <>
@@ -95,13 +104,19 @@ export default function BillingSettingsPage() {
       <PageHeader
         title="Billing Settings"
         icon="ti-settings"
-        actions={<Tabs variant="pill" tabs={TABS} value={tab} onChange={setTab} />}
+        actions={<Tabs variant="pill" tabs={tabs} value={tab} onChange={setTab} />}
       />
 
       {/* Content */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <AnimatePresence mode="wait">
-          {tab === "general" ? <GeneralSettingsTab key="general" /> : <FeeSchedulesTab key="fees" />}
+          {tab === "general" ? (
+            <GeneralSettingsTab key="general" />
+          ) : tab === "fees" ? (
+            <FeeSchedulesTab key="fees" />
+          ) : tabs.includes(DEVELOPER_TAB) ? (
+            <DeveloperTab key="developer" />
+          ) : null}
         </AnimatePresence>
       </div>
     </>

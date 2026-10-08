@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -10,34 +10,52 @@ import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import useYearFilter from "../hooks/useYearFilter";
+import useSections from "../hooks/useSections";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import StatusBand from "../components/ui/StatusBand";
 import FilterMenu from "../components/ui/FilterMenu";
 import SearchField from "../components/ui/SearchField";
-import { StatusDot } from "../components/ui/Badge";
-import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import SchoolYearMenu from "../components/ui/SchoolYearMenu";
+import { StatusBadge, StatusDot } from "../components/ui/Badge";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { groupYears } from "../utils/schoolYear";
+import { ENROLLMENT_STATUS_MAP, STUDENT_STATUS_MAP } from "../constants/statusMaps";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
-import { deleteStudent, getStudents } from "../api/studentApi";
+import { deleteStudent, getStudentCounts, getStudents } from "../api/studentApi";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
+
+// The page is the school's masterlist, and the school year is its scope, set
+// in the same menu as Enrollments, Grades and Subjects:
+//
+//   a year       that year's learners, one row each, with the grade and
+//                section they were placed in, narrowed by level, grade and
+//                section. A current or upcoming year can switch to the
+//                learners not enrolled for it.
+//   All years    every student record the school has, with where each was
+//                last enrolled.
+//
+// It opens on the current year like every other year page. Links that mean
+// everyone (the Dashboard's student total, the admin home's "Find a
+// student") open it on All years with ?school_year=all.
 
 const STATUS_FILTERS = ["all", "active", "inactive", "transferred", "graduated", "dropped"];
 
-// Sorting lives on the column headers rather than a dropdown beside the
-// search box, so the filter row matches every other list page. A column's
-// `key` doubles as the API's `ordering` field, prefixed with "-" for
-// descending — see DEFAULT_ORDERING below.
-const DEFAULT_ORDERING = "-student_id";
+// What each scope is sorted by until a column header is clicked. `key` on a
+// column doubles as the API's `ordering` field, prefixed with "-" for
+// descending. "placement" is the order a class list reads in: grade, then
+// section, then surname. The Not enrolled list is a worklist, A to Z.
+const DEFAULT_ORDERING = { roll: "placement", unenrolled: "last_name", registry: "-student_id" };
 
 // What the table caption says about the order rows are in, so nobody has to
 // read the header carets to know. One per ordering the headers can produce.
 const ORDERING_CAPTIONS = {
-  [DEFAULT_ORDERING]: "Newest registered first",
-  last_name:          "Sorted by last name, A to Z",
-  "-last_name":       "Sorted by last name, Z to A",
-  birth_date:         "Sorted by age, oldest first",
-  "-birth_date":      "Sorted by age, youngest first",
+  "-student_id": "Newest registered first",
+  placement:     "By grade and section, then last name",
+  "-placement":  "By grade and section, highest grade first",
+  last_name:     "Sorted by last name, A to Z",
+  "-last_name":  "Sorted by last name, Z to A",
+  birth_date:    "Sorted by age, oldest first",
+  "-birth_date": "Sorted by age, youngest first",
 };
 
 const SEX_FILTERS = [
@@ -46,23 +64,37 @@ const SEX_FILTERS = [
   { value: "female", label: "Female" },
 ];
 
+const ENROLLMENT_VIEWS = [
+  { value: "enrolled",     label: "Enrolled" },
+  { value: "not_enrolled", label: "Not enrolled" },
+];
+
+// The years whose not-enrolled list means something: the one under way, and
+// the next one while it is being enrolled into. For a past year it would
+// only list the learners who joined after it.
+const ENROLLING_STATES = new Set(["current", "upcoming"]);
+
 // Long enough that a word is finished, short enough that the list keeps up.
 const SEARCH_DEBOUNCE_MS = 300;
 
-const TABLE_COLUMNS = [
-  // `key` is the API ordering field for sortable columns, so the header the
-  // user clicks and the value sent to the backend can't drift apart.
-  { key: "last_name",  label: "Student",   width: "24%", sortable: true },
-  { key: "lrn",        label: "LRN",       width: "13%" },
-  // The page is the school's masterlist, so it says where each learner was:
-  // their latest enrollment that wasn't cancelled, from the list response.
-  { key: "last_enrollment", label: "Last enrolled", width: "15%" },
-  { key: "birth_date", label: "Age",       width: "12%", sortable: true },
-  { key: "sex",     label: "Sex",       width: "8%" },
-  { key: "status",  label: "Status",    width: "10%" },
-  { key: "contact", label: "Contact",   width: "12%" },
-  { key: "actions", label: "Actions",   width: "6%", align: "right" },
-];
+// The third column is where the learner is: their place in the year shown,
+// or, with no one year to speak of, their latest enrollment.
+function tableColumns(scope) {
+  return [
+    // `key` is the API ordering field for sortable columns, so the header the
+    // user clicks and the value sent to the backend can't drift apart.
+    { key: "last_name",  label: "Student",   width: "24%", sortable: true },
+    { key: "lrn",        label: "LRN",       width: "13%" },
+    scope === "roll"
+      ? { key: "placement",       label: "Grade · Section", width: "15%", sortable: true }
+      : { key: "last_enrollment", label: "Last enrolled",   width: "15%" },
+    { key: "birth_date", label: "Age",       width: "12%", sortable: true },
+    { key: "sex",     label: "Sex",       width: "8%" },
+    { key: "status",  label: "Status",    width: "10%" },
+    { key: "contact", label: "Contact",   width: "12%" },
+    { key: "actions", label: "Actions",   width: "6%", align: "right" },
+  ];
+}
 
 const PAGE_SIZE = 20;
 
@@ -86,183 +118,187 @@ function fmtDate(dateStr) {
 /** Consistent treatment for "this field is empty", instead of a blank cell. */
 const Blank = () => <span className="text-sm italic text-neutral-500">—</span>;
 
+/** A menu item's count, at its right edge. Nothing while counts load. */
+const countNote = (n) =>
+  n == null ? null : <span className="text-[11px] text-neutral-500 tabular-nums">{n.toLocaleString()}</span>;
+
 export default function StudentsPage() {
   usePageTitle("Students");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  const token = sessionStorage.getItem("access_token");
 
-  const [students, setStudents]   = useState([]);
+  const [schoolYear, setSchoolYear, yearIsDefault] = useYearFilter();
+  const { currentYear, yearStates } = useSchoolYear();
+
   // ?search= is how the admin home's "Find a student" box lands here.
   const [search, setSearch]       = useState(() => searchParams.get("search") ?? "");
   const [inputVal, setInputVal]   = useState(() => searchParams.get("search") ?? "");
-  const [page, setPage]           = useState(1);
-  const [pageMeta, setPageMeta]   = useState({ count: 0, next: null, previous: null });
-  const [loading, setLoading]     = useState(true);
-  const [loadError, setLoadError] = useState(null);
-  const [toDelete, setToDelete]   = useState(null);
-  const [deleteError, setDeleteError] = useState("");
   const [statusFilter, setStatus] = useState(() => searchParams.get("status") ?? "all");
   const [sexFilter, setSexFilter] = useState("");
-  const [ordering, setOrdering]   = useState(DEFAULT_ORDERING);
-  // Students registered but never enrolled for a given year. Both the
-  // registration and enrolment forms tell the registrar that someone must
-  // "enrol them later"; until this filter existed nothing in the app could
-  // say who, so a learner could sit with no section and no grades unnoticed.
-  const [isUnenrolled, setIsUnenrolled] = useState(false);
-  // The year "Not enrolled" checks. Every year is its own choice in the
-  // Enrollment menu, so the pill always names the year — during enrollment
-  // season, that can be next year.
-  const [unenrolledYear, setUnenrolledYear] = useYearFilter({ allowAll: false });
-  const [statusCounts, setStatusCounts] = useState({});
+  const [view, setView]           = useState("enrolled");
+  const [schoolLevel, setSchoolLevel] = useState("");
+  const [gradeLevel, setGradeLevel]   = useState("");
+  const [section, setSection]         = useState("");
+  // null: the scope's own order (DEFAULT_ORDERING). A header click sets it.
+  const [ordering, setOrdering]   = useState(null);
+  // Bumped to load the list and counts again (after a delete, or Retry).
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [toDelete, setToDelete]   = useState(null);
+  const [deleteError, setDeleteError] = useState("");
   const [deletingStudent, setDeletingStudent] = useState(false);
-  const { options: yearOptions, currentYear } = useSchoolYear();
 
   const searchRef = useRef(null);
-  const token = sessionStorage.getItem("access_token");
 
-  const fetchStudents = async (
-    nextPage = 1,
-    term = search,
-    status = statusFilter,
-    sex = sexFilter,
-    ord = ordering,
-    unenrolled = isUnenrolled,
-  ) => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await getStudents({
-        page: nextPage,
-        page_size: PAGE_SIZE,
-        search: term,
-        status: status === "all" ? "" : status,
-        sex,
-        ordering: ord,
-        unenrolled: unenrolled ? unenrolledYear : undefined,
+  // ── Scope ────────────────────────────────────────────────────────────────
+  const allYears = schoolYear === "";
+  const yearState = yearStates?.[schoolYear];
+  // Until the registry says what state the year is in, assume only the
+  // current one is being enrolled into.
+  const canListUnenrolled = !allYears && (yearState ? ENROLLING_STATES.has(yearState) : schoolYear === currentYear);
+  const notEnrolled = canListUnenrolled && view === "not_enrolled";
+  const scope = allYears ? "registry" : notEnrolled ? "unenrolled" : "roll";
+  const placementOn = scope === "roll";
+
+  // The one description of which students are listed. The list, its counts
+  // and every request below are built from it, so they can't disagree.
+  const filters = useMemo(() => ({
+    search,
+    status: statusFilter === "all" ? "" : statusFilter,
+    sex: sexFilter,
+    ...(scope === "roll" && {
+      school_year: schoolYear,
+      school_level: schoolLevel,
+      grade_level: gradeLevel,
+      section,
+    }),
+    ...(scope === "unenrolled" && { unenrolled: schoolYear }),
+  }), [search, statusFilter, sexFilter, scope, schoolYear, schoolLevel, gradeLevel, section]);
+
+  const effectiveOrdering = ordering ?? DEFAULT_ORDERING[scope];
+  const filtersKey = JSON.stringify({ filters, ordering: effectiveOrdering });
+
+  // The page number belongs to the filters it was picked under: change any
+  // filter or the sort and the list starts again from page 1.
+  const [pageState, setPageState] = useState({ key: filtersKey, page: 1 });
+  const page = pageState.key === filtersKey ? pageState.page : 1;
+  const goToPage = (p) => setPageState({ key: filtersKey, page: p });
+
+  // ── Loading ──────────────────────────────────────────────────────────────
+  // Each answer is stored with the request it answers, so a slow one for a
+  // filter already left behind can't overwrite the list now on screen.
+  const listKey = `${filtersKey}|${page}|${reloadKey}`;
+  const [list, setList] = useState({ key: null, results: [], count: 0, next: null, previous: null, error: null });
+  const loading = list.key !== listKey;
+
+  useEffect(() => {
+    if (!token) { navigate("/login"); return undefined; }
+    let live = true;
+    getStudents({ page, page_size: PAGE_SIZE, ordering: effectiveOrdering, ...filters })
+      .then((data) => {
+        if (live) setList({ key: listKey, results: data.results || [], count: data.count ?? 0, next: data.next, previous: data.previous, error: null });
+      })
+      .catch((err) => {
+        if (!live) return;
+        console.error(err);
+        // Previously this was swallowed, so a failed request rendered as
+        // "No students found" — indistinguishable from an empty database.
+        setList({ key: listKey, results: [], count: 0, next: null, previous: null, error: err });
       });
-      setStudents(data.results || []);
-      setPageMeta({ count: data.count, next: data.next, previous: data.previous });
-      setPage(nextPage);
-    } catch (err) {
-      console.error(err);
-      // Previously this was swallowed, so a failed request rendered as
-      // "No students found" — indistinguishable from an empty database.
-      setLoadError(err);
-      setStudents([]);
-      setPageMeta({ count: 0, next: null, previous: null });
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => { live = false; };
+    // listKey stands for every input of the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listKey]);
 
-  // Per-status counts for the status band. Non-critical: if it fails the band
+  // The band, menu counts and sex split. Non-critical: if they fail the band
   // shows dashes rather than blocking the page.
-  const fetchCounts = async () => {
-    try {
-      const counts = {};
-      await Promise.all(
-        ["", "active", "inactive", "transferred", "graduated", "dropped"].map(async (s) => {
-          const res = await getStudents({ page: 1, search: "", status: s });
-          counts[s === "" ? "all" : s] = res.count;
-        })
-      );
-      setStatusCounts(counts);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const countsKey = `${JSON.stringify(filters)}|${reloadKey}`;
+  const [counts, setCounts] = useState({ key: null, data: null, failed: false });
 
   useEffect(() => {
-    if (!token) { navigate("/login"); return; }
-    fetchStudents(1, search, statusFilter, "", DEFAULT_ORDERING);
-    fetchCounts();
+    if (!token) return undefined;
+    let live = true;
+    getStudentCounts(filters)
+      .then((data) => { if (live) setCounts({ key: countsKey, data, failed: false }); })
+      .catch((err) => {
+        console.error(err);
+        if (live) setCounts((c) => ({ key: countsKey, data: c.data, failed: true }));
+      });
+    return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [countsKey]);
 
-  // Reload when the year changes while "Not enrolled" is on — a pick in its
-  // picker, or the current year arriving from School Settings. It used to
-  // read the sidebar's year and never reloaded when that changed.
-  useEffect(() => {
-    if (!isUnenrolled) return;
-    fetchStudents(1, search, statusFilter, sexFilter, ordering, true); // eslint-disable-line react-hooks/set-state-in-effect
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unenrolledYear]);
+  const tally = counts.data;
+  const statusCounts = useMemo(() => {
+    const byStatus = tally?.status ?? {};
+    return { ...byStatus, all: Object.values(byStatus).reduce((sum, n) => sum + n, 0) };
+  }, [tally]);
 
-  // Search as you type: the list follows the box once typing pauses. `search`
-  // is a dependency so that anything which applies the box itself (Enter, a
-  // filter, Clear) cancels the pending run instead of fetching twice.
+  // Sections of the chosen grade in the year shown, for the Section menu.
+  const { sections } = useSections(placementOn ? schoolYear : "", placementOn ? gradeLevel : "");
+
+  // ── Changing filters ─────────────────────────────────────────────────────
+  // Search as you type: the box applies itself once typing pauses. Every
+  // other filter is state the requests above read, so nothing here can land
+  // with stale filters; Enter only skips the wait.
   useEffect(() => {
-    if (inputVal === search) return;
-    const timer = setTimeout(() => {
-      setSearch(inputVal);
-      fetchStudents(1, inputVal, statusFilter, sexFilter, ordering);
-    }, SEARCH_DEBOUNCE_MS);
+    if (inputVal === search) return undefined;
+    const timer = setTimeout(() => setSearch(inputVal), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputVal, search]);
 
-  // Every filter change also applies what's typed in the box. Without this a
-  // search still waiting on its debounce would land after the filter, with
-  // the filters as they were before it.
-  const applyTypedSearch = () => {
-    setSearch(inputVal);
-    return inputVal;
+  // Any filter change also applies what is typed in the search box, so the
+  // list never shows one search while the box says another. (The chips used
+  // to read the box and paging read the last search, so page 2 dropped it.)
+  const handleSearch = () => setSearch(inputVal);
+
+  // A year opens on its own list, in its own order. Grade levels carry
+  // across years; section names may not.
+  const handleYear = (year) => {
+    handleSearch();
+    setSchoolYear(year);
+    setView("enrolled");
+    setSection("");
+    setOrdering(null);
   };
 
-  const handleSearch = () => {
-    fetchStudents(1, applyTypedSearch(), statusFilter, sexFilter, ordering);
+  const handleView = (next) => { handleSearch(); setView(next); setOrdering(null); };
+
+  const handleLevel = (level) => {
+    handleSearch(); setSchoolLevel(level); setGradeLevel(""); setSection("");
   };
 
-  const handleStatusFilter = (val) => {
-    setStatus(val);
-    fetchStudents(1, applyTypedSearch(), val, sexFilter, ordering);
-  };
+  const handleGrade = (grade) => { handleSearch(); setGradeLevel(grade); setSection(""); };
 
-  const handleSexFilter = (val) => {
-    setSexFilter(val);
-    fetchStudents(1, applyTypedSearch(), statusFilter, val, ordering);
-  };
+  const handleSection = (name) => { handleSearch(); setSection(name); };
 
-  // Clicking a column header sorts by it, and clicking the active one flips
-  // direction. `ordering` stays the single source of truth — sortKey/sortDir
-  // below are derived from it so the header carets can't drift out of sync
-  // with what the API was actually asked for.
-  const handleSort = (key) => {
-    const next = sortKey === key && sortDir === "asc" ? `-${key}` : key;
-    setOrdering(next);
-    fetchStudents(1, applyTypedSearch(), statusFilter, sexFilter, next);
-  };
+  const handleStatusFilter = (val) => { handleSearch(); setStatus(val); };
 
-  // The Enrollment menu: "" for any enrollment, or a year for "Not enrolled
-  // for {year}". A year only means something with the filter on, so picking
-  // one turns it on.
-  const handleEnrollmentFilter = (year) => {
-    const term = applyTypedSearch();
-    if (!year) {
-      setIsUnenrolled(false);
-      fetchStudents(1, term, statusFilter, sexFilter, ordering, false);
-      return;
-    }
-    setUnenrolledYear(year);
-    if (isUnenrolled) return; // the year effect above reloads
-    setIsUnenrolled(true);
-    // That effect only runs when the year actually changes.
-    if (year === unenrolledYear) fetchStudents(1, term, statusFilter, sexFilter, ordering, true);
-  };
-
-  const handleClearAll = () => {
-    setInputVal(""); setSearch(""); setStatus("all");
-    setSexFilter(""); setOrdering(DEFAULT_ORDERING);
-    setIsUnenrolled(false); setUnenrolledYear(null);
-    fetchStudents(1, "", "all", "", DEFAULT_ORDERING, false);
-    searchRef.current?.focus();
-  };
+  const handleSexFilter = (val) => { handleSearch(); setSexFilter(val); };
 
   const handleClearSearch = () => {
     setInputVal("");
     setSearch("");
-    fetchStudents(1, "", statusFilter, sexFilter, ordering);
+    searchRef.current?.focus();
+  };
+
+  // Derived so the header caret always reflects the ordering actually in use.
+  const sortKey = effectiveOrdering.replace(/^-/, "");
+  const sortDir = effectiveOrdering.startsWith("-") ? "desc" : "asc";
+
+  // Clicking a column header sorts by it, and clicking the active one flips
+  // direction.
+  const handleSort = (key) => {
+    handleSearch();
+    setOrdering(sortKey === key && sortDir === "asc" ? `-${key}` : key);
+  };
+
+  const handleClearAll = () => {
+    setInputVal(""); setSearch(""); setStatus("all"); setSexFilter("");
+    setView("enrolled"); setSchoolLevel(""); setGradeLevel(""); setSection("");
+    setOrdering(null); setSchoolYear(null);
     searchRef.current?.focus();
   };
 
@@ -274,8 +310,9 @@ export default function StudentsPage() {
       await deleteStudent(toDelete.student_id);
       toast.success("Student deleted.");
       setToDelete(null);
-      fetchStudents(page, search, statusFilter, sexFilter, ordering);
-      fetchCounts();
+      // The last row of the last page: that page is gone now.
+      if (list.results.length === 1 && page > 1) goToPage(page - 1);
+      setReloadKey((k) => k + 1);
     } catch (e) {
       const msg = e.message || "Delete failed.";
       setDeleteError(msg);
@@ -285,27 +322,114 @@ export default function StudentsPage() {
     }
   };
 
-  const hasActiveFilters =
-    search || statusFilter !== "all" || sexFilter || ordering !== DEFAULT_ORDERING || isUnenrolled;
+  // Level, grade and section are kept while hidden (on All years or Not
+  // enrolled), but only count while they narrow the list.
+  const hasActiveFilters = Boolean(
+    search || statusFilter !== "all" || sexFilter || ordering || !yearIsDefault || notEnrolled ||
+    (placementOn && (schoolLevel || gradeLevel || section)),
+  );
+  const students = list.results;
+  const totalPages = Math.ceil(list.count / PAGE_SIZE);
 
-  // Derived so the header caret always reflects the ordering actually in use.
-  const sortKey = ordering.replace(/^-/, "");
-  const sortDir = ordering.startsWith("-") ? "desc" : "asc";
-  const totalPages = Math.ceil(pageMeta.count / PAGE_SIZE);
-
-  // The same years, in the same order, as the "Not enrolled for" picker this
-  // menu replaced: the current year first, then recent, then earlier.
-  const enrollmentOptions = [
-    { value: "", label: "Any enrollment" },
-    ...groupYears(yearOptions, currentYear).flatMap(([, years]) =>
-      years.map((y) => ({ value: y, label: `Not enrolled for ${y}` })),
-    ),
+  // ── Menu options ─────────────────────────────────────────────────────────
+  // Counts come from /counts/, each counted inside every other filter. The
+  // "All" items show none: that number is the band's own total.
+  const viewOptions = ENROLLMENT_VIEWS.map((o) => ({ ...o, note: countNote(tally?.enrollment?.[o.value]) }));
+  const levelOptions = LEVEL_FILTER_OPTIONS.map((o) => ({
+    ...o,
+    note: o.value && tally ? countNote(tally.school_level?.[o.value] ?? 0) : null,
+  }));
+  const gradeOptions = [
+    { value: "", label: "All grades" },
+    ...(GRADE_LEVELS_BY_LEVEL[schoolLevel] ?? []).map((g) => ({
+      value: g, label: g, note: tally ? countNote(tally.grade_level?.[g] ?? 0) : null,
+    })),
   ];
+  const sectionOptions = [
+    { value: "", label: "All sections" },
+    ...sections.map((s) => ({
+      value: s.name, label: s.name, note: tally ? countNote(tally.section?.[s.name] ?? 0) : null,
+    })),
+  ];
+  const levelLabel = LEVEL_FILTER_OPTIONS.find((l) => l.value === schoolLevel)?.label;
+
+  // ── Band, title and footer lines ─────────────────────────────────────────
+  // What the band's total counts: the scope, and the placement filters when
+  // set, since the counts are taken inside them.
+  const bandTotal = tally ? statusCounts.all : undefined;
+  const s = bandTotal === 1 ? "" : "s";
+  const bandCaption = [
+    allYears
+      ? `student${s} on record`
+      : notEnrolled
+        ? `learner${s} not enrolled for S.Y. ${schoolYear}`
+        : `learner${s} in S.Y. ${schoolYear}`,
+    placementOn && schoolLevel ? levelLabel : null,
+    placementOn ? gradeLevel : null,
+    placementOn ? section : null,
+  ].filter(Boolean).join(" · ");
 
   const listTitle =
     statusFilter === "all"
       ? "All students"
       : `${STUDENT_STATUS_MAP[statusFilter]?.label ?? statusFilter} students`;
+
+  // The masterlist's male/female split, for the list as filtered. With a sex
+  // filter on, the count already says it.
+  const sexSplit = !sexFilter && tally?.sex && counts.key === countsKey
+    ? `${(tally.sex.male ?? 0).toLocaleString()} male · ${(tally.sex.female ?? 0).toLocaleString()} female`
+    : null;
+
+  const emptyState = (() => {
+    if (search && !allYears) {
+      return {
+        icon: "ti-search",
+        title: `No match in S.Y. ${schoolYear}`,
+        subtitle: "They may be in another school year, or not enrolled in this one.",
+        action: (
+          <Button variant="secondary" size="sm" icon="ti-world-search" onClick={() => handleYear("")}>
+            Search all years
+          </Button>
+        ),
+      };
+    }
+    if (notEnrolled && !search && statusFilter === "all" && !sexFilter) {
+      return {
+        icon: "ti-circle-check",
+        title: `Everyone is enrolled for S.Y. ${schoolYear}`,
+        subtitle: "Every active student has a place this school year.",
+      };
+    }
+    if (hasActiveFilters) {
+      return {
+        icon: "ti-users-off",
+        title: "No students match these filters",
+        subtitle: "Try a different search term, or clear the filters to see everyone.",
+        action: (
+          <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
+            Clear filters
+          </Button>
+        ),
+      };
+    }
+    if (!allYears) {
+      return {
+        icon: "ti-users-off",
+        title: `No learners enrolled for S.Y. ${schoolYear} yet`,
+        subtitle: "Enrollments made for this school year will list them here.",
+      };
+    }
+    return {
+      icon: "ti-users-off",
+      title: "No students yet",
+      subtitle: "Add your first student to get started.",
+      action: canManage ? (
+        <Button size="sm" icon="ti-user-plus" onClick={() => navigate("/students/new")}>
+          New Student
+        </Button>
+      ) : null,
+    };
+  })();
 
   return (
     <>
@@ -321,19 +445,18 @@ export default function StudentsPage() {
       />
 
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
-        {/* The status mix, and the status filter. */}
+        {/* The status mix, and the status filter. The school year sits in
+            the band because the band's numbers are counted for it. No counts
+            on the year menu: the context's are enrollment rows, and a senior
+            high learner has two of those a year. */}
         <StatusBand
-          total={statusCounts.all}
-          caption={`student${statusCounts.all === 1 ? "" : "s"} registered`}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              Pick a status to filter the list
-            </span>
-          }
+          total={bandTotal}
+          caption={bandCaption}
+          aside={<SchoolYearMenu value={schoolYear} onChange={handleYear} />}
           options={STATUS_FILTERS.map((v) => ({
             value: v,
             label: v === "all" ? "All" : STUDENT_STATUS_MAP[v]?.label ?? v,
-            count: statusCounts[v],
+            count: tally ? statusCounts[v] ?? 0 : undefined,
             variant: STUDENT_STATUS_MAP[v]?.variant,
           }))}
           value={statusFilter}
@@ -341,7 +464,7 @@ export default function StudentsPage() {
           onChange={handleStatusFilter}
         />
 
-        {/* Toolbar: search, the two filter menus, Clear. */}
+        {/* Toolbar: search, the filter menus, Clear. */}
         <div className="flex flex-wrap items-center gap-2.5">
           <SearchField
             id="student-search"
@@ -363,17 +486,59 @@ export default function StudentsPage() {
             onChange={handleSexFilter}
           />
 
-          {/* Right-aligned: it sits near the page's right edge. */}
-          <FilterMenu
-            label="Enrollment"
-            valueLabel={isUnenrolled ? `Not enrolled for ${unenrolledYear}` : "Any"}
-            active={isUnenrolled}
-            options={enrollmentOptions}
-            value={isUnenrolled ? unenrolledYear : ""}
-            onChange={handleEnrollmentFilter}
-            align="end"
-            menuWidth={240}
-          />
+          {canListUnenrolled && (
+            <FilterMenu
+              label="Enrollment"
+              valueLabel={notEnrolled ? "Not enrolled" : "Enrolled"}
+              active={notEnrolled}
+              options={viewOptions}
+              value={notEnrolled ? "not_enrolled" : "enrolled"}
+              onChange={handleView}
+              align="end"
+              menuWidth={200}
+            />
+          )}
+
+          {/* A learner's level, grade and section belong to one school year,
+              so these narrow a year's list only, each within the one before. */}
+          {placementOn && (
+            <FilterMenu
+              label="Level"
+              valueLabel={levelLabel ?? "All levels"}
+              active={Boolean(schoolLevel)}
+              options={levelOptions}
+              value={schoolLevel}
+              onChange={handleLevel}
+              align="end"
+              menuWidth={220}
+            />
+          )}
+
+          {placementOn && schoolLevel && (
+            <FilterMenu
+              label="Grade"
+              valueLabel={gradeLevel || "All grades"}
+              active={Boolean(gradeLevel)}
+              options={gradeOptions}
+              value={gradeLevel}
+              onChange={handleGrade}
+              align="end"
+              menuWidth={180}
+            />
+          )}
+
+          {placementOn && gradeLevel && (
+            <FilterMenu
+              label="Section"
+              valueLabel={section || "All sections"}
+              active={Boolean(section)}
+              options={sectionOptions}
+              value={section}
+              onChange={handleSection}
+              align="end"
+              menuWidth={180}
+            />
+          )}
 
           {hasActiveFilters && (
             <button
@@ -397,43 +562,28 @@ export default function StudentsPage() {
             <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-neutral-200 px-5 py-4">
               <div className="flex items-baseline gap-2.5">
                 <h2 className="text-md font-bold text-neutral-900">{listTitle}</h2>
-                {!loading && !loadError && (
+                {!loading && !list.error && (
                   <span className="text-sm text-neutral-500 tabular-nums">
-                    {pageMeta.count.toLocaleString()}
+                    {list.count.toLocaleString()}
                   </span>
                 )}
               </div>
-              {ORDERING_CAPTIONS[ordering] && (
-                <span className="text-[12px] text-neutral-500">{ORDERING_CAPTIONS[ordering]}</span>
+              {ORDERING_CAPTIONS[effectiveOrdering] && (
+                <span className="text-[12px] text-neutral-500">{ORDERING_CAPTIONS[effectiveOrdering]}</span>
               )}
             </div>
             <Table
               headerVariant="quiet"
-              columns={TABLE_COLUMNS}
+              columns={tableColumns(scope)}
               loading={loading}
-              error={loadError}
-              onRetry={() => fetchStudents(page, search, statusFilter, sexFilter, ordering)}
+              error={list.error}
+              onRetry={() => setReloadKey((k) => k + 1)}
               errorSubject="students"
               isEmpty={students.length === 0}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
-              empty={{
-                icon: "ti-users-off",
-                title: hasActiveFilters ? "No students match these filters" : "No students yet",
-                subtitle: hasActiveFilters
-                  ? "Try a different search term, or clear the filters to see everyone."
-                  : "Add your first student to get started.",
-                action: hasActiveFilters ? (
-                  <Button variant="secondary" size="sm" icon="ti-filter-off" onClick={handleClearAll}>
-                    Clear filters
-                  </Button>
-                ) : canManage ? (
-                  <Button size="sm" icon="ti-user-plus" onClick={() => navigate("/students/new")}>
-                    New Student
-                  </Button>
-                ) : null,
-              }}
+              empty={emptyState}
             >
               {students.map((st) => {
                 const palette = getAvatarPalette(`${st.last_name}${st.first_name}`);
@@ -476,21 +626,8 @@ export default function StudentsPage() {
                       ) : <Blank />}
                     </TableCell>
 
-                    {/* null means never enrolled; a missing key means the
-                        server didn't say, which is not the same thing. */}
                     <TableCell>
-                      {st.last_enrollment ? (
-                        <>
-                          <div className="text-sm font-semibold text-neutral-900">
-                            S.Y. {st.last_enrollment.school_year}
-                          </div>
-                          <div className="truncate text-xs text-neutral-500">
-                            {[st.last_enrollment.grade_level, st.last_enrollment.section].filter(Boolean).join(" · ")}
-                          </div>
-                        </>
-                      ) : st.last_enrollment === null ? (
-                        <span className="text-sm italic text-neutral-500">Not enrolled yet</span>
-                      ) : <Blank />}
+                      {scope === "roll" ? <PlacementCell placement={st.placement} /> : <LastEnrolledCell last={st.last_enrollment} />}
                     </TableCell>
 
                     <TableCell>
@@ -529,29 +666,40 @@ export default function StudentsPage() {
 
                     {/* Row actions must not trigger the row's own navigation. */}
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
+                      {scope === "unenrolled" && canManage ? (
+                        // The worklist's one job: give this learner a place.
                         <Button
-                          variant="ghost" size="sm" iconOnly icon="ti-chart-bar"
-                          title="View grades"
-                          aria-label={`View grades for ${st.first_name} ${st.last_name}`}
-                          onClick={() => navigate(`/grades?student=${st.student_id}`)}
-                        />
-                        <Button
-                          variant="ghost" size="sm" iconOnly icon="ti-pencil"
-                          title="Edit student"
-                          aria-label={`Edit ${st.first_name} ${st.last_name}`}
-                          onClick={() => navigate(`/students/${st.student_id}/edit`)}
-                        />
-                        {canManage && (
+                          variant="secondary" size="sm" icon="ti-clipboard-plus"
+                          aria-label={`Enroll ${st.first_name} ${st.last_name} for S.Y. ${schoolYear}`}
+                          onClick={() => navigate(`/enrollments/new?student=${st.student_id}&school_year=${encodeURIComponent(schoolYear)}`)}
+                        >
+                          Enroll
+                        </Button>
+                      ) : (
+                        <div className="flex justify-end gap-1">
                           <Button
-                            variant="ghost" size="sm" iconOnly icon="ti-trash"
-                            title="Delete student"
-                            aria-label={`Delete ${st.first_name} ${st.last_name}`}
-                            className="hover:bg-error-50 hover:text-error-500"
-                            onClick={() => setToDelete(st)}
+                            variant="ghost" size="sm" iconOnly icon="ti-chart-bar"
+                            title="View grades"
+                            aria-label={`View grades for ${st.first_name} ${st.last_name}`}
+                            onClick={() => navigate(`/grades?student=${st.student_id}`)}
                           />
-                        )}
-                      </div>
+                          <Button
+                            variant="ghost" size="sm" iconOnly icon="ti-pencil"
+                            title="Edit student"
+                            aria-label={`Edit ${st.first_name} ${st.last_name}`}
+                            onClick={() => navigate(`/students/${st.student_id}/edit`)}
+                          />
+                          {canManage && (
+                            <Button
+                              variant="ghost" size="sm" iconOnly icon="ti-trash"
+                              title="Delete student"
+                              aria-label={`Delete ${st.first_name} ${st.last_name}`}
+                              className="hover:bg-error-50 hover:text-error-500"
+                              onClick={() => setToDelete(st)}
+                            />
+                          )}
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -560,14 +708,15 @@ export default function StudentsPage() {
           </Card>
         </motion.div>
 
-        {!loading && !loadError && pageMeta.count > 0 && (
+        {!loading && !list.error && list.count > 0 && (
           <Pagination
             page={page}
             totalPages={totalPages}
-            count={pageMeta.count}
-            hasPrevious={Boolean(pageMeta.previous)}
-            hasNext={Boolean(pageMeta.next)}
-            onPageChange={(p) => fetchStudents(p, search, statusFilter, sexFilter, ordering)}
+            count={list.count}
+            note={sexSplit}
+            hasPrevious={Boolean(list.previous)}
+            hasNext={Boolean(list.next)}
+            onPageChange={goToPage}
           />
         )}
       </div>
@@ -599,4 +748,47 @@ export default function StudentsPage() {
       </AnimatePresence>
     </>
   );
+}
+
+/** Where the learner is placed in the year shown. "Enrolled" is the usual
+ *  case and stays quiet; anything else gets its badge. */
+function PlacementCell({ placement }) {
+  if (!placement) return <Blank />;
+  const status = placement.enrollment_status;
+  // Senior high has a row per semester; say which one this is.
+  const semester = placement.semester ? `${placement.semester} sem` : null;
+  return (
+    <>
+      <div className="truncate text-sm font-semibold text-neutral-900">
+        {[placement.grade_level, placement.section].filter(Boolean).join(" · ")}
+      </div>
+      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
+        {status === "enrolled" ? (
+          <span>{["Enrolled", semester].filter(Boolean).join(" · ")}</span>
+        ) : (
+          <>
+            <StatusBadge status={status} map={ENROLLMENT_STATUS_MAP} size="sm" showIcon={false} />
+            {semester && <span>{semester}</span>}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** null means never enrolled; a missing key means the server didn't say,
+ *  which is not the same thing. */
+function LastEnrolledCell({ last }) {
+  if (last) {
+    return (
+      <>
+        <div className="text-sm font-semibold text-neutral-900">S.Y. {last.school_year}</div>
+        <div className="truncate text-xs text-neutral-500">
+          {[last.grade_level, last.section].filter(Boolean).join(" · ")}
+        </div>
+      </>
+    );
+  }
+  if (last === null) return <span className="text-sm italic text-neutral-500">Not enrolled yet</span>;
+  return <Blank />;
 }

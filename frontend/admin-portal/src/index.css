@@ -23,7 +23,7 @@
     height: 5px;
   }
   ::-webkit-scrollbar-thumb {
-    background: #f0dada;
+    background: var(--scrollbar-thumb);
     border-radius: 99px;
   }
 

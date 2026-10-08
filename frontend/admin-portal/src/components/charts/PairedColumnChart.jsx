@@ -29,6 +29,7 @@ import { motion } from "framer-motion";
 import ChartFrame, { NoData } from "./ChartFrame";
 import { columnPath, niceMax } from "./geometry";
 import { chartInk, token } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 import useElementSize from "./useElementSize";
 import { chartVariants } from "../../utils/motion";
 
@@ -68,8 +69,9 @@ export default function PairedColumnChart({
   const measured = useElementSize(fill ? plotEl : null);
   // Filling needs both dimensions; until the plot has a height, the fixed size.
   const size = measured?.height > 0 ? measured : null;
-  const ink = chartInk();
-  const colors = { previous: token("--color-brand-400"), current: token("--color-brand-600") };
+  const theme = useTheme();
+  const ink = chartInk(theme);
+  const colors = { previous: token("--color-brand-400", theme), current: token("--color-brand-600", theme) };
   const names = { previous: previousLabel, current: currentLabel };
 
   const compared = rows.some((r) => r.previous != null);

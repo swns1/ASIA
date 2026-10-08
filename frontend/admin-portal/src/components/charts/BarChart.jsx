@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import ChartFrame, { NoData } from "./ChartFrame";
 import { barPath, niceMax } from "./geometry";
 import { GAP, chartInk } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 import { chartVariants } from "../../utils/motion";
 
 const W = 760;
@@ -33,7 +34,7 @@ export default function BarChart({
   formatValue = (v) => String(v),
 }) {
   const [tip, setTip] = useState(null);
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
   const fill = color || ink.bar;
 
   // Rows with a zero value are KEPT — an empty category is a real reading

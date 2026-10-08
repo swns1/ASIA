@@ -83,7 +83,39 @@ class LastEnrollmentMixin(serializers.Serializer):
         return data
 
 
-class StudentSerializer(LastEnrollmentMixin, LrnFormatMixin, BlankEmailAsNullMixin, serializers.ModelSerializer):
+class PlacementMixin(serializers.Serializer):
+    """
+    `placement`: where the student is placed in the school year the
+    masterlist is scoped to (`?school_year=`) -- `school_year`,
+    `grade_level`, `section`, `enrollment_status` and `semester` of their
+    row in it. A learner listed for that year always has one.
+
+    Only that list looks it up (views._annotate_placement); every other
+    response leaves the key out, as LastEnrollmentMixin does.
+    """
+
+    placement = serializers.SerializerMethodField()
+
+    def get_placement(self, obj):
+        grade_level = getattr(obj, "placement_grade_level", None)
+        if not grade_level:
+            return None
+        return {
+            "school_year": getattr(obj, "placement_school_year", None),
+            "grade_level": grade_level,
+            "section": getattr(obj, "placement_section", None),
+            "enrollment_status": getattr(obj, "placement_status", None),
+            "semester": getattr(obj, "placement_semester", None),
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not hasattr(instance, "placement_grade_level"):
+            data.pop("placement", None)
+        return data
+
+
+class StudentSerializer(PlacementMixin, LastEnrollmentMixin, LrnFormatMixin, BlankEmailAsNullMixin, serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = "__all__"
@@ -124,7 +156,7 @@ class StudentSerializer(LastEnrollmentMixin, LrnFormatMixin, BlankEmailAsNullMix
         return attrs
 
 
-class StudentBillingSummarySerializer(LastEnrollmentMixin, serializers.ModelSerializer):
+class StudentBillingSummarySerializer(PlacementMixin, LastEnrollmentMixin, serializers.ModelSerializer):
     """
     Reduced-field view of Student for the accounting role: enough to look
     up and identify a student for invoicing (name, LRN/student number,
@@ -149,6 +181,7 @@ class StudentBillingSummarySerializer(LastEnrollmentMixin, serializers.ModelSeri
             # Year, grade and section only -- where the student is placed,
             # which invoicing already deals in, not demographic PII.
             "last_enrollment",
+            "placement",
         )
         read_only_fields = fields
 

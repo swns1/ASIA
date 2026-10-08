@@ -11,7 +11,7 @@ import PairedColumnChart from "./PairedColumnChart";
 import Sparkline from "./Sparkline";
 import StackedBar from "./StackedBar";
 import { barPath, columnPath, linePath, niceMax } from "./geometry";
-import { clearTokenCache } from "./tokens";
+import { chartInk, clearTokenCache, levelColor } from "./tokens";
 
 beforeEach(() => {
   // token() memoizes per module, and jsdom resolves no custom properties, so
@@ -20,29 +20,64 @@ beforeEach(() => {
 });
 
 describe("token fallbacks", () => {
-  it("match styles/tokens.css exactly", () => {
-    // tokens.js carries hex fallbacks for environments with no live
-    // stylesheet. They are a mirror, not a second source of truth — but a
-    // mirror drifts silently, and a drifted fallback is how a chart quietly
-    // renders an un-audited colour. This test is the thing that stops it:
-    // it reads the real stylesheet and compares.
-    // Resolved from the project root: under vitest `import.meta.url` is an
-    // http URL, not a file one, so fileURLToPath cannot be used here.
-    const root = process.cwd();
-    const css = readFileSync(join(root, "src/styles/tokens.css"), "utf8");
-    const js = readFileSync(join(root, "src/components/charts/tokens.js"), "utf8");
+  // tokens.js carries hex fallbacks for environments with no live
+  // stylesheet. They are a mirror, not a second source of truth — but a
+  // mirror drifts silently, and a drifted fallback is how a chart quietly
+  // renders an un-audited colour. These tests are the thing that stop it:
+  // they read the real stylesheet and compare.
+  // Resolved from the project root: under vitest `import.meta.url` is an
+  // http URL, not a file one, so fileURLToPath cannot be used here.
+  const root = process.cwd();
+  const css = readFileSync(join(root, "src/styles/tokens.css"), "utf8");
+  const js = readFileSync(join(root, "src/components/charts/tokens.js"), "utf8");
 
-    const fallbacks = [...js.matchAll(/"(--color-[a-z0-9-]+)":\s*"(#[0-9a-fA-F]{3,8})"/g)];
+  // The dark set is a block of its own in each file: light fallbacks mirror
+  // what comes before it, dark ones mirror the block itself.
+  const darkCssAt = css.indexOf('[data-theme="dark"] {');
+  const darkJsAt = js.indexOf("const DARK_FALLBACKS");
+  const sets = {
+    light: { js: js.slice(0, darkJsAt), css: css.slice(0, darkCssAt) },
+    dark: {
+      js: js.slice(darkJsAt, js.indexOf("};", darkJsAt)),
+      css: css.slice(darkCssAt, css.indexOf("}", darkCssAt)),
+    },
+  };
+
+  it.each(["light", "dark"])("match styles/tokens.css exactly (%s)", (theme) => {
+    const { js: fallbackSource, css: declarations } = sets[theme];
+    const fallbacks = [
+      ...fallbackSource.matchAll(/"(--(?:color|chart)-[a-z0-9-]+)":\s*"(#[0-9a-fA-F]{3,8})"/g),
+    ];
     expect(fallbacks.length).toBeGreaterThan(8);
 
     for (const [, name, hex] of fallbacks) {
-      const declared = css.match(
+      const declared = declarations.match(
         new RegExp(`${name}:\\s*(#[0-9a-fA-F]{3,8})`)
       );
-      expect(declared, `${name} is not declared in tokens.css`).toBeTruthy();
-      expect(hex.toLowerCase(), `${name} fallback has drifted from tokens.css`)
+      expect(declared, `${name} is not declared in tokens.css (${theme})`).toBeTruthy();
+      expect(hex.toLowerCase(), `${name} ${theme} fallback has drifted from tokens.css`)
         .toBe(declared[1].toLowerCase());
     }
+  });
+});
+
+describe("chart colours by theme", () => {
+  // jsdom has no stylesheet, so these are the fallbacks, which the tests
+  // above hold to tokens.css.
+  it("reads the light set by default", () => {
+    const ink = chartInk();
+    expect(ink.ink).toBe("#1a0a0a");
+    expect(ink.dot).toBe("#ffffff");
+    expect(levelColor("elementary")).toBe("#2563eb");
+  });
+
+  it("reads the dark set for a dark page", () => {
+    const ink = chartInk("dark");
+    expect(ink.ink).toBe("#f6eded");
+    expect(ink.bar).toBe("#ef4b4b");
+    // A label on a bar turns dark, since dark-mode bars are light.
+    expect(ink.onMark).toBe("#1c1414");
+    expect(levelColor("elementary", "dark")).toBe("#7ba8f7");
   });
 });
 

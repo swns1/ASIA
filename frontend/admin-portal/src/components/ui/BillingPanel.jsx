@@ -4,6 +4,7 @@ import Card from "./Card";
 import Button from "./Button";
 import Skeleton from "./Skeleton";
 import Sparkline from "../charts/Sparkline";
+import { CHIP_GLOW } from "../../constants/statusTones";
 
 // BillingPanel — the dashboard's money block, as one panel rather than four
 // stat cards.
@@ -90,7 +91,7 @@ export default function BillingPanel({
   return (
     <Card padding="none" className={`overflow-hidden ${className}`}>
       <div className="flex items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-info-50">
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-info-50 ${CHIP_GLOW.info}`}>
           <i className="ti ti-receipt text-[14px] text-info-500" aria-hidden="true" />
         </div>
         <span className="flex-1 text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
@@ -171,7 +172,7 @@ export default function BillingPanel({
                 id="billing-year"
                 value={filterYear ?? ""}
                 onChange={(e) => onFilterYearChange?.(e.target.value || null)}
-                className="focus-ring w-full cursor-pointer rounded-sm border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-700 outline-none sm:max-w-[220px]"
+                className="focus-ring w-full cursor-pointer rounded-sm border border-neutral-300 bg-surface px-2 py-1 text-xs text-neutral-700 outline-none sm:max-w-[220px]"
               >
                 <option value="">Current ({schoolYear})</option>
                 {schoolYearOptions.map((y) => (
@@ -217,7 +218,8 @@ export default function BillingPanel({
 
       {/* The collection rate, drawn rather than stated. Hidden while loading
           and when nothing is billed — a full-width empty track would read as
-          0% collected, which is not the same as "nothing to collect". */}
+          0% collected, which is not the same as "nothing to collect". In
+          dark mode each part shades along its length. */}
       {!loading && net > 0 && (
         <>
           <div
@@ -226,11 +228,19 @@ export default function BillingPanel({
             aria-label={`${collectionPct}% collected, ${100 - collectionPct}% outstanding`}
           >
             <div
-              className={`h-full transition-[width] duration-500 ${showAmounts ? "bg-success-dot" : "bg-neutral-400"}`}
+              className={`h-full transition-[width] duration-500 ${
+                showAmounts
+                  ? "bg-success-dot dark:bg-[linear-gradient(90deg,#2e7d32,#4caf50)]"
+                  : "bg-neutral-400"
+              }`}
               style={{ width: `${showAmounts ? collectionPct : 50}%` }}
             />
             <div
-              className={`h-full transition-[width] duration-500 ${showAmounts ? "bg-error-dot" : "bg-neutral-300"}`}
+              className={`h-full transition-[width] duration-500 ${
+                showAmounts
+                  ? "bg-error-dot dark:bg-[linear-gradient(90deg,#f44336,#b71c1c)]"
+                  : "bg-neutral-300"
+              }`}
               style={{ width: `${showAmounts ? 100 - collectionPct : 50}%` }}
             />
           </div>

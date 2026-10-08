@@ -60,8 +60,12 @@ describe("Scholarship awards — band", () => {
 
     expect(await legend().findByRole("button", { name: "All 171" })).toBeTruthy();
     // Types in a fixed order (by id), each with its own count.
-    const names = legend().getAllByRole("button").map((b) => b.textContent);
-    expect(names).toEqual(["All 171", "Education Service Contracting 35", "4Ps Beneficiary 136"]);
+    // The counts on screen roll up to these.
+    const names = () => legend().getAllByRole("button").map((b) => b.textContent);
+    await waitFor(
+      () => expect(names()).toEqual(["All 171", "Education Service Contracting 35", "4Ps Beneficiary 136"]),
+      { timeout: 2000 },
+    );
     expect(screen.getByText("awards in S.Y. 2026-2027")).toBeTruthy();
     expect(lastSummary()).toEqual({ school_year: "2026-2027" });
   });

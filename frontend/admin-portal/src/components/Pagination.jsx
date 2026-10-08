@@ -12,8 +12,11 @@ const BTN =
   "focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-sm border px-2 text-xs " +
   "transition-colors disabled:cursor-not-allowed disabled:opacity-40";
 const BTN_IDLE =
-  "border-neutral-300 bg-white text-neutral-600 hover:enabled:border-brand-500 hover:enabled:bg-brand-100 hover:enabled:text-brand-600";
-const BTN_ACTIVE = "border-brand-500 bg-brand-100 font-bold text-brand-600";
+  "border-neutral-300 bg-surface text-neutral-600 hover:enabled:border-brand-500 hover:enabled:bg-brand-100 hover:enabled:text-brand-600";
+// Dark: the current page lit with the brand's red gradient.
+const BTN_ACTIVE =
+  "border-brand-500 bg-brand-100 font-bold text-brand-600 " +
+  "dark:border-[rgba(239,75,75,0.6)] dark:bg-[linear-gradient(135deg,rgba(224,49,49,0.38),rgba(224,49,49,0.12))] dark:text-white";
 
 export default function Pagination({
   page,

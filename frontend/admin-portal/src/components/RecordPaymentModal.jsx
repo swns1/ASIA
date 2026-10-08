@@ -20,6 +20,16 @@ const getInvoice    = (id)  => _getInvoice(id);
 const getInvoices   = (p={})=> _getInvoices(p);
 const createPayment = (p)   => _createPayment(p);
 
+// The chosen payment method's colours, from its tone (constants/paymentMethods):
+// token classes, so they follow the theme. Complete strings, as Tailwind needs.
+const METHOD_ON = {
+  success: "border-success-500 bg-success-50 text-success-500",
+  info:    "border-info-500 bg-info-50 text-info-500",
+  accent:  "border-accent-500 bg-accent-50 text-accent-500",
+  warning: "border-warning-500 bg-warning-50 text-warning-500",
+  muted:   "border-muted-500 bg-muted-50 text-muted-500",
+};
+
 const fmt = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
 
 /**
@@ -136,58 +146,64 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
           {error && <Alert variant="error" className="mb-3.5">{error}</Alert>}
 
           {/* Invoice selector */}
-          <div style={{ marginBottom:16 }}>
+          <div className="mb-4">
             <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Invoice <span className="text-brand-600">*</span></div>
             {loadingInvoice ? <Skeleton height={52} /> : invoice ? (
-              <div style={{ padding:"14px 16px", border:"1.5px solid #fde2de", borderRadius:12, background:"#fff8f6" }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{invoice.invoice_no}</span>
-                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <div className="rounded-lg border-[1.5px] border-brand-border-soft bg-brand-50 px-4 py-3.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="font-[monospace] text-[13px] font-bold text-neutral-900">{invoice.invoice_no}</span>
+                  <div className="flex items-center gap-1.5">
                     <StatusBadge status={invoice.status} map={INVOICE_STATUS_MAP} size="sm" />
                     {!preloadedInvoiceId && (
-                      <button onClick={() => setInvoice(null)} style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"4px 8px", fontSize:11, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
+                      <button
+                        type="button"
+                        onClick={() => setInvoice(null)}
+                        className="cursor-pointer rounded-[7px] border border-brand-border-soft bg-transparent px-2 py-1 text-[11px] text-neutral-700"
+                      >
+                        Change
+                      </button>
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en?.student_name ?? `Enrollment #${invoice.enrollment_id}`}</div>
-                <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>{en?.grade_level} · {en?.section} · S.Y. {en?.school_year}</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:12 }}>
+                <div className="text-[13px] font-semibold text-neutral-900">{en?.student_name ?? `Enrollment #${invoice.enrollment_id}`}</div>
+                <div className="mt-0.5 text-[11px] text-neutral-500">{en?.grade_level} · {en?.section} · S.Y. {en?.school_year}</div>
+                <div className="mt-3 grid grid-cols-[1fr_1fr_1fr] gap-2.5">
                   {[
-                    { label:"Total Due",  val:fmt(invoice.net_amount ?? 0), color:"#1a0a0a" },
-                    { label:"Total Paid", val:fmt(invoice.total_paid ?? 0), color:"#2e6b0d" },
-                    { label:"Balance",    val:fmt(balance),                  color:balance > 0 ? "#a32d2d" : "#2e6b0d" },
+                    { label:"Total Due",  val:fmt(invoice.net_amount ?? 0), tone:"text-neutral-900" },
+                    { label:"Total Paid", val:fmt(invoice.total_paid ?? 0), tone:"text-success-500" },
+                    { label:"Balance",    val:fmt(balance),                  tone:balance > 0 ? "text-error-600" : "text-success-500" },
                   ].map((s) => (
-                    <div key={s.label} style={{ textAlign:"center", padding:"10px 8px", background:"white", borderRadius:10, border:"1px solid #f5eaea" }}>
-                      <div style={{ fontSize:14, fontWeight:700, color:s.color }}>{s.val}</div>
-                      <div style={{ fontSize:10.5, color:"#8a6a6a", marginTop:3, textTransform:"uppercase", letterSpacing:"0.06em" }}>{s.label}</div>
+                    <div key={s.label} className="rounded-md border border-neutral-200 bg-surface px-2 py-2.5 text-center">
+                      <div className={`text-[14px] font-bold ${s.tone}`}>{s.val}</div>
+                      <div className="mt-[3px] text-[10.5px] uppercase tracking-[0.06em] text-neutral-500">{s.label}</div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div style={{ position:"relative" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
+              <div className="relative">
+                <div className="flex h-11 items-center gap-2.5 rounded-md border-[1.5px] border-brand-border-soft bg-surface px-3.5">
+                  <i className="ti ti-search text-[14px] text-neutral-500" aria-hidden="true" />
                   <input placeholder="Search by invoice number or student name…" value={invoiceSearch}
                     onChange={(e) => { setInvoiceSearch(e.target.value); setDropdownOpen(true); }}
                     onFocus={() => setDropdownOpen(true)}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-                  {searching && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
+                    className="flex-1 border-none bg-transparent text-[13px] text-neutral-900 outline-none" />
+                  {searching && <i className="ti ti-loader-2 animate-spin text-[13px] text-brand-600" aria-hidden="true" />}
                 </div>
                 {dropdownOpen && invoiceSearch && (
-                  <div style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
-                    {invoiceResults.length === 0 && !searching && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No invoices found.</div>}
+                  <div className="absolute inset-x-0 top-full z-[1000] mt-1.5 max-h-[220px] overflow-y-auto rounded-md border border-brand-border-soft bg-surface-raised shadow-lg dark:shadow-float-dark">
+                    {invoiceResults.length === 0 && !searching && <div className="p-4 text-center text-[13px] text-neutral-500">No invoices found.</div>}
                     {invoiceResults.map((inv) => {
                       if (inv.status === "void" || inv.status === "paid") return null;
                       const en = inv.enrollment_detail;
                       return (
                         <div key={inv.invoice_id} onClick={() => { setInvoice(inv); setDropdownOpen(false); setInvoiceSearch(""); }}
                           className="cursor-pointer border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                            <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a", fontFamily:"monospace" }}>{inv.invoice_no}</span>
+                          <div className="flex items-center justify-between">
+                            <span className="font-[monospace] text-[12px] font-bold text-neutral-900">{inv.invoice_no}</span>
                             <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
                           </div>
-                          <div style={{ fontSize:12, color:"#5a4a4a", marginTop:2 }}>{en?.student_name ?? `Enrollment #${inv.enrollment_id}`} · {fmt(inv.balance ?? 0)} remaining</div>
+                          <div className="mt-0.5 text-[12px] text-neutral-800">{en?.student_name ?? `Enrollment #${inv.enrollment_id}`} · {fmt(inv.balance ?? 0)} remaining</div>
                         </div>
                       );
                     })}
@@ -198,16 +214,18 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
           </div>
 
           {/* Payment method */}
-          <div style={{ marginBottom:16 }}>
+          <div className="mb-4">
             <div className="mb-1.5 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">Payment Method <span className="text-brand-600">*</span></div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+            <div className="grid grid-cols-[repeat(3,1fr)] gap-2">
               {PAYMENT_METHODS.map((pm) => {
                 const active = form.payment_method === pm.value;
                 return (
-                  <button key={pm.value} type="button" onClick={() => setF("payment_method", pm.value)}
-                    style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, border:`1.5px solid ${active?pm.color:"#8a6a6a"}`, background:active?pm.bg:"white", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all .15s" }}>
-                    <i className={`ti ${pm.icon}`} style={{ fontSize:14, color:active?pm.color:"#855c5c" }} />
-                    <span style={{ fontSize:12, fontWeight:active?700:500, color:active?pm.color:"#7a5050" }}>{pm.label}</span>
+                  <button key={pm.value} type="button" aria-pressed={active} onClick={() => setF("payment_method", pm.value)}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border-[1.5px] px-3 py-2.5 transition-all duration-150 ${
+                      active ? METHOD_ON[pm.tone] ?? METHOD_ON.muted : "border-neutral-500 bg-surface"
+                    }`}>
+                    <i className={`ti ${pm.icon} text-[14px] ${active ? "" : "text-neutral-600"}`} aria-hidden="true" />
+                    <span className={`text-[12px] ${active ? "font-bold" : "font-medium text-neutral-700"}`}>{pm.label}</span>
                   </button>
                 );
               })}
@@ -215,19 +233,19 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
           </div>
 
           {/* Amount + date */}
-          <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:12, marginBottom:14 }}>
+          <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
             <Field label="Amount Paid" required>
-              <div style={{ position:"relative" }}>
-                <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#8a6a6a", fontWeight:600 }}>₱</span>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-neutral-500">₱</span>
                 <Input type="number" min="0.01" step="0.01"
                   max={invoice ? parseFloat(invoice.balance ?? (parseFloat(invoice.net_amount ?? 0) - parseFloat(invoice.total_paid ?? 0))) : undefined}
                   value={form.amount_paid} onChange={(e) => setF("amount_paid", e.target.value)}
                   placeholder="0.00" className="pl-[26px] text-right" />
               </div>
               {invoice && balance > 0 && (
-                <div style={{ marginTop:5, display:"flex", gap:6, flexWrap:"wrap" }}>
+                <div className="mt-[5px] flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => setF("amount_paid", String(balance))}
-                    style={{ fontSize:11, color:"#c92a2a", background:"#fff0f0", border:"none", borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
+                    className="cursor-pointer rounded-[6px] border-none bg-brand-100 px-2.5 py-[3px] text-[11px] font-semibold text-brand-600">
                     Full balance {fmt(balance)}
                   </button>
                   {invoice.installments?.length > 0 && (() => {
@@ -236,7 +254,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                     const nextBal = parseFloat(next.amount) - parseFloat(next.amount_paid);
                     return (
                       <button type="button" onClick={() => setF("amount_paid", String(nextBal))}
-                        style={{ fontSize:11, color:"#1455a0", background:"#e3f0fd", border:"none", borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontWeight:600 }}>
+                        className="cursor-pointer rounded-[6px] border-none bg-info-50 px-2.5 py-[3px] text-[11px] font-semibold text-info-500">
                         Next installment {fmt(nextBal)}
                       </button>
                     );

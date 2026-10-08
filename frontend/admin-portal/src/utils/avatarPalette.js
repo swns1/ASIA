@@ -3,20 +3,20 @@
 // StudentsPage, StudentDetailPage and DashboardPage each had their own copy of
 // this idea with different palette lengths, so the same student could appear in
 // two different colours on two screens. One palette, one function.
+//
+// The seven pairs live in styles/tokens.css (--avatar-N-bg / --avatar-N-fg),
+// with a dark value for each, so an avatar follows the theme of the page it
+// is drawn on. They are returned as var() references for inline styles.
 
-const PALETTES = [
-  { bg: "#fde8e8", color: "#a52f22" },
-  { bg: "#e8f0fd", color: "#1d4ed8" },
-  { bg: "#e8fdf0", color: "#15803d" },
-  { bg: "#fdf5e8", color: "#b45309" },
-  { bg: "#f0e8fd", color: "#6d28d9" },
-  { bg: "#fde8f8", color: "#a3155f" },
-  { bg: "#e8fdfd", color: "#0e7490" },
-];
+const PALETTES = Array.from({ length: 7 }, (_, i) => ({
+  bg: `var(--avatar-${i + 1}-bg)`,
+  color: `var(--avatar-${i + 1}-fg)`,
+}));
 
 /**
  * @param {string} name  any stable identifier for the person
- * @returns {{bg: string, color: string}} tinted background + AA-contrast text
+ * @returns {{bg: string, color: string}} tinted background + AA-contrast text,
+ *   as CSS var() references
  */
 export function getAvatarPalette(name = "") {
   if (!name) return PALETTES[0];

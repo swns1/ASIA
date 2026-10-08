@@ -750,11 +750,7 @@ export default function UsersPage() {
         <StatusBand
           total={bandTotal}
           caption={bandCaption}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              Pick a role to filter the list
-            </span>
-          }
+          hint="Pick a role to filter the list"
           options={[
             { value: "all", label: "All", count: bandTotal },
             ...ROLE_ORDER.map((r) => ({

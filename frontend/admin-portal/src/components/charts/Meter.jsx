@@ -8,6 +8,7 @@
 // a portion of the track rather than as a separate category.
 
 import { chartInk } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 
 export default function Meter({
   value,
@@ -18,7 +19,7 @@ export default function Meter({
   color,
   className = "",
 }) {
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
   const safeMax = max > 0 ? max : 0;
   const ratio = safeMax ? Math.min(1, Math.max(0, value / safeMax)) : 0;
   const pct = Math.round(ratio * 100);

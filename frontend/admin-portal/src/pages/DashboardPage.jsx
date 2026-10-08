@@ -26,6 +26,7 @@ import {
 } from "../api/enrollmentApi";
 import { getInvoices as _getInvoices, getFinancialSummary as _getFinancialSummary } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { ALL_YEARS_PARAM } from "../hooks/useYearFilter";
 import { getCurrentUser, hasAnyRole, BILLING_ROLES, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
 
 function AnimatedCount({ target, loading }) {
@@ -441,7 +442,8 @@ function StaffDashboard() {
           <DashboardStat
             label="Total Students" icon="ti-users" iconTone="brand" value={totalStudents} loading={loading}
             chipText={`${activeStudents.toLocaleString()} active`} chipTone="up"
-            onOpen={() => navigate("/students")} openLabel="View all students"
+            // All years: this tile counts every student, not this year's.
+            onOpen={() => navigate(`/students?school_year=${ALL_YEARS_PARAM}`)} openLabel="View all students"
           />
           <DashboardStat
             label="Enrolled this S.Y." icon="ti-calendar-event" iconTone="success" value={enrolledCount} loading={loading}

@@ -287,7 +287,7 @@ describe("AdminHome — teachers today", () => {
 });
 
 describe("AdminHome — start a task", () => {
-  const student = (student_id, first_name, last_name, last_enrollment = null) => ({
+  const student =(student_id, first_name, last_name, last_enrollment = null) => ({
     student_id, first_name, last_name, middle_name: null, suffix: null,
     lrn: `1000000000${student_id}`, student_number: `S-${student_id}`, last_enrollment,
   });
@@ -329,12 +329,14 @@ describe("AdminHome — start a task", () => {
     expect(screen.getByTestId("location").textContent).toBe("/students/2");
   });
 
-  it("takes Enter, or See all, to the Students page search", async () => {
+  it("takes See all to the Students page search, across every year", async () => {
     renderAs("admin");
     const box = await finder();
     fireEvent.change(box, { target: { value: "Dela Cruz" } });
     fireEvent.click(await screen.findByRole("button", { name: "See all 9 matches in Students" }));
-    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz");
+    // All years: the Students page otherwise opens on this year's learners,
+    // and someone who left or graduated would not be found.
+    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz&school_year=all");
   });
 
   it("goes straight to the Students search on Enter, without waiting", async () => {
@@ -342,7 +344,7 @@ describe("AdminHome — start a task", () => {
     const box = await finder();
     fireEvent.change(box, { target: { value: "Dela Cruz" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz");
+    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz&school_year=all");
   });
 
   it("says when nothing matches", async () => {

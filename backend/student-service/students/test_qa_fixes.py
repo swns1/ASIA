@@ -310,15 +310,27 @@ class TestPlacementFilters:
             qs = view.get_queryset()
         return view.queryset, mirror, qs
 
-    def test_filters_students_by_a_live_placement_at_that_grade_and_year(self):
+    def test_filters_students_by_their_place_at_that_grade_in_that_year(self):
+        """With a year, any row of that year that wasn't cancelled counts: a
+        closed year's rows are all completed, and its class lists used to
+        come up empty."""
         base, mirror, _ = self._queryset("school_level=elementary&grade_level=Grade%204&school_year=2026-2027")
+        mirror.objects.filter.assert_called_once_with(school_year="2026-2027")
+        year_rows = mirror.objects.filter.return_value
+        year_rows.exclude.assert_called_once_with(enrollment_status="cancelled")
+        chain = year_rows.exclude.return_value
+        chain.filter.assert_called_once_with(school_level="elementary")
+        placed = chain.filter.return_value.filter.return_value
+        chain.filter.return_value.filter.assert_called_once_with(grade_level="Grade 4")
+        base.filter.assert_any_call(student_id__in=placed.values.return_value)
+
+    def test_without_a_year_the_grade_is_the_live_placement(self):
+        base, mirror, _ = self._queryset("school_level=elementary&grade_level=Grade%204")
         mirror.objects.filter.assert_called_once_with(enrollment_status__in=("enrolled", "pending"))
         chain = mirror.objects.filter.return_value
         chain.filter.assert_called_once_with(school_level="elementary")
+        placed = chain.filter.return_value.filter.return_value
         chain.filter.return_value.filter.assert_called_once_with(grade_level="Grade 4")
-        chain.filter.return_value.filter.return_value.filter.assert_called_once_with(school_year="2026-2027")
-        placed = chain.filter.return_value.filter.return_value.filter.return_value
-        placed.values.assert_called_once_with("student_id")
         base.filter.assert_any_call(student_id__in=placed.values.return_value)
 
     def test_no_filter_no_enrollment_lookup(self):

@@ -5,15 +5,19 @@
  * ran only on Enter or a Search button, and Sex was a labelled chip row that
  * also held "Recents" and "Not enrolled". The band's legend is now the one
  * status control, the box searches once typing pauses, and Sex is a menu.
+ * (The year scope, its Level/Grade/Section menus and Not enrolled are
+ * masterlist.test.jsx's.)
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const getStudents = vi.fn();
+const getStudentCounts = vi.fn();
 
 vi.mock("../../api/studentApi", () => ({
   getStudents: (...a) => getStudents(...a),
+  getStudentCounts: (...a) => getStudentCounts(...a),
   deleteStudent: vi.fn(),
 }));
 vi.mock("../../context/SchoolYearContext", () => ({
@@ -22,8 +26,14 @@ vi.mock("../../context/SchoolYearContext", () => ({
 
 const { default: StudentsPage } = await import("../StudentsPage");
 
-// What the band's count requests get back, by status ("" is everyone).
-const COUNTS = { "": 10, active: 6, inactive: 1, transferred: 1, graduated: 1, dropped: 1 };
+// What the band's counts request gets back.
+const COUNTS = {
+  status: { active: 6, inactive: 1, transferred: 1, graduated: 1, dropped: 1 },
+  sex: { male: 5, female: 5 },
+  registered: 10,
+  year_total: 10,
+  enrollment: { enrolled: 10, not_enrolled: 2 },
+};
 
 function page() {
   return (
@@ -33,10 +43,10 @@ function page() {
   );
 }
 
-// The list request is the one with a page size; the band's are not.
-const lastList = () => getStudents.mock.calls.map(([p]) => p).filter((p) => p.page_size).at(-1);
-const listCallCount = () => getStudents.mock.calls.filter(([p]) => p.page_size).length;
-const settled = () => screen.findByText(/^No students (yet|match these filters)$/);
+const lastList = () => getStudents.mock.lastCall[0];
+const listCallCount = () => getStudents.mock.calls.length;
+// The empty state only shows once a request has come back.
+const settled = () => screen.findByText(/^(No students|No learners|No match|Everyone is enrolled)/);
 const legend = () => within(screen.getByRole("group", { name: "Filter by status" }));
 const searchBox = () => screen.getByRole("searchbox", { name: /search students/i });
 const sexMenu = () => screen.getByRole("button", { name: /^sex:/i });
@@ -46,12 +56,8 @@ beforeEach(() => {
   sessionStorage.clear();
   sessionStorage.setItem("access_token", "token");
   sessionStorage.setItem("current_user", JSON.stringify({ name: "Ana Reyes", role: "registrar" }));
-  getStudents.mockImplementation(async (p) => ({
-    results: [],
-    count: p.page_size ? 0 : COUNTS[p.status],
-    next: null,
-    previous: null,
-  }));
+  getStudents.mockResolvedValue({ results: [], count: 0, next: null, previous: null });
+  getStudentCounts.mockResolvedValue(COUNTS);
 });
 
 describe("StudentsPage — status band", () => {
@@ -61,7 +67,11 @@ describe("StudentsPage — status band", () => {
 
     expect(await legend().findByRole("button", { name: "Active 6" })).toBeTruthy();
     expect(legend().getByRole("button", { name: "All 10" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("students registered").previousSibling.textContent).toBe("10");
+    // The total rolls up to its count.
+    await waitFor(
+      () => expect(screen.getByText("learners in S.Y. 2026-2027").previousSibling.textContent).toBe("10"),
+      { timeout: 2000 },
+    );
   });
 
   it("filters by a status from its legend button, and goes back to all on a second click", async () => {
@@ -177,37 +187,38 @@ describe("StudentsPage — Clear", () => {
     render(page());
     await settled();
     expect(screen.queryByRole("button", { name: /^clear$/i })).toBeNull();
-    expect(screen.getByText("Newest registered first")).toBeTruthy();
+    expect(screen.getByText("By grade and section, then last name")).toBeTruthy();
 
     fireEvent.click(await legend().findByRole("button", { name: "Active 6" }));
     fireEvent.click(sexMenu());
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Female" }));
     fireEvent.click(screen.getByRole("button", { name: /^enrollment:/i }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Not enrolled for 2025-2026" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^not enrolled/i }));
     fireEvent.change(searchBox(), { target: { value: "cruz" } });
     fireEvent.keyDown(searchBox(), { key: "Enter" });
-    fireEvent.click(screen.getByRole("button", { name: "Student" }));
+    fireEvent.click(screen.getByRole("button", { name: "Age" }));
     await waitFor(() =>
       expect(lastList()).toMatchObject({
-        search: "cruz", status: "active", sex: "female", ordering: "last_name", unenrolled: "2025-2026",
+        search: "cruz", status: "active", sex: "female", ordering: "birth_date", unenrolled: "2026-2027",
       }),
     );
     await settled();
-    expect(screen.getByText("Sorted by last name, A to Z")).toBeTruthy();
+    expect(screen.getByText("Sorted by age, oldest first")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
 
     await waitFor(() =>
       expect(lastList()).toMatchObject({
-        page: 1, search: "", status: "", sex: "", ordering: "-student_id", unenrolled: undefined,
+        page: 1, search: "", status: "", sex: "", ordering: "placement", school_year: "2026-2027",
       }),
     );
+    expect(lastList().unenrolled).toBeUndefined();
     await settled();
     expect(searchBox().value).toBe("");
     expect(legend().getByRole("button", { name: "All 10" }).getAttribute("aria-pressed")).toBe("true");
     expect(sexMenu().getAttribute("aria-label")).toBe("Sex: All");
-    expect(screen.getByRole("button", { name: /^enrollment:/i }).getAttribute("aria-label")).toBe("Enrollment: Any");
-    expect(screen.getByText("Newest registered first")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^enrollment:/i }).getAttribute("aria-label")).toBe("Enrollment: Enrolled");
+    expect(screen.getByText("By grade and section, then last name")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^clear$/i })).toBeNull();
   });
 });

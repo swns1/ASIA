@@ -16,13 +16,15 @@ const ALIGN = {
   end: "right-0",
 };
 
-// The pill. "light" sits on the page; "dark" sits on a StatusBand, where it
-// stays outlined whatever it's set to, since the band has no pale tint to
-// mark "set" with.
+// The pill. "light" sits on the page or a light StatusBand; "dark" sits on a
+// dark StatusBand, where it stays outlined whatever it's set to, since the
+// band has no pale tint to mark "set" with.
+// The dark tone's colours are the on-panel tokens: the brand panel is the
+// same in both themes, so its text is too.
 const TONES = {
   light: {
     trigger: "h-10 rounded-lg",
-    idle: "border-neutral-300 bg-white hover:border-brand-500",
+    idle: "border-neutral-300 bg-surface hover:border-brand-500",
     set: "border-brand-500 bg-brand-100",
     label: "text-neutral-500",
     value: "text-neutral-900",
@@ -31,12 +33,12 @@ const TONES = {
   },
   dark: {
     trigger: "h-9 rounded-full",
-    idle: "border-white/16 bg-transparent hover:border-white/30",
-    set: "border-white/16 bg-transparent hover:border-white/30",
-    label: "text-brand-300",
+    idle: "border-white/16 bg-white/[0.04] hover:border-white/30",
+    set: "border-white/16 bg-white/[0.04] hover:border-white/30",
+    label: "text-on-panel-muted",
     value: "text-white",
     valueSet: "text-white",
-    chevron: "text-brand-border",
+    chevron: "text-on-panel-faint",
   },
 };
 
@@ -172,7 +174,7 @@ export default function FilterMenu({
           // z-20 clears the table's sticky header (z-10) and stays under the
           // page header (z-30). The height cap is for the year list, which
           // gains an entry every school year.
-          className={`absolute top-[calc(100%+6px)] z-20 max-h-[280px] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1.5 shadow-lg ${ALIGN[side] ?? ALIGN.start}`}
+          className={`absolute top-[calc(100%+6px)] z-20 max-h-[280px] overflow-y-auto rounded-lg border border-neutral-200 bg-surface-raised p-1.5 shadow-lg dark:shadow-float-dark ${ALIGN[side] ?? ALIGN.start}`}
           style={{ minWidth: menuWidth }}
         >
           {options.map((o, i) => {

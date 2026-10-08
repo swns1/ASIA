@@ -15,6 +15,8 @@
 // School Years keeps its changes grey: it lays whole rows of changes side by
 // side, where colour on every cell would drown the figures.)
 
+import { useId } from "react";
+
 import Badge from "../../components/ui/Badge";
 import Card, { Panel } from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -25,7 +27,9 @@ import { NoData } from "../../components/charts/ChartFrame";
 import Legend from "../../components/charts/Legend";
 import { linePath } from "../../components/charts/geometry";
 import { linearAxis } from "../../components/charts/scale";
-import { levelColor, token } from "../../components/charts/tokens";
+import { chartInk, levelColor, token } from "../../components/charts/tokens";
+import useTheme from "../../hooks/useTheme";
+import { CHIP_GLOW } from "../../constants/statusTones";
 import { LEVEL_ICONS, LEVEL_SHORT_LABELS } from "../../constants/schoolLevels";
 import { collectionPace, levelRows, plural, withYear, yearChange } from "./adminHomeData";
 
@@ -85,7 +89,12 @@ function HeadlineChange({ change, since }) {
 function LevelRow({ row, longest, compared, year, prev }) {
   const change = compared ? yearChange(row.current, row.previous) : null;
   const width = (n) => `${longest ? (n * 100) / longest : 0}%`;
-  const color = levelColor(row.key);
+  const theme = useTheme();
+  const color = levelColor(row.key, theme);
+  // Dark: the bar fades in from the left and glows faintly in its colour.
+  const barStyle = theme === "dark"
+    ? { background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})`, boxShadow: `0 0 10px -2px ${color}` }
+    : { background: color };
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 @sm:grid-cols-[110px_minmax(0,1fr)_auto]">
       <span className="inline-flex min-w-0 items-center gap-1.5 text-[11.5px] font-semibold text-neutral-800">
@@ -97,7 +106,7 @@ function LevelRow({ row, longest, compared, year, prev }) {
         title={`${row.label}: ${count(row.current)} in S.Y. ${year}${compared ? `, ${count(row.previous)} in S.Y. ${prev}` : ""}`}
         aria-hidden="true"
       >
-        <div className="h-2.5 rounded-r-[4px]" style={{ width: width(row.current), background: color }} />
+        <div className="h-2.5 rounded-r-[4px]" style={{ width: width(row.current), ...barStyle }} />
         {compared && <div className="h-1 rounded-r-[2px] bg-neutral-400" style={{ width: width(row.previous) }} />}
       </div>
       {/* Fixed widths, so the columns line up from row to row: room for a
@@ -213,7 +222,16 @@ export function EnrolleesPanel({ cmp, onGo }) {
 // two that could be mistaken for separate ones.
 
 function PaceChart({ pace, year, prev }) {
-  const colors = { now: token("--color-brand-500"), before: token("--color-neutral-400"), label: token("--color-brand-600") };
+  const theme = useTheme();
+  const dark = theme === "dark";
+  const ink = chartInk(theme);
+  const colors = {
+    now: token("--color-brand-500", theme),
+    before: token("--color-neutral-400", theme),
+    label: token("--color-brand-600", theme),
+  };
+  // Dark mode fills under this year's line with red fading to nothing.
+  const areaId = `${useId()}-area`;
   const { months, latest } = pace;
   const pct = (v) => `${one(v)}%`;
 
@@ -251,7 +269,19 @@ function PaceChart({ pace, year, prev }) {
             {linePath(points("before")).map((d) => (
               <path key={d} d={d} fill="none" stroke={colors.before} strokeWidth={2} strokeLinejoin="round" />
             ))}
-            {area && <path d={area} fill={colors.now} opacity={0.08} />}
+            {dark && (
+              <defs>
+                <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor={colors.now} stopOpacity={0.34} />
+                  <stop offset="1" stopColor={colors.now} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+            )}
+            {area && <path d={area} fill={dark ? `url(#${areaId})` : colors.now} opacity={dark ? 1 : 0.08} />}
+            {/* Dark: a soft glow under the line. */}
+            {line && dark && (
+              <path d={line} fill="none" stroke={colors.now} strokeWidth={7} strokeOpacity={0.2} strokeLinejoin="round" strokeLinecap="round" />
+            )}
             {line && (
               <path d={line} fill="none" stroke={colors.now} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
             )}
@@ -259,7 +289,7 @@ function PaceChart({ pace, year, prev }) {
               <circle
                 key={`${key}-${m.key}`}
                 cx={geo.x(i)} cy={geo.y(m[key])} r={3.5}
-                fill="#fff" stroke={colors[key]} strokeWidth={2}
+                fill={ink.dot} stroke={colors[key]} strokeWidth={2}
               >
                 <title>{`S.Y. ${key === "now" ? year : prev} · ${m.short} · ${pct(m[key])}`}</title>
               </circle>
@@ -270,7 +300,7 @@ function PaceChart({ pace, year, prev }) {
                 textAnchor={flip ? "end" : "start"}
                 fontSize="12" fontWeight="700" fill={colors.label}
                 // A halo, so last year's line can pass behind it.
-                stroke="#fff" strokeWidth={3} paintOrder="stroke"
+                stroke={ink.dot} strokeWidth={3} paintOrder="stroke"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {pct(latest.now)}
@@ -324,7 +354,7 @@ export function CollectionPacePanel({ cmp, today, showAmounts, onToggleAmounts }
   return (
     <Card padding="none" className="flex min-w-0 flex-col overflow-hidden">
       <div className="flex items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-brand-100">
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-brand-100 ${CHIP_GLOW.brand}`}>
           <i className="ti ti-trending-up text-[14px] text-brand-600" aria-hidden="true" />
         </div>
         <span className="flex-1 text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">

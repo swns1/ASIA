@@ -465,11 +465,7 @@ export default function AuditTrailPage() {
         <StatusBand
           total={statusCounts?.total}
           caption={bandCaption}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              Pick a status to filter the list
-            </span>
-          }
+          hint="Pick a status to filter the list"
           options={[
             { value: "all", label: "All", count: statusCounts?.total },
             ...Object.entries(AUDIT_STATUS_MAP).map(([key, meta]) => ({

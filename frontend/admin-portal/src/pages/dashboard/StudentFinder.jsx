@@ -18,7 +18,9 @@ const fullName = (st) => {
   return given ? `${st.last_name}, ${given}` : st.last_name;
 };
 
-export default function StudentFinder({ onOpen, onSeeAll }) {
+// fieldClassName styles the box for where it sits (the dashboard passes
+// GLASS_SEARCH, for its brand panel in dark mode).
+export default function StudentFinder({ onOpen, onSeeAll, fieldClassName }) {
   const [term, setTerm] = useState("");
   // The last answer, tagged with the words it answers, so a slow reply to an
   // older term can't pass for the current one.
@@ -90,6 +92,7 @@ export default function StudentFinder({ onOpen, onSeeAll }) {
         onEnter={seeAll}
         onClear={() => change("")}
         onKeyDown={onKeyDown}
+        className={fieldClassName}
         inputProps={{
           role: "combobox",
           "aria-expanded": expanded,
@@ -103,7 +106,7 @@ export default function StudentFinder({ onOpen, onSeeAll }) {
       />
 
       {expanded && (
-        <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg">
+        <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-neutral-200 bg-surface-raised shadow-lg dark:shadow-float-dark">
           <ul id={listId} role="listbox" aria-label="Matching students" className="max-h-80 overflow-y-auto">
             {rows.map((st, i) => {
               const palette = getAvatarPalette(`${st.last_name}${st.first_name}`);

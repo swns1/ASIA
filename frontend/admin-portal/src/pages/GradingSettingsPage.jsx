@@ -507,11 +507,7 @@ function GradingTemplatesTab({ header }) {
         <StatusBand
           total={counts?.[""]}
           caption={[`grading template${counts?.[""] === 1 ? "" : "s"}`, levelFilter && levelLabel].filter(Boolean).join(" · ")}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              A template&apos;s weights must add up to 100%
-            </span>
-          }
+          hint="A template's weights must add up to 100%"
           options={[
             { value: "", label: "All", count: counts?.[""] },
             ...Object.entries(TEMPLATE_STATUS_MAP).map(([key, meta]) => ({
@@ -892,11 +888,7 @@ function NarrativeCategoriesTab({ header }) {
         <StatusBand
           total={counts?.[""]}
           caption={`narrative categor${counts?.[""] === 1 ? "y" : "ies"}`}
-          aside={
-            <span className="hidden text-sm text-brand-border sm:block">
-              Teachers rate the active ones for each learner
-            </span>
-          }
+          hint="Teachers rate the active ones for each learner"
           options={CATEGORY_FILTERS.map((f) => ({
             value: f.value, label: f.label, count: counts?.[f.value], variant: f.variant,
           }))}

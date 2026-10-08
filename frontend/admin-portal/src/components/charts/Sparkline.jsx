@@ -10,6 +10,7 @@
 
 import { linePath } from "./geometry";
 import { chartInk, STROKE } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 
 export default function Sparkline({
   values = [],
@@ -18,7 +19,7 @@ export default function Sparkline({
   color,
   className = "",
 }) {
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
   const stroke = color || ink.bar;
 
   // Two points is the minimum that can express a direction; one point is a

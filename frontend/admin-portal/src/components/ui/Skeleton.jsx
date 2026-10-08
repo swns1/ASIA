@@ -5,9 +5,10 @@
 // on list rows and a softer opacity pulse on dashboard cards.
 // Both stop under `prefers-reduced-motion`.
 
+// The sweep's two colours are tokens.css variables, so it dims in dark mode.
 const VARIANTS = {
   shimmer:
-    "bg-[linear-gradient(90deg,#f0e8e8_25%,#fde8e8_50%,#f0e8e8_75%)] " +
+    "bg-[linear-gradient(90deg,var(--skeleton)_25%,var(--skeleton-shine)_50%,var(--skeleton)_75%)] " +
     "bg-[length:200%_100%] animate-[shimmer_1.6s_ease-in-out_infinite]",
   pulse: "bg-brand-200 animate-pulse",
 };

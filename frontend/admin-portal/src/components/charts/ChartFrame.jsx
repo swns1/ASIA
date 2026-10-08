@@ -4,7 +4,6 @@
 // dashboard draws on the same surface, with the same tooltip behaviour and the
 // same empty state, rather than a second look invented alongside it.
 
-import { SURFACE } from "./tokens";
 
 /**
  * Tooltips are HTML rather than SVG text so they wrap, use real type tokens
@@ -19,7 +18,7 @@ export function ChartTooltip({ tip, viewBox }) {
   const flipY = tip.y < h * 0.24;
   return (
     <div
-      className="pointer-events-none absolute z-10 w-max max-w-[240px] rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-xs shadow-lg"
+      className="pointer-events-none absolute z-10 w-max max-w-[240px] rounded-md border border-neutral-200 bg-surface-raised px-2.5 py-2 text-xs shadow-lg dark:shadow-float-dark"
       style={{
         left: `${(tip.x / w) * 100}%`,
         top: `${(tip.y / h) * 100}%`,
@@ -86,7 +85,9 @@ export default function ChartFrame({
           // layout alone and redrawing at the measured size can't feed back
           // into the size.
           className={fill ? "absolute inset-0 h-full w-full" : "w-full"}
-          style={{ background: SURFACE, borderRadius: 10, ...(fill ? {} : { height }) }}
+          // tokens.css --chart-surface: the plain plane in light, the plane
+          // with a faint red glow in dark.
+          style={{ background: "var(--chart-surface)", borderRadius: 10, ...(fill ? {} : { height }) }}
           role="img"
         >
           {title && <title>{title}</title>}

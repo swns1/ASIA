@@ -12,6 +12,8 @@
 // analytics/riskVocabulary (the reserved status palette), and every other mark
 // is a single brand hue from styles/tokens.css.
 
+import { useId } from "react";
+
 import BarChart from "../../components/charts/BarChart";
 import { NoData } from "../../components/charts/ChartFrame";
 import ColumnPlot from "../../components/charts/ColumnPlot";
@@ -23,6 +25,7 @@ import { linearAxis } from "../../components/charts/scale";
 import Skeleton from "../../components/ui/Skeleton";
 import { Panel } from "../../components/ui/Card";
 import { STROKE, chartInk, token } from "../../components/charts/tokens";
+import useTheme from "../../hooks/useTheme";
 import { LEVEL_LABELS, LEVEL_SHORT_LABELS } from "../../constants/schoolLevels";
 import {
   GOOD_ATTENDANCE,
@@ -30,8 +33,6 @@ import {
   riskLevelMeta,
 } from "../analytics/riskVocabulary";
 import { monthSpans, plural } from "./adminHomeData";
-
-const ink = () => chartInk();
 
 function ChartSkeleton({ height = 180 }) {
   return <Skeleton height={height} variant="pulse" />;
@@ -60,6 +61,7 @@ const PIPELINE_GEOMETRY = {
 };
 
 export function PipelineBand({ pipeline, loading, schoolYear, compact = false, measured = false }) {
+  const theme = useTheme();
   if (loading) return <Panel title="Enrollment Pipeline"><ChartSkeleton height={measured ? 100 : 150} /></Panel>;
 
   const segments = PIPELINE_STEPS.map((step) => ({
@@ -67,7 +69,7 @@ export function PipelineBand({ pipeline, loading, schoolYear, compact = false, m
     label: step.label,
     blurb: step.blurb,
     value: pipeline?.[step.key] ?? 0,
-    color: token(step.tokenName),
+    color: token(step.tokenName, theme),
   }));
 
   const total = pipeline?.total ?? 0;
@@ -97,13 +99,14 @@ export function PipelineBand({ pipeline, loading, schoolYear, compact = false, m
 }
 
 function StepLegend({ steps, pipeline }) {
+  const theme = useTheme();
   return (
     <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
       {steps.map((step) => (
         <span key={step.key} className="inline-flex items-center gap-1.5 text-xs text-neutral-600">
           <span
             className="inline-block h-2 w-2 rounded-full"
-            style={{ background: token(step.tokenName) }}
+            style={{ background: token(step.tokenName, theme) }}
             aria-hidden="true"
           />
           {step.label}
@@ -366,8 +369,12 @@ export function AttendanceBand({ series, loading, compact = false }) {
 const NOTE_W = 124;
 
 function AttendanceWeeks({ weeks, rates, measured }) {
-  const ink = chartInk();
-  const colors = { line: ink.bar, low: riskLevelMeta("critical").color, tint: token("--color-error-50") };
+  const theme = useTheme();
+  const dark = theme === "dark";
+  const ink = chartInk(theme);
+  const colors = { line: ink.bar, low: riskLevelMeta("critical").color, tint: token("--color-error-50", theme) };
+  // Dark mode shades the below-target zone from the target line down.
+  const tintId = `${useId()}-tint`;
   const below = (v) => v != null && v < GOOD_ATTENDANCE;
   const axis = linearAxis(Math.min(80, Math.floor(Math.min(...measured) / 5) * 5), 100);
   // A week is a Monday's date; read it as that calendar day, not UTC midnight.
@@ -404,7 +411,7 @@ function AttendanceWeeks({ weeks, rates, measured }) {
             return (
               <div
                 key={weeks[i].week}
-                className="absolute inline-flex items-center gap-[3px] whitespace-nowrap rounded-[6px] border border-brand-300 bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-error-500"
+                className="absolute inline-flex items-center gap-[3px] whitespace-nowrap rounded-[6px] border border-brand-300 bg-surface-raised px-1.5 py-0.5 text-[10.5px] font-semibold text-error-500"
                 style={{
                   left: `${(x * 100) / geo.width}%`,
                   top: `${(y * 100) / geo.height}%`,
@@ -420,11 +427,20 @@ function AttendanceWeeks({ weeks, rates, measured }) {
       >
         {(geo) => (
           <>
-            {/* Below the target, tinted; the dashed rule is the target itself. */}
+            {/* Below the target, tinted; the dashed rule is the target itself.
+                Dark mode fades the tint from the rule down. */}
+            {dark && (
+              <defs>
+                <linearGradient id={tintId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#f44336" stopOpacity={0.22} />
+                  <stop offset="1" stopColor="#f44336" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+            )}
             <rect
               x={geo.left} y={geo.y(GOOD_ATTENDANCE)}
               width={geo.width - geo.left} height={geo.base - geo.y(GOOD_ATTENDANCE)}
-              fill={colors.tint} opacity={0.5}
+              fill={dark ? `url(#${tintId})` : colors.tint} opacity={dark ? 1 : 0.5}
             />
             <line
               x1={geo.left} x2={geo.width} y1={geo.y(GOOD_ATTENDANCE)} y2={geo.y(GOOD_ATTENDANCE)}
@@ -438,14 +454,20 @@ function AttendanceWeeks({ weeks, rates, measured }) {
             </text>
             {/* A closed week (null) breaks the line rather than joining across it. */}
             {linePath(rates.map((v, i) => (v == null ? null : { x: geo.x(i), y: geo.y(v) }))).map((d) => (
-              <path key={d} d={d} fill="none" stroke={colors.line} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" />
+              <g key={d}>
+                {/* Dark: a soft glow under the line. */}
+                {dark && (
+                  <path d={d} fill="none" stroke={colors.line} strokeWidth={6} strokeOpacity={0.2} strokeLinecap="round" strokeLinejoin="round" />
+                )}
+                <path d={d} fill="none" stroke={colors.line} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" />
+              </g>
             ))}
             {rates.map((v, i) => (v == null ? null : (
               <circle
                 key={weeks[i].week}
                 cx={geo.x(i)} cy={geo.y(v)} r={below(v) ? 5 : 3}
-                fill={below(v) ? colors.low : "#fff"}
-                stroke={below(v) ? "#fff" : colors.line}
+                fill={below(v) ? colors.low : ink.dot}
+                stroke={below(v) ? ink.dot : colors.line}
                 strokeWidth={2}
               >
                 <title>{`Week of ${weekOf(weeks[i].week)} · ${v}%${below(v) ? " · below target" : ""}`}</title>
@@ -492,6 +514,7 @@ export function AttendanceTargetBand({ series, loading }) {
 // and a dual-axis chart invents a correlation the data does not contain.
 
 export function CollectionsBand({ summary, loading, showAmounts = true }) {
+  const theme = useTheme();
   if (loading) return <Panel title="Collections"><ChartSkeleton height={220} /></Panel>;
 
   const series = summary?.collections_series ?? [];
@@ -511,7 +534,7 @@ export function CollectionsBand({ summary, loading, showAmounts = true }) {
           title="Collections by month"
           labels={labels}
           series={[
-            { key: "cumulative", label: "Collected to date", values: cumulative, color: ink().bar },
+            { key: "cumulative", label: "Collected to date", values: cumulative, color: chartInk(theme).bar },
             { key: "monthly", label: "Collected that month", values: monthly, color: riskLevelMeta("low").color },
           ]}
           threshold={netBilled > 0 ? { value: netBilled, label: "Billed" } : null}
