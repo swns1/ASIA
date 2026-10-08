@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1618 430" width="1618" height="430">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="20" y="18" width="266" height="48" rx="3" fill="#ffffff"/>
+<path d="M20,44 V21 Q20,18 23,18 H283 Q286,18 286,21 V44 Z" fill="#e2e6ec"/>
+<text x="31" y="35.5" fill="#1c2129" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">students</text>
+<text x="276" y="35" text-anchor="end" fill="#5a6372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="9.5">Student Service</text>
+<text x="29" y="55.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="63" y="56" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">student_id</text>
+<text x="277" y="56" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="20" y="18" width="266" height="48" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3"/>
+<rect x="20" y="124" width="266" height="48" rx="3" fill="#ffffff"/>
+<path d="M20,150 V127 Q20,124 23,124 H283 Q286,124 286,127 V150 Z" fill="#e2e6ec"/>
+<text x="31" y="141.5" fill="#1c2129" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">scholarship_types</text>
+<text x="276" y="141" text-anchor="end" fill="#5a6372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="9.5">Enrollment Service</text>
+<text x="29" y="161.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="63" y="162" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">scholarship_type_id</text>
+<text x="277" y="162" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="20" y="124" width="266" height="48" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3"/>
+<rect x="358" y="18" width="312" height="65" rx="3" fill="#ffffff"/>
+<path d="M358,44 V21 Q358,18 361,18 H667 Q670,18 670,21 V44 Z" fill="#e2e6ec"/>
+<text x="369" y="35.5" fill="#1c2129" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">enrollments</text>
+<text x="660" y="35" text-anchor="end" fill="#5a6372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="9.5">Enrollment Service</text>
+<text x="367" y="55.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="401" y="56" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">enrollment_id</text>
+<text x="661" y="56" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="359" y="61" width="310" height="17" fill="#f2f4f7"/>
+<text x="367" y="72.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="401" y="73" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">student_id</text>
+<text x="661" y="73" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="358" y="18" width="312" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3"/>
+<rect x="358" y="129" width="312" height="82" rx="3" fill="#ffffff"/>
+<path d="M358,155 V132 Q358,129 361,129 H667 Q670,129 670,132 V155 Z" fill="#e2e6ec"/>
+<text x="369" y="146.5" fill="#1c2129" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">enrollment_scholarships</text>
+<text x="660" y="146" text-anchor="end" fill="#5a6372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="9.5">Enrollment Service</text>
+<text x="367" y="166.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="401" y="167" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">enrollment_scholarship_id</text>
+<text x="661" y="167" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="359" y="172" width="310" height="17" fill="#f2f4f7"/>
+<text x="367" y="183.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="401" y="184" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">enrollment_id</text>
+<text x="661" y="184" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<text x="367" y="200.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="401" y="201" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">scholarship_type_id</text>
+<text x="661" y="201" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="358" y="129" width="312" height="82" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3"/>
+<rect x="734" y="33" width="224" height="82" rx="3" fill="#ffffff"/>
+<path d="M734,59 V36 Q734,33 737,33 H955 Q958,33 958,36 V59 Z" fill="#A0531C"/>
+<text x="745" y="50.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">student_invoices</text>
+<text x="743" y="70.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="777" y="71" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">invoice_id</text>
+<text x="949" y="71" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="735" y="76" width="222" height="17" fill="#f2f4f7"/>
+<text x="743" y="87.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="777" y="88" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">enrollment_id</text>
+<text x="949" y="88" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<text x="743" y="104.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">UQ</text>
+<text x="777" y="105" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">invoice_no</text>
+<text x="949" y="105" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">varchar(50)</text>
+<rect x="734" y="33" width="224" height="82" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="734" y="193" width="224" height="48" rx="3" fill="#ffffff"/>
+<path d="M734,219 V196 Q734,193 737,193 H955 Q958,193 958,196 V219 Z" fill="#A0531C"/>
+<text x="745" y="210.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">school_settings</text>
+<text x="743" y="230.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="777" y="231" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">setting_id</text>
+<text x="949" y="231" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="734" y="193" width="224" height="48" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1022" y="18" width="230" height="65" rx="3" fill="#ffffff"/>
+<path d="M1022,44 V21 Q1022,18 1025,18 H1249 Q1252,18 1252,21 V44 Z" fill="#A0531C"/>
+<text x="1033" y="35.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">student_invoice_items</text>
+<text x="1031" y="55.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1065" y="56" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">invoice_item_id</text>
+<text x="1243" y="56" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1023" y="61" width="228" height="17" fill="#f2f4f7"/>
+<text x="1031" y="72.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1065" y="73" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">invoice_id</text>
+<text x="1243" y="73" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1022" y="18" width="230" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1022" y="113" width="230" height="82" rx="3" fill="#ffffff"/>
+<path d="M1022,139 V116 Q1022,113 1025,113 H1249 Q1252,113 1252,116 V139 Z" fill="#A0531C"/>
+<text x="1033" y="130.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">student_invoice_discounts</text>
+<text x="1031" y="150.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1065" y="151" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">invoice_discount_id</text>
+<text x="1243" y="151" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1023" y="156" width="228" height="17" fill="#f2f4f7"/>
+<text x="1031" y="167.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1065" y="168" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">invoice_id</text>
+<text x="1243" y="168" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<text x="1031" y="184.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1065" y="185" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">discount_type_id</text>
+<text x="1243" y="185" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1022" y="113" width="230" height="82" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1022" y="225" width="230" height="65" rx="3" fill="#ffffff"/>
+<path d="M1022,251 V228 Q1022,225 1025,225 H1249 Q1252,225 1252,228 V251 Z" fill="#A0531C"/>
+<text x="1033" y="242.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">invoice_installments</text>
+<text x="1031" y="262.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1065" y="263" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">installment_id</text>
+<text x="1243" y="263" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1023" y="268" width="228" height="17" fill="#f2f4f7"/>
+<text x="1031" y="279.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1065" y="280" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">invoice_id</text>
+<text x="1243" y="280" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1022" y="225" width="230" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1022" y="320" width="230" height="65" rx="3" fill="#ffffff"/>
+<path d="M1022,346 V323 Q1022,320 1025,320 H1249 Q1252,320 1252,323 V346 Z" fill="#A0531C"/>
+<text x="1033" y="337.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">student_payments</text>
+<text x="1031" y="357.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1065" y="358" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">payment_id</text>
+<text x="1243" y="358" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1023" y="363" width="228" height="17" fill="#f2f4f7"/>
+<text x="1031" y="374.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1065" y="375" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">invoice_id</text>
+<text x="1243" y="375" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1022" y="320" width="230" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1316" y="46" width="244" height="65" rx="3" fill="#ffffff"/>
+<path d="M1316,72 V49 Q1316,46 1319,46 H1557 Q1560,46 1560,49 V72 Z" fill="#A0531C"/>
+<text x="1327" y="63.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">discount_types</text>
+<text x="1325" y="83.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1359" y="84" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">discount_type_id</text>
+<text x="1551" y="84" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1317" y="89" width="242" height="17" fill="#f2f4f7"/>
+<text x="1325" y="100.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">UQ</text>
+<text x="1359" y="101" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">discount_code</text>
+<text x="1551" y="101" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">varchar(50)</text>
+<rect x="1316" y="46" width="244" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1316" y="157" width="244" height="65" rx="3" fill="#ffffff"/>
+<path d="M1316,183 V160 Q1316,157 1319,157 H1557 Q1560,157 1560,160 V183 Z" fill="#A0531C"/>
+<text x="1327" y="174.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">fee_schedule_items</text>
+<text x="1325" y="194.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1359" y="195" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">fee_schedule_item_id</text>
+<text x="1551" y="195" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1317" y="200" width="242" height="17" fill="#f2f4f7"/>
+<text x="1325" y="211.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1359" y="212" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">fee_schedule_id</text>
+<text x="1551" y="212" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1316" y="157" width="244" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1316" y="252" width="244" height="65" rx="3" fill="#ffffff"/>
+<path d="M1316,278 V255 Q1316,252 1319,252 H1557 Q1560,252 1560,255 V278 Z" fill="#A0531C"/>
+<text x="1327" y="269.5" fill="#ffffff" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">fee_schedules</text>
+<text x="1325" y="289.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1359" y="290" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">fee_schedule_id</text>
+<text x="1551" y="290" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1317" y="295" width="242" height="17" fill="#f2f4f7"/>
+<text x="1325" y="306.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">FK</text>
+<text x="1359" y="307" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">school_year</text>
+<text x="1551" y="307" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">varchar(20)</text>
+<rect x="1316" y="252" width="244" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1"/>
+<rect x="1316" y="347" width="244" height="65" rx="3" fill="#ffffff"/>
+<path d="M1316,373 V350 Q1316,347 1319,347 H1557 Q1560,347 1560,350 V373 Z" fill="#e2e6ec"/>
+<text x="1327" y="364.5" fill="#1c2129" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">school_years</text>
+<text x="1550" y="364" text-anchor="end" fill="#5a6372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="9.5">Enrollment Service</text>
+<text x="1325" y="384.8" fill="#946600" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">PK</text>
+<text x="1359" y="385" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5" font-weight="600">school_year_id</text>
+<text x="1551" y="385" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">bigint</text>
+<rect x="1317" y="390" width="242" height="17" fill="#f2f4f7"/>
+<text x="1325" y="401.8" fill="#6a7280" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700">UQ</text>
+<text x="1359" y="402" fill="#1c2129" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">label</text>
+<text x="1551" y="402" text-anchor="end" fill="#6a7280" font-family="IBM Plex Mono, Consolas, Menlo, monospace" font-size="10.5">varchar(20)</text>
+<rect x="1316" y="347" width="244" height="65" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="286" y1="52.5" x2="316" y2="52.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="358" y1="69.5" x2="316" y2="69.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="316" y1="52.5" x2="316" y2="69.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="670" y1="52.5" x2="700" y2="52.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="670" y1="180.5" x2="700" y2="180.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="734" y1="84.5" x2="700" y2="84.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="700" y1="52.5" x2="700" y2="180.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="286" y1="158.5" x2="328" y2="158.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="358" y1="197.5" x2="328" y2="197.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="328" y1="158.5" x2="328" y2="197.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="958" y1="67.5" x2="988" y2="67.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1022" y1="69.5" x2="988" y2="69.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1022" y1="164.5" x2="988" y2="164.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1022" y1="276.5" x2="988" y2="276.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1022" y1="371.5" x2="988" y2="371.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="988" y1="67.5" x2="988" y2="371.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1316" y1="80.5" x2="1282" y2="80.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1252" y1="181.5" x2="1282" y2="181.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1282" y1="80.5" x2="1282" y2="181.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1560" y1="286.5" x2="1590" y2="286.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1560" y1="208.5" x2="1590" y2="208.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1590" y1="208.5" x2="1590" y2="286.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1560" y1="398.5" x2="1602" y2="398.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1560" y1="303.5" x2="1602" y2="303.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1602" y1="303.5" x2="1602" y2="398.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="294" y1="46.5" x2="294" y2="58.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="299" y1="46.5" x2="299" y2="58.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M346,69.5 L358,63.5 M346,69.5 L358,75.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="340" cy="69.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="678" y1="46.5" x2="678" y2="58.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="683" y1="46.5" x2="683" y2="58.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M682,180.5 L670,174.5 M682,180.5 L670,186.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="688" cy="180.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<path d="M722,84.5 L734,78.5 M722,84.5 L734,90.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="716" cy="84.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="294" y1="152.5" x2="294" y2="164.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="299" y1="152.5" x2="299" y2="164.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M346,197.5 L358,191.5 M346,197.5 L358,203.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="340" cy="197.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="966" y1="61.5" x2="966" y2="73.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="971" y1="61.5" x2="971" y2="73.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1010,69.5 L1022,63.5 M1010,69.5 L1022,75.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1004" cy="69.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1010,164.5 L1022,158.5 M1010,164.5 L1022,170.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1004" cy="164.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1010,276.5 L1022,270.5 M1010,276.5 L1022,282.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1004" cy="276.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1010,371.5 L1022,365.5 M1010,371.5 L1022,377.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1004" cy="371.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1308" y1="74.5" x2="1308" y2="86.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1299" cy="80.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1264,181.5 L1252,175.5 M1264,181.5 L1252,187.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1270" cy="181.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1568" y1="280.5" x2="1568" y2="292.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1573" y1="280.5" x2="1573" y2="292.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1572,208.5 L1560,202.5 M1572,208.5 L1560,214.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1578" cy="208.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1568" y1="392.5" x2="1568" y2="404.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<line x1="1573" y1="392.5" x2="1573" y2="404.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<path d="M1572,303.5 L1560,297.5 M1572,303.5 L1560,309.5" fill="none" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="1578" cy="303.5" r="3.8" fill="#ffffff" stroke="#39414e" stroke-width="1.2"/>
+<circle cx="700" cy="84.5" r="2.3" fill="#39414e"/>
+<circle cx="988" cy="69.5" r="2.3" fill="#39414e"/>
+<circle cx="988" cy="164.5" r="2.3" fill="#39414e"/>
+<circle cx="988" cy="276.5" r="2.3" fill="#39414e"/>
+</svg>
