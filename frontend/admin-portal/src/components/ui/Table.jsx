@@ -95,7 +95,7 @@ export default function Table({
                   // a visual caret alone doesn't convey.
                   aria-sort={isSorted ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
                   className={[
-                    "border-b border-neutral-200 bg-white px-4 py-3",
+                    "border-b border-neutral-200 bg-surface px-4 py-3",
                     header.cell,
                     ALIGN[col.align] ?? ALIGN.left,
                     stickyHeader ? "sticky top-0 z-10" : "",

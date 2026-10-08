@@ -21,6 +21,7 @@ import { motion } from "framer-motion";
 import ChartFrame, { NoData } from "./ChartFrame";
 import { linePath, niceMax } from "./geometry";
 import { MARKER, STROKE, chartInk } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 import { chartVariants } from "../../utils/motion";
 
 const PAD_L = 46;
@@ -43,7 +44,7 @@ export default function LineChart({
   yMin = 0,
 }) {
   const [active, setActive] = useState(null);
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
 
   const hasData = labels.length > 0 &&
     series.some((s) => s.values.some((v) => v != null && !Number.isNaN(v)));
@@ -193,7 +194,7 @@ export default function LineChart({
                   r={MARKER / 2}
                   fill={color}
                   // 2px surface ring, so an overlapping marker stays separable.
-                  stroke="#fdfcfb"
+                  stroke={ink.plane}
                   strokeWidth={2}
                 />
               )}
@@ -224,7 +225,7 @@ export default function LineChart({
 }
 
 function Legend({ series }) {
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
   return (
     <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
       {series.map((s) => (

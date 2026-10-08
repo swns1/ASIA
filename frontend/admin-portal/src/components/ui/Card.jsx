@@ -1,5 +1,8 @@
 import { motion } from "framer-motion";
 import { SkeletonCard } from "./Skeleton";
+import BrandBackdrop from "./BrandBackdrop";
+import useTheme from "../../hooks/useTheme";
+import { CHIP_GLOW } from "../../constants/statusTones";
 
 // Card / StatCard / Panel — the three container shapes the app actually uses.
 // StatCard and Panel absorb the near-identical local components that were
@@ -20,13 +23,27 @@ export default function Card({
   // boolean). A card that just navigates is a plain button, and aria-pressed
   // on it made screen readers announce "toggle button, not pressed".
   active,
+  // In dark mode, draw as the login page's brand panel (dot grid, still red
+  // glows, a red under-glow) instead of a card: for the one block a page
+  // leads with, as the status band is on the list pages. Light is unchanged.
+  // Fields and secondary buttons on it take brandPanel.js's glass classes.
+  brandPanel = false,
   className = "",
   children,
   ...props
 }) {
+  const theme = useTheme();
+  const panel = brandPanel && theme === "dark";
   const classes = [
-    "w-full rounded-xl border bg-white transition-all duration-150",
-    active ? "border-brand-500 shadow-md" : "border-neutral-200 shadow-sm",
+    "w-full rounded-xl border transition-all duration-150",
+    panel
+      ? "relative isolate border-[rgba(224,49,49,0.26)] bg-brand-950 shadow-panel-glow"
+      : [
+          "bg-surface",
+          // Dark: a faint sheen from the top edge down, over the surface colour.
+          "dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_60%)]",
+          active ? "border-brand-500 shadow-md" : "border-neutral-200 shadow-sm dark:shadow-card-dark",
+        ].join(" "),
     interactive
       ? "focus-ring cursor-pointer text-left hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
       : "",
@@ -46,6 +63,7 @@ export default function Card({
       aria-pressed={interactive && active !== undefined ? active : undefined}
       {...props}
     >
+      {panel && <BrandBackdrop tone="dark" />}
       {children}
     </Tag>
   );
@@ -95,6 +113,22 @@ const HOVER_GLOW_TONES = {
 };
 const HOVER_GLOW_REST = "0 8px 24px rgba(0,0,0,0.08)";
 
+// Dark mode: each tile glows faintly in its tone from the icon's side, like
+// the login panel's corner glow. Drawn under the card's sheen, inline, since
+// both are background images and a class can't stack the two.
+const TONE_RGB = {
+  brand: "224,49,49",
+  success: "76,175,80",
+  warning: "255,152,0",
+  error: "244,67,54",
+  info: "33,150,243",
+  muted: "158,158,158",
+  accent: "168,85,247",
+};
+const CARD_SHEEN = "linear-gradient(180deg,rgba(255,255,255,0.03),transparent 60%)";
+const darkTileGlow = (tone, layout) =>
+  `radial-gradient(circle at ${layout === "horizontal" ? "0% 50%" : "100% 0%"},rgba(${TONE_RGB[tone] ?? TONE_RGB.brand},0.14),transparent 45%),${CARD_SHEEN}`;
+
 /**
  * StatCard — the labelled metric tile used across the dashboard and every list
  * page's summary strip. Often doubles as a filter toggle, hence `active`.
@@ -142,10 +176,12 @@ export function StatCard({
   animateDelay = 0,
   children,
   className = "",
+  style,
   ...props
 }) {
+  const dark = useTheme() === "dark";
   const isInteractive = Boolean(onClick);
-  const toneClass = ICON_TONES[iconTone] ?? ICON_TONES.brand;
+  const toneClass = `${ICON_TONES[iconTone] ?? ICON_TONES.brand} ${CHIP_GLOW[iconTone] ?? CHIP_GLOW.brand}`;
   const activeToneClass = ACTIVE_TONES[iconTone] ?? ACTIVE_TONES.brand;
   const activeTextClass = ACTIVE_TEXT_TONES[iconTone] ?? ACTIVE_TEXT_TONES.brand;
   const glow = HOVER_GLOW_TONES[iconTone] ?? HOVER_GLOW_TONES.brand;
@@ -162,7 +198,7 @@ export function StatCard({
   const iconChip = icon && (
     <div
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors duration-150 ${
-        active ? "bg-white " + activeTextClass : customChip ? "" : toneClass
+        active ? "bg-surface " + activeTextClass : customChip ? "" : toneClass
       }`}
       style={customChip ? iconStyle : undefined}
     >
@@ -250,6 +286,7 @@ export function StatCard({
       active={active}
       onClick={onClick}
       className={cardClassName}
+      style={dark && !active ? { backgroundImage: darkTileGlow(iconTone, layout), ...style } : style}
       {...props}
     >
       {body}

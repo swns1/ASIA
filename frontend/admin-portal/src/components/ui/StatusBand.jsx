@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import BrandBackdrop from "./BrandBackdrop";
 import { STATUS_DOT } from "../../constants/statusTones";
-import useBandTone, { BandToneContext } from "../../hooks/useBandTone";
+import useTheme, { BandToneContext } from "../../hooks/useTheme";
 import { springTransition } from "../../utils/motion";
 
 // StatusBand — a list page's status mix, and its status filter.
@@ -27,8 +27,9 @@ import { springTransition } from "../../utils/motion";
 // segment, which is how the band shows counts still loading. `format` writes
 // the numbers, for a band that counts money.
 //
-// The band is a white card by default. `tone` forces "light" or "dark" (the
-// brand panel); left out, it follows hooks/useBandTone, a developer switch.
+// The band follows the page's theme (hooks/useTheme): a white card on a light
+// page, the login's brand panel on a dark one. `tone` forces "light" or
+// "dark" whatever the page is.
 //
 // Motion, each a response to something the reader did:
 //  - the selected chip's highlight slides to the chip picked;
@@ -42,7 +43,7 @@ import { springTransition } from "../../utils/motion";
 // Every class string is a complete literal, as Tailwind needs.
 const TONES = {
   light: {
-    panel: "border border-neutral-200 bg-white shadow-sm",
+    panel: "border border-neutral-200 bg-surface shadow-sm",
     total: "text-neutral-900",
     caption: "text-neutral-600",
     hint: "text-neutral-500",
@@ -59,19 +60,24 @@ const TONES = {
     count: "text-neutral-900",
     countOn: "text-brand-600",
   },
+  // The brand panel. Its colours are the on-panel tokens, which keep their
+  // values in dark mode (brand-300 and friends lighten or darken with the
+  // theme; the panel doesn't). The red edge and under-glow lift it off a
+  // dark page, and the picked chip lights up in the login button's red.
   dark: {
-    panel: "bg-brand-950 shadow-lg",
+    panel: "border border-[rgba(224,49,49,0.26)] bg-brand-950 shadow-panel-glow",
     total: "text-white",
-    caption: "text-brand-300",
-    hint: "text-brand-border",
+    caption: "text-on-panel-muted",
+    hint: "text-on-panel-faint",
     track: "bg-white/6",
     shimmer:
       "bg-[linear-gradient(90deg,rgb(255_255_255/0.06)_25%,rgb(255_255_255/0.14)_50%,rgb(255_255_255/0.06)_75%)]",
-    chip: "bg-transparent text-neutral-50 hover:border-white/30",
+    chip: "bg-white/[0.02] text-on-panel hover:border-white/30",
     chipBorder: "border-white/16",
     chipMarked: "border-white/30",
-    chipOn: "border-transparent text-neutral-50",
-    highlight: "border-brand-300 bg-white/12",
+    chipOn: "border-transparent text-white",
+    highlight:
+      "border-on-panel-muted/55 bg-[linear-gradient(135deg,rgba(224,49,49,0.55),rgba(224,49,49,0.2))] shadow-[0_4px_16px_-4px_rgba(224,49,49,0.55)]",
     count: "text-white",
     countOn: "text-white",
   },
@@ -127,8 +133,8 @@ export default function StatusBand({
   format = plain,
   tone: toneProp,
 }) {
-  const storedTone = useBandTone();
-  const tone = toneProp ?? storedTone;
+  const pageTheme = useTheme();
+  const tone = toneProp ?? pageTheme;
   const t = TONES[tone] ?? TONES.light;
   const reduceMotion = useReducedMotion();
   // Scopes the sliding highlight to this band, for a page with two.

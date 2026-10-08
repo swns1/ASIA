@@ -20,6 +20,7 @@ import { motion } from "framer-motion";
 import ChartFrame, { NoData } from "./ChartFrame";
 import { barPath } from "./geometry";
 import { GAP, RADIUS, chartInk } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 import useElementSize from "./useElementSize";
 import { chartVariants } from "../../utils/motion";
 
@@ -40,7 +41,7 @@ export default function StackedBar({
   const [tip, setTip] = useState(null);
   const [plotEl, setPlotEl] = useState(null);
   const size = useElementSize(measured ? plotEl : null);
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
   const w = size?.width ?? W;
 
   const shown = segments.filter((s) => (s.value ?? 0) > 0);
@@ -108,7 +109,7 @@ export default function StackedBar({
             {drawWidth > 34 && (
               <text
                 x={seg.x + drawWidth / 2} y={barY + barH / 2 + 6}
-                textAnchor="middle" fontSize="17" fontWeight="700" fill={ink.ink}
+                textAnchor="middle" fontSize="17" fontWeight="700" fill={ink.onMark}
               >
                 {seg.value}
               </text>

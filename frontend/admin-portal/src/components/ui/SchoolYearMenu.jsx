@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import FilterMenu from "./FilterMenu";
-import { BandToneContext } from "../../hooks/useBandTone";
+import { BandToneContext } from "../../hooks/useTheme";
 import { useSchoolYear } from "../../context/SchoolYearContext";
 import useArchivedYears from "../../hooks/useArchivedYears";
 import { groupYears } from "../../utils/schoolYear";

@@ -4,6 +4,7 @@ import { modalVariants, springTransition } from "../../utils/motion";
 import useFocusTrap from "../../hooks/useFocusTrap";
 import Button from "./Button";
 import Alert from "./Alert";
+import { CHIP_GLOW } from "../../constants/statusTones";
 
 // Modal — the one dialog primitive.
 //
@@ -56,10 +57,10 @@ export default function Modal({
 
   const iconToneClass =
     iconTone === "danger"
-      ? "bg-error-50 text-error-500"
+      ? `bg-error-50 text-error-500 ${CHIP_GLOW.error}`
       : iconTone === "neutral"
-        ? "bg-muted-50 text-muted-500"
-        : "bg-brand-100 text-brand-600";
+        ? `bg-muted-50 text-muted-500 ${CHIP_GLOW.muted}`
+        : `bg-brand-100 text-brand-600 ${CHIP_GLOW.brand}`;
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
@@ -84,7 +85,7 @@ export default function Modal({
         animate="visible"
         exit="exit"
         transition={springTransition}
-        className={`relative flex max-h-[90vh] w-[calc(100%-2rem)] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl outline-none ${
+        className={`relative flex max-h-[90vh] w-[calc(100%-2rem)] flex-col overflow-hidden rounded-3xl bg-surface-raised shadow-2xl outline-none dark:shadow-float-dark dark:ring-1 dark:ring-white/[0.06] ${
           SIZES[size] ?? SIZES.sm
         } ${className}`}
       >

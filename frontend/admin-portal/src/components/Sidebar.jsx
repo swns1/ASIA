@@ -7,8 +7,10 @@ import {
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
 import useCurrentUser from "../hooks/useCurrentUser";
+import useTheme from "../hooks/useTheme";
 import AccountSettingsModal from "./AccountSettingsModal";
 import useMediaQuery from "../hooks/useMediaQuery";
+import BrandBackdrop from "./ui/BrandBackdrop";
 import { ConfirmDialog } from "./ui/Modal";
 import { springTransition } from "../utils/motion";
 import { initialsFrom } from "../utils/avatarPalette";
@@ -98,6 +100,8 @@ export default function Sidebar({
 
   // Live, so editing your own name on the Users page shows here at once.
   const currentUser = useCurrentUser();
+  // In dark mode the sidebar is the login page's brand panel.
+  const dark = useTheme() === "dark";
 
   const navGroups = NAV.map((group) => ({
     ...group,
@@ -130,20 +134,33 @@ export default function Sidebar({
 
       <aside
         className={[
-          "z-50 flex shrink-0 flex-col border-r border-neutral-200 bg-white shadow-xs transition-[width,transform] duration-200",
-          "fixed inset-y-0 left-0 lg:static",
+          // `lg:relative`, not static: the dark brand panel's backdrop is
+          // positioned inside it. `isolate` keeps that backdrop behind the
+          // nav without slipping under the sidebar's own background.
+          "isolate z-50 flex shrink-0 flex-col border-r border-neutral-200 bg-surface shadow-xs transition-[width,transform] duration-200",
+          "dark:border-white/[0.07] dark:bg-brand-950 dark:shadow-none",
+          "fixed inset-y-0 left-0 lg:relative",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           showLabels ? "w-56" : "w-16",
         ].join(" ")}
       >
-        {/* Logo */}
+        {/* The login's dot grid and red glows; they hold still. */}
+        {dark && <BrandBackdrop tone="dark" />}
+
+        {/* Logo. In dark mode it sits on the login page's glass tile, which
+            also keeps the crest's dark outline from melting into the panel. */}
         <div
           className={[
-            "flex h-14 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-4",
+            "flex h-14 shrink-0 items-center gap-2.5 border-b border-neutral-200 px-4 dark:border-white/[0.07]",
             showLabels ? "" : "justify-center px-0",
           ].join(" ")}
         >
-          <img src={logo} alt="" className="h-[30px] w-5 shrink-0" aria-hidden="true" />
+          <span
+            className="flex shrink-0 items-center justify-center dark:h-[34px] dark:w-[34px] dark:rounded-md dark:border dark:border-white/[0.12] dark:bg-white/[0.08]"
+            aria-hidden="true"
+          >
+            <img src={logo} alt="" className="h-[30px] w-5 dark:h-[26px] dark:w-[18px]" />
+          </span>
           {showLabels && (
             <div className="min-w-0">
               <div className="truncate text-sm font-bold text-neutral-900">South Lakes IS</div>
@@ -177,14 +194,17 @@ export default function Sidebar({
                   className={[
                     "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                     showLabels ? "" : "justify-center",
-                    active ? "font-semibold text-brand-600" : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
+                    active
+                      ? "font-semibold text-brand-600 dark:text-white"
+                      : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
                   ].join(" ")}
                 >
                   {active && (
+                    // Dark: a red wash fading to the right, edged in red.
                     <motion.span
                       layoutId="sidebar-active-pill"
                       transition={springTransition}
-                      className="absolute inset-0 rounded-md bg-brand-100"
+                      className="absolute inset-0 rounded-md bg-brand-100 dark:bg-transparent dark:bg-[linear-gradient(90deg,rgba(224,49,49,0.34),rgba(224,49,49,0.08))] dark:shadow-[inset_0_0_0_1px_rgba(224,49,49,0.28)]"
                     />
                   )}
                   <span className="relative flex items-center gap-2.5">
@@ -198,7 +218,7 @@ export default function Sidebar({
                   </span>
                   {active && (
                     <span
-                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-brand-500"
+                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-brand-500 dark:bg-action dark:shadow-[0_0_10px_rgba(224,49,49,0.9)]"
                       aria-hidden="true"
                     />
                   )}
@@ -251,7 +271,7 @@ export default function Sidebar({
         </nav>
 
         {/* Collapse toggle — desktop only; the drawer closes instead. */}
-        <div className="hidden border-t border-neutral-200 px-2.5 py-2 lg:block">
+        <div className="hidden border-t border-neutral-200 px-2.5 py-2 lg:block dark:border-white/[0.07]">
           <button
             type="button"
             onClick={onToggleCollapsed}
@@ -270,12 +290,13 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* User card */}
-        <div className="border-t border-neutral-200 p-2.5">
+        {/* User card. Dark: glass over the panel's strongest glow, with the
+            avatar in the login button's red. */}
+        <div className="border-t border-neutral-200 p-2.5 dark:border-white/[0.07]">
           {showLabels && (
-            <div className="flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5">
+            <div className="flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5 dark:bg-white/[0.06] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
               <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600 dark:bg-[linear-gradient(135deg,var(--color-action),var(--color-action-2))] dark:text-white dark:shadow-[0_4px_12px_rgba(224,49,49,0.35)]"
                 aria-hidden="true"
               >
                 {initialsFrom(currentUser?.name || "")}
@@ -298,7 +319,7 @@ export default function Sidebar({
                 title="Change password"
                 aria-label="Change password"
                 onClick={() => setShowAccount(true)}
-                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
               >
                 <i className="ti ti-key text-[15px]" aria-hidden="true" />
               </button>
@@ -307,7 +328,7 @@ export default function Sidebar({
                 title="Log out"
                 aria-label="Log out"
                 onClick={() => setShowLogout(true)}
-                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
               >
                 <i className="ti ti-logout text-[15px]" aria-hidden="true" />
               </button>
@@ -319,7 +340,7 @@ export default function Sidebar({
               title="Change password"
               aria-label="Change password"
               onClick={() => setShowAccount(true)}
-              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
             >
               <i className="ti ti-key text-[15px]" aria-hidden="true" />
             </button>
@@ -330,7 +351,7 @@ export default function Sidebar({
               title="Log out"
               aria-label="Log out"
               onClick={() => setShowLogout(true)}
-              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-white text-neutral-600 transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
+              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
             >
               <i className="ti ti-logout text-[15px]" aria-hidden="true" />
             </button>

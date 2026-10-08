@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import useTheme from "../../hooks/useTheme";
 
 // ChipGroup — the row of pill filters used for status/level/sex facets.
 //
@@ -58,6 +59,29 @@ const TONES = {
 const REST = { bg: "#ffffff", color: "#855c5c", border: "#f0e4e4" };
 const REST_DOT = "#c0b0b0";
 
+// The same in dark mode: tokens.css's dark set, as literals for the same
+// reason as above. A selected chip's border and text take the tone's light
+// dark-mode colour; the count badge keeps a deep fill, since it carries white
+// text (the school levels' badges use their light-mode tone for that).
+const DARK_TONES = {
+  brand:   { bg: "#2f1a1a", color: "#ff8f8f", border: "#ef4b4b", badge: "#e03131" },
+  success: { bg: "#13261a", color: "#7fcf8a", border: "#7fcf8a", badge: "#4caf50" },
+  warning: { bg: "#2b2010", color: "#f2b866", border: "#f2b866", badge: "#ff9800" },
+  error:   { bg: "#341717", color: "#ff8f85", border: "#ff8f85", badge: "#f44336" },
+  info:    { bg: "#132238", color: "#8fbaf2", border: "#8fbaf2", badge: "#2196f3" },
+  muted:   { bg: "#262220", color: "#c2b9b0", border: "#c2b9b0", badge: "#9e9e9e" },
+  accent:  { bg: "#251a3a", color: "#c3a6fb", border: "#c3a6fb", badge: "#a855f7" },
+
+  nursery:      { bg: "#2b2010", color: "#e3a857", border: "#e3a857", badge: "#854f0b" },
+  kindergarten: { bg: "#251a3a", color: "#b99af7", border: "#b99af7", badge: "#7c3aed" },
+  elementary:   { bg: "#13213a", color: "#7ba8f7", border: "#7ba8f7", badge: "#2563eb" },
+  juniorhigh:   { bg: "#13261a", color: "#86c98a", border: "#86c98a", badge: "#2e6b0d" },
+  seniorhigh:   { bg: "#361a2c", color: "#f17db7", border: "#f17db7", badge: "#be185d" },
+};
+
+const DARK_REST = { bg: "#1c1414", color: "#b69b9b", border: "#463535" };
+const DARK_REST_DOT = "#604a4a";
+
 export default function ChipGroup({
   options = [],
   value,
@@ -83,6 +107,10 @@ export default function ChipGroup({
   // that value sits between the text-xs (11px) and text-sm (12.5px) tokens,
   // so it's set explicitly rather than forced onto the nearest token step.
   const sizeClass = size === "sm" ? "h-7 px-3 text-xs" : "h-8 px-3.5 text-[12px]";
+  const dark = useTheme() === "dark";
+  const tones = dark ? DARK_TONES : TONES;
+  const rest = dark ? DARK_REST : REST;
+  const restDot = dark ? DARK_REST_DOT : REST_DOT;
 
   return (
     <motion.div
@@ -93,7 +121,7 @@ export default function ChipGroup({
     >
       {options.map((opt, idx) => {
         const selected = opt.value === value;
-        const tone = TONES[opt.tone] ?? TONES.brand;
+        const tone = tones[opt.tone] ?? tones.brand;
         return (
           <motion.button
             key={generation ? `${generation}-${opt.value}` : opt.value}
@@ -101,7 +129,7 @@ export default function ChipGroup({
             layout
             initial={
               stagger
-                ? { opacity: 0, y: 6, backgroundColor: REST.bg, color: REST.color, borderColor: REST.border }
+                ? { opacity: 0, y: 6, backgroundColor: rest.bg, color: rest.color, borderColor: rest.border }
                 : false
             }
             animate={{
@@ -109,9 +137,9 @@ export default function ChipGroup({
               // Opacity goes through `animate`, not a class, because the
               // stagger above animates it too and would override a class.
               ...(disabled ? { opacity: selected ? 1 : 0.5 } : null),
-              backgroundColor: selected ? tone.bg : REST.bg,
-              color: selected ? tone.color : REST.color,
-              borderColor: selected ? tone.border : REST.border,
+              backgroundColor: selected ? tone.bg : rest.bg,
+              color: selected ? tone.color : rest.color,
+              borderColor: selected ? tone.border : rest.border,
             }}
             transition={
               stagger
@@ -136,7 +164,7 @@ export default function ChipGroup({
           >
             {opt.dot && (
               <motion.span
-                animate={{ background: selected ? opt.dot : REST_DOT }}
+                animate={{ background: selected ? opt.dot : restDot }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
               />

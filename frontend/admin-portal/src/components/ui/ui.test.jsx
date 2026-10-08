@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Button from "./Button";
 import Alert from "./Alert";
@@ -11,7 +11,8 @@ import { StatusBadge } from "./Badge";
 import ChipGroup from "./ChipGroup";
 import SegmentedControl from "./SegmentedControl";
 import StatusBand from "./StatusBand";
-import { setBandTone } from "../../hooks/useBandTone";
+import Card from "./Card";
+import { ThemeContext } from "../../hooks/useTheme";
 import { Field, Input, Textarea } from "../FormField";
 import { STUDENT_STATUS_MAP } from "../../constants/statusMaps";
 
@@ -288,6 +289,25 @@ describe("SegmentedControl", () => {
   });
 });
 
+describe("Card as a brand panel", () => {
+  const card = () => screen.getByText("Start a task").closest("div");
+
+  it("is an ordinary card on a light page", () => {
+    render(<Card brandPanel>Start a task</Card>);
+    expect(card().className).toContain("bg-surface");
+    expect(card().className).not.toContain("bg-brand-950");
+  });
+
+  it("is the login's brand panel on a dark page", () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <Card brandPanel>Start a task</Card>
+      </ThemeContext.Provider>
+    );
+    expect(card().className).toContain("bg-brand-950");
+  });
+});
+
 describe("StatusBand", () => {
   const OPTIONS = [
     { value: "all", label: "All", count: 3 },
@@ -301,24 +321,19 @@ describe("StatusBand", () => {
 
   it("is a light card by default, with its hint in the corner", () => {
     render(band({ hint: "Pick a status to filter the list" }));
-    expect(panel().className).toContain("bg-white");
+    expect(panel().className).toContain("bg-surface");
     expect(panel().className).not.toContain("bg-brand-950");
     expect(screen.getByText("Pick a status to filter the list")).toBeTruthy();
   });
 
-  it("follows the developer switch to dark and back", () => {
-    render(band());
-    act(() => setBandTone("dark"));
+  it("is the brand panel on a dark page", () => {
+    render(<ThemeContext.Provider value="dark">{band()}</ThemeContext.Provider>);
     expect(panel().className).toContain("bg-brand-950");
-    act(() => setBandTone("light"));
-    expect(panel().className).toContain("bg-white");
   });
 
-  it("keeps a tone a page asks for, whatever the switch says", () => {
-    render(band({ tone: "light" }));
-    act(() => setBandTone("dark"));
-    expect(panel().className).toContain("bg-white");
-    act(() => setBandTone("light"));
+  it("keeps a tone a page asks for, whatever the page's theme", () => {
+    render(<ThemeContext.Provider value="dark">{band({ tone: "light" })}</ThemeContext.Provider>);
+    expect(panel().className).toContain("bg-surface");
   });
 
   it("goes back to All when the selected status is picked again", () => {

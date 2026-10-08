@@ -44,25 +44,78 @@ const FALLBACKS = {
   "--color-elementary-500":   "#2563eb",
   "--color-juniorhigh-500":   "#2e6b0d",
   "--color-seniorhigh-500":   "#be185d",
+  // Chart-only values (tokens.css :root).
+  "--chart-plane":   "#fdfcfb",
+  "--chart-dot":     "#ffffff",
+  "--chart-on-mark": "#1a0a0a",
+};
+
+// The same for dark mode, where tokens.css's dark set differs.
+const DARK_FALLBACKS = {
+  "--color-neutral-50":  "#110b0b",
+  "--color-neutral-200": "#302424",
+  "--color-neutral-300": "#463535",
+  "--color-neutral-400": "#604a4a",
+  "--color-neutral-500": "#a68c8c",
+  "--color-neutral-600": "#b69b9b",
+  "--color-neutral-700": "#cab3b3",
+  "--color-neutral-800": "#ddcbcb",
+  "--color-neutral-900": "#f6eded",
+  "--color-brand-100":   "#2f1a1a",
+  "--color-brand-300":   "#7d3535",
+  "--color-brand-400":   "#b04a4a",
+  "--color-brand-500":   "#ef4b4b",
+  "--color-brand-600":   "#ff8f8f",
+  "--color-success-500": "#7fcf8a",
+  "--color-warning-500": "#f2b866",
+  "--color-error-50":    "#341717",
+  "--color-error-500":   "#ff8f85",
+  "--color-info-500":    "#8fbaf2",
+  "--color-nursery-500":      "#e3a857",
+  "--color-kindergarten-500": "#b99af7",
+  "--color-elementary-500":   "#7ba8f7",
+  "--color-juniorhigh-500":   "#86c98a",
+  "--color-seniorhigh-500":   "#f17db7",
+  "--chart-plane":   "#160f0f",
+  "--chart-dot":     "#160f0f",
+  "--chart-on-mark": "#1c1414",
 };
 
 const cache = new Map();
 
+// Dark mode is set on a container, not the document (hooks/useTheme.js), so
+// the document root only ever has the light values. Dark ones are read off a
+// hidden element that carries the dark theme itself.
+let darkProbe = null;
+function darkSource() {
+  if (typeof document === "undefined" || !document.body) return null;
+  if (!darkProbe || !darkProbe.isConnected) {
+    darkProbe = document.createElement("div");
+    darkProbe.setAttribute("data-theme", "dark");
+    darkProbe.setAttribute("aria-hidden", "true");
+    darkProbe.style.display = "none";
+    document.body.appendChild(darkProbe);
+  }
+  return darkProbe;
+}
+
 /**
- * One resolved token value. Cached — getComputedStyle forces style resolution,
- * and a chart can ask for the same token once per mark.
+ * One resolved token value, for "light" (the default) or "dark". Cached:
+ * getComputedStyle forces style resolution, and a chart can ask for the same
+ * token once per mark. A chart in a page that can be dark passes the theme
+ * from hooks/useTheme, and redraws when it changes.
  */
-export function token(name) {
-  if (cache.has(name)) return cache.get(name);
+export function token(name, theme = "light") {
+  const key = `${theme}:${name}`;
+  if (cache.has(key)) return cache.get(key);
 
   let value = "";
   if (typeof window !== "undefined" && window.getComputedStyle) {
-    value = window.getComputedStyle(document.documentElement)
-      .getPropertyValue(name)
-      .trim();
+    const source = theme === "dark" ? darkSource() : document.documentElement;
+    if (source) value = window.getComputedStyle(source).getPropertyValue(name).trim();
   }
-  const resolved = value || FALLBACKS[name] || "";
-  cache.set(name, resolved);
+  const resolved = value || (theme === "dark" && DARK_FALLBACKS[name]) || FALLBACKS[name] || "";
+  cache.set(key, resolved);
   return resolved;
 }
 
@@ -72,24 +125,30 @@ export function clearTokenCache() {
 }
 
 // ── Chart surface ───────────────────────────────────────────────────────────
-// A shade off the app background so a chart reads as its own plane. Kept as a
-// literal because it is a chart-only surface with no token of its own; every
-// other value below comes from the design system.
+// A shade off the app background so a chart reads as its own plane. The
+// light value, for charts on pages that are always light; ChartFrame draws
+// its background from --chart-surface, which follows the theme.
 export const SURFACE = "#fdfcfb";
 
-export const chartInk = () => ({
+export const chartInk = (theme = "light") => ({
   /** Hairline grid — one shade off the surface, solid. Dashes mean threshold. */
-  grid:  token("--color-neutral-300"),
+  grid:  token("--color-neutral-300", theme),
   /** Axis labels and tick text — AA on the surface. */
-  axis:  token("--color-neutral-500"),
+  axis:  token("--color-neutral-500", theme),
   /** Direct labels on a mark, and any figure the reader is meant to read. */
-  ink:   token("--color-neutral-900"),
+  ink:   token("--color-neutral-900", theme),
   /** Secondary label text beneath a mark. */
-  muted: token("--color-neutral-800"),
+  muted: token("--color-neutral-800", theme),
   /** Single-series fill. One hue for every bar — never a value ramp. */
-  bar:   token("--color-brand-500"),
+  bar:   token("--color-brand-500", theme),
   /** A threshold rule (passing mark, target). The only dashed line allowed. */
-  threshold: token("--color-neutral-900"),
+  threshold: token("--color-neutral-900", theme),
+  /** The chart plane's plain colour, for a ring that has to match it. */
+  plane: token("--chart-plane", theme),
+  /** A hollow point's fill, and the halo that lifts a label off a line. */
+  dot: token("--chart-dot", theme),
+  /** A label drawn on a filled mark: dark on light dark-mode bars. */
+  onMark: token("--chart-on-mark", theme),
 });
 
 // ── School levels ───────────────────────────────────────────────────────────
@@ -103,7 +162,7 @@ const LEVEL_TOKENS = {
   senior_highschool: "--color-seniorhigh-500",
 };
 
-export const levelColor = (level) => token(LEVEL_TOKENS[level]);
+export const levelColor = (level, theme = "light") => token(LEVEL_TOKENS[level], theme);
 
 // ── Mark geometry ───────────────────────────────────────────────────────────
 /** Surface gap between adjacent fills, so the background separates them. */

@@ -1,19 +1,23 @@
 import { motion } from "framer-motion";
 import { Panel } from "../../components/ui/Card";
 import SegmentedControl from "../../components/ui/SegmentedControl";
-import useBandTone, { setBandTone } from "../../hooks/useBandTone";
+import { setThemePreference, useThemePreference } from "../../hooks/useTheme";
+import { DARK_READY_PAGES } from "../../constants/darkReady";
 
 // DeveloperTab — switches that aren't for school staff yet. The tab only
-// exists in a dev build (BillingSettingsPage leaves it out of a production
-// one), and each switch is kept in this browser only.
+// exists in a dev build, for super admins and admins (BillingSettingsPage
+// leaves it out otherwise), and each switch is kept in this browser only.
 
-const BAND_TONES = [
+const APPEARANCE = [
   { value: "light", label: "Light", icon: "ti-sun" },
   { value: "dark", label: "Dark", icon: "ti-moon" },
+  { value: "system", label: "Same as my computer", icon: "ti-device-desktop" },
 ];
 
+const readyPages = DARK_READY_PAGES.map((page) => page.label).join(", ");
+
 export default function DeveloperTab() {
-  const bandTone = useBandTone();
+  const preference = useThemePreference();
 
   return (
     <motion.div
@@ -24,23 +28,25 @@ export default function DeveloperTab() {
       className="flex-1 overflow-y-auto px-7 py-6"
     >
       <Panel
-        icon="ti-layout-navbar"
-        title="Status band"
-        subtitle="The summary band over the lists: Students, Enrollments, Invoices and the rest"
+        icon="ti-moon"
+        title="Appearance"
+        subtitle="Light or dark mode, while it's being built"
         className="max-w-xl"
       >
         <SegmentedControl
-          label="Status band look"
-          options={BAND_TONES}
-          value={bandTone}
-          onChange={setBandTone}
+          label="Appearance"
+          options={APPEARANCE}
+          value={preference}
+          onChange={setThemePreference}
         />
         <p className="mt-3 text-xs text-neutral-500">
-          Light is the default. Dark brings back the brand panel, in this browser only.
+          Light is the default. Dark applies only while an admin is signed in, in this browser.
+          Pages turn dark as they're converted ({readyPages} so far); the rest stay light beside a
+          dark sidebar.
         </p>
       </Panel>
       <p className="mt-3 text-xs text-neutral-500">
-        This tab shows only in a development build.
+        This tab shows only in a development build, and only to admins.
       </p>
     </motion.div>
   );

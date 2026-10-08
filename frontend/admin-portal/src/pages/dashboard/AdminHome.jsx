@@ -42,6 +42,7 @@ import ChipGroup from "../../components/ui/ChipGroup";
 import Table, { TableRow, TableCell } from "../../components/ui/Table";
 import Meter from "../../components/charts/Meter";
 import { chartInk, token } from "../../components/charts/tokens";
+import { GLASS_BUTTON, GLASS_FIELD } from "../../components/ui/brandPanel";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import { Input } from "../../components/FormField";
 import { AttendanceTargetBand, PipelineBand, RiskByLevelBand } from "./DashboardBands";
@@ -53,6 +54,8 @@ import { getInvoices } from "../../api/billingApi";
 import { getStudentApplications } from "../../api/applicationApi";
 import { useSchoolYear } from "../../context/SchoolYearContext";
 import useYearFilter, { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
+import useTheme from "../../hooks/useTheme";
+import { CHIP_GLOW } from "../../constants/statusTones";
 import { getCurrentUser } from "../../utils/auth";
 import { pageVariants } from "../../utils/motion";
 import {
@@ -270,10 +273,12 @@ export default function AdminHome() {
 
 // ── Start a task ─────────────────────────────────────────────────────────────
 
+// The page's lead block: in dark mode the login's brand panel, as the status
+// band is on the list pages, with its search and second button in glass.
 function QuickActions({ onFind, onEnroll, onRecordPayment }) {
   const [term, setTerm] = useState("");
   return (
-    <Card className="flex flex-col gap-3 lg:flex-row lg:items-center">
+    <Card brandPanel className="flex flex-col gap-3 lg:flex-row lg:items-center">
       <form
         role="search"
         className="flex min-w-0 flex-1 items-center gap-2"
@@ -286,13 +291,15 @@ function QuickActions({ onFind, onEnroll, onRecordPayment }) {
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           placeholder="Find a student by name, LRN or student number"
-          className="min-w-0 flex-1"
+          className={`min-w-0 flex-1 ${GLASS_FIELD}`}
         />
-        <Button type="submit" variant="secondary" icon="ti-search">Find</Button>
+        <Button type="submit" variant="secondary" icon="ti-search" className={GLASS_BUTTON}>Find</Button>
       </form>
       <div className="flex flex-wrap gap-2">
         <Button icon="ti-user-plus" onClick={onEnroll}>Enroll a student</Button>
-        <Button variant="secondary" icon="ti-cash" onClick={onRecordPayment}>Record a payment</Button>
+        <Button variant="secondary" icon="ti-cash" onClick={onRecordPayment} className={GLASS_BUTTON}>
+          Record a payment
+        </Button>
       </div>
     </Card>
   );
@@ -301,9 +308,9 @@ function QuickActions({ onFind, onEnroll, onRecordPayment }) {
 // ── Needs your attention ─────────────────────────────────────────────────────
 
 const ROW_TONES = {
-  warning: "bg-warning-50 text-warning-500",
-  info:    "bg-info-50 text-info-500",
-  error:   "bg-error-50 text-error-500",
+  warning: `bg-warning-50 text-warning-500 ${CHIP_GLOW.warning}`,
+  info:    `bg-info-50 text-info-500 ${CHIP_GLOW.info}`,
+  error:   `bg-error-50 text-error-500 ${CHIP_GLOW.error}`,
 };
 
 function AttentionPanel({ data, loading, schoolYear, onGo }) {
@@ -376,21 +383,26 @@ function noAdviserCount(sections) {
 
 // One compact progress row: label, bar, "N of M sections".
 function MiniMeter({ label, value, max, color }) {
+  const theme = useTheme();
   const pct = max > 0 ? Math.round((Math.min(value, max) / max) * 100) : 0;
+  // Dark: the fill fades in from the left and glows faintly.
+  const fillStyle = theme === "dark"
+    ? { background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})`, boxShadow: `0 0 8px color-mix(in srgb, ${color} 45%, transparent)` }
+    : { background: color };
   const text = `${value.toLocaleString()} of ${plural(max, "section")}`;
   return (
     <div className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 text-xs">
       <span className="truncate font-semibold text-neutral-700">{label}</span>
       <span
         className="block h-2 overflow-hidden rounded-full"
-        style={{ background: chartInk().grid }}
+        style={{ background: chartInk(theme).grid }}
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={`${label}: ${text}`}
       >
-        <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+        <span className="block h-full rounded-full" style={{ width: `${pct}%`, ...fillStyle }} />
       </span>
       <span className="tabular-nums text-neutral-600">
         <strong className="text-neutral-900">{value.toLocaleString()}</strong> of {plural(max, "section")}
@@ -451,6 +463,7 @@ function SectionTiles({ sections, noAdviser }) {
 }
 
 function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
+  const theme = useTheme();
   if (loading || !teachers || !teachers.sections.length) {
     return (
       <Panel title="Teachers today" subtitle={TEACHERS_SUBTITLE} icon="ti-user-check" className="min-w-0">
@@ -509,7 +522,7 @@ function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
                 label={`${period.label} grades in`}
                 value={grades.sections_complete}
                 max={grades.sections_total}
-                color={token("--color-info-500")}
+                color={token("--color-info-500", theme)}
               />
             ) : (
               <p className="text-xs text-neutral-600">No subjects are set up for these grade levels yet.</p>
@@ -561,6 +574,7 @@ function SummaryBox({ children }) {
 }
 
 function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
+  const theme = useTheme();
   const [filter, setFilter] = useState("all");
   const { attendance, grades, grading_period: period, no_classes: noClasses, sections } = teachers;
   const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
@@ -605,7 +619,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
                 max={attendance.sections_total}
                 valueText={attendance.sections_taken.toLocaleString()}
                 targetText={plural(attendance.sections_total, "section")}
-                color={token("--color-success-500")}
+                color={token("--color-success-500", theme)}
               />
             )}
           </SummaryBox>
@@ -617,7 +631,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
                 max={grades.sections_total}
                 valueText={grades.sections_complete.toLocaleString()}
                 targetText={plural(grades.sections_total, "section")}
-                color={token("--color-info-500")}
+                color={token("--color-info-500", theme)}
               />
             ) : (
               <p className="text-sm text-neutral-600">No subjects are set up yet.</p>

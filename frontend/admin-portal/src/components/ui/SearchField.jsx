@@ -15,7 +15,7 @@ export default function SearchField({
   inputRef,
 }) {
   return (
-    <div className="flex h-10 flex-1 basis-80 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-3.5 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
+    <div className="flex h-10 flex-1 basis-80 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-surface px-3.5 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
       <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
       <label htmlFor={id} className="sr-only">
         {label}

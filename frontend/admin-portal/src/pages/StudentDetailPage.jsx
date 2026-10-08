@@ -710,12 +710,15 @@ export default function StudentDetailPage() {
                       transition={{ duration: 0.32, ease: [0.34, 1.56, 0.64, 1], delay: isFirstRender ? 0.12 : 0 }}
                       style={{
                         width:76, height:76, borderRadius:"50%",
-                        background:`linear-gradient(135deg, ${palette.bg}, ${palette.color}22)`,
-                        border:`3px solid ${palette.color}33`,
+                        // The palette is CSS variables now (dark-mode aware), so
+                        // the old hex-alpha suffixes (…22 = 13.3%, …33 = 20%)
+                        // are written as color-mix, which gives the same colours.
+                        background:`linear-gradient(135deg, ${palette.bg}, color-mix(in srgb, ${palette.color} 13.3%, transparent))`,
+                        border:`3px solid color-mix(in srgb, ${palette.color} 20%, transparent)`,
                         display:"flex", alignItems:"center", justifyContent:"center",
                         fontSize:26, fontWeight:700, color:palette.color,
                         flexShrink:0, letterSpacing:"0.02em",
-                        boxShadow:`0 4px 20px ${palette.color}22`,
+                        boxShadow:`0 4px 20px color-mix(in srgb, ${palette.color} 13.3%, transparent)`,
                       }}
                     >
                       {`${student.first_name?.[0] ?? ""}${student.last_name?.[0] ?? ""}`.toUpperCase()}

@@ -15,9 +15,9 @@ function makeToken(expSecondsFromNow = 600) {
   return `header.${btoa(JSON.stringify(payload))}.signature`;
 }
 
-function renderShell(children = <p>Page content</p>) {
+function renderShell(children = <p>Page content</p>, path = "/students") {
   return render(
-    <MemoryRouter initialEntries={["/students"]}>
+    <MemoryRouter initialEntries={[path]}>
       <SchoolYearProvider>
         <AppLayout>{children}</AppLayout>
       </SchoolYearProvider>
@@ -65,5 +65,51 @@ describe("AppLayout shell", () => {
     );
     expect(screen.getAllByRole("navigation", { name: /main navigation/i })).toHaveLength(1);
     expect(screen.queryByText("Nested page")).not.toBeNull();
+  });
+});
+
+describe("AppLayout dark mode", () => {
+  // The theme the nearest container gives an element: "dark", or null for
+  // light (a light container carries no attribute at all).
+  const themeOf = (el) => el.closest("[data-theme]")?.getAttribute("data-theme") ?? null;
+  const nav = () => screen.getByRole("navigation", { name: /main navigation/i });
+
+  const signInAs = (role) =>
+    sessionStorage.setItem("current_user", JSON.stringify({ name: "Ana Reyes", role }));
+
+  beforeEach(() => {
+    localStorage.setItem("asia.dev.theme", "dark");
+  });
+
+  it("darkens the sidebar and a converted page for an admin", () => {
+    signInAs("admin");
+    renderShell();
+    expect(themeOf(nav())).toBe("dark");
+    expect(themeOf(screen.getByText("Page content"))).toBe("dark");
+  });
+
+  it("darkens the dashboard (the admin home) for an admin", () => {
+    signInAs("super_admin");
+    renderShell(<p>Page content</p>, "/dashboard");
+    expect(themeOf(screen.getByText("Page content"))).toBe("dark");
+  });
+
+  it("keeps a page that isn't converted yet light, beside a dark sidebar", () => {
+    signInAs("admin");
+    renderShell(<p>Page content</p>, "/enrollments");
+    expect(themeOf(nav())).toBe("dark");
+    expect(themeOf(screen.getByText("Page content"))).toBeNull();
+  });
+
+  it("leaves a list page's detail pages light", () => {
+    signInAs("super_admin");
+    renderShell(<p>Page content</p>, "/students/12");
+    expect(themeOf(screen.getByText("Page content"))).toBeNull();
+  });
+
+  it("stays light for staff, whatever this browser has stored", () => {
+    // beforeEach signs in a registrar.
+    const { container } = renderShell();
+    expect(container.querySelector("[data-theme]")).toBeNull();
   });
 });

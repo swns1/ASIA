@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import { PageGlow } from "./ui/BrandBackdrop";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import { ThemeContext, useAppTheme } from "../hooks/useTheme";
+import { isDarkReady } from "../constants/darkReady";
 
 // AppLayout — the staff shell (sidebar + content column).
 //
@@ -30,12 +34,22 @@ function readCollapsed() {
   return typeof window !== "undefined" && window.innerWidth < 1280;
 }
 
+// `data-theme` for a container: present only when dark, so a light page is
+// exactly what it was before dark mode existed.
+const themeAttr = (theme) => (theme === "dark" ? "dark" : undefined);
+
 export default function AppLayout({ children }) {
   const alreadyInside = useContext(InsideAppLayout);
   const { ensureYears } = useSchoolYear();
+  const { pathname } = useLocation();
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Dark mode reaches the sidebar whenever it's on, but a page only once it
+  // has been converted (constants/darkReady.js); the rest stay light.
+  const appTheme = useAppTheme();
+  const pageTheme = appTheme === "dark" && isDarkReady(pathname) ? "dark" : "light";
 
   // AppLayout is the first thing to mount once a user is actually
   // authenticated (SchoolYearProvider itself mounts before login, when there's
@@ -62,17 +76,27 @@ export default function AppLayout({ children }) {
   return (
     <InsideAppLayout.Provider value={true}>
       <div className="flex h-screen overflow-hidden bg-neutral-50">
-        <Sidebar
-          collapsed={collapsed}
-          onToggleCollapsed={toggleCollapsed}
-          mobileOpen={mobileOpen}
-          onCloseMobile={() => setMobileOpen(false)}
-        />
+        {/* `contents`: the wrapper only carries the theme (to the sidebar and
+            the dialogs it opens); the sidebar keeps its place in the row. */}
+        <div className="contents" data-theme={themeAttr(appTheme)}>
+          <ThemeContext.Provider value={appTheme}>
+            <Sidebar
+              collapsed={collapsed}
+              onToggleCollapsed={toggleCollapsed}
+              mobileOpen={mobileOpen}
+              onCloseMobile={() => setMobileOpen(false)}
+            />
+          </ThemeContext.Provider>
+        </div>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Below lg the sidebar is an off-canvas drawer, so the content
-              column carries its own bar to open it. */}
-          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 lg:hidden">
+              column carries its own bar to open it. Part of the shell, so it
+              takes the sidebar's theme. */}
+          <div
+            data-theme={themeAttr(appTheme)}
+            className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-surface px-4 lg:hidden dark:border-white/[0.07] dark:bg-brand-950"
+          >
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
@@ -85,7 +109,20 @@ export default function AppLayout({ children }) {
             <span className="text-sm font-bold text-neutral-900">South Lakes IS</span>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+          {/* The page area. Dark only for a converted page, with the brand
+              panel's glow behind it. The glow is positioned and comes first,
+              and the page wraps in a positioned box after it, so the page
+              paints over the glow without either making a stacking context:
+              a dialog's z-index still has to clear the sidebar. */}
+          <div
+            data-theme={themeAttr(pageTheme)}
+            className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-neutral-50"
+          >
+            {pageTheme === "dark" && <PageGlow />}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <ThemeContext.Provider value={pageTheme}>{children}</ThemeContext.Provider>
+            </div>
+          </div>
         </div>
       </div>
     </InsideAppLayout.Provider>

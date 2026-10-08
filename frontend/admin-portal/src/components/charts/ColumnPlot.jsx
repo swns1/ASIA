@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import ChartFrame from "./ChartFrame";
 import { chartInk } from "./tokens";
+import useTheme from "../../hooks/useTheme";
 import useElementSize from "./useElementSize";
 
 // charts/ColumnPlot.jsx — a plot with a value axis up the left and a row of
@@ -48,7 +49,7 @@ export default function ColumnPlot({
 }) {
   const [plotEl, setPlotEl] = useState(null);
   const measured = useElementSize(plotEl);
-  const ink = chartInk();
+  const ink = chartInk(useTheme());
 
   const width = measured?.width ?? FALLBACK_W;
   const height = padTop + plotHeight + PAD_B;

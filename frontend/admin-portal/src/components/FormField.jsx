@@ -20,7 +20,7 @@ const FieldContext = createContext(null);
 const CONTROL_BASE =
   "w-full rounded-lg border-[1.5px] px-3.5 py-2.5 text-base text-neutral-900 " +
   "outline-none transition-colors placeholder:text-neutral-500 " +
-  "focus:bg-white focus:ring-3 " +
+  "focus:bg-surface focus:ring-3 " +
   "disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 " +
   "read-only:bg-neutral-200 read-only:text-neutral-700";
 

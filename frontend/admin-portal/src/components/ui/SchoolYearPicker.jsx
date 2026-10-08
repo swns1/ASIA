@@ -216,7 +216,7 @@ export default function SchoolYearPicker({
         className={`focus-ring flex h-[42px] items-center gap-2.5 rounded-lg border-[1.5px] px-3 text-left transition-colors duration-150 ${
           emphasised
             ? "border-brand-500 bg-brand-100"
-            : "border-neutral-300 bg-white hover:border-brand-500"
+            : "border-neutral-300 bg-surface hover:border-brand-500"
         }`}
       >
         <span className="flex flex-col">
@@ -245,7 +245,8 @@ export default function SchoolYearPicker({
         {triggerCount != null && (
           <span
             className={`shrink-0 rounded-full px-[7px] py-px text-[10px] font-bold tabular-nums text-white ${
-              emphasised ? "bg-brand-500" : "bg-neutral-400"
+              // A fill under white text: the action red, which stays deep in dark mode.
+              emphasised ? "bg-action" : "bg-neutral-400"
             }`}
           >
             {triggerCount.toLocaleString()}
@@ -269,7 +270,7 @@ export default function SchoolYearPicker({
             transition={{ duration: 0.14, ease: "easeOut" }}
             // Anchored per `align`, so the panel always opens toward the room
             // it has. z-40 clears the table but stays under Modal's z-[999].
-            className={`absolute ${align === "end" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-40 w-[268px] rounded-xl border-[1.5px] border-neutral-200 bg-white p-[7px] shadow-[0_12px_40px_rgba(224,49,49,0.14)]`}
+            className={`absolute ${align === "end" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-40 w-[268px] rounded-xl border-[1.5px] border-neutral-200 bg-surface-raised p-[7px] shadow-[0_12px_40px_rgba(224,49,49,0.14)] dark:shadow-float-dark`}
           >
             {showFilter && (
               <div className="mx-[3px] mb-1 mt-[3px] flex h-[34px] items-center gap-[7px] rounded-lg border-[1.5px] border-neutral-300 px-2.5 focus-within:border-brand-500">
