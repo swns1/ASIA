@@ -101,9 +101,9 @@ jobs:
         # findings stood (axios and react-router-dom in runtime code, the rest
         # transitive build/test-only); those were cleared, so the only way back
         # above this line is a new dependency or a newly-published advisory —
-        # both of which are worth stopping for. (Two moderate vitest findings
-        # remain: clearing them takes a major-version bump of the test runner,
-        # and they sit below this threshold.)
+        # both of which are worth stopping for. (It stopped exactly that way in
+        # October 2026: a critical tinypool advisory reached vitest 3, which
+        # was cleared by moving to vitest 4. The scan is now at zero findings.)
         #
         # @tabler/icons-webfont is pinned to exactly 3.31.0 because of this
         # gate. 3.32-3.36 depend on sharp (libvips advisories) and 3.37+ on
