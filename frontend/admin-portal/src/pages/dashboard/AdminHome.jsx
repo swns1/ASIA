@@ -43,10 +43,10 @@ import Table, { TableRow, TableCell } from "../../components/ui/Table";
 import Meter from "../../components/charts/Meter";
 import { chartInk, token } from "../../components/charts/tokens";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
-import { Input } from "../../components/FormField";
 import { AttendanceTargetBand, PipelineBand, RiskByLevelBand } from "./DashboardBands";
 import { CollectionPacePanel, EnrolleesPanel } from "./YearOverYear";
 import useYearComparison from "./useYearComparison";
+import StudentFinder from "./StudentFinder";
 
 import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api/enrollmentApi";
 import { getInvoices } from "../../api/billingApi";
@@ -169,8 +169,10 @@ export default function AdminHome() {
           )}
         </AnimatePresence>
 
-        <motion.div variants={pageVariants.item} className="shrink-0">
+        {/* Above the panels below, which the finder's matches drop over. */}
+        <motion.div variants={pageVariants.item} className="relative z-20 shrink-0">
           <QuickActions
+            onOpenStudent={(st) => navigate(`/students/${st.student_id}`)}
             onFind={(term) => navigate(term ? `/students?search=${encodeURIComponent(term)}` : "/students")}
             onEnroll={() => navigate("/enrollments/new")}
             onRecordPayment={() => setShowPayment(true)}
@@ -265,26 +267,10 @@ export default function AdminHome() {
 
 // ── Start a task ─────────────────────────────────────────────────────────────
 
-function QuickActions({ onFind, onEnroll, onRecordPayment }) {
-  const [term, setTerm] = useState("");
+function QuickActions({ onOpenStudent, onFind, onEnroll, onRecordPayment }) {
   return (
     <Card className="flex flex-col gap-3 lg:flex-row lg:items-center">
-      <form
-        role="search"
-        className="flex min-w-0 flex-1 items-center gap-2"
-        onSubmit={(e) => { e.preventDefault(); onFind(term.trim()); }}
-      >
-        <label htmlFor="home-student-search" className="sr-only">Find a student by name, LRN or student number</label>
-        <Input
-          id="home-student-search"
-          type="search"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          placeholder="Find a student by name, LRN or student number"
-          className="min-w-0 flex-1"
-        />
-        <Button type="submit" variant="secondary" icon="ti-search">Find</Button>
-      </form>
+      <StudentFinder onOpen={onOpenStudent} onSeeAll={onFind} />
       <div className="flex flex-wrap gap-2">
         <Button icon="ti-user-plus" onClick={onEnroll}>Enroll a student</Button>
         <Button variant="secondary" icon="ti-cash" onClick={onRecordPayment}>Record a payment</Button>

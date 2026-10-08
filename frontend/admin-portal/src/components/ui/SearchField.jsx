@@ -4,6 +4,9 @@
 //
 // It grows to fill the toolbar from a 320px basis, so the filter pills beside
 // it keep their size and wrap to a second line before the box gets cramped.
+//
+// onKeyDown and inputProps are for a box that drives a list of suggestions
+// (the dashboard's student finder): arrow keys, and the combobox ARIA.
 export default function SearchField({
   id,
   label,
@@ -13,6 +16,8 @@ export default function SearchField({
   onEnter,
   onClear,
   inputRef,
+  onKeyDown,
+  inputProps,
 }) {
   return (
     <div className="flex h-10 flex-1 basis-80 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-3.5 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
@@ -27,7 +32,11 @@ export default function SearchField({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") onEnter?.(); }}
+        {...inputProps}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (e.key === "Enter" && !e.defaultPrevented) onEnter?.();
+        }}
         className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 [&::-webkit-search-cancel-button]:appearance-none"
       />
       {value && (

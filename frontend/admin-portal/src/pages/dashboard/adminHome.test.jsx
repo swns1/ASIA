@@ -6,7 +6,7 @@
  * came from, and which sections still owe attendance or grades.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 
 let currentUser;
@@ -17,6 +17,7 @@ const getInvoices = vi.fn();
 const getFinancialSummary = vi.fn();
 const getStudentApplications = vi.fn();
 const compareSchoolYears = vi.fn();
+const getStudents = vi.fn();
 let yearStates;
 
 vi.mock("../../utils/auth", async (importOriginal) => ({
@@ -24,7 +25,7 @@ vi.mock("../../utils/auth", async (importOriginal) => ({
   getCurrentUser: () => currentUser,
 }));
 vi.mock("../../api/studentApi", () => ({
-  getStudents: () => Promise.resolve({ count: 0, results: [] }),
+  getStudents: (...a) => getStudents(...a),
 }));
 vi.mock("../../api/enrollmentApi", () => ({
   getEnrollments: (...a) => getEnrollments(...a),
@@ -286,11 +287,77 @@ describe("AdminHome — teachers today", () => {
 });
 
 describe("AdminHome — start a task", () => {
-  it("finds a student through the Students page search", async () => {
+  const student = (student_id, first_name, last_name, last_enrollment = null) => ({
+    student_id, first_name, last_name, middle_name: null, suffix: null,
+    lrn: `1000000000${student_id}`, student_number: `S-${student_id}`, last_enrollment,
+  });
+  const finder = () => screen.findByRole("combobox", { name: /Find a student/ });
+
+  beforeEach(() => {
+    getStudents.mockResolvedValue({
+      count: 9,
+      results: [
+        student(1, "Ana", "Dela Cruz", { school_year: "2026-2027", grade_level: "Grade 7", section: "Rizal" }),
+        student(2, "Ben", "Dela Cruz"),
+      ],
+    });
+  });
+
+  it("drops down the matches as you type, and opens the one picked", async () => {
     renderAs("admin");
-    fireEvent.change(await screen.findByLabelText(/Find a student/), { target: { value: "Dela Cruz" } });
-    fireEvent.click(screen.getByRole("button", { name: "Find" }));
+    fireEvent.change(await finder(), { target: { value: "Dela Cruz" } });
+
+    const option = await screen.findByRole("option", { name: /Dela Cruz, Ana/ });
+    expect(getStudents).toHaveBeenLastCalledWith({ search: "Dela Cruz", page_size: 6 });
+    expect(within(option).getByText("Grade 7 · Rizal")).toBeTruthy();
+    expect(within(screen.getByRole("option", { name: /Dela Cruz, Ben/ })).getByText("Not enrolled yet")).toBeTruthy();
+
+    fireEvent.click(option);
+    expect(screen.getByTestId("location").textContent).toBe("/students/1");
+  });
+
+  it("opens a match from the keyboard", async () => {
+    renderAs("admin");
+    const box = await finder();
+    fireEvent.change(box, { target: { value: "Dela Cruz" } });
+    await screen.findByRole("option", { name: /Dela Cruz, Ben/ });
+
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    expect(box.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: /Ben/ }).id);
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(screen.getByTestId("location").textContent).toBe("/students/2");
+  });
+
+  it("takes Enter, or See all, to the Students page search", async () => {
+    renderAs("admin");
+    const box = await finder();
+    fireEvent.change(box, { target: { value: "Dela Cruz" } });
+    fireEvent.click(await screen.findByRole("button", { name: "See all 9 matches in Students" }));
     expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz");
+  });
+
+  it("goes straight to the Students search on Enter, without waiting", async () => {
+    renderAs("admin");
+    const box = await finder();
+    fireEvent.change(box, { target: { value: "Dela Cruz" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(screen.getByTestId("location").textContent).toBe("/students?search=Dela%20Cruz");
+  });
+
+  it("says when nothing matches", async () => {
+    getStudents.mockResolvedValue({ count: 0, results: [] });
+    renderAs("admin");
+    fireEvent.change(await finder(), { target: { value: "Zzyx" } });
+    expect(await screen.findByText("No student matches “Zzyx”.")).toBeTruthy();
+  });
+
+  it("waits for two letters before searching", async () => {
+    renderAs("admin");
+    fireEvent.change(await finder(), { target: { value: "D" } });
+    await new Promise((r) => setTimeout(r, 400));
+    await waitFor(() => expect(getStudents).not.toHaveBeenCalledWith(expect.objectContaining({ search: "D" })));
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 
