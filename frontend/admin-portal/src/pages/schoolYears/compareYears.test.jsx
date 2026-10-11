@@ -31,6 +31,7 @@ vi.mock("../../api/billingApi", () => ({
 
 const { default: SchoolYearComparePage } = await import("../SchoolYearComparePage");
 const { defaultCompareYears, previousLabel } = await import("../../components/schoolYears/yearHelpers");
+const { ThemeContext } = await import("../../hooks/useTheme");
 
 const YEARS = [
   { label: "2027-2028", state: "upcoming" },
@@ -311,5 +312,38 @@ describe("SchoolYearComparePage — charts", () => {
     expect(await screen.findAllByText(/billing figures/)).toHaveLength(2);
     // ... and so does the collection-rate tile, without a figure.
     expect(screen.getByText("Couldn't be loaded")).toBeTruthy();
+  });
+});
+
+describe("SchoolYearComparePage in dark mode", () => {
+  const renderDark = (url = "/school-years/compare") =>
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={[url]}>
+            <SchoolYearComparePage />
+          </MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+
+  it("draws the charts in the dark palette", async () => {
+    const { container } = renderDark();
+    expect(await screen.findByText("Learners by school level")).toBeTruthy();
+    await waitFor(() => expect(container.querySelector('circle[stroke="#8fbaf2"]')).toBeTruthy());
+    // Rate points: the dark info line, hollowed with the dark plane.
+    expect(container.querySelector('circle[stroke="#8fbaf2"]').getAttribute("fill")).toBe("#160f0f");
+    // School levels in their dark hues.
+    expect(container.querySelector('[fill="#7ba8f7"]')).toBeTruthy();
+    expect(container.querySelector('[fill="#2563eb"]')).toBeNull();
+    // The chosen year is lit like every other chosen option.
+    const chooser = screen.getByRole("group", { name: "School years to compare" });
+    expect(within(chooser).getByRole("button", { name: /2026-2027/ }).className).toContain("dark:bg-brand-100");
+  });
+
+  it("shows the tables", async () => {
+    renderDark(TABLES);
+    const learners = await rowOf("Learners by year", "Learners");
+    await waitFor(() => expect(within(learners).getByText("120")).toBeTruthy());
   });
 });

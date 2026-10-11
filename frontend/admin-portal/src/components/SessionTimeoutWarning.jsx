@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { clearAuthSession, decodeJwtPayload } from "../utils/auth";
 import { refreshSession } from "../api/apiClient";
 import Button from "./ui/Button";
+import { usePageTheme } from "../hooks/useTheme";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
@@ -14,6 +16,9 @@ const WARN_BEFORE_MS = 5 * 60 * 1000; // 5 minutes before expiry
 // no warning at all — their session simply died mid-task.
 export default function SessionTimeoutWarning() {
   const navigate = useNavigate();
+  // It floats over the page, outside every themed container, so it carries
+  // the page's theme itself (dark over a converted page in dark mode).
+  const dark = usePageTheme() === "dark";
   const [show, setShow] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extendFailed, setExtendFailed] = useState(false);
@@ -89,10 +94,11 @@ export default function SessionTimeoutWarning() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           role="alert"
           aria-live="assertive"
-          className="fixed bottom-6 right-6 z-[2000] w-[min(340px,calc(100vw-3rem))] rounded-xl border-[1.5px] border-brand-300 bg-white p-5 shadow-2xl"
+          data-theme={dark ? "dark" : undefined}
+          className="fixed bottom-6 right-6 z-[2000] w-[min(340px,calc(100vw-3rem))] rounded-xl border-[1.5px] border-brand-300 bg-surface-raised p-5 shadow-2xl dark:shadow-float-dark"
         >
           <div className="mb-3 flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-200">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-200 ${CHIP_GLOW.brand}`}>
               <i className="ti ti-clock text-[18px] text-brand-600" aria-hidden="true" />
             </div>
             <div className="min-w-0">

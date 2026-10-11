@@ -80,8 +80,10 @@ export default function StepBar({
                   className={[
                     "flex shrink-0 items-center justify-center rounded-full border-2 font-bold",
                     dims.circle,
+                    // Done steps carry a white check, so they read the fixed
+                    // action red rather than brand-500, which lightens in dark.
                     done
-                      ? "border-brand-500 bg-brand-500 text-white"
+                      ? "border-action bg-action text-white"
                       : active
                         ? "border-brand-500 bg-brand-100 text-brand-500"
                         : "border-brand-border-soft bg-brand-50 text-neutral-500",
@@ -130,7 +132,7 @@ export default function StepBar({
                 <span
                   aria-hidden="true"
                   className={`mx-1.5 h-0.5 flex-1 transition-colors duration-300 ${dims.labelGap} ${
-                    done ? "bg-brand-500" : "bg-brand-border-soft"
+                    done ? "bg-action" : "bg-brand-border-soft"
                   }`}
                 />
               )}

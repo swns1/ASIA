@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 
 import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
 import { columnPath } from "../../components/charts/geometry";
-import { SURFACE, chartInk, token } from "../../components/charts/tokens";
+import { chartInk, token } from "../../components/charts/tokens";
 import useElementSize from "../../components/charts/useElementSize";
+import useTheme from "../../hooks/useTheme";
 import { mapAxes, placeDots } from "./mapFrame";
 import {
   PASSING_GRADE,
@@ -44,10 +45,10 @@ import {
 // The colours moved with them: these were hardcoded hex, which is exactly how
 // the app accumulated its contrast failures.
 //
-// `ink()` is resolved on first render, not at import: chartInk() reads the CSS
+// `ink()` is resolved on render, not at import: chartInk() reads the CSS
 // custom properties off :root, and this module can execute before the
 // stylesheet has been parsed. Values are cached inside tokens.js after that.
-const ink = () => chartInk();
+// Each chart defines it for its own area's theme (hooks/useTheme).
 
 // ── Small shared pieces ──────────────────────────────────────────────────────
 
@@ -226,6 +227,7 @@ function GroupedBandChart({ rows, unitLabel, emptyMessage }) {
 // hue and no legend — the title says what the bars are.
 
 function ReasonChart({ summary }) {
+  const theme = useTheme();
   const flagged = summary?.flagged_count ?? 0;
   if (!flagged) return <NoData message="Nobody needs following up in this selection." />;
   const rows = (summary?.by_reason ?? [])
@@ -243,7 +245,7 @@ function ReasonChart({ summary }) {
               {reasonLabel(row.code)}
             </span>
             <Track label={`${reasonLabel(row.code)}: ${students(row.count)}, ${pct(row.count, whole)}% of those flagged`}>
-              <Fill share={row.count / whole} color={chartInk().bar} />
+              <Fill share={row.count / whole} color={chartInk(theme).bar} />
             </Track>
             <span className="text-right text-sm tabular-nums text-neutral-600">
               <strong className="font-bold text-neutral-900">{students(row.count)}</strong> · {pct(row.count, whole)}%
@@ -273,6 +275,8 @@ function GradeDistributionChart({ scores }) {
   const [tip, setTip] = useState(null);
   const [plotEl, setPlotEl] = useState(null);
   const size = useElementSize(plotEl);
+  const theme = useTheme();
+  const ink = () => chartInk(theme);
   const graded = scores.filter((s) => s.average_grade != null);
   if (!graded.length) return <NoData message="No grades recorded for this selection yet." />;
   const ungraded = scores.length - graded.length;
@@ -357,7 +361,7 @@ function GradeDistributionChart({ scores }) {
         caption="Each column counts the students whose average falls in that range."
       >
         {/* The failing side, tinted and named in place of a key */}
-        <rect x={0} y={0} width={passX} height={baseY} fill={token("--color-error-50")} fillOpacity={0.6} />
+        <rect x={0} y={0} width={passX} height={baseY} fill={token("--color-error-50", theme)} fillOpacity={0.6} />
         <line x1={PAD_L} x2={W - PAD_R} y1={baseY} y2={baseY} stroke={ink().grid} />
 
         {bins.map((bin, i) => {
@@ -420,10 +424,10 @@ function GradeDistributionChart({ scores }) {
           x1={passX} x2={passX} y1={32} y2={baseY}
           stroke={ink().threshold} strokeDasharray="4,3" strokeWidth={1.5}
         />
-        <text x={passX - 10} y={24} textAnchor="end" fontSize="11" fontWeight="700" fill={token("--color-error-500")}>
+        <text x={passX - 10} y={24} textAnchor="end" fontSize="11" fontWeight="700" fill={token("--color-error-500", theme)}>
           Below passing
         </text>
-        <text x={passX + 10} y={24} textAnchor="start" fontSize="11" fontWeight="700" fill={token("--color-success-500")}>
+        <text x={passX + 10} y={24} textAnchor="start" fontSize="11" fontWeight="700" fill={token("--color-success-500", theme)}>
           Passing · {PASSING_GRADE} and up
         </text>
         <text x={PAD_L + plotW / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={ink().axis}>
@@ -452,6 +456,8 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
   const [tip, setTip] = useState(null);
   const [plotEl, setPlotEl] = useState(null);
   const size = useElementSize(plotEl);
+  const theme = useTheme();
+  const ink = () => chartInk(theme);
   const plotted = scores.filter((s) => s.average_grade != null && s.attendance_rate != null);
   if (!plotted.length) {
     return (
@@ -531,7 +537,7 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
         return (
           <g key={row.student_id}>
             {/* 2px surface ring keeps overlapping dots readable */}
-            <circle cx={cx} cy={cy} r={5} fill={meta.color} stroke={SURFACE} strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={5} fill={meta.color} stroke={ink().plane} strokeWidth={2} />
             {/* Hit target well beyond the mark, so a dot never needs a
                 dead-centre click */}
             <circle
@@ -571,7 +577,7 @@ function AttendanceGradeChart({ scores, onSelectStudent }) {
           fontSize="11"
           fontWeight="600"
           fill={ink().axis}
-          stroke={SURFACE}
+          stroke={ink().plane}
           strokeWidth={3}
           paintOrder="stroke"
           pointerEvents="none"

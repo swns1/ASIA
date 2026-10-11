@@ -2,6 +2,7 @@ import { LEVEL_LABELS } from "../../../constants/schoolLevels";
 import { NoData } from "../ChartFrame";
 import { columnPath } from "../geometry";
 import { GAP, chartInk, levelColor } from "../tokens";
+import useTheme from "../../../hooks/useTheme";
 import { fmtCount, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
 import ColumnPlot from "../ColumnPlot";
@@ -26,7 +27,8 @@ export default function LearnersByLevelChart({ years, source }) {
 }
 
 function LearnersByLevel({ years, get }) {
-  const ink = chartInk();
+  const theme = useTheme();
+  const ink = chartInk(theme);
   const byLevel = (y) => get(y)?.enrollment.by_level ?? {};
   // A level none of these years has isn't drawn or keyed -- as in the table.
   const levels = Object.keys(LEVEL_LABELS).filter((level) => years.some((y) => byLevel(y)[level]));
@@ -58,7 +60,7 @@ function LearnersByLevel({ years, get }) {
         legend={
           <Legend
             className="mb-2"
-            items={levels.map((level) => ({ key: level, label: LEVEL_LABELS[level], color: levelColor(level) }))}
+            items={levels.map((level) => ({ key: level, label: LEVEL_LABELS[level], color: levelColor(level, theme) }))}
           />
         }
         axis={axis}
@@ -76,12 +78,12 @@ function LearnersByLevel({ years, get }) {
                 const topmost = j === col.segments.length - 1;
                 return topmost ? (
                   // The column's rounded top belongs to its highest level.
-                  <path key={s.level} d={columnPath(x0, top, w, h)} fill={levelColor(s.level)}>
+                  <path key={s.level} d={columnPath(x0, top, w, h)} fill={levelColor(s.level, theme)}>
                     <title>{`${LEVEL_LABELS[s.level]} · ${fmtCount(s.value)}`}</title>
                   </path>
                 ) : (
                   // A surface gap off each segment's top separates it from the next.
-                  <rect key={s.level} x={x0} y={top + GAP} width={w} height={Math.max(0, h - GAP)} fill={levelColor(s.level)}>
+                  <rect key={s.level} x={x0} y={top + GAP} width={w} height={Math.max(0, h - GAP)} fill={levelColor(s.level, theme)}>
                     <title>{`${LEVEL_LABELS[s.level]} · ${fmtCount(s.value)}`}</title>
                   </rect>
                 );

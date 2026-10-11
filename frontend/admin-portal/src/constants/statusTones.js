@@ -52,6 +52,19 @@ export const CHIP_GLOW = {
   accent:  "dark:bg-[linear-gradient(135deg,rgba(168,85,247,0.3),rgba(168,85,247,0.07))] dark:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.32)]",
 };
 
+/**
+ * CHIP_GLOW for the school-level tiles (`bg-nursery-50 text-nursery-500`…),
+ * in each level's own hue. Nursery and kindergarten share warning's and
+ * accent's; elementary and senior high have hues no status tone carries.
+ */
+export const LEVEL_GLOW = {
+  nursery:      CHIP_GLOW.warning,
+  kindergarten: CHIP_GLOW.accent,
+  elementary:   "dark:bg-[linear-gradient(135deg,rgba(59,130,246,0.3),rgba(59,130,246,0.07))] dark:shadow-[inset_0_0_0_1px_rgba(59,130,246,0.32)]",
+  juniorhigh:   CHIP_GLOW.success,
+  seniorhigh:   "dark:bg-[linear-gradient(135deg,rgba(236,72,153,0.3),rgba(236,72,153,0.07))] dark:shadow-[inset_0_0_0_1px_rgba(236,72,153,0.32)]",
+};
+
 /** The text tone for each variant, contrast-checked for labels. */
 export const STATUS_TEXT = {
   success: "text-success-500",

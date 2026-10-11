@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   getSchoolYear: vi.fn(),
@@ -444,5 +445,41 @@ describe("SchoolYearDetailPage — calendar", () => {
     await waitFor(() => expect(api.carryOverSchoolYear).toHaveBeenLastCalledWith(
       "2027-2028", { from: "2026-2027", parts: ["calendar"] },
     ));
+  });
+});
+
+describe("SchoolYearDetailPage — dark mode", () => {
+  const renderDark = (url) => render(
+    <ThemeContext.Provider value="dark">
+      <div data-theme="dark">
+        <MemoryRouter initialEntries={[url]}>
+          <Routes>
+            <Route path="/school-years/:label" element={<SchoolYearDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </div>
+    </ThemeContext.Provider>,
+  );
+
+  it("leads the overview with the dates on the brand panel", async () => {
+    api.getSchoolYear.mockResolvedValue({ ...YEAR, state: "current", start_date: "2020-06-01", end_date: "2099-03-31" });
+    renderDark("/school-years/2027-2028");
+    expect(await screen.findByText("Setup checklist")).toBeTruthy();
+    const dates = screen.getByRole("heading", { name: "Dates" }).closest("div.rounded-xl");
+    expect(dates.className).toContain("bg-brand-950");
+    expect(screen.getByText(/of the year has passed/)).toBeTruthy();
+  });
+
+  it("shows the sections and advisers tabs on a dark page", async () => {
+    api.getSections.mockResolvedValue([section(1, "Grade 7", "Rizal", { adviser_count: 1 })]);
+    api.getSectionAdvisories.mockResolvedValue({ results: [{
+      advisory_id: 40, teacher_user_id: 9, school_year: "2027-2028",
+      school_level: "junior_highschool", grade_level: "Grade 7", section: "Rizal", strand: null,
+    }] });
+    renderDark("/school-years/2027-2028?tab=sections");
+    expect(await screen.findByRole("button", { name: /Grade 7 Rizal/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Advisers/ }));
+    expect(await screen.findByText("Carla Diaz")).toBeTruthy();
+    expect(screen.getByText("Inactive")).toBeTruthy();
   });
 });

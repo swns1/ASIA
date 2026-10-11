@@ -9,6 +9,8 @@
 //
 // Every class string is a complete literal, as Tailwind needs.
 
+import { SELECTED_DARK } from "./darkSurfaces";
+
 const SIZES = {
   md: "gap-1.5 px-3.5 py-1.5 text-[12px]",
   sm: "gap-1 px-2.5 py-1 text-xs",
@@ -35,9 +37,11 @@ export default function SegmentedControl({
             className={[
               "focus-ring inline-flex items-center rounded-sm border-[1.5px] font-semibold transition-colors",
               SIZES[size] ?? SIZES.md,
+              // The chosen fill carries white text, so it reads the fixed
+              // action red; in dark it lights up like the current page number.
               on
-                ? "border-brand-500 bg-brand-500 text-white"
-                : "border-neutral-300 bg-white text-neutral-600 hover:border-brand-300 hover:text-brand-600",
+                ? `border-action bg-action text-white ${SELECTED_DARK}`
+                : "border-neutral-300 bg-surface text-neutral-600 hover:border-brand-300 hover:text-brand-600",
             ].join(" ")}
           >
             {opt.icon && <i className={`ti ${opt.icon} text-[14px]`} aria-hidden="true" />}

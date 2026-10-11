@@ -139,7 +139,8 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
               <motion.div
                 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18 }}
-                style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#b91c1c", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}
+                className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+                style={{ border: "1px solid var(--color-brand-300)", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}
               >
                 <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
               </motion.div>
@@ -178,23 +179,23 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
           <Field label="Discount Type" required>
             <div style={{ display: "flex", gap: 10 }}>
               {[
-                { value: "percentage",   label: "Percentage (%)",   icon: "ti-percentage",    color: "#1455a0", bg: "#e3f0fd" },
-                { value: "fixed_amount", label: "Fixed Amount (₱)", icon: "ti-currency-peso", color: "#2e6b0d", bg: "#e8f5e0" },
+                { value: "percentage",   label: "Percentage (%)",   icon: "ti-percentage",    color: "var(--color-info-500)", bg: "var(--color-info-50)" },
+                { value: "fixed_amount", label: "Fixed Amount (₱)", icon: "ti-currency-peso", color: "var(--color-success-500)", bg: "var(--color-success-50)" },
               ].map((opt) => {
                 const active = form.discount_mode === opt.value;
                 return (
                   <button key={opt.value} type="button" onClick={() => setF("discount_mode", opt.value)}
                     style={{
                       flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
-                      borderRadius: 12, border: `1.5px solid ${active ? opt.color : "#f0e4e4"}`,
-                      background: active ? opt.bg : "white", cursor: "pointer",
+                      borderRadius: 12, border: `1.5px solid ${active ? opt.color : "var(--color-neutral-300)"}`,
+                      background: active ? opt.bg : "var(--color-surface)", cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease",
                     }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 8, background: active ? "white" : "#f9f4f4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s ease" }}>
-                      <i className={`ti ${opt.icon}`} style={{ fontSize: 16, color: active ? opt.color : "#855c5c", transition: "color 0.15s ease" }} />
+                    <div className={active ? undefined : "bg-[#f9f4f4] dark:bg-neutral-200"} style={{ width: 34, height: 34, borderRadius: 8, background: active ? "var(--color-surface)" : undefined, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s ease" }}>
+                      <i className={`ti ${opt.icon}`} style={{ fontSize: 16, color: active ? opt.color : "var(--color-neutral-600)", transition: "color 0.15s ease" }} />
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? opt.color : "#7a5050", transition: "color 0.15s ease" }}>{opt.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: active ? opt.color : "var(--color-neutral-700)", transition: "color 0.15s ease" }}>{opt.label}</span>
                   </button>
                 );
               })}
@@ -209,7 +210,7 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
                 onChange={(e) => setF("discount_value", e.target.value)}
                 placeholder={form.discount_mode === "percentage" ? "e.g. 50" : "e.g. 5000"}
                 className="pr-12" />
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 13, fontWeight: 700, color: "#8a6a6a" }}>
+              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 13, fontWeight: 700, color: "var(--color-neutral-500)" }}>
                 {form.discount_mode === "percentage" ? "%" : "₱"}
               </span>
             </div>
@@ -219,11 +220,11 @@ function ScholarshipTypeModal({ scholarshipType, onClose, onSaved }) {
           </Field>
 
           {/* Active toggle */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10 }}>
+          <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "1px solid var(--color-neutral-200)", borderRadius: 10 }}>
             <input type="checkbox" id="is_active" checked={form.is_active}
               onChange={(e) => setF("is_active", e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: "#e03131", cursor: "pointer" }} />
-            <label htmlFor="is_active" style={{ fontSize: 13, color: "#1a0a0a", cursor: "pointer", fontWeight: 500 }}>
+              style={{ width: 15, height: 15, accentColor: "var(--color-brand-500)", cursor: "pointer" }} />
+            <label htmlFor="is_active" style={{ fontSize: 13, color: "var(--color-neutral-900)", cursor: "pointer", fontWeight: 500 }}>
               Active — available for assignment to enrollments
             </label>
           </div>
@@ -238,7 +239,7 @@ function DeleteModal({ item, onConfirm, onCancel, deleting, deleteError }) {
     <ConfirmModal
       icon="ti-trash"
       title="Delete scholarship?"
-      message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{item.scholarship_name}</strong>. This cannot be undone and may affect existing enrollments.</>}
+      message={<>You're about to delete <strong style={{ color: "var(--color-neutral-900)" }}>{item.scholarship_name}</strong>. This cannot be undone and may affect existing enrollments.</>}
       error={deleteError}
       loading={deleting}
       onConfirm={onConfirm}

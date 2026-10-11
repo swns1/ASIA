@@ -29,6 +29,7 @@ vi.mock("../../context/SchoolYearContext", () => ({
 }));
 
 const { default: AnalyticsPage } = await import("../AnalyticsPage");
+const { ThemeContext } = await import("../../hooks/useTheme");
 
 // A promise the test settles when it chooses, to put answers out of order.
 function deferred() {
@@ -129,5 +130,50 @@ describe("AnalyticsPage", () => {
     const title = document.querySelector("svg title").textContent;
     expect(title).toBe("Reyes, Bea: Needs attention on " + new Date("2026-09-29T08:00:00Z")
       .toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  });
+});
+
+describe("AnalyticsPage in dark mode", () => {
+  const renderDark = () =>
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter>
+            <AnalyticsPage />
+          </MemoryRouter>
+        </div>
+      </ThemeContext.Provider>
+    );
+
+  it("renders the overview and draws its chart in the dark palette", async () => {
+    getRiskAssessmentLatest.mockResolvedValue(
+      runOf([score(1, "Cruz, Ana", "critical"), score(2, "Reyes, Bea", "high")])
+    );
+    const { container } = renderDark();
+    await flush();
+
+    expect(screen.getByText(/Showing 2 students ·/)).toBeTruthy();
+    expect(screen.getByText("students are below the passing mark")).toBeTruthy();
+    // The failing side's tint is the dark error-50, not the light one.
+    expect(container.querySelector('rect[fill="#341717"]')).toBeTruthy();
+    expect(container.querySelector('rect[fill="#fde8e8"]')).toBeNull();
+    // Labels read in the dark theme's ink.
+    expect(container.querySelector('text[fill="#f6eded"]')).toBeTruthy();
+  });
+
+  it("draws a student's history on the dark plane", async () => {
+    getRiskAssessmentLatest.mockResolvedValue(runOf([score(1, "Cruz, Ana", "critical")]));
+    getRiskAssessmentTrend.mockResolvedValue({
+      points: [{ run_id: 7, created_at: "2026-09-29T08:00:00Z", grading_period: "1st_quarter", risk_score: 80, risk_level: "critical" }],
+    });
+    const { container } = renderDark();
+    await flush();
+    fireEvent.click(screen.getByRole("tab", { name: /Students to follow up/ }));
+    fireEvent.click(within(await screen.findByRole("table")).getByText("Cruz, Ana"));
+    await flush();
+
+    expect(screen.getByText("How this student's situation has changed across saved checks")).toBeTruthy();
+    // The point's ring matches the dark chart plane.
+    expect(container.querySelector('circle[r="5.5"]').getAttribute("stroke")).toBe("#160f0f");
   });
 });

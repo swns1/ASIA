@@ -102,7 +102,7 @@ export default function ObservedValues({
                       className={`focus-ring h-8 rounded-sm border-[1.5px] text-[12px] transition-colors disabled:cursor-not-allowed ${
                         selected
                           ? "font-bold"
-                          : "border-neutral-300 bg-white font-semibold text-neutral-600 enabled:hover:border-brand-300 enabled:hover:text-brand-600 disabled:opacity-60"
+                          : "border-neutral-300 bg-surface font-semibold text-neutral-600 enabled:hover:border-brand-300 enabled:hover:text-brand-600 disabled:opacity-60"
                       }`}
                     >
                       {v.value}

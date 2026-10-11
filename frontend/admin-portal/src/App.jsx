@@ -1,16 +1,15 @@
 import { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { MotionConfig } from "framer-motion";
-import { Toaster } from "react-hot-toast";
 import PrivateRoute from "./components/PrivateRoute";
 import { SchoolYearProvider } from "./context/SchoolYearContext";
 import AppLayout from "./components/AppLayout";
 import GuardianLayout from "./components/GuardianLayout";
 import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
+import AppToaster from "./components/AppToaster";
 import PageTransition from "./components/PageTransition";
 import RouteFallback from "./components/RouteFallback";
 import lazyRoute from "./utils/lazyRoute";
-import { toasterProps } from "./utils/toastConfig";
 import { STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES, STAFF_ALL } from "./utils/auth";
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
@@ -219,11 +218,12 @@ export default function App() {
           without a valid token, and guardians now get the same expiry warning
           staff do — previously it lived inside the staff shell only. */}
       <SessionTimeoutWarning />
-    </BrowserRouter>
 
-    {/* One toast host for the whole app, so toasts survive navigation and
-        work on the login page (which never had a Toaster of its own). */}
-    <Toaster {...toasterProps} />
+      {/* One toast host for the whole app, so toasts survive navigation and
+          work on the login page (which never had a Toaster of its own).
+          Inside the router so it can take the theme of the page under it. */}
+      <AppToaster />
+    </BrowserRouter>
     </SchoolYearProvider>
     </MotionConfig>
   );

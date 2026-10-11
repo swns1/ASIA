@@ -14,6 +14,7 @@ import { ConfirmDialog } from "../components/ui/Modal";
 import YearModal from "../components/schoolYears/YearModal";
 import { progressThrough, suggestNewYear } from "../components/schoolYears/yearHelpers";
 import { SCHOOL_YEAR_STATE_MAP } from "../constants/statusMaps";
+import { CHIP_GLOW } from "../constants/statusTones";
 import { fmtDate } from "../utils/format";
 import { firstMessageFrom } from "../utils/apiError";
 import { useSchoolYear } from "../context/SchoolYearContext";
@@ -54,7 +55,7 @@ function YearRow({ year, onOpen, onEdit, onMakeCurrent, onDelete }) {
     <TableRow onClick={() => onOpen(year)}>
       <TableCell>
         <div className="flex items-center gap-2.5">
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${isCurrent ? "bg-success-50 text-success-500" : "bg-brand-100 text-brand-600"}`}>
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${isCurrent ? `bg-success-50 text-success-500 ${CHIP_GLOW.success}` : `bg-brand-100 text-brand-600 ${CHIP_GLOW.brand}`}`}>
             <i className="ti ti-calendar text-[15px]" aria-hidden="true" />
           </div>
           <Link

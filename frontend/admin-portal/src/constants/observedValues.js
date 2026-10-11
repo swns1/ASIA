@@ -9,13 +9,14 @@
 // at all. One list here keeps the two entry screens and SF9 on the same marks.
 //
 // Colours are the status pairs from styles/tokens.css (info, success,
-// warning, error), as literals because these screens style inline.
+// warning, error), as var() strings because these screens style inline: each
+// follows the theme of the screen drawing it, and SF9 always prints light.
 
 export const OBSERVED_VALUES = [
-  { value: "AO", label: "Always Observed", color: "#1455a0", bg: "#e3f0fd" },
-  { value: "SO", label: "Sometimes Observed", color: "#2e6b0d", bg: "#e8f5e0" },
-  { value: "RO", label: "Rarely Observed", color: "#854f0b", bg: "#faeeda" },
-  { value: "NO", label: "Not Observed", color: "#9b2020", bg: "#fde8e8" },
+  { value: "AO", label: "Always Observed", color: "var(--color-info-500)", bg: "var(--color-info-50)" },
+  { value: "SO", label: "Sometimes Observed", color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+  { value: "RO", label: "Rarely Observed", color: "var(--color-warning-500)", bg: "var(--color-warning-50)" },
+  { value: "NO", label: "Not Observed", color: "var(--color-error-500)", bg: "var(--color-error-50)" },
 ];
 
 // Rows saved before the switch keep their old word. Each reads as the mark

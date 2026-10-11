@@ -19,6 +19,13 @@ export const GLASS_SEARCH =
   "dark:border-white/[0.14] dark:bg-white/[0.06] " +
   "dark:hover:border-white/30 dark:focus-within:border-white/40 dark:focus-within:bg-white/[0.08]";
 
+/** A lead block that isn't a Card, drawn as the brand panel in dark (what
+ *  Card's `brandPanel` does). Render `{dark && <BrandBackdrop tone="dark" />}`
+ *  as its first child. Add `dark:bg-none` if the block has a light gradient,
+ *  and don't use it on a sticky or absolute block (it sets `relative`). */
+export const BRAND_PANEL_DARK =
+  "dark:relative dark:isolate dark:border-[rgba(224,49,49,0.26)] dark:bg-brand-950 dark:shadow-panel-glow";
+
 /** A secondary Button on the panel. */
 export const GLASS_BUTTON =
   "dark:border-white/[0.16] dark:bg-white/[0.08] dark:text-white " +

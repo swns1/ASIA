@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   getEnrollments: vi.fn(), getSubjects: vi.fn(), getGrades: vi.fn(), getScoreEntries: vi.fn(),
@@ -287,5 +288,59 @@ describe("Grades — Observed values", () => {
     await waitFor(() => expect(api.getNarrativeReports).toHaveBeenLastCalledWith({
       enrollment: 11, grading_period: "2nd_quarter", page_size: 100,
     }));
+  });
+});
+
+describe("Grades — dark mode", () => {
+  const dark = (node) => (
+    <ThemeContext.Provider value="dark">
+      <div data-theme="dark">{node}</div>
+    </ThemeContext.Provider>
+  );
+
+  it("renders the entry sheet and the grade bar", async () => {
+    render(dark(page("/grades/entry?student=5")));
+    fireEvent.click(await screen.findByRole("radio", { name: /S\.Y\. 2026-2027/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Mathematics 10/ }));
+
+    expect(await screen.findByRole("spinbutton", { name: "Score for Quiz 1" })).toBeTruthy();
+    expect(await screen.findByText("Very Satisfactory")).toBeTruthy();
+    expect(screen.getByText("Very Satisfactory").className).toContain("text-success-500");
+    const chosen = within(screen.getByRole("group", { name: "Grading period" })).getByRole("button", { name: "1st Q" });
+    expect(chosen.className).toContain("dark:bg-brand-100");
+  });
+
+  it("renders the summary and the AI panel, through its answer and its error", async () => {
+    const Q = ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"];
+    savedGrades = [7, 8].flatMap((subject) =>
+      [90, 91, 92, 93].map((v, i) => ({ grade_id: subject * 10 + i, subject, grading_period: Q[i], numeric_grade: String(v) })));
+    api.callGemini.mockResolvedValueOnce({ interpretation: "**SUMMARY**\n* Strong in every subject", provider: "gemini" });
+    render(dark(page("/grades?student=5&tab=summary&enrollment=11")));
+
+    expect(await screen.findByText("Mathematics 10")).toBeTruthy();
+    expect(screen.getByText("Outstanding").className).toContain("text-info-500");
+    expect(screen.getByText("No analysis yet")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+    expect(await screen.findByText("Strong in every subject")).toBeTruthy();
+    expect(screen.getByText("SUMMARY")).toBeTruthy();
+
+    api.callGemini.mockRejectedValueOnce(new Error("The AI service is unavailable."));
+    fireEvent.click(screen.getByRole("button", { name: /Re-analyze/ }));
+    expect(await screen.findByText("Analysis failed")).toBeTruthy();
+    expect(screen.getByText("The AI service is unavailable.")).toBeTruthy();
+  });
+
+  it("renders the observed values", async () => {
+    api.getNarrativeCategories.mockResolvedValue({ results: [{ category_id: 1, name: "Upholds truth" }] });
+    api.getNarrativeReports.mockResolvedValue({
+      results: [{ report_id: 50, category: 1, grading_period: "1st_quarter", rating: "AO" }],
+    });
+    render(dark(page("/grades/observed?student=5")));
+    fireEvent.click(await screen.findByRole("radio", { name: /S\.Y\. 2026-2027/ }));
+
+    expect(await screen.findByText("1st Quarter · 1 of 1 rated")).toBeTruthy();
+    const truth = screen.getByRole("group", { name: "Upholds truth" });
+    expect(within(truth).getByRole("button", { name: "Always Observed (AO)" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

@@ -1,6 +1,7 @@
 import { NoData } from "../ChartFrame";
 import { linePath } from "../geometry";
-import { STROKE, token } from "../tokens";
+import { STROKE, chartInk, token } from "../tokens";
+import useTheme from "../../../hooks/useTheme";
 import { fmtOne, num, share, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
 import ColumnPlot from "../ColumnPlot";
@@ -46,7 +47,9 @@ export default function RatesChart({ years, states, source }) {
 }
 
 function Rates({ years, states, get }) {
-  const series = SERIES.map((s) => ({ ...s, color: token(s.colorToken), values: years.map((y) => s.value(get(y))) }));
+  const theme = useTheme();
+  const ink = chartInk(theme);
+  const series = SERIES.map((s) => ({ ...s, color: token(s.colorToken, theme), values: years.map((y) => s.value(get(y))) }));
   const all = series.flatMap((s) => s.values).filter((v) => v != null);
   if (!all.length) return <NoData message="No rates recorded for these years yet." />;
 
@@ -90,7 +93,7 @@ function Rates({ years, states, get }) {
               )))}
             {/* Points over every line, so no line hides another's point. */}
             {series.map((s) => s.values.map((v, i) => (v == null ? null : (
-              <circle key={`${s.key}-${years[i]}`} cx={geo.x(i)} cy={geo.y(v)} r={4} fill="#fff" stroke={s.color} strokeWidth={2}>
+              <circle key={`${s.key}-${years[i]}`} cx={geo.x(i)} cy={geo.y(v)} r={4} fill={ink.dot} stroke={s.color} strokeWidth={2}>
                 <title>{`${s.name} · S.Y. ${years[i]} · ${fmtOne(v)}%`}</title>
               </circle>
             ))))}

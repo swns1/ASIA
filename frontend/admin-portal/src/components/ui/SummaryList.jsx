@@ -11,7 +11,7 @@
  */
 export default function SummaryList({ icon, title, className = "", children }) {
   return (
-    <div className={`overflow-hidden rounded-xl border border-neutral-200 bg-white ${className}`}>
+    <div className={`overflow-hidden rounded-xl border border-neutral-200 bg-surface ${className}`}>
       <div className="flex items-center gap-2.5 border-b border-neutral-200 bg-brand-50 px-4 py-3">
         {icon && <i className={`ti ${icon} text-brand-500`} aria-hidden="true" />}
         <h4 className="text-sm font-bold text-neutral-900">{title}</h4>

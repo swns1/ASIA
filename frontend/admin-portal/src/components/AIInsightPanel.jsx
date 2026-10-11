@@ -7,6 +7,8 @@
 //   disabled    — bool, disables the Analyze button (e.g. no data loaded yet)
 
 import { useState, useEffect } from "react";
+import { CARD_DARK } from "./ui/darkSurfaces";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
 // Converts **bold**, bullet lines, and numbered sections into styled JSX.
@@ -25,7 +27,7 @@ function renderInterpretation(text) {
       const label = line.replace(/\*\*/g, "");
       elements.push(
         <div key={key++} style={{
-          fontSize: 10.5, fontWeight: 700, color: "#c92a2a",
+          fontSize: 10.5, fontWeight: 700, color: "var(--color-brand-600)",
           textTransform: "uppercase", letterSpacing: "0.08em",
           marginTop: 14, marginBottom: 4,
         }}>
@@ -41,10 +43,10 @@ function renderInterpretation(text) {
       elements.push(
         <div key={key++} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
           <span style={{
-            width: 5, height: 5, borderRadius: "50%", background: "#e03131",
+            width: 5, height: 5, borderRadius: "50%", background: "var(--color-brand-500)",
             flexShrink: 0, marginTop: 7,
           }} />
-          <span style={{ fontSize: 13, color: "#3a2a2a", lineHeight: 1.6 }}>
+          <span className="text-[#3a2a2a] dark:text-neutral-800" style={{ fontSize: 13, lineHeight: 1.6 }}>
             {renderInline(content)}
           </span>
         </div>
@@ -54,7 +56,7 @@ function renderInterpretation(text) {
 
     // Regular paragraph line
     elements.push(
-      <p key={key++} style={{ fontSize: 13, color: "#3a2a2a", lineHeight: 1.7, marginBottom: 2 }}>
+      <p key={key++} className="text-[#3a2a2a] dark:text-neutral-800" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 2 }}>
         {renderInline(line)}
       </p>
     );
@@ -68,7 +70,7 @@ function renderInline(text) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return parts.map((part, i) => {
     if (/^\*\*[^*]+\*\*$/.test(part))
-      return <strong key={i} style={{ fontWeight: 700, color: "#1a0a0a" }}>{part.replace(/\*\*/g, "")}</strong>;
+      return <strong key={i} style={{ fontWeight: 700, color: "var(--color-neutral-900)" }}>{part.replace(/\*\*/g, "")}</strong>;
     if (/^\*[^*]+\*$/.test(part))
       return <em key={i} style={{ fontStyle: "italic" }}>{part.replace(/\*/g, "")}</em>;
     return part;
@@ -80,7 +82,7 @@ function Sk({ w = "100%", h = 13 }) {
   return (
     <div style={{
       width: w, height: h, borderRadius: 6,
-      background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)",
+      background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)",
       backgroundSize: "200% 100%",
       animation: "shimmer 1.6s ease-in-out infinite",
     }} />
@@ -126,36 +128,33 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin    { to{transform:rotate(360deg)} }
-        .ai-analyze-btn:hover:not(:disabled) { background: linear-gradient(135deg,#c92a2a,#b91c1c) !important; box-shadow: 0 6px 20px rgba(224,49,49,0.35) !important; }
-        .ai-regen-btn:hover { color: #e03131 !important; border-color: #fca5a5 !important; background: #fff0f0 !important; }
+        .ai-analyze-btn:hover:not(:disabled) { background: linear-gradient(135deg,var(--color-action-2),#b91c1c) !important; box-shadow: 0 6px 20px rgba(224,49,49,0.35) !important; }
+        .ai-regen-btn:hover { color: var(--color-brand-500) !important; border-color: var(--color-brand-300) !important; background: var(--color-brand-100) !important; }
       `}</style>
 
-      <div style={{
-        background: "white", border: "1px solid #f5eaea", borderRadius: 16,
-        boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+      <div className={`bg-surface shadow-[0_2px_16px_rgba(224,49,49,0.06)] ${CARD_DARK}`} style={{
+        border: "1px solid var(--color-neutral-200)", borderRadius: 16,
         animation: "fadeUp 0.25s ease both",
       }}>
 
         {/* ── Header ── */}
-        <div style={{
-          padding: "14px 20px", borderBottom: "1px solid #f5eaea",
+        <div className="bg-[linear-gradient(to_right,#fdfafa,white)] dark:bg-none" style={{
+          padding: "14px 20px", borderBottom: "1px solid var(--color-neutral-200)",
           borderRadius: "16px 16px 0 0",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "linear-gradient(to right, #fdfafa, white)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
+            <div className={`bg-[linear-gradient(135deg,var(--color-brand-100),var(--color-brand-200))] ${CHIP_GLOW.brand}`} style={{
               width: 32, height: 32, borderRadius: 9,
-              background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
-              border: "1px solid #fca5a5",
+              border: "1px solid var(--color-brand-300)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <i className="ti ti-sparkles" style={{ fontSize: 15, color: "#c92a2a" }} />
+              <i className="ti ti-sparkles" style={{ fontSize: 15, color: "var(--color-brand-600)" }} />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{title}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{title}</div>
               {description && (
-                <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 1 }}>{description}</div>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", marginTop: 1 }}>{description}</div>
               )}
             </div>
           </div>
@@ -168,8 +167,8 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   height: 32, padding: "0 12px",
-                  border: "1px solid #f0e4e4", borderRadius: 8,
-                  background: "white", fontSize: 12, color: "#855c5c",
+                  border: "1px solid var(--color-neutral-300)", borderRadius: 8,
+                  background: "var(--color-surface)", fontSize: 12, color: "var(--color-neutral-600)",
                   cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                   fontWeight: 500, transition: "all 0.12s",
                 }}
@@ -180,16 +179,16 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             )}
 
             <button
-              className="ai-analyze-btn"
+              className={`ai-analyze-btn ${disabled || status === "loading" ? "bg-[#f0dada] dark:bg-neutral-200" : ""}`}
               onClick={handleAnalyze}
               disabled={disabled || status === "loading"}
               style={{
                 display: "flex", alignItems: "center", gap: 7,
                 height: 34, padding: "0 16px",
                 background: disabled || status === "loading"
-                  ? "#f0dada"
-                  : "linear-gradient(135deg, #e03131, #c92a2a)",
-                color: disabled || status === "loading" ? "#8a6a6a" : "white",
+                  ? undefined
+                  : "linear-gradient(135deg, var(--color-action), var(--color-action-2))",
+                color: disabled || status === "loading" ? "var(--color-neutral-500)" : "white",
                 border: "none", borderRadius: 9,
                 fontSize: 12.5, fontWeight: 700,
                 cursor: disabled || status === "loading" ? "not-allowed" : "pointer",
@@ -221,20 +220,20 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             <div style={{
               display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", padding: "28px 20px", gap: 10,
-              color: "#8a6a6a", textAlign: "center",
+              color: "var(--color-neutral-500)", textAlign: "center",
             }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
-                background: "linear-gradient(135deg, #fff0f0, #fde8e8)",
+                background: "linear-gradient(135deg, var(--color-brand-100), var(--color-brand-200))",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
-                <i className="ti ti-sparkles" style={{ fontSize: 22, color: "#8a6a6a" }} />
+                <i className="ti ti-sparkles" style={{ fontSize: 22, color: "var(--color-neutral-500)" }} />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#8a6a6a" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-neutral-500)" }}>
                 No analysis yet
               </div>
-              <div style={{ fontSize: 12, color: "#8a6a6a", maxWidth: 280, lineHeight: 1.6 }}>
-                Click <strong style={{ color: "#c92a2a" }}>Analyze</strong> to generate an AI-powered interpretation of this data using Gemini.
+              <div style={{ fontSize: 12, color: "var(--color-neutral-500)", maxWidth: 280, lineHeight: 1.6 }}>
+                Click <strong style={{ color: "var(--color-brand-600)" }}>Analyze</strong> to generate an AI-powered interpretation of this data using Gemini.
               </div>
             </div>
           )}
@@ -259,16 +258,16 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
 
           {/* Error state */}
           {status === "error" && (
-            <div style={{
-              background: "#fef2f2", border: "1px solid #fca5a5",
+            <div className="bg-[#fef2f2] dark:bg-error-50" style={{
+              border: "1px solid var(--color-brand-300)",
               borderRadius: 10, padding: "14px 16px",
               display: "flex", alignItems: "flex-start", gap: 10,
               animation: "fadeUp 0.2s ease both",
             }}>
-              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "#c92a2a", flexShrink: 0, marginTop: 1 }} />
+              <i className="ti ti-alert-circle" style={{ fontSize: 16, color: "var(--color-brand-600)", flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#b91c1c" }}>Analysis failed</div>
-                <div style={{ fontSize: 12, color: "#9b2020", marginTop: 3, lineHeight: 1.5 }}>{errMsg}</div>
+                <div className="text-[#b91c1c] dark:text-error-500" style={{ fontSize: 13, fontWeight: 600 }}>Analysis failed</div>
+                <div style={{ fontSize: 12, color: "var(--color-error-500)", marginTop: 3, lineHeight: 1.5 }}>{errMsg}</div>
               </div>
             </div>
           )}
@@ -278,11 +277,11 @@ export default function AIInsightPanel({ title = "AI Interpretation", descriptio
             <div style={{ animation: "fadeUp 0.25s ease both" }}>
               {renderInterpretation(result)}
               <div style={{
-                marginTop: 16, paddingTop: 12, borderTop: "1px solid #f5eaea",
+                marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-neutral-200)",
                 display: "flex", alignItems: "center", gap: 6,
               }}>
-                <i className="ti ti-sparkles" style={{ fontSize: 11, color: "#8a6a6a" }} />
-                <span style={{ fontSize: 10.5, color: "#8a6a6a", fontStyle: "italic" }}>
+                <i className="ti ti-sparkles" style={{ fontSize: 11, color: "var(--color-neutral-500)" }} />
+                <span style={{ fontSize: 10.5, color: "var(--color-neutral-500)", fontStyle: "italic" }}>
                   {source === "groq"
                     ? "Generated by Groq (Llama 4)"
                     : source === "gemini"

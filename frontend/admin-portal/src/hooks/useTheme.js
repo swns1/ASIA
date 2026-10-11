@@ -1,6 +1,8 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
+import { useLocation } from "react-router-dom";
 import useCurrentUser from "./useCurrentUser";
 import { hasAnyRole, STAFF_ADMIN } from "../utils/auth";
+import { isDarkReady } from "../constants/darkReady";
 
 // useTheme — light or dark.
 //
@@ -14,7 +16,8 @@ import { hasAnyRole, STAFF_ADMIN } from "../utils/auth";
 // The theme isn't set on the whole document. AppLayout sets `data-theme` on
 // the sidebar, and on the page area only for pages already converted
 // (constants/darkReady.js), so an unconverted page stays fully light rather
-// than half dark. ThemeContext tells a component which of the two it sits in.
+// than half dark. ThemeArea does the same for the full-page forms, which
+// have no AppLayout. ThemeContext tells a component which theme it sits in.
 
 const KEY = "asia.dev.theme";
 // The status band's own switch, which this replaced.
@@ -82,6 +85,16 @@ export function useAppTheme() {
   const user = useCurrentUser();
   if (!hasAnyRole(user, STAFF_ADMIN)) return "light";
   return preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
+}
+
+/** The theme of the current route's page: dark only once the page has been
+ *  converted (constants/darkReady.js). AppLayout's page area, ThemeArea (the
+ *  full-page forms) and what floats over a page (toasts, the session
+ *  warning) all follow it, so they match the page under them. */
+export function usePageTheme() {
+  const appTheme = useAppTheme();
+  const { pathname } = useLocation();
+  return appTheme === "dark" && isDarkReady(pathname) ? "dark" : "light";
 }
 
 /** The theme of the area a component sits in, as AppLayout set it. */

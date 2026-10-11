@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = { getGradingTemplates: vi.fn(), getNarrativeCategories: vi.fn() };
 vi.mock("../../api/enrollmentApi", () => ({
@@ -108,5 +109,31 @@ describe("Grading setup — narrative categories", () => {
     await waitFor(() => expect(screen.queryByText("Attentive in class")).toBeNull());
     expect(screen.getByText("Old category")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Inactive categories" })).toBeTruthy();
+  });
+});
+
+describe("Grading setup — dark mode", () => {
+  const renderDark = (url = "/grading-templates") =>
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={[url]}><GradingSettingsPage /></MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+
+  it("renders the templates and opens one to edit", async () => {
+    renderDark();
+    fireEvent.click((await screen.findByText("JHS Draft")).closest("tr"));
+
+    expect(await screen.findByRole("button", { name: /Update Template/ })).toBeTruthy();
+    expect(screen.getByText("80.0% / 100%")).toBeTruthy();
+    expect(screen.getByDisplayValue("Performance Tasks")).toBeTruthy();
+  });
+
+  it("renders the narrative categories", async () => {
+    renderDark("/grading-templates?tab=narrative");
+    expect(await screen.findByText("Attentive in class")).toBeTruthy();
+    expect(screen.getByText("Old category")).toBeTruthy();
   });
 });

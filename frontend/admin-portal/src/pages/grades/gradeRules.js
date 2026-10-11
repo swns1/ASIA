@@ -63,24 +63,30 @@ export const PERIOD_SHORT = {
 // teacher picks "incomplete"/"dropped" manually, there's no path to those
 // from the computed score.
 export const REMARKS_META = {
-  passed:     { label: "Passed",     color: "#2e6b0d", bg: "#e8f5e0" },
-  failed:     { label: "Failed",     color: "#9b2020", bg: "#fde8e8" },
-  incomplete: { label: "Incomplete", color: "#854f0b", bg: "#faeeda" },
-  dropped:    { label: "Dropped",    color: "#5c5752", bg: "#f0ede8" },
+  passed:     { label: "Passed",     color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+  failed:     { label: "Failed",     color: "var(--color-error-500)",   bg: "var(--color-error-50)" },
+  incomplete: { label: "Incomplete", color: "var(--color-warning-500)", bg: "var(--color-warning-50)" },
+  dropped:    { label: "Dropped",    color: "var(--color-muted-500)",   bg: "var(--color-muted-50)" },
 };
 
-// One colour per grading component, in template order.
-export const COMPONENT_COLORS = ["#e03131","#1455a0","#2e6b0d","#d97706","#7c3aed","#be185d","#0891b2"];
+// One colour per grading component, in template order. var() strings where
+// the colour is a token, so the dots follow the theme; the amber and cyan
+// have no token and stay as they are in both themes (dots only, and both
+// clear 3:1 on the dark surfaces).
+export const COMPONENT_COLORS = ["var(--color-brand-500)","var(--color-info-500)","var(--color-success-500)","#d97706","var(--color-accent-500)","var(--color-seniorhigh-500)","#0891b2"];
 
-/** The DepEd band a grade falls in: its descriptor and colours. */
+/** The DepEd band a grade falls in: its descriptor and colours, as token
+ *  classes (`color` the text, `bg` the fill) rather than colour values: the
+ *  80–84 band's fill has no token, so it carries a dark override, which only
+ *  a class can. */
 export function gradeStyle(g) {
-  if (g === null || g === undefined) return { color:"#8a6a6a", bg:"transparent", label:"—" };
+  if (g === null || g === undefined) return { color:"text-neutral-500", bg:"bg-transparent", label:"—" };
   const n = parseFloat(g);
-  if (n >= 90) return { color:"#1455a0", bg:"#e3f0fd",  label:"Outstanding" };
-  if (n >= 85) return { color:"#2e6b0d", bg:"#e8f5e0",  label:"Very Satisfactory" };
-  if (n >= 80) return { color:"#2e6b0d", bg:"#eaf3de",  label:"Satisfactory" };
-  if (n >= 75) return { color:"#854f0b", bg:"#faeeda",  label:"Fairly Satisfactory" };
-  return { color:"#9b2020", bg:"#fde8e8", label:"Did Not Meet" };
+  if (n >= 90) return { color:"text-info-500",    bg:"bg-info-50",  label:"Outstanding" };
+  if (n >= 85) return { color:"text-success-500", bg:"bg-success-50",  label:"Very Satisfactory" };
+  if (n >= 80) return { color:"text-success-500", bg:"bg-[#eaf3de] dark:bg-success-50",  label:"Satisfactory" };
+  if (n >= 75) return { color:"text-warning-500", bg:"bg-warning-50",  label:"Fairly Satisfactory" };
+  return { color:"text-error-500", bg:"bg-error-50", label:"Did Not Meet" };
 }
 
 // Derived from gradeStyle rather than restated: the legend previously hard-coded

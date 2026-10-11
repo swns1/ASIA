@@ -1,8 +1,9 @@
 import { useState } from "react";
 
 import ChartFrame, { NoData } from "../../components/charts/ChartFrame";
-import { SURFACE, chartInk, token } from "../../components/charts/tokens";
+import { chartInk, token } from "../../components/charts/tokens";
 import useElementSize from "../../components/charts/useElementSize";
+import useTheme from "../../hooks/useTheme";
 import { groupShapes, isFaint, mapAxes, placeDots } from "./mapFrame";
 import { formatAttendance, formatGrade } from "./riskVocabulary";
 
@@ -24,8 +25,6 @@ import { formatAttendance, formatGrade } from "./riskVocabulary";
 // some share a colour and are told apart by shape (mapFrame.groupShapes).
 // Every group is also named, in the legend and beside its average, and the
 // amber -- 1.8:1 on the surface -- is outlined (isFaint).
-
-const ink = () => chartInk();
 
 const H = 340;
 const PAD = { left: 50, right: 20, top: 30, bottom: 44 };
@@ -75,8 +74,9 @@ function Marker({ shape, x, y, r, ...paint }) {
  * is too light to show its own edge on the white card (the amber).
  */
 export function GroupSwatch({ color, shape = "circle", size = "md" }) {
+  const theme = useTheme();
   const px = size === "sm" ? 8 : 10;
-  const outlined = isFaint(color, "#ffffff");
+  const outlined = isFaint(color, theme === "dark" ? token("--color-surface", theme) : "#ffffff");
   return (
     <svg width={px} height={px} viewBox="0 0 10 10" className="shrink-0" aria-hidden="true">
       <Marker
@@ -85,7 +85,7 @@ export function GroupSwatch({ color, shape = "circle", size = "md" }) {
         y={shape === "triangle" ? 5.6 : 5}
         r={shape === "triangle" ? 3.6 : 4.4}
         fill={color}
-        stroke={outlined ? token("--color-neutral-500") : "none"}
+        stroke={outlined ? token("--color-neutral-500", theme) : "none"}
         strokeWidth={outlined ? 1 : 0}
       />
     </svg>
@@ -98,6 +98,9 @@ export default function GroupMap({ result }) {
   const [picked, setPicked] = useState(null);
   const [plotEl, setPlotEl] = useState(null);
   const size = useElementSize(plotEl);
+  const theme = useTheme();
+  // Resolved per render, for this area's theme.
+  const ink = () => chartInk(theme);
 
   const groups = result?.clusters ?? [];
   const students = groups.flatMap((group) => (group.students ?? []).map((s) => ({ ...s, group })));
@@ -116,7 +119,7 @@ export default function GroupMap({ result }) {
   // A pick left over from a grouping with more groups picks nothing.
   const pick = groups.some((g) => g.cluster_id === picked) ? picked : null;
   const isPicked = (group) => pick == null || group.cluster_id === pick;
-  const faint = new Map(groups.map((g) => [g.cluster_id, isFaint(g.color)]));
+  const faint = new Map(groups.map((g) => [g.cluster_id, isFaint(g.color, ink().plane)]));
   const shapes = groupShapes(groups);
   const shared = [...shapes.values()].some((s) => s !== "circle");
   const bands = BANDS.map((b) => ({ ...b, group: groups.find((g) => g.band === b.band) })).filter((b) => b.group);
@@ -308,10 +311,10 @@ export default function GroupMap({ result }) {
               x={d.cx}
               y={d.cy}
               r={DOT_R}
-              fill={on ? d.group.color : token("--color-neutral-300")}
+              fill={on ? d.group.color : token("--color-neutral-300", theme)}
               // A 2px surface ring keeps overlapping marks apart; a faint
               // colour gets a darker outline instead, or its edge is lost.
-              stroke={outlined ? token("--color-neutral-500") : SURFACE}
+              stroke={outlined ? token("--color-neutral-500", theme) : ink().plane}
               strokeWidth={outlined ? 1.25 : 2}
             />
           );
@@ -324,7 +327,7 @@ export default function GroupMap({ result }) {
         <text
           x={PAD.left + 6} y={goodY - 6}
           textAnchor="start" fontSize="11" fontWeight="600" fill={ink().axis}
-          stroke={SURFACE} strokeWidth={3} paintOrder="stroke" pointerEvents="none"
+          stroke={ink().plane} strokeWidth={3} paintOrder="stroke" pointerEvents="none"
         >
           Good attendance
         </text>
@@ -333,14 +336,14 @@ export default function GroupMap({ result }) {
           const on = isPicked(a.group);
           return (
             <g key={`avg-${a.group.cluster_id}`} pointerEvents="none">
-              <circle cx={a.cx} cy={a.cy} r={12} fill={SURFACE} />
+              <circle cx={a.cx} cy={a.cy} r={12} fill={ink().plane} />
               <Marker
                 shape={shapes.get(a.group.cluster_id)}
                 x={a.cx}
                 y={a.cy}
                 r={7}
-                fill={on ? a.group.color : token("--color-neutral-300")}
-                stroke={on ? ink().ink : token("--color-neutral-400")}
+                fill={on ? a.group.color : token("--color-neutral-300", theme)}
+                stroke={on ? ink().ink : token("--color-neutral-400", theme)}
                 strokeWidth={2.5}
               />
             </g>
@@ -352,7 +355,7 @@ export default function GroupMap({ result }) {
             key={`name-${n.id}`}
             x={n.x} y={n.y}
             textAnchor={n.anchor} fontSize="12" fontWeight="700" fill={ink().ink}
-            stroke={SURFACE} strokeWidth={4} strokeLinejoin="round" paintOrder="stroke" pointerEvents="none"
+            stroke={ink().plane} strokeWidth={4} strokeLinejoin="round" paintOrder="stroke" pointerEvents="none"
           >
             {n.text}
           </text>

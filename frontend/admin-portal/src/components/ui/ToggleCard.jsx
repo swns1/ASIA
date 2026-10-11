@@ -27,7 +27,7 @@ export function ToggleCard({
         "flex cursor-pointer items-center justify-between gap-3 rounded-xl border-[1.5px] px-4 py-3.5 transition-colors duration-150",
         checked
           ? "border-brand-500 bg-brand-100"
-          : "border-brand-border-soft bg-white hover:border-brand-300",
+          : "border-brand-border-soft bg-surface hover:border-brand-300",
         className,
       ].join(" ")}
     >
@@ -35,7 +35,7 @@ export function ToggleCard({
         {icon && (
           <span
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
-              checked ? "bg-brand-500 text-white" : "bg-brand-50 text-neutral-500"
+              checked ? "bg-action text-white" : "bg-brand-50 text-neutral-500"
             }`}
           >
             <i className={`ti ${icon} text-base`} aria-hidden="true" />
@@ -61,7 +61,7 @@ export function ToggleCard({
       <span
         aria-hidden="true"
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 peer-focus-visible:ring-3 peer-focus-visible:ring-brand-500/35 ${
-          checked ? "bg-brand-500" : "bg-neutral-400"
+          checked ? "bg-action" : "bg-neutral-400"
         }`}
       >
         <span
@@ -94,7 +94,7 @@ export function TogglePill({
         "inline-flex cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-3.5 py-2 text-xs font-bold transition-colors duration-150",
         checked
           ? "border-brand-500 bg-brand-100 text-brand-600"
-          : "border-brand-border-soft bg-white text-neutral-500 hover:border-brand-300 hover:text-brand-600",
+          : "border-brand-border-soft bg-surface text-neutral-500 hover:border-brand-300 hover:text-brand-600",
         className,
       ].join(" ")}
     >

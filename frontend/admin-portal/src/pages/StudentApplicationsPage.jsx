@@ -639,8 +639,8 @@ export default function StudentApplicationsPage() {
                 <TableRow key={row.student_application_id} onClick={() => setOpenApplicationId(row.student_application_id)}>
                   <TableCell><span className="font-semibold text-neutral-900">{row.reference}</span></TableCell>
                   <TableCell>{`${row.first_name} ${row.last_name}`.trim() || "—"}</TableCell>
-                  <TableCell>{row.school_year || <span className="text-neutral-400">—</span>}</TableCell>
-                  <TableCell>{row.lrn || <span className="text-neutral-400">Not yet assigned</span>}</TableCell>
+                  <TableCell>{row.school_year || <span className="text-neutral-400 dark:text-neutral-500">—</span>}</TableCell>
+                  <TableCell>{row.lrn || <span className="text-neutral-400 dark:text-neutral-500">Not yet assigned</span>}</TableCell>
                   <TableCell>{fmtDate(row.submitted_at)}</TableCell>
                   <TableCell>
                     {row.duplicate_of_student_id && (

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import GroupMap from "./GroupMap";
+import GroupMap, { GroupSwatch } from "./GroupMap";
+import { ThemeContext } from "../../hooks/useTheme";
 import { groupShapes, isFaint, mapAxes } from "./mapFrame";
 
 // The group map is the one picture of what the grouping did, and it is read
@@ -184,5 +185,33 @@ describe("mapFrame", () => {
     expect(axes.yTicks[0]).toBe(40);
     expect(axes.x(47.7)).toBeGreaterThan(axes.x(40));
     expect(axes.xTicks).toContain(75);
+  });
+});
+
+describe("GroupMap in dark mode", () => {
+  const dark = (ui) =>
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">{ui}</div>
+      </ThemeContext.Provider>
+    );
+
+  it("rings its marks with the dark plane, where the amber holds its own edge", () => {
+    const { container } = dark(<GroupMap result={RESULT} />);
+    expect(dotsOf(container, RED)[0].getAttribute("stroke")).toBe("#160f0f");
+    expect(dotsOf(container, AMBER)[0].getAttribute("stroke")).toBe("#160f0f");
+    expect(screen.getAllByText("Needs Support").length).toBe(2);
+  });
+
+  it("outlines a swatch only where its colour fades into the dark card", () => {
+    const { container } = dark(
+      <>
+        <GroupSwatch color={AMBER} />
+        <GroupSwatch color="#2a1a1a" />
+      </>
+    );
+    const [amber, faint] = container.querySelectorAll("circle");
+    expect(amber.getAttribute("stroke")).toBe("none");
+    expect(faint.getAttribute("stroke")).toBe("#a68c8c");
   });
 });

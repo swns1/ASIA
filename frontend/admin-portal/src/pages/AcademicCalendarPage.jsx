@@ -16,6 +16,9 @@ import ConfirmModal from "../components/ConfirmModal";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { listVariants } from "../utils/motion";
+import useTheme from "../hooks/useTheme";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -108,6 +111,19 @@ function hexToTints(hex) {
   const light = `#${mix(r,0.93)}${mix(g,0.93)}${mix(b,0.93)}`;
   return { bg, light };
 }
+
+// Dark mode. The tints above are mixed toward white, pastels that would glare
+// on the dark planes, so in dark an event colour is mixed toward transparent
+// instead. The colour stays on the marks (edges, dots, bars). As text or an
+// icon it can't be trusted: it's user-chosen, and even the defaults measure
+// 2.2–3.6:1 on the dark surface, so in dark its labels and icons take a token.
+const DARK_EVENT_BG    = (c) => `color-mix(in srgb, ${c} 18.8%, transparent)`;
+const DARK_EVENT_LIGHT = (c) => `color-mix(in srgb, ${c} 13.3%, transparent)`;
+const DARK_EVENT_TEXT  = "var(--color-neutral-800)";
+// framer-motion tweens these hovers and can't tween var(): dark gets the dark
+// values of the same tokens (brand-100, brand-300, brand-600; brand-50 for
+// the CSV button's near-miss #fff8f8).
+const DARK_HOVER = { bg: "#2f1a1a", border: "#7d3535", text: "#ff8f8f", soft: "#221616" };
 
 function buildEventTypes(overrides) {
   return EVENT_TYPE_DEFAULTS.map((t) => {
@@ -331,7 +347,7 @@ function formatDateRange(start, end) {
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
+  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
 
 // ── Month Calendar Grid ───────────────────────────────────────────────────────
@@ -378,6 +394,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
   const firstDay    = new Date(year, monthIndex, 1).getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const todayKey    = dateKey(new Date());
+  const dark        = useTheme() === "dark";
 
   // Build week rows: each is an array of 7 day-numbers-or-null
   const weeks = [];
@@ -392,11 +409,11 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
   }
 
   return (
-    <div style={{ background: "white", borderRadius: 18, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 4px 24px rgba(224,49,49,0.07)" }}>
+    <div className={`border border-[#f0e6e6] bg-surface shadow-[0_4px_24px_rgba(224,49,49,0.07)] dark:border-neutral-200 ${CARD_DARK}`} style={{ borderRadius: 18, overflow: "hidden" }}>
       {/* Day-of-week header */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,#fff)" }}>
+      <div className="bg-[linear-gradient(135deg,#fff5f5,#fff)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid var(--color-neutral-200)" }}>
         {DAYS_SHORT.map((d, i) => (
-          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "#a32d2d" : "#8a6a6a", textTransform: "uppercase" }}>{d}</div>
+          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "var(--color-brand-700)" : "var(--color-neutral-500)", textTransform: "uppercase" }}>{d}</div>
         ))}
       </div>
 
@@ -415,8 +432,8 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
               if (!day) return (
                 <div key={`empty-${wi}-${ci}`} style={{
                   minHeight: 88,
-                  background: isWeekend ? "#fdfafa" : "transparent",
-                  borderRight: "1px solid #faf0f0", borderBottom: "1px solid #faf0f0",
+                  background: isWeekend ? (dark ? "var(--color-neutral-100)" : "#fdfafa") : "transparent",
+                  borderRight: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0", borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
                 }} />
               );
 
@@ -444,14 +461,15 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
               return (
                 <div
                   key={k}
-                  className={hasAny ? "cal-day" : ""}
+                  className={hasAny && !isSelected ? "cal-day" : ""}
                   onClick={() => onSelectDay(isSelected ? null : k)}
                   style={{
                     minHeight: 88,
                     padding: "6px 0 4px",
-                    borderRight: "1px solid #faf0f0",
-                    borderBottom: "1px solid #faf0f0",
-                    background: isSelected ? "#fff0f0" : isToday ? "#fffbfb" : isWeekend ? "#fdfafa" : "white",
+                    transition: "background-color 0.15s ease",
+                    borderRight: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
+                    borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
+                    background: isSelected ? "var(--color-brand-100)" : isToday ? "var(--color-neutral-100)" : isWeekend ? (dark ? "var(--color-neutral-100)" : "#fdfafa") : "var(--color-surface)",
                     cursor: hasAny ? "pointer" : "default",
                     position: "relative",
                     overflow: "hidden",
@@ -459,12 +477,12 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                 >
                   {/* Day number */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "0 6px" }}>
-                    <span style={{
+                    <span className={isToday ? undefined : "cal-day-num"} style={{
                       display: "inline-flex", alignItems: "center", justifyContent: "center",
                       width: 24, height: 24, borderRadius: "50%",
                       fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
-                      background: isToday ? "#e03131" : isSelected ? "#fff0f0" : "transparent",
-                      color: isToday ? "white" : isSelected ? "#c92a2a" : isWeekend ? "#8a6a6a" : "#2a1a1a",
+                      background: isToday ? "var(--color-action)" : isSelected ? "var(--color-brand-100)" : "transparent",
+                      color: isToday ? "white" : isSelected ? "var(--color-brand-600)" : isWeekend ? "var(--color-neutral-500)" : dark ? "var(--color-neutral-900)" : "#2a1a1a",
                       transition: "background-color 0.15s ease, color 0.15s ease",
                     }}>
                       {day}
@@ -503,15 +521,15 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                         <div key={ev.event_id} style={{
                           fontSize: 10, fontWeight: 600,
                           height: 18, flexShrink: 0, boxSizing: "border-box",
-                          color: showTitle ? meta.color : "transparent",
-                          background: meta.bg,
+                          color: showTitle ? (dark ? DARK_EVENT_TEXT : meta.color) : "transparent",
+                          background: dark ? DARK_EVENT_BG(meta.color) : meta.bg,
                           borderLeft: isStart || isSingle
                             ? `2.5px solid ${meta.color}`
                             : isContinuationStart
                               ? `1.5px dashed ${meta.color}`
-                              : `1px solid ${meta.color}22`,
-                          borderTop:    `1px solid ${meta.color}22`,
-                          borderBottom: `1px solid ${meta.color}22`,
+                              : `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
+                          borderTop:    `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
+                          borderBottom: `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
                           borderRight: "none",
                           borderRadius,
                           padding: "2px 4px",
@@ -533,7 +551,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                       );
                     })}
                     {overflow > 0 && (
-                      <div style={{ fontSize: 9.5, color: "#8a6a6a", paddingLeft: 2 }}>+{overflow} more</div>
+                      <div style={{ fontSize: 9.5, color: "var(--color-neutral-500)", paddingLeft: 2 }}>+{overflow} more</div>
                     )}
                   </div>
                 </div>
@@ -549,11 +567,12 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
 
 function EventCard({ event, onEdit, onDelete }) {
   const meta = eventMeta(event.event_type);
+  const dark = useTheme() === "dark";
   return (
     <motion.div
       whileHover={{ y: -2, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
       transition={{ duration: 0.15 }}
-      style={{ borderRadius: 12, border: `1px solid ${meta.color}28`, background: meta.light, overflow: "hidden" }}
+      style={{ borderRadius: 12, border: `1px solid color-mix(in srgb, ${meta.color} 15.7%, transparent)`, background: dark ? DARK_EVENT_LIGHT(meta.color) : meta.light, overflow: "hidden" }}
     >
       <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
         <div style={{ width: 4, background: meta.color, flexShrink: 0 }} />
@@ -561,32 +580,32 @@ function EventCard({ event, onEdit, onDelete }) {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: meta.color, background: meta.bg, padding: "2px 7px", borderRadius: 99, letterSpacing: "0.04em" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "2px 7px", borderRadius: 99, letterSpacing: "0.04em" }}>
                   <i className={`ti ${meta.icon}`} style={{ fontSize: 10 }} />{meta.label}
                 </span>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
-              <div style={{ fontSize: 11, color: "#855c5c", marginTop: 2 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
+              <div style={{ fontSize: 11, color: "var(--color-neutral-600)", marginTop: 2 }}>
                 <i className="ti ti-calendar" style={{ fontSize: 10, marginRight: 3 }} />
                 {formatDateRange(event.start_date, event.end_date)}
               </div>
               {event.description && (
-                <div style={{ fontSize: 11, color: "#855c5c", marginTop: 4, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-600)", marginTop: 4, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                   {event.description}
                 </div>
               )}
             </div>
             {onEdit && <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               <motion.button onClick={() => onEdit(event)} title="Edit"
-                whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+                whileHover={{ scale: 1.1, backgroundColor: dark ? DARK_HOVER.bg : "#fff0f0", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
                 whileTap={{ scale: 0.9 }}
-                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
+                style={{ width: 26, height: 26, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-600)" }}>
                 <i className="ti ti-pencil" style={{ fontSize: 12 }} />
               </motion.button>
               <motion.button onClick={() => onDelete(event)} title="Delete"
-                whileHover={{ scale: 1.1, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+                whileHover={{ scale: 1.1, backgroundColor: dark ? DARK_HOVER.bg : "#fff0f0", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
                 whileTap={{ scale: 0.9 }}
-                style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
+                style={{ width: 26, height: 26, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-500)" }}>
                 <i className="ti ti-trash" style={{ fontSize: 12 }} />
               </motion.button>
             </div>}
@@ -600,8 +619,8 @@ function EventCard({ event, onEdit, onDelete }) {
 // ── Add / Edit Modal ──────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "", grading_period: "" };
-const LBL = { display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
-const INP = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box" };
+const LBL = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
+const INP = { width: "100%", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none", boxSizing: "border-box" };
 
 function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   const [form, setForm] = useState(mode === "edit"
@@ -612,6 +631,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const selectedMeta = eventMeta(form.event_type);
   const isGradingPeriod = form.event_type === "grading_period";
+  const dark = useTheme() === "dark";
 
   // Picking a quarter names the event after it, unless the title was typed by
   // hand — then it's left alone.
@@ -677,7 +697,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
         icon={selectedMeta.icon}
         title={mode === "edit" ? "Edit Event" : "Add New Event"}
         subtitle={`S.Y. ${schoolYear}`}
-        tint={{ background: selectedMeta.bg, color: selectedMeta.color, borderColor: `${selectedMeta.color}30` }}
+        tint={{ background: dark ? DARK_EVENT_BG(selectedMeta.color) : selectedMeta.bg, color: dark ? DARK_EVENT_TEXT : selectedMeta.color, borderColor: `color-mix(in srgb, ${selectedMeta.color} 18.8%, transparent)` }}
       />
 
       <div className="flex flex-col gap-4">
@@ -700,12 +720,12 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
                       borderRadius: 10, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
                       outline: "none", appearance: "none", WebkitAppearance: "none",
                       borderStyle: "solid", borderWidth: "1.5px",
-                      borderColor: active ? t.color : "#f0e4e4",
-                      backgroundColor: active ? t.bg : "white",
+                      borderColor: active ? t.color : "var(--color-neutral-300)",
+                      backgroundColor: active ? (dark ? DARK_EVENT_BG(t.color) : t.bg) : "var(--color-surface)",
                       transition: "background-color 0.15s ease, border-color 0.15s ease",
                     }}>
-                    <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? t.color : "#8a6a6a", transition: "color 0.15s ease" }} />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? t.color : "#855c5c", transition: "color 0.15s ease" }}>{t.label}</span>
+                    <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: active ? (dark ? DARK_EVENT_TEXT : t.color) : "var(--color-neutral-500)", transition: "color 0.15s ease" }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: active ? (dark ? DARK_EVENT_TEXT : t.color) : "var(--color-neutral-600)", transition: "color 0.15s ease" }}>{t.label}</span>
                   </button>
                 );
               })}
@@ -719,7 +739,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
                 <option value="">Choose a quarter…</option>
                 {GRADING_QUARTERS.map((q) => <option key={q.value} value={q.value}>{q.label}</option>)}
               </select>
-              <div style={{ fontSize: 11.5, color: "#855c5c", marginTop: 6 }}>
+              <div style={{ fontSize: 11.5, color: "var(--color-neutral-600)", marginTop: 6 }}>
                 Set the first and last day of the quarter. The last day is when its grades are due.
               </div>
             </div>
@@ -741,6 +761,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
 
 function ColorSettingsModal({ onClose, onSaved }) {
   const [overrides, setOverrides] = useState(() => loadColorOverrides());
+  const dark = useTheme() === "dark";
 
   const setColor = (value, color) => setOverrides((prev) => ({ ...prev, [value]: color }));
   const resetAll = () => setOverrides({});
@@ -781,14 +802,14 @@ function ColorSettingsModal({ onClose, onSaved }) {
           {preview.map((t) => (
             <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {/* Live preview strip */}
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: t.bg, border: `2px solid ${t.color}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: t.color }} />
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: dark ? DARK_EVENT_BG(t.color) : t.bg, border: `2px solid ${t.color}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className={`ti ${t.icon}`} style={{ fontSize: 14, color: dark ? DARK_EVENT_TEXT : t.color }} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1a0a0a" }}>{t.label}</div>
-                <div style={{ fontSize: 10.5, color: "#8a6a6a", marginTop: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-neutral-900)" }}>{t.label}</div>
+                <div style={{ fontSize: 10.5, color: "var(--color-neutral-500)", marginTop: 1 }}>
                   {/* Mini strip preview */}
-                  <span style={{ display: "inline-block", background: t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 10, color: t.color, fontWeight: 600 }}>
+                  <span style={{ display: "inline-block", background: dark ? DARK_EVENT_BG(t.color) : t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 10, color: dark ? DARK_EVENT_TEXT : t.color, fontWeight: 600 }}>
                     Sample event
                   </span>
                 </div>
@@ -799,7 +820,7 @@ function ColorSettingsModal({ onClose, onSaved }) {
                   type="color"
                   value={overrides[t.value] ?? t.color}
                   onChange={(e) => setColor(t.value, e.target.value)}
-                  style={{ width: 36, height: 36, border: "1.5px solid #f0e4e4", borderRadius: 9, cursor: "pointer", padding: 2, background: "white" }}
+                  style={{ width: 36, height: 36, border: "1.5px solid var(--color-neutral-300)", borderRadius: 9, cursor: "pointer", padding: 2, background: "var(--color-surface)" }}
                   title={`Pick color for ${t.label}`}
                 />
               </div>
@@ -808,7 +829,7 @@ function ColorSettingsModal({ onClose, onSaved }) {
                 <button
                   onClick={() => setOverrides((p) => { const n = { ...p }; delete n[t.value]; return n; })}
                   title="Reset to default"
-                  style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8a6a6a" }}>
+                  style={{ width: 26, height: 26, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-neutral-500)" }}>
                   <i className="ti ti-refresh" style={{ fontSize: 12 }} />
                 </button>
               )}
@@ -832,6 +853,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
   const [done,      setDone]      = useState(false);
   const [added,     setAdded]     = useState(0);
   const [error,     setError]     = useState("");
+  const dark = useTheme() === "dark";
 
   async function handleImport() {
     if (toAdd.length === 0) { onClose(); return; }
@@ -895,36 +917,36 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
           {/* Success state */}
           {done ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "8px 0" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: "#e8f5e0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <i className="ti ti-circle-check" style={{ fontSize: 28, color: "#2e6b0d" }} />
+              <div className={`bg-success-50 ${CHIP_GLOW.success}`} style={{ width: 52, height: 52, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <i className="ti ti-circle-check" style={{ fontSize: 28, color: "var(--color-success-500)" }} />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a0a0a" }}>Import complete!</div>
-              <div style={{ fontSize: 13, color: "#855c5c", textAlign: "center", lineHeight: 1.7 }}>
-                <strong style={{ color: "#2e6b0d" }}>{added} holiday{added !== 1 ? "s" : ""}</strong> added to S.Y. {schoolYear}.
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-neutral-900)" }}>Import complete!</div>
+              <div style={{ fontSize: 13, color: "var(--color-neutral-600)", textAlign: "center", lineHeight: 1.7 }}>
+                <strong style={{ color: "var(--color-success-500)" }}>{added} holiday{added !== 1 ? "s" : ""}</strong> added to S.Y. {schoolYear}.
               </div>
             </div>
           ) : (
             <>
               {error && (
-                <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ background: dark ? "var(--color-error-50)" : "#fef2f2", border: "1px solid var(--color-brand-300)", borderRadius: 9, padding: "10px 14px", fontSize: 12, color: dark ? "var(--color-error-500)" : "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}>
                   <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
                 </div>
               )}
 
               {/* Summary counts */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
-                <div style={{ background: "#e8f5e0", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="ti ti-circle-plus" style={{ fontSize: 20, color: "#2e6b0d" }} />
+                <div style={{ background: "var(--color-success-50)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <i className="ti ti-circle-plus" style={{ fontSize: 20, color: "var(--color-success-500)" }} />
                   <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: "#2e6b0d" }}>{toAdd.length}</div>
-                    <div style={{ fontSize: 11, color: "#3e7b1d", fontWeight: 600 }}>to be added</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "var(--color-success-500)" }}>{toAdd.length}</div>
+                    <div style={{ fontSize: 11, color: dark ? "var(--color-success-500)" : "#3e7b1d", fontWeight: 600 }}>to be added</div>
                   </div>
                 </div>
-                <div style={{ background: "#f5eeee", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: 20, color: "#855c5c" }} />
+                <div style={{ background: dark ? "var(--color-neutral-200)" : "#f5eeee", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <i className="ti ti-circle-check" style={{ fontSize: 20, color: "var(--color-neutral-600)" }} />
                   <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: "#855c5c" }}>{skipped.length}</div>
-                    <div style={{ fontSize: 11, color: "#7a5050", fontWeight: 600 }}>already exist</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "var(--color-neutral-600)" }}>{skipped.length}</div>
+                    <div style={{ fontSize: 11, color: "var(--color-neutral-700)", fontWeight: 600 }}>already exist</div>
                   </div>
                 </div>
               </div>
@@ -932,19 +954,19 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
               {/* Holiday list preview */}
               {toAdd.length > 0 ? (
                 <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
                   {toAdd.map((h) => (
-                    <div key={h.date} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: "#fff8f8", borderRadius: 9, border: "1px solid #fde8e8" }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#e03131", flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "#1a0a0a" }}>{h.title}</span>
-                      <span style={{ fontSize: 11, color: "#8a6a6a", fontVariantNumeric: "tabular-nums" }}>{h.date}</span>
+                    <div key={h.date} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: dark ? "var(--color-brand-50)" : "#fff8f8", borderRadius: 9, border: "1px solid var(--color-brand-200)" }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-500)", flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--color-neutral-900)" }}>{h.title}</span>
+                      <span style={{ fontSize: 11, color: "var(--color-neutral-500)", fontVariantNumeric: "tabular-nums" }}>{h.date}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ background: "#f5eeee", borderRadius: 12, padding: "16px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: 18, color: "#855c5c" }} />
-                  <div style={{ fontSize: 13, color: "#7a5050" }}>All holidays for S.Y. {schoolYear} are already in the calendar.</div>
+                <div style={{ background: dark ? "var(--color-neutral-200)" : "#f5eeee", borderRadius: 12, padding: "16px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <i className="ti ti-circle-check" style={{ fontSize: 18, color: "var(--color-neutral-600)" }} />
+                  <div style={{ fontSize: 13, color: "var(--color-neutral-700)" }}>All holidays for S.Y. {schoolYear} are already in the calendar.</div>
                 </div>
               )}
             </>
@@ -961,6 +983,7 @@ function DeleteModal({ event, onConfirm, onCancel }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const meta = eventMeta(event.event_type);
+  const dark = useTheme() === "dark";
   async function handleDelete() {
     setDeleting(true);
     setError("");
@@ -981,9 +1004,9 @@ function DeleteModal({ event, onConfirm, onCancel }) {
       title="Delete event?"
       message={
         <>
-          <div style={{ background: meta.bg, border: `1px solid ${meta.color}28`, borderRadius: 10, padding: "10px 14px", width: "100%", display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <i className={`ti ${meta.icon}`} style={{ fontSize: 14, color: meta.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: meta.color }}>{event.title}</span>
+          <div style={{ background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, border: `1px solid color-mix(in srgb, ${meta.color} 15.7%, transparent)`, borderRadius: 10, padding: "10px 14px", width: "100%", display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <i className={`ti ${meta.icon}`} style={{ fontSize: 14, color: dark ? DARK_EVENT_TEXT : meta.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: dark ? DARK_EVENT_TEXT : meta.color }}>{event.title}</span>
           </div>
           This event will be permanently removed from the calendar. This action cannot be undone.
         </>
@@ -1002,6 +1025,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
   const [search,      setSearch]      = useState("");
   const [filterType,  setFilterType]  = useState("all");
   const [collapsed,   setCollapsed]   = useState({});
+  const dark = useTheme() === "dark";
 
   const filtered = events.filter((ev) => {
     const matchType   = filterType === "all" || ev.event_type === filterType;
@@ -1035,30 +1059,31 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
   }
 
   return (
-    <div style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+    <div className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`} style={{ borderRadius: 14, overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
 
       {/* Header */}
-      <div style={{ padding: "13px 14px 10px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", flexShrink: 0 }}>
+      <div className="bg-[linear-gradient(135deg,#fff5f5,white)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ padding: "13px 14px 10px", borderBottom: "1px solid var(--color-neutral-200)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>All Events</div>
-          <span style={{ fontSize: 10.5, color: "#8a6a6a" }}>{filtered.length} / {events.length}</span>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>All Events</div>
+          <span style={{ fontSize: 10.5, color: "var(--color-neutral-500)" }}>{filtered.length} / {events.length}</span>
         </div>
 
         {/* Search */}
-        <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 6, border: "1.5px solid #f0e4e4", borderRadius: 8, padding: "5px 10px", background: "#fffbfb", marginBottom: 7 }}>
-          <i className="ti ti-search" style={{ fontSize: 12, color: "#8a6a6a", flexShrink: 0 }} />
+        <div className="search-wrap" style={{ display: "flex", alignItems: "center", gap: 6, border: "1.5px solid var(--color-neutral-300)", borderRadius: 8, padding: "5px 10px", background: "var(--color-neutral-100)", marginBottom: 7 }}>
+          <i className="ti ti-search" style={{ fontSize: 12, color: "var(--color-neutral-500)", flexShrink: 0 }} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search events…"
-            style={{ border: "none", outline: "none", fontSize: 12, color: "#1a0a0a", background: "transparent", width: "100%", fontFamily: "'DM Sans',sans-serif" }}
+            style={{ border: "none", outline: "none", fontSize: 12, color: "var(--color-neutral-900)", background: "transparent", width: "100%", fontFamily: "'DM Sans',sans-serif" }}
           />
           <AnimatePresence>
             {search && (
               <motion.button
                 initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
                 onClick={() => setSearch("")}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a", padding: 0, display: "flex" }}>
+                aria-label="Clear search"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-neutral-500)", padding: 0, display: "flex" }}>
                 <i className="ti ti-x" style={{ fontSize: 11 }} />
               </motion.button>
             )}
@@ -1069,7 +1094,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           <button
             onClick={() => setFilterType("all")}
-            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "#e03131" : "#f0e4e4"}`, background: filterType === "all" ? "#fff0f0" : "white", fontSize: 10.5, color: filterType === "all" ? "#c92a2a" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
+            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "var(--color-brand-500)" : "var(--color-neutral-300)"}`, background: filterType === "all" ? "var(--color-brand-100)" : "var(--color-surface)", fontSize: 10.5, color: filterType === "all" ? "var(--color-brand-600)" : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
             All
           </button>
           {EVENT_TYPES.map((t) => {
@@ -1078,7 +1103,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
             if (count === 0) return null;
             return (
               <button key={t.value} onClick={() => setFilterType(active ? "all" : t.value)}
-                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "#f0e4e4"}`, background: active ? t.bg : "white", fontSize: 10.5, color: active ? t.color : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
+                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "var(--color-neutral-300)"}`, background: active ? (dark ? DARK_EVENT_BG(t.color) : t.bg) : "var(--color-surface)", fontSize: 10.5, color: active ? (dark ? DARK_EVENT_TEXT : t.color) : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
                 <i className={`ti ${t.icon}`} style={{ fontSize: 10 }} />{t.label} <span style={{ opacity: 0.7 }}>·{count}</span>
               </button>
             );
@@ -1094,8 +1119,8 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "28px 0" }}>
-            <i className="ti ti-calendar-off" style={{ fontSize: 26, color: "#8a6a6a" }} />
-            <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>
+            <i className="ti ti-calendar-off" style={{ fontSize: 26, color: "var(--color-neutral-500)" }} />
+            <div style={{ fontSize: 12, color: "var(--color-neutral-500)", textAlign: "center", lineHeight: 1.6 }}>
               {events.length === 0
                 ? (onEdit ? <>No events yet.<br />Click <strong>Add Event</strong> to get started.</> : "No events this year.")
                 : "No events match your filter."}
@@ -1110,18 +1135,18 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                 {/* Month header row */}
                 <button
                   onClick={() => { toggleMonth(m); onJumpMonth(m); }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fff8f6"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--color-brand-50)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: "1px solid #faf0f0", transition: "background-color 0.12s ease" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0", transition: "background-color 0.12s ease" }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
                     {MONTHS[m]}
                   </span>
-                  <span style={{ fontSize: 10, color: "#8a6a6a", fontWeight: 600 }}>{monthEvs.length}</span>
+                  <span style={{ fontSize: 10, color: "var(--color-neutral-500)", fontWeight: 600 }}>{monthEvs.length}</span>
                   <motion.i
                     animate={{ rotate: isCollapsed ? 0 : 180 }}
                     transition={{ duration: 0.18 }}
                     className="ti ti-chevron-down"
-                    style={{ fontSize: 11, color: "#8a6a6a" }}
+                    style={{ fontSize: 11, color: "var(--color-neutral-500)" }}
                   />
                 </button>
 
@@ -1139,28 +1164,28 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                         const meta = eventMeta(ev.event_type);
                         return (
                           <div key={ev.event_id}
-                            style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: "1px solid #faf5f5", transition: "background-color 0.12s ease" }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fff8f6"; }}
+                            style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf5f5", transition: "background-color 0.12s ease" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--color-brand-50)"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}>
                             <div style={{ width: 3, alignSelf: "stretch", background: meta.color, flexShrink: 0 }} />
                             <div style={{ flex: 1, padding: "7px 10px", minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1a0a0a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-neutral-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
                               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: meta.color, background: meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
-                                <span style={{ fontSize: 10, color: "#8a6a6a" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
+                                <span style={{ fontSize: 10, color: "var(--color-neutral-500)" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                               </div>
                             </div>
                             {onEdit && <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
                               <button onClick={() => onEdit(ev)} title="Edit"
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#855c5c"; }}
-                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-brand-100)"; e.currentTarget.style.color = "var(--color-brand-600)"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.color = "var(--color-neutral-600)"; }}
+                                style={{ width: 24, height: 24, border: "1px solid var(--color-neutral-300)", borderRadius: 6, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-600)", transition: "background-color 0.12s ease, color 0.12s ease" }}>
                                 <i className="ti ti-pencil" style={{ fontSize: 11 }} />
                               </button>
                               <button onClick={() => onDelete(ev)} title="Delete"
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "#fff0f0"; e.currentTarget.style.color = "#c92a2a"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "#8a6a6a"; }}
-                                style={{ width: 24, height: 24, border: "1px solid #f0e4e4", borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", transition: "background-color 0.12s ease, color 0.12s ease" }}>
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-brand-100)"; e.currentTarget.style.color = "var(--color-brand-600)"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.color = "var(--color-neutral-500)"; }}
+                                style={{ width: 24, height: 24, border: "1px solid var(--color-neutral-300)", borderRadius: 6, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-500)", transition: "background-color 0.12s ease, color 0.12s ease" }}>
                                 <i className="ti ti-trash" style={{ fontSize: 11 }} />
                               </button>
                             </div>}
@@ -1366,20 +1391,21 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
 // ── Print Toolbar ─────────────────────────────────────────────────────────────
 
 function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
+  const dark = useTheme() === "dark";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "white", borderRadius: 12, border: "1px solid #f0e6e6", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", marginTop: 4 }}>
-      <i className="ti ti-printer" style={{ fontSize: 15, color: "#8a6a6a" }} />
-      <span style={{ fontSize: 12, fontWeight: 600, color: "#855c5c" }}>Export</span>
-      <div style={{ width: 1, height: 18, background: "#f0e4e4" }} />
+    <div className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, marginTop: 4 }}>
+      <i className="ti ti-printer" style={{ fontSize: 15, color: "var(--color-neutral-500)" }} />
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-neutral-600)" }}>Export</span>
+      <div style={{ width: 1, height: 18, background: "var(--color-neutral-300)" }} />
 
       {/* View toggle */}
-      <div style={{ display: "flex", background: "#fdf8f8", borderRadius: 8, padding: 3, gap: 2 }}>
+      <div style={{ display: "flex", background: dark ? "var(--color-neutral-100)" : "#fdf8f8", borderRadius: 8, padding: 3, gap: 2 }}>
         {[
           { value: "list",  label: "Full Year List",  icon: "ti-list" },
           { value: "month", label: "Monthly Sheets",  icon: "ti-layout-grid" },
         ].map((opt) => (
           <button key={opt.value} onClick={() => setPrintView(opt.value)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "white" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "#c92a2a" : "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 10px", borderRadius: 6, border: "none", background: printView === opt.value ? "var(--color-surface-raised)" : "transparent", fontSize: 11.5, fontWeight: printView === opt.value ? 700 : 500, color: printView === opt.value ? "var(--color-brand-600)" : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: printView === opt.value ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.1s" }}>
             <i className={`ti ${opt.icon}`} style={{ fontSize: 13 }} />{opt.label}
           </button>
         ))}
@@ -1389,9 +1415,9 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
 
       {/* CSV */}
       <motion.button onClick={onExportCSV}
-        whileHover={{ borderColor: "#fca5a5", color: "#c92a2a", background: "#fff8f8" }}
+        whileHover={{ borderColor: dark ? DARK_HOVER.border : "#fca5a5", color: dark ? DARK_HOVER.text : "#c92a2a", background: dark ? DARK_HOVER.soft : "#fff8f8" }}
         whileTap={{ scale: 0.96 }}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid #f0e4e4", borderRadius: 9, background: "white", fontSize: 12, fontWeight: 600, color: "#855c5c", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", border: "1.5px solid var(--color-neutral-300)", borderRadius: 9, background: "var(--color-surface)", fontSize: 12, fontWeight: 600, color: "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
         <i className="ti ti-table-export" style={{ fontSize: 14 }} />Download CSV
       </motion.button>
 
@@ -1399,7 +1425,7 @@ function PrintToolbar({ printView, setPrintView, onPrint, onExportCSV }) {
       <motion.button onClick={onPrint}
         whileHover={{ scale: 1.02, boxShadow: "0 6px 18px rgba(224,49,49,0.36)" }}
         whileTap={{ scale: 0.96 }}
-        style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 16px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,#e03131,#c92a2a)", fontSize: 12, fontWeight: 700, color: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(224,49,49,0.28)" }}>
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 16px", border: "none", borderRadius: 9, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", fontSize: 12, fontWeight: 700, color: "white", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(224,49,49,0.28)" }}>
         <i className="ti ti-printer" style={{ fontSize: 14 }} />Print / PDF
       </motion.button>
     </div>
@@ -1430,6 +1456,7 @@ export default function AcademicCalendarPage() {
   const [activeMonth,   setActiveMonth]   = useState(() => new Date().getMonth());
   const [printView,      setPrintView]     = useState("list");
   const [schoolSettings, setSchoolSettings] = useState(null);
+  const dark = useTheme() === "dark";
 
   const [animated] = useState(false);
   const ifr = !animated; // isFirstRender — entrance animations run only once
@@ -1492,12 +1519,15 @@ export default function AcademicCalendarPage() {
     <>
     <>
       <style>{`
-        .cal-day:hover { background: #fff4f4; }
-        .cal-day:hover > div:first-child > span { background: #fde8e8; }
-        .month-nav-btn:hover { background: #fff0f0 !important; color: #e03131 !important; border-color: #fca5a5 !important; }
-        .ev-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; }
-        .month-pill:hover { border-color: #fca5a5 !important; color: #e03131 !important; background: #fff8f8 !important; }
-        .ev-list-row:hover { background: #fff8f6 !important; }
+        /* A day with events tints on hover, and its number turns red in a
+           circle, a preview of the selected day (a weekend's grey number
+           would be 4.1:1 on the circle; brand-600 is 4.65:1, 6.7:1 dark).
+           !important because the cell and the number set their colours
+           inline. The selected day (already tinted) and today's red circle
+           don't take the classes, so the hover leaves them alone. */
+        .cal-day:hover { background: #fff4f4 !important; }
+        [data-theme="dark"] .cal-day:hover { background: var(--color-brand-50) !important; }
+        .cal-day:hover .cal-day-num { background: var(--color-brand-200) !important; color: var(--color-brand-600) !important; }
         #cal-print-portal { display: none; }
         @media print {
           @page { margin: 14mm 12mm; size: A4 portrait; }
@@ -1546,10 +1576,10 @@ export default function AcademicCalendarPage() {
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18 }}
-            style={{ margin: "14px 24px 0", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "11px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
+            style={{ margin: "14px 24px 0", background: dark ? "var(--color-error-50)" : "#fef2f2", border: "1px solid var(--color-brand-300)", borderRadius: 10, padding: "11px 16px", fontSize: 13, color: dark ? "var(--color-error-500)" : "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
           >
             <i className="ti ti-alert-circle" style={{ fontSize: 15 }} />{error}
-            <button onClick={() => setError("")} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b91c1c" }}><i className="ti ti-x" /></button>
+            <button onClick={() => setError("")} aria-label="Dismiss error" style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: dark ? "var(--color-error-500)" : "#b91c1c" }}><i className="ti ti-x" /></button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1566,13 +1596,15 @@ export default function AcademicCalendarPage() {
           <motion.div
             initial={ifr ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.26, ease: "easeOut" }}
-            style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+            className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`}
+            style={{ borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}
           >
             <motion.button
-              whileHover={{ background: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }}
+              whileHover={{ background: dark ? DARK_HOVER.bg : "#fff0f0", color: dark ? DARK_HOVER.text : "#c92a2a", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setActiveMonth((m) => (m - 1 + 12) % 12)}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
+              aria-label="Previous month"
+              style={{ width: 30, height: 30, border: "1px solid var(--color-neutral-300)", borderRadius: 8, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-600)" }}>
               <i className="ti ti-chevron-left" style={{ fontSize: 15 }} />
             </motion.button>
             <AnimatePresence mode="wait">
@@ -1580,19 +1612,20 @@ export default function AcademicCalendarPage() {
                 key={activeMonth}
                 initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.15, ease: "easeOut" }}
-                style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", minWidth: 148, textAlign: "center" }}
+                style={{ fontSize: 16, fontWeight: 700, color: "var(--color-neutral-900)", minWidth: 148, textAlign: "center" }}
               >
-                {MONTHS[activeMonth]} <span style={{ color: "#8a6a6a", fontWeight: 500 }}>{activeMonthYear}</span>
+                {MONTHS[activeMonth]} <span style={{ color: "var(--color-neutral-500)", fontWeight: 500 }}>{activeMonthYear}</span>
               </motion.div>
             </AnimatePresence>
             <motion.button
-              whileHover={{ background: "#fff0f0", color: "#c92a2a", borderColor: "#fca5a5" }}
+              whileHover={{ background: dark ? DARK_HOVER.bg : "#fff0f0", color: dark ? DARK_HOVER.text : "#c92a2a", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setActiveMonth((m) => (m + 1) % 12)}
-              style={{ width: 30, height: 30, border: "1px solid #f0e4e4", borderRadius: 8, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
+              aria-label="Next month"
+              style={{ width: 30, height: 30, border: "1px solid var(--color-neutral-300)", borderRadius: 8, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-600)" }}>
               <i className="ti ti-chevron-right" style={{ fontSize: 15 }} />
             </motion.button>
-            <div style={{ width: 1, height: 20, background: "#f0e4e4", margin: "0 6px" }} />
+            <div style={{ width: 1, height: 20, background: "var(--color-neutral-300)", margin: "0 6px" }} />
             {/* Month pills */}
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {MONTHS.map((m, i) => {
@@ -1603,9 +1636,9 @@ export default function AcademicCalendarPage() {
                     whileTap={{ scale: 0.92 }}
                     style={{
                       height: 26, padding: "0 9px", borderRadius: 99, cursor: "pointer",
-                      border: `1.5px solid ${active ? "#e03131" : "#f0e4e4"}`,
-                      background: active ? "#fff0f0" : "white",
-                      fontSize: 11, color: active ? "#c92a2a" : "#855c5c",
+                      border: `1.5px solid ${active ? "var(--color-brand-500)" : "var(--color-neutral-300)"}`,
+                      background: active ? "var(--color-brand-100)" : "var(--color-surface)",
+                      fontSize: 11, color: active ? "var(--color-brand-600)" : "var(--color-neutral-600)",
                       fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500,
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
                     }}>
@@ -1645,8 +1678,8 @@ export default function AcademicCalendarPage() {
           >
             {EVENT_TYPES.map((t) => (
               <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 3, background: t.bg, border: `1.5px solid ${t.color}60` }} />
-                <span style={{ fontSize: 11, color: "#855c5c", fontWeight: 500 }}>{t.label}</span>
+                <div style={{ width: 10, height: 10, borderRadius: 3, background: dark ? DARK_EVENT_BG(t.color) : t.bg, border: `1.5px solid color-mix(in srgb, ${t.color} 37.6%, transparent)` }} />
+                <span style={{ fontSize: 11, color: "var(--color-neutral-600)", fontWeight: 500 }}>{t.label}</span>
               </div>
             ))}
           </motion.div>
@@ -1669,24 +1702,25 @@ export default function AcademicCalendarPage() {
               <motion.div
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 transition={{ duration: 0.26, ease: "easeOut" }}
-                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "14px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+                className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`}
+                style={{ borderRadius: 14, padding: "14px 16px" }}
               >
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#8a6a6a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
                 <motion.div
                   variants={listVariants.container} initial={ifr ? "hidden" : false} animate="visible"
                   style={{ display: "flex", flexDirection: "column", gap: 7 }}
                 >
                   {typeCounts.map((t) => (
                     <motion.div key={t.value} variants={listVariants.item} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <i className={`ti ${t.icon}`} style={{ fontSize: 13, color: t.color }} />
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: dark ? DARK_EVENT_BG(t.color) : t.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`ti ${t.icon}`} style={{ fontSize: 13, color: dark ? DARK_EVENT_TEXT : t.color }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#3a2020" }}>{t.label}</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: t.color }}>{t.count}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: dark ? "var(--color-neutral-800)" : "#3a2020" }}>{t.label}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: dark ? "var(--color-neutral-900)" : t.color }}>{t.count}</span>
                         </div>
-                        <div style={{ height: 4, borderRadius: 99, background: "#f5eaea", overflow: "hidden" }}>
+                        <div style={{ height: 4, borderRadius: 99, background: "var(--color-neutral-200)", overflow: "hidden" }}>
                           <motion.div
                             initial={ifr ? { width: 0 } : false}
                             animate={{ width: `${Math.min(100, (t.count / events.length) * 100)}%` }}
@@ -1709,25 +1743,26 @@ export default function AcademicCalendarPage() {
                 key="selected"
                 initial={{ opacity: 0, scale: 0.97, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 6 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.05)" }}
+                className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`}
+                style={{ borderRadius: 14, overflow: "hidden" }}
               >
-                <div style={{ padding: "13px 16px", borderBottom: "1px solid #f5eaea", background: "linear-gradient(135deg,#fff5f5,white)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 9, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className="ti ti-calendar" style={{ fontSize: 15, color: "#c92a2a" }} />
+                <div className="bg-[linear-gradient(135deg,#fff5f5,white)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ padding: "13px 16px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <i className="ti ti-calendar" style={{ fontSize: 15, color: "var(--color-brand-600)" }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{selectedLabel}</div>
-                    <div style={{ fontSize: 10.5, color: "#8a6a6a", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{selectedLabel}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--color-neutral-500)", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
                   </div>
-                  <motion.button onClick={() => setSelectedDay(null)}
+                  <motion.button onClick={() => setSelectedDay(null)} aria-label="Close this day's events"
                     whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6a6a" }}>
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-neutral-500)" }}>
                     <i className="ti ti-x" style={{ fontSize: 15 }} />
                   </motion.button>
                 </div>
                 <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
                   {uniqueForDay.length === 0
-                    ? <div style={{ fontSize: 12, color: "#8a6a6a", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
+                    ? <div style={{ fontSize: 12, color: "var(--color-neutral-500)", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
                     : uniqueForDay.map((ev) => (
                       <EventCard key={ev.event_id} event={ev}
                         onEdit={readOnly ? null : (e) => setModal({ mode: "edit", event: e })}
@@ -1741,13 +1776,14 @@ export default function AcademicCalendarPage() {
                 key="empty"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                style={{ background: "white", borderRadius: 14, border: "1px solid #f0e6e6", padding: "22px 16px", boxShadow: "0 2px 10px rgba(224,49,49,0.05)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
+                className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`}
+                style={{ borderRadius: 14, padding: "22px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
               >
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "#8a6a6a" }} />
+                <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "var(--color-neutral-500)" }} />
                 </div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#8a6a6a" }}>No date selected</div>
-                <div style={{ fontSize: 11, color: "#8a6a6a", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-neutral-500)" }}>No date selected</div>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
               </motion.div>
             )}
           </AnimatePresence>

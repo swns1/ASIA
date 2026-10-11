@@ -38,6 +38,7 @@ import Card from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
 import StepBar from "../components/ui/StepBar";
 import WizardNav from "../components/ui/WizardNav";
+import ThemeArea from "../components/ThemeArea";
 
 import {
   STEPS,
@@ -609,7 +610,7 @@ export default function StudentFormPage() {
   const title = id ? "Edit Student" : "New Student Registration";
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <ThemeArea className="min-h-screen bg-neutral-50">
       <PageHeader
         title={title}
         icon={id ? "ti-pencil" : "ti-user-plus"}
@@ -735,6 +736,6 @@ export default function StudentFormPage() {
           />
         )}
       </AnimatePresence>
-    </div>
+    </ThemeArea>
   );
 }

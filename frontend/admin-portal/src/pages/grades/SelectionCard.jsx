@@ -3,6 +3,7 @@ import Card from "../../components/ui/Card";
 import Skeleton from "../../components/ui/Skeleton";
 import { getStudents } from "../../api/studentApi";
 import { getAvatarPalette, initialsFrom } from "../../utils/avatarPalette";
+import { MENU_DARK, SELECTED_DARK } from "../../components/ui/darkSurfaces";
 import { PERIOD_SHORT, formatGrade } from "./gradeRules";
 
 // SelectionCard — the left column of the Summary, Entry and Observed values
@@ -53,7 +54,7 @@ function StudentSearch({ onPick }) {
 
   return (
     <div className="relative">
-      <div className="flex h-10 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-3 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
+      <div className="flex h-10 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-surface px-3 transition-[border-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-500/[0.09]">
         <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
         <input
           placeholder="Search by name or LRN…"
@@ -66,7 +67,7 @@ function StudentSearch({ onPick }) {
         {loading && <i className="ti ti-loader-2 animate-spin text-[14px] text-brand-600" aria-hidden="true" />}
       </div>
       {open && query && (
-        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-30 max-h-[280px] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1.5 shadow-lg">
+        <div className={`absolute inset-x-0 top-[calc(100%+6px)] z-30 max-h-[280px] overflow-y-auto rounded-lg border border-neutral-200 bg-surface-raised p-1.5 shadow-lg ${MENU_DARK}`}>
           {results.length === 0 && !loading && (
             <div className="px-3 py-4 text-center text-[12.5px] text-neutral-500">No students match “{query}”.</div>
           )}
@@ -260,7 +261,7 @@ export default function SelectionCard({
                   aria-pressed={selected}
                   onClick={() => onPickPeriod(p)}
                   className={`focus-ring h-[30px] rounded-sm text-[12px] font-semibold transition-colors ${
-                    selected ? "bg-white text-brand-600 shadow-sm" : "text-neutral-600 hover:text-brand-600"
+                    selected ? `bg-surface text-brand-600 shadow-sm ${SELECTED_DARK}` : "text-neutral-600 hover:text-brand-600"
                   }`}
                 >
                   {PERIOD_SHORT[p] ?? p}

@@ -57,11 +57,23 @@ describe("the theme the signed-in user gets", () => {
     expect(result.current).toBe("dark");
   });
 
-  it("stays light for staff, whatever the browser has stored", () => {
-    signInAs("registrar");
+  // Staff don't get dark mode yet (the user's call, 2026-10-11): every role
+  // outside super_admin/admin, and a guardian, stays light.
+  it.each(["registrar", "teacher", "accounting", "guardian"])(
+    "stays light for a %s, whatever the browser has stored",
+    (role) => {
+      signInAs(role);
+      setThemePreference("dark");
+      const { result } = renderHook(() => useAppTheme());
+      expect(result.current).toBe("light");
+    },
+  );
+
+  it("is dark for a super admin who chose dark", () => {
+    signInAs("super_admin");
     setThemePreference("dark");
     const { result } = renderHook(() => useAppTheme());
-    expect(result.current).toBe("light");
+    expect(result.current).toBe("dark");
   });
 
   it("follows the computer when set to Same as my computer", () => {

@@ -48,6 +48,8 @@ const FALLBACKS = {
   "--chart-plane":   "#fdfcfb",
   "--chart-dot":     "#ffffff",
   "--chart-on-mark": "#1a0a0a",
+  // The card surface, for a key mark drawn on a card rather than a chart.
+  "--color-surface": "#ffffff",
 };
 
 // The same for dark mode, where tokens.css's dark set differs.
@@ -79,6 +81,7 @@ const DARK_FALLBACKS = {
   "--chart-plane":   "#160f0f",
   "--chart-dot":     "#160f0f",
   "--chart-on-mark": "#1c1414",
+  "--color-surface": "#1c1414",
 };
 
 const cache = new Map();

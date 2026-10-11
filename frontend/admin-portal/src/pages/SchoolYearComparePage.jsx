@@ -8,6 +8,7 @@ import ErrorState from "../components/ui/ErrorState";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import { StatusBadge } from "../components/ui/Badge";
 import SegmentedControl from "../components/ui/SegmentedControl";
+import { SELECTED_DARK } from "../components/ui/darkSurfaces";
 import CompareCharts from "../components/charts/compare/CompareCharts";
 import { defaultCompareYears, previousLabel } from "../components/schoolYears/yearHelpers";
 import { KINDS, changeBetween, fmtCount, num, share } from "../components/schoolYears/compareFigures";
@@ -45,7 +46,7 @@ function Change({ value, before, kind, since }) {
   const change = changeBetween(value, before, kind);
   if (!change) return null;
   if (change.direction === "same") {
-    return <div className="mt-0.5 text-[11.5px] text-neutral-400">No change</div>;
+    return <div className="mt-0.5 text-[11.5px] text-neutral-400 dark:text-neutral-500">No change</div>;
   }
   return (
     <div className="mt-0.5 inline-flex items-center gap-0.5 text-[11.5px] text-neutral-500">
@@ -96,7 +97,7 @@ function CompareTable({ caption, years, states, rows, loading, error, onRetry, e
             return (
               <TableCell key={y} align="right" className="align-top tabular-nums text-[13.5px]">
                 {v == null ? (
-                  <span className="text-neutral-400" title={row.missing ?? "No figure for this year"}>—</span>
+                  <span className="text-neutral-400 dark:text-neutral-500" title={row.missing ?? "No figure for this year"}>—</span>
                 ) : (
                   KINDS[row.kind].value(v)
                 )}
@@ -243,8 +244,8 @@ function YearChooser({ labels, states, selected, onToggle }) {
             className={[
               "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed",
               on
-                ? "border-brand-500 bg-brand-50 text-brand-700"
-                : "border-neutral-200 bg-white text-neutral-600 hover:border-brand-300",
+                ? `border-brand-500 bg-brand-50 text-brand-700 ${SELECTED_DARK}`
+                : "border-neutral-200 bg-surface text-neutral-600 hover:border-brand-300",
               locked && !on ? "opacity-50" : "",
             ].join(" ")}
           >

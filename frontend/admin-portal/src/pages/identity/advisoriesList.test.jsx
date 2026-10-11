@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = { getSectionAdvisories: vi.fn(), getUsers: vi.fn() };
 vi.mock("../../api/enrollmentApi", () => ({
@@ -97,5 +98,20 @@ describe("Teacher advisories — band", () => {
     expect(screen.queryByText("Grade 4 · Rizal")).toBeNull();
     expect(screen.getByText("Grade 7 · Mabini")).toBeTruthy();
     expect(legend().getByRole("button", { name: "All 3" })).toBeTruthy();
+  });
+});
+
+describe("Teacher advisories — dark mode", () => {
+  it("shows the list, and the remove confirm, on a dark page", async () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter><TeacherAdvisoriesPage /></MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+    expect(await screen.findByText("Grade 4 · Rizal")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove Ana Active's advisory" })[0]);
+    expect(await screen.findByText("Remove advisory assignment?")).toBeTruthy();
   });
 });

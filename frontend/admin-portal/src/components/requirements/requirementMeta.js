@@ -5,14 +5,24 @@
 // component may export nothing else. Same reason pages/student-form/
 // formShapes.js exists.
 
-// Design tokens, matching the two copies this panel replaces.
+// Design tokens, matching the two copies this panel replaces. var() strings
+// where the colour is a token, so it follows the theme of the screen drawing
+// it; the literals have no exact token and keep their light value.
 export const C = {
-  red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
-  green: "#2e7d32", greenLight: "#e8f5e0", greenBorder: "#a5d6a7",
-  amber: "#854f0b", amberLight: "#faeeda", amberBorder: "#e8c99a",
-  border: "#f5eaea", softBorder: "#f9f0f0",
-  text: "#1a0a0a", muted: "#7a5050", pale: "#8a6a6a",
-  bg: "#fdf8f6", white: "#ffffff",
+  red: "var(--color-brand-500)", redDark: "var(--color-brand-600)", redLight: "var(--color-brand-100)", redBorder: "var(--color-brand-300)",
+  green: "#2e7d32", greenLight: "var(--color-success-50)", greenBorder: "#a5d6a7",
+  amber: "var(--color-warning-500)", amberLight: "var(--color-warning-50)", amberBorder: "#e8c99a",
+  border: "var(--color-neutral-200)", softBorder: "#f9f0f0",
+  text: "var(--color-neutral-900)", muted: "var(--color-neutral-700)", pale: "var(--color-neutral-500)",
+  bg: "var(--color-neutral-50)", white: "#ffffff",
+};
+
+// What the in-use literals above become in dark (`dark ? DARK_C.green : C.green`).
+// The border is the dark success toast's.
+export const DARK_C = {
+  green: "var(--color-success-500)",
+  greenBorder: "rgba(127,207,138,0.35)",
+  softBorder: "var(--color-neutral-200)",
 };
 
 export const REQ_ICONS = {

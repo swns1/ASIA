@@ -7,6 +7,9 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
 import Skeleton from "../components/ui/Skeleton";
+import { SELECTED_DARK } from "../components/ui/darkSurfaces";
+import { BRAND_PANEL_DARK } from "../components/ui/brandPanel";
+import BrandBackdrop from "../components/ui/BrandBackdrop";
 import { getSections, getSectionAdvisories, getMySections, getEnrollments } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser, hasAnyRole, STAFF_ADMIN } from "../utils/auth";
@@ -14,6 +17,8 @@ import { useSchoolYear } from "../context/SchoolYearContext";
 import useYearFilter from "../hooks/useYearFilter";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { GRADE_LEVELS_BY_LEVEL, LEVEL_LABELS } from "../constants/schoolLevels";
+import { LEVEL_GLOW } from "../constants/statusTones";
+import useTheme from "../hooks/useTheme";
 import { SectionDetail, StudentsTab } from "./TeacherSectionsPage";
 
 // Every section of one school year, for admin and registrar. My Sections only
@@ -28,11 +33,11 @@ const GRADE_ORDER = Object.values(GRADE_LEVELS_BY_LEVEL).flat();
 
 // Complete literal class strings: Tailwind can't see interpolated names.
 const LEVEL_CHIP = {
-  nursery:           "bg-nursery-50 text-nursery-500",
-  kindergarten:      "bg-kindergarten-50 text-kindergarten-500",
-  elementary:        "bg-elementary-50 text-elementary-500",
-  junior_highschool: "bg-juniorhigh-50 text-juniorhigh-500",
-  senior_highschool: "bg-seniorhigh-50 text-seniorhigh-500",
+  nursery:           `bg-nursery-50 text-nursery-500 ${LEVEL_GLOW.nursery}`,
+  kindergarten:      `bg-kindergarten-50 text-kindergarten-500 ${LEVEL_GLOW.kindergarten}`,
+  elementary:        `bg-elementary-50 text-elementary-500 ${LEVEL_GLOW.elementary}`,
+  junior_highschool: `bg-juniorhigh-50 text-juniorhigh-500 ${LEVEL_GLOW.juniorhigh}`,
+  senior_highschool: `bg-seniorhigh-50 text-seniorhigh-500 ${LEVEL_GLOW.seniorhigh}`,
 };
 
 const asList = (data) => (Array.isArray(data) ? data : data?.results ?? []);
@@ -74,7 +79,7 @@ function SectionList({ rows, selectedId, onSelect, adviserNames }) {
   }, [rows, query, adviserNames]);
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col border-r border-neutral-100 bg-white">
+    <div className="flex w-[280px] shrink-0 flex-col border-r border-neutral-100 bg-surface">
       <div className="border-b border-neutral-100 p-4">
         <label className="flex items-center gap-2 rounded-[10px] border-[1.5px] border-neutral-200 bg-neutral-50 px-3 py-2">
           <i className="ti ti-search text-sm text-neutral-500" aria-hidden="true" />
@@ -176,7 +181,7 @@ function AdvisedSection({ section, adviserName, loadTeacher, readOnly }) {
                 onClick={() => setAdvisoryId(a.advisory_id)}
                 aria-pressed={active}
                 className={`focus-ring rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                  active ? "border-brand-500 bg-brand-100 text-brand-600" : "border-neutral-200 bg-white text-neutral-700 hover:border-brand-300"
+                  active ? `border-brand-500 bg-brand-100 text-brand-600 ${SELECTED_DARK}` : "border-neutral-200 bg-surface text-neutral-700 hover:border-brand-300"
                 }`}
               >
                 {a.strand || "Whole section"} · {adviserName(a)}
@@ -206,6 +211,7 @@ function AdvisedSection({ section, adviserName, loadTeacher, readOnly }) {
 // ── Right pane: a section without an adviser ─────────────────────────────────
 // Same roster rule as an advisory's (advisory_roster: currently `enrolled`).
 function UnadvisedSection({ section, schoolYear, canManage }) {
+  const dark = useTheme() === "dark";
   const [state, setState] = useState({ loading: true, students: [] });
 
   useEffect(() => {
@@ -233,8 +239,9 @@ function UnadvisedSection({ section, schoolYear, canManage }) {
   }, [schoolYear, section.grade_level, section.name]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-white">
-      <div className="border-b border-neutral-100 px-6 py-5">
+    <div className="flex flex-1 flex-col overflow-hidden bg-surface">
+      <div className={`border-b border-neutral-100 px-6 py-5 ${BRAND_PANEL_DARK}`}>
+        {dark && <BrandBackdrop tone="dark" />}
         <div className="flex items-center gap-3">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] ${LEVEL_CHIP[section.school_level] ?? LEVEL_CHIP.elementary}`}>
             <i className="ti ti-users-group text-[17px]" aria-hidden="true" />

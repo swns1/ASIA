@@ -41,7 +41,7 @@ export default function GradeBar({
   const band = gradeStyle(final);
 
   return (
-    <div className="sticky bottom-4 z-10 flex items-center gap-5 rounded-2xl border border-neutral-300 bg-white px-5 py-3.5 shadow-lg">
+    <div className="sticky bottom-4 z-10 flex items-center gap-5 rounded-2xl border border-neutral-300 bg-surface-raised px-5 py-3.5 shadow-lg dark:shadow-float-dark">
       <div className="flex min-w-0 flex-1 items-center gap-5">
         <div className="flex shrink-0 flex-col gap-px">
           <span className={LABEL}>Final grade</span>
@@ -57,7 +57,7 @@ export default function GradeBar({
             )}
             {final !== null && (
               complete ? (
-                <span className="text-[12px] font-semibold" style={{ color: band.color }}>{band.label}</span>
+                <span className={`text-[12px] font-semibold ${band.color}`}>{band.label}</span>
               ) : (
                 <span className="text-[12px] font-semibold text-neutral-500">Running grade</span>
               )
@@ -112,7 +112,7 @@ export default function GradeBar({
             <select
               value={remarks}
               onChange={(e) => onRemarksChange(e.target.value)}
-              className="focus-ring h-10 appearance-none rounded-lg border-[1.5px] border-neutral-300 bg-white pl-3.5 pr-9 text-[12.5px] font-semibold text-neutral-900"
+              className="focus-ring h-10 appearance-none rounded-lg border-[1.5px] border-neutral-300 bg-surface pl-3.5 pr-9 text-[12.5px] font-semibold text-neutral-900"
             >
               <option value="">No remarks</option>
               {Object.entries(REMARKS_META).map(([value, meta]) => (

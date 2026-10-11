@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const getPayments = vi.fn();
 const getPaymentSummary = vi.fn();
@@ -105,5 +106,20 @@ describe("Payments — menus", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Largest first" }));
 
     await waitFor(() => expect(lastList().ordering).toBe("-amount_paid"));
+  });
+});
+
+describe("Payments — dark mode", () => {
+  it("shows the band, the menus and the table on a dark page", async () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={["/payments"]}><PaymentsPage /></MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+    expect(await screen.findByText("Ana Cruz")).toBeTruthy();
+    expect(legend().getByRole("button", { name: "GCash ₱3,005,023" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "INV-2026-000003" })).toBeTruthy();
   });
 });

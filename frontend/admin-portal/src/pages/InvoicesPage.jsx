@@ -7,6 +7,7 @@ import RecordPaymentModal from "../components/RecordPaymentModal";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
 import { useSearchParams } from "react-router-dom";
+import useTheme from "../hooks/useTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import { pageVariants } from "../utils/motion";
 
@@ -24,8 +25,9 @@ import Badge, { StatusBadge, StatusDot } from "../components/ui/Badge";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Modal from "../components/ui/Modal";
 import Skeleton from "../components/ui/Skeleton";
+import { MENU_DARK } from "../components/ui/darkSurfaces";
 import { INVOICE_STATUS_MAP } from "../constants/statusMaps";
-import { STATUS_TEXT } from "../constants/statusTones";
+import { CHIP_GLOW, STATUS_TEXT } from "../constants/statusTones";
 import { paymentMethodMeta } from "../constants/paymentMethods";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -78,12 +80,17 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 // `tone` names the shared palette entry; the bg/color literals stay for the
 // inline plan pill on each list row until that moves to a shared Badge.
+// They stay literals because PlanChoice tweens them with framer-motion, which
+// can't tween a var(); `dark` holds the dark values of the same tokens
+// (info, success, accent, warning-500 on nursery-50).
 const PLAN_META = {
-  monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd", tone:"info" },
-  quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0", tone:"success" },
-  semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd", tone:"accent" },
-  annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8", tone:"warning" },
+  monthly:     { label:"Monthly",     color:"#1455a0", bg:"#e3f0fd", tone:"info",    dark:{ color:"#8fbaf2", bg:"#132238" } },
+  quarterly:   { label:"Quarterly",   color:"#2e6b0d", bg:"#e8f5e0", tone:"success", dark:{ color:"#7fcf8a", bg:"#13261a" } },
+  semi_annual: { label:"Semi-Annual", color:"#7c3aed", bg:"#f0e8fd", tone:"accent",  dark:{ color:"#c3a6fb", bg:"#251a3a" } },
+  annual:      { label:"Annual",      color:"#854f0b", bg:"#fdf5e8", tone:"warning", dark:{ color:"#f2b866", bg:"#2b2010" } },
 };
+// An unchosen plan in dark: the dark surface and neutral-300 control border.
+const DARK_PLAN_REST = { border:"#463535", bg:"#1c1414" };
 
 const PLAN_FILTERS = [
   { value: "", label: "Any" },
@@ -148,25 +155,27 @@ function usePlanRates() {
 
 function PlanChoice({ plan, onChange }) {
   const rates = usePlanRates();
+  const dark = useTheme() === "dark";
   return (
     <div style={{ display:"grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap:8 }}>
       {Object.entries(PLAN_META).map(([val, meta]) => {
         const active = plan === val;
         const pct = rates[val];
         const discountNote = pct ? ` · ${pct}% off tuition` : "";
+        const tone = dark ? meta.dark : meta;
         return (
           <motion.button key={val} type="button" onClick={() => onChange(val)}
             aria-pressed={active}
             animate={{
-              borderColor:    active ? meta.color : "#f0e4e4",
-              backgroundColor: active ? meta.bg   : "#ffffff",
+              borderColor:    active ? tone.color : dark ? DARK_PLAN_REST.border : "#f0e4e4",
+              backgroundColor: active ? tone.bg   : dark ? DARK_PLAN_REST.bg : "#ffffff",
             }}
             whileHover={{ scale:1.01 }}
             whileTap={{ scale:0.98 }}
             transition={{ duration:0.15, ease:"easeOut" }}
             style={{ padding:"12px 14px", borderRadius:12, border:"1.5px solid", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", textAlign:"left" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:active ? meta.color : "#1a0a0a" }}>{meta.label}</div>
-            <div style={{ fontSize:11, color:active ? meta.color : "#8a6a6a", marginTop:2, opacity:0.85 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:active ? tone.color : "var(--color-neutral-900)" }}>{meta.label}</div>
+            <div style={{ fontSize:11, color:active ? tone.color : "var(--color-neutral-500)", marginTop:2, opacity:0.85 }}>
               {PLAN_INSTALLMENTS[val]}{discountNote}
             </div>
           </motion.button>
@@ -246,7 +255,8 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
             <motion.div
               initial={{ opacity:0, y:-6 }}
               animate={{ opacity:1, y:0 }}
-              style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}
+              className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+              style={{ border:"1px solid var(--color-brand-300)", borderRadius:8, padding:"10px 14px", fontSize:13, marginBottom:14, display:"flex", alignItems:"center", gap:8 }}
             >
               <i className="ti ti-alert-circle" style={{ fontSize:14 }} />
               <span style={{ flex:1 }}>{error}</span>
@@ -260,29 +270,29 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
 
           {/* Search enrollment */}
           <div style={{ marginBottom:14 }}>
-            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 }}>Enrollment *</label>
+            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 }}>Enrollment *</label>
             {selected ? (
               <motion.div
                 initial={{ opacity:0, scale:0.97 }}
                 animate={{ opacity:1, scale:1 }}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid #fde2de", borderRadius:10, background:"#fff8f6" }}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid var(--color-brand-border-soft)", borderRadius:10, background:"var(--color-brand-50)" }}
               >
-                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#c92a2a" }} />
+                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"var(--color-brand-600)" }} />
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{selected.student_name ?? `Enrollment #${selected.enrollment_id}`}</div>
-                  <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>S.Y. {selected.school_year} · {selected.grade_level} · {selected.section}</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"var(--color-neutral-900)" }}>{selected.student_name ?? `Enrollment #${selected.enrollment_id}`}</div>
+                  <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:1 }}>S.Y. {selected.school_year} · {selected.grade_level} · {selected.section}</div>
                 </div>
-                <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"5px 10px", fontSize:12, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
+                <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"1px solid var(--color-brand-border-soft)", borderRadius:7, padding:"5px 10px", fontSize:12, color:"var(--color-neutral-700)", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
               </motion.div>
             ) : (
               <div style={{ position:"relative" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
+                <div style={{ display:"flex", alignItems:"center", gap:10, background:"var(--color-surface)", border:"1.5px solid var(--color-brand-border-soft)", borderRadius:10, padding:"0 14px", height:44 }}>
+                  <i className="ti ti-search" style={{ fontSize:14, color:"var(--color-neutral-500)" }} />
                   <input placeholder="Search by student name, LRN, or grade…" value={search}
                     onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-                  {loading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
+                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"var(--color-neutral-900)", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
+                  {loading && <i className="ti ti-loader-2" style={{ fontSize:13, color:"var(--color-brand-600)", animation:"spin 1s linear infinite" }} />}
                 </div>
                 <AnimatePresence>
                   {open && search && (
@@ -291,16 +301,17 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
                       animate={{ opacity:1, y:0 }}
                       exit={{ opacity:0, y:-6 }}
                       transition={{ duration:0.14 }}
-                      style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}
+                      className={`shadow-lg ${MENU_DARK}`}
+                      style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"var(--color-surface-raised)", borderRadius:10, border:"1px solid var(--color-brand-border-soft)", maxHeight:220, overflowY:"auto", zIndex:1000 }}
                     >
-                      {enrollments.length === 0 && !loading && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No enrolled students found.</div>}
+                      {enrollments.length === 0 && !loading && <div style={{ padding:"16px", textAlign:"center", color:"var(--color-neutral-500)", fontSize:13 }}>No enrolled students found.</div>}
                       {enrollments.map((en) => (
                         <div key={en.enrollment_id} onClick={() => { setSelected(en); setOpen(false); setSearch(""); }}
                           className="flex cursor-pointer items-center gap-2.5 border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
-                          <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"#c92a2a" }} />
+                          <i className="ti ti-clipboard-list" style={{ fontSize:14, color:"var(--color-brand-600)" }} />
                           <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{en.student_name ?? `Enrollment #${en.enrollment_id}`}</div>
-                            <div style={{ fontSize:11, color:"#8a6a6a" }}>S.Y. {en.school_year} · {en.grade_level} · {en.section}</div>
+                            <div style={{ fontSize:13, fontWeight:600, color:"var(--color-neutral-900)" }}>{en.student_name ?? `Enrollment #${en.enrollment_id}`}</div>
+                            <div style={{ fontSize:11, color:"var(--color-neutral-500)" }}>S.Y. {en.school_year} · {en.grade_level} · {en.section}</div>
                           </div>
                         </div>
                       ))}
@@ -313,7 +324,7 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
 
           {/* Payment plan */}
           <div style={{ marginBottom:6 }}>
-            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
+            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
             <PlanChoice plan={plan} onChange={setPlan} />
           </div>
         </div>
@@ -370,16 +381,16 @@ function ReissueModal({ invoice, onClose, onReissued }) {
     >
       <div style={{ padding:"18px 24px", display:"flex", flexDirection:"column", gap:14 }}>
         {error && (
-          <div role="alert" style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c" }}>{error}</div>
+          <div role="alert" className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500" style={{ border:"1px solid var(--color-brand-300)", borderRadius:8, padding:"10px 14px", fontSize:13 }}>{error}</div>
         )}
-        <div style={{ fontSize:13, color:"#5a4a4a", lineHeight:1.5 }}>
+        <div className="text-[#5a4a4a] dark:text-neutral-800" style={{ fontSize:13, lineHeight:1.5 }}>
           {paid > 0
             ? <>The <strong>{fmt(paid)}</strong> already paid moves to the new invoice, with each payment keeping its date and reference.</>
             : <>Nothing has been paid on this invoice yet.</>}{" "}
           The original invoice date is kept, so an Early Bird discount already earned still applies.
         </div>
         <div>
-          <div style={{ fontSize:10.5, fontWeight:700, color:"#7a5050", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan</div>
+          <div style={{ fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan</div>
           <PlanChoice plan={plan} onChange={setPlan} />
         </div>
       </div>
@@ -396,6 +407,7 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [showReissue, setShowReissue] = useState(false);
   const [tab,        setTab]        = useState("breakdown");
+  const dark = useTheme() === "dark";
 
   useEffect(() => {
     setLoading(true); setInvoice(null);
@@ -423,7 +435,7 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
   );
 
   if (!invoice) return (
-    <div style={{ padding:"40px", textAlign:"center", color:"#8a6a6a", fontSize:13, fontStyle:"italic" }}>Failed to load invoice.</div>
+    <div style={{ padding:"40px", textAlign:"center", color:"var(--color-neutral-500)", fontSize:13, fontStyle:"italic" }}>Failed to load invoice.</div>
   );
 
   const en         = invoice.enrollment_detail;
@@ -456,22 +468,22 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
-              <span style={{ fontSize:18, fontWeight:700, color:"#1a0a0a" }}>{invoice.invoice_no}</span>
+              <span style={{ fontSize:18, fontWeight:700, color:"var(--color-neutral-900)" }}>{invoice.invoice_no}</span>
               <StatusBadge status={invoice.status} map={INVOICE_STATUS_MAP} size="sm" />
-              <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:planMeta.bg, color:planMeta.color }}>{planMeta.label}</span>
-              {invoice.recalculated_at && <span style={{ fontSize:10, color:"#8a6a6a", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
+              <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:dark ? planMeta.dark.bg : planMeta.bg, color:dark ? planMeta.dark.color : planMeta.color }}>{planMeta.label}</span>
+              {invoice.recalculated_at && <span style={{ fontSize:10, color:"var(--color-neutral-500)", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
             </div>
             {en && (
-              <div style={{ fontSize:13, color:"#5a4a4a" }}>
+              <div className="text-[#5a4a4a] dark:text-neutral-800" style={{ fontSize:13 }}>
                 <span style={{ fontWeight:600 }}>{en.student_name}</span>
-                <span style={{ color:"#8a6a6a" }}> · LRN {en.lrn} · {en.grade_level} · {en.section} · S.Y. {en.school_year}</span>
+                <span style={{ color:"var(--color-neutral-500)" }}> · LRN {en.lrn} · {en.grade_level} · {en.section} · S.Y. {en.school_year}</span>
               </div>
             )}
-            <div style={{ fontSize:12, color:"#8a6a6a", marginTop:4 }}>
+            <div style={{ fontSize:12, color:"var(--color-neutral-500)", marginTop:4 }}>
               Issued {fmtDate(invoice.invoice_date)}
               {invoice.status !== "void" && (
                 invoice.next_due_date
-                  ? <> · Next due: <span style={{ color: invoice.is_overdue ? "#c92a2a" : undefined, fontWeight: invoice.is_overdue ? 700 : undefined }}>{fmtDate(invoice.next_due_date)}{invoice.is_overdue ? " (overdue)" : ""}</span></>
+                  ? <> · Next due: <span style={{ color: invoice.is_overdue ? "var(--color-brand-600)" : undefined, fontWeight: invoice.is_overdue ? 700 : undefined }}>{fmtDate(invoice.next_due_date)}{invoice.is_overdue ? " (overdue)" : ""}</span></>
                   : <> · Nothing left to pay</>
               )}
             </div>
@@ -517,21 +529,21 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
         <div style={{ marginTop:16 }}>
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
             <div>
-              <span style={{ fontSize:11, color:"#8a6a6a" }}>Total paid </span>
-              <span style={{ fontSize:14, fontWeight:700, color:"#2e6b0d" }}>{fmt(totalPaid)}</span>
-              <span style={{ fontSize:11, color:"#8a6a6a" }}> of {fmt(netAmount)}</span>
+              <span style={{ fontSize:11, color:"var(--color-neutral-500)" }}>Total paid </span>
+              <span style={{ fontSize:14, fontWeight:700, color:"var(--color-success-500)" }}>{fmt(totalPaid)}</span>
+              <span style={{ fontSize:11, color:"var(--color-neutral-500)" }}> of {fmt(netAmount)}</span>
             </div>
             <div>
-              <span style={{ fontSize:11, color:"#8a6a6a" }}>Balance </span>
-              <span style={{ fontSize:14, fontWeight:700, color: balance > 0 ? "#a32d2d" : "#2e6b0d" }}>{fmt(balance)}</span>
+              <span style={{ fontSize:11, color:"var(--color-neutral-500)" }}>Balance </span>
+              <span style={{ fontSize:14, fontWeight:700, color: balance > 0 ? "var(--color-error-600)" : "var(--color-success-500)" }}>{fmt(balance)}</span>
             </div>
           </div>
-          <div style={{ height:8, borderRadius:99, background:"#f0e8e8", overflow:"hidden" }}>
+          <div className="bg-[#f0e8e8] dark:bg-neutral-200" style={{ height:8, borderRadius:99, overflow:"hidden" }}>
             <motion.div
               initial={{ width:"0%" }}
               animate={{ width:`${paidPct}%` }}
               transition={{ type:"spring", stiffness:60, damping:18, delay:0.2 }}
-              style={{ height:"100%", background:"linear-gradient(to right,#e03131,#c92a2a)", borderRadius:99 }}
+              style={{ height:"100%", background:"linear-gradient(to right,var(--color-action),var(--color-action-2))", borderRadius:99 }}
             />
           </div>
         </div>
@@ -564,9 +576,9 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
             style={{ display:"flex", flexDirection:"column", gap:12 }}
           >
             {[
-              { key:"tuition", items:tuitionItems, label:"Tuition Fees",        color:"#c92a2a", bg:"#fff0f0", note:"Discounts applied below" },
-              { key:"misc",    items:miscItems,    label:"Miscellaneous Fees",   color:"#1455a0", bg:"#e3f0fd", note:"No discount" },
-              { key:"other",   items:otherItems,   label:"Other Fees",           color:"#2e6b0d", bg:"#e8f5e0", note:"No discount" },
+              { key:"tuition", items:tuitionItems, label:"Tuition Fees",        color:"var(--color-brand-600)", bg:"var(--color-brand-100)", note:"Discounts applied below" },
+              { key:"misc",    items:miscItems,    label:"Miscellaneous Fees",   color:"var(--color-info-500)", bg:"var(--color-info-50)", note:"No discount" },
+              { key:"other",   items:otherItems,   label:"Other Fees",           color:"var(--color-success-500)", bg:"var(--color-success-50)", note:"No discount" },
             ].filter((g) => g.items.length > 0).map((group) => (
               <Card key={group.key} padding="none" className="overflow-hidden">
                 {/* Header stays inline: the tint encodes the fee category
@@ -577,13 +589,13 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
                   <span style={{ fontSize:11, color:group.color, opacity:0.7, fontStyle:"italic" }}>{group.note}</span>
                 </div>
                 {group.items.map((item) => (
-                  <div key={item.invoice_item_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", borderBottom:"1px solid #f9f0f0", fontSize:13 }}>
-                    <span style={{ color:"#1a0a0a" }}>{item.description.replace(/^\[.*?\]\s*/, "")}</span>
-                    <span style={{ fontWeight:600, color:"#1a0a0a" }}>{fmt(item.amount)}</span>
+                  <div key={item.invoice_item_id} className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", fontSize:13 }}>
+                    <span style={{ color:"var(--color-neutral-900)" }}>{item.description.replace(/^\[.*?\]\s*/, "")}</span>
+                    <span style={{ fontWeight:600, color:"var(--color-neutral-900)" }}>{fmt(item.amount)}</span>
                   </div>
                 ))}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", background:"#fdfafa" }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Subtotal</span>
+                <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px" }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"var(--color-neutral-900)" }}>Subtotal</span>
                   <span style={{ fontSize:13, fontWeight:700, color:group.color }}>{fmt(group.items.reduce((s, i) => s + parseFloat(i.amount), 0))}</span>
                 </div>
               </Card>
@@ -592,28 +604,31 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
             {(invoice.discounts ?? []).length > 0 && (
               <Card padding="none" className="overflow-hidden">
                 <div className="border-b border-neutral-200/70 bg-warning-50 px-[18px] py-3">
-                  <span className="text-[13px] font-bold text-warning-700">Discounts Applied to Tuition</span>
+                  <span className="text-[13px] font-bold text-warning-600">Discounts Applied to Tuition</span>
                 </div>
                 {invoice.discounts.map((d) => (
-                  <div key={d.invoice_discount_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", borderBottom:"1px solid #f9f0f0", fontSize:13 }}>
+                  <div key={d.invoice_discount_id} className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", fontSize:13 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <i className="ti ti-discount" style={{ fontSize:13, color:"#854f0b" }} />
-                      <span style={{ color:"#1a0a0a" }}>{d.description}</span>
+                      <i className="ti ti-discount" style={{ fontSize:13, color:"var(--color-warning-500)" }} />
+                      <span style={{ color:"var(--color-neutral-900)" }}>{d.description}</span>
                     </div>
-                    <span style={{ fontWeight:600, color:"#854f0b" }}>− {fmt(d.amount)}</span>
+                    <span style={{ fontWeight:600, color:"var(--color-warning-500)" }}>− {fmt(d.amount)}</span>
                   </div>
                 ))}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", background:"#fdfafa" }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"#1a0a0a" }}>Total Discounts</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#854f0b" }}>− {fmt(invoice.total_discounts ?? 0)}</span>
+                <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px" }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"var(--color-neutral-900)" }}>Total Discounts</span>
+                  <span style={{ fontSize:13, fontWeight:700, color:"var(--color-warning-500)" }}>− {fmt(invoice.total_discounts ?? 0)}</span>
                 </div>
               </Card>
             )}
 
-            <div style={{ background:"linear-gradient(135deg,#e03131,#c92a2a)", borderRadius:14, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ background:"linear-gradient(135deg,var(--color-action),var(--color-action-2))", borderRadius:14, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              {/* Solid white: on the action red even pure white is only
+                  4.5:1 at its lightest, so any dimmer white fails. Case and
+                  size keep these two lines below the amount. */}
               <div>
-                <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.07em" }}>Net Amount Due</div>
-                <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", marginTop:2 }}>After all discounts · {planMeta.label} plan</div>
+                <div style={{ fontSize:12, color:"white", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.07em" }}>Net Amount Due</div>
+                <div style={{ fontSize:11, color:"white", marginTop:2 }}>After all discounts · {planMeta.label} plan</div>
               </div>
               <div style={{ fontSize:28, fontWeight:700, color:"white" }}>{fmt(netAmount)}</div>
             </div>
@@ -691,17 +706,17 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
 
               {payments.length === 0 ? (
                 <div style={{ padding:"40px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                  <div style={{ width:44, height:44, borderRadius:12, background:"#e8f5e0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <i className="ti ti-cash" style={{ fontSize:20, color:"#2e6b0d" }} />
+                  <div className={`bg-success-50 ${CHIP_GLOW.success}`} style={{ width:44, height:44, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <i className="ti ti-cash" style={{ fontSize:20, color:"var(--color-success-500)" }} />
                   </div>
-                  <div style={{ fontSize:13, color:"#8a6a6a", fontStyle:"italic" }}>No payments recorded yet.</div>
+                  <div style={{ fontSize:13, color:"var(--color-neutral-500)", fontStyle:"italic" }}>No payments recorded yet.</div>
                   {invoice.status !== "void" && (
                     <motion.button
                       onClick={() => onRecordPayment(invoiceId)}
                       whileHover={{ scale:1.03 }}
                       whileTap={{ scale:0.96 }}
                       transition={{ duration:0.12 }}
-                      style={{ marginTop:4, display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#2e6b0d,#256009)", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
+                      style={{ marginTop:4, display:"inline-flex", alignItems:"center", gap:6, height:34, padding:"0 16px", border:"none", borderRadius:8, background:"linear-gradient(135deg,var(--color-success-fill),var(--color-success-fill-2))", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}
                     >
                       <i className="ti ti-cash" style={{ fontSize:12 }} />Record First Payment
                     </motion.button>
@@ -1088,7 +1103,7 @@ export default function InvoicesPage() {
                       aria-pressed={isSelected}
                       onClick={() => setSelectedId(inv.invoice_id)}
                       className={`focus-ring flex w-full flex-col gap-1 border-b border-l-[3px] border-b-neutral-200/70 px-4 py-3 text-left transition-colors duration-150 ${
-                        isSelected ? "border-l-brand-500 bg-brand-50" : "border-l-transparent bg-white hover:bg-brand-50"
+                        isSelected ? "border-l-brand-500 bg-brand-50" : "border-l-transparent bg-surface hover:bg-brand-50"
                       }`}
                     >
                       <span className="flex w-full items-center justify-between gap-2">
@@ -1122,7 +1137,7 @@ export default function InvoicesPage() {
             {/* Pagination — the shared control, so it behaves and reads the
                 same as every other list in the app. */}
             {!loading && !loadError && pageMeta.count > 20 && (
-              <div className="border-t border-neutral-200 bg-white px-4 py-2.5">
+              <div className="border-t border-neutral-200 bg-surface px-4 py-2.5">
                 <Pagination
                   page={page}
                   totalPages={totalPages}

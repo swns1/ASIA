@@ -38,7 +38,7 @@ function AdviserChip({ name, inactive = false, readOnly, onRemove }) {
       className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1 text-[12.5px] font-semibold ${
         inactive
           ? "border-dashed border-neutral-400 bg-muted-50 text-muted-500"
-          : "border-neutral-200 bg-white text-neutral-800"
+          : "border-neutral-200 bg-surface text-neutral-800"
       }`}
     >
       <i
@@ -47,7 +47,7 @@ function AdviserChip({ name, inactive = false, readOnly, onRemove }) {
       />
       {name}
       {inactive && (
-        <span className="rounded-full bg-white px-1.5 text-[11px] font-bold">Inactive</span>
+        <span className="rounded-full bg-surface px-1.5 text-[11px] font-bold">Inactive</span>
       )}
       {!readOnly && (
         <button

@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const fetchAuditLogs = vi.fn();
 const fetchAuditFacets = vi.fn();
@@ -102,5 +103,28 @@ describe("Audit trail — band", () => {
     fetchAuditLogs.mockRejectedValue(new Error("Failed to load log records."));
     renderPage();
     expect(await screen.findByRole("button", { name: /try again|retry/i })).toBeTruthy();
+  });
+});
+
+describe("Audit trail — dark mode", () => {
+  const renderDark = () => render(
+    <ThemeContext.Provider value="dark">
+      <div data-theme="dark">
+        <MemoryRouter><AuditTrailPage /></MemoryRouter>
+      </div>
+    </ThemeContext.Provider>,
+  );
+
+  it("shows the records on a dark page", async () => {
+    renderDark();
+    expect(await screen.findByText("Maria Santos")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Rows per page" })).toBeTruthy();
+  });
+
+  it("shows the access notice on a dark page", async () => {
+    sessionStorage.setItem("current_user", JSON.stringify({ id: 5, name: "Reg", role: "registrar" }));
+    renderDark();
+    expect(await screen.findByText("Access Denied")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Back to Dashboard/ })).toBeTruthy();
   });
 });

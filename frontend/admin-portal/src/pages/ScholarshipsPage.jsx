@@ -26,6 +26,7 @@ import { groupYears } from "../utils/schoolYear";
 import { seriesDot } from "../constants/statusTones";
 import { GRADE_LEVELS_BY_LEVEL, LEVEL_FILTER_OPTIONS } from "../constants/schoolLevels";
 import fetchAllPages from "../utils/fetchAllPages";
+import { MENU_DARK } from "../components/ui/darkSurfaces";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -176,7 +177,8 @@ function AwardModal({ scholarshipTypes, schoolYear, onClose, onSaved }) {
           <AnimatePresence>
             {error && (
               <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
-                style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+                className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+                style={{ border:"1px solid var(--color-brand-300)", borderRadius:8, padding:"10px 14px", fontSize:13, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
                 <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
               </motion.div>
             )}
@@ -188,32 +190,33 @@ function AwardModal({ scholarshipTypes, schoolYear, onClose, onSaved }) {
           <Field label="Student" required htmlFor="award-student-search">
             {student ? (
               <motion.div initial={{ opacity:0, scale:0.97 }} animate={{ opacity:1, scale:1 }}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid #fde2de", borderRadius:10, background:"#fff8f6" }}>
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"1.5px solid var(--color-brand-border-soft)", borderRadius:10, background:"var(--color-brand-50)" }}>
                 <div style={{ width:36, height:36, borderRadius:"50%", background:getAvatarPalette(student.last_name).bg, color:getAvatarPalette(student.last_name).color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13, flexShrink:0 }}>
                   {`${student.first_name?.[0]??""}${student.last_name?.[0]??""}`.toUpperCase()}
                 </div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{student.first_name} {student.last_name}</div>
-                  <div style={{ fontSize:11, color:"#8a6a6a" }}>LRN {student.lrn}</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"var(--color-neutral-900)" }}>{student.first_name} {student.last_name}</div>
+                  <div style={{ fontSize:11, color:"var(--color-neutral-500)" }}>LRN {student.lrn}</div>
                 </div>
                 <button onClick={() => { setStudent(null); setEnrollment(null); }}
-                  style={{ background:"transparent", border:"1px solid #fde2de", borderRadius:7, padding:"5px 10px", fontSize:12, color:"#7a5050", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
+                  style={{ background:"transparent", border:"1px solid var(--color-brand-border-soft)", borderRadius:7, padding:"5px 10px", fontSize:12, color:"var(--color-neutral-700)", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Change</button>
               </motion.div>
             ) : (
               <div style={{ position:"relative" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, background:"white", border:"1.5px solid #fde2de", borderRadius:10, padding:"0 14px", height:44 }}>
-                  <i className="ti ti-search" style={{ fontSize:14, color:"#8a6a6a" }} />
+                <div style={{ display:"flex", alignItems:"center", gap:10, background:"var(--color-surface)", border:"1.5px solid var(--color-brand-border-soft)", borderRadius:10, padding:"0 14px", height:44 }}>
+                  <i className="ti ti-search" style={{ fontSize:14, color:"var(--color-neutral-500)" }} />
                   <input id="award-student-search" placeholder="Search student by name or LRN…" value={search}
                     onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
-                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"#1a0a0a", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
-                  {loadingSt && <i className="ti ti-loader-2" style={{ fontSize:13, color:"#c92a2a", animation:"spin 1s linear infinite" }} />}
+                    style={{ flex:1, border:"none", background:"transparent", fontSize:13, color:"var(--color-neutral-900)", outline:"none", fontFamily:"'DM Sans',sans-serif" }} />
+                  {loadingSt && <i className="ti ti-loader-2" style={{ fontSize:13, color:"var(--color-brand-600)", animation:"spin 1s linear infinite" }} />}
                 </div>
                 <AnimatePresence>
                   {open && search && (
                     <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.14 }}
-                      style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"white", borderRadius:10, border:"1px solid #fde2de", boxShadow:"0 12px 40px rgba(224,49,49,0.14)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
-                      {students.length === 0 && !loadingSt && <div style={{ padding:"16px", textAlign:"center", color:"#8a6a6a", fontSize:13 }}>No students found.</div>}
+                      className={`shadow-lg ${MENU_DARK}`}
+                      style={{ position:"absolute", top:"100%", left:0, right:0, marginTop:6, background:"var(--color-surface-raised)", borderRadius:10, border:"1px solid var(--color-brand-border-soft)", maxHeight:220, overflowY:"auto", zIndex:1000 }}>
+                      {students.length === 0 && !loadingSt && <div style={{ padding:"16px", textAlign:"center", color:"var(--color-neutral-500)", fontSize:13 }}>No students found.</div>}
                       {students.map((st) => (
                         <div key={st.student_id} onClick={() => { setStudent(st); setOpen(false); setSearch(""); }}
                           className="flex cursor-pointer items-center gap-2.5 border-b border-neutral-200/70 px-3.5 py-2.5 transition-colors hover:bg-brand-50">
@@ -221,8 +224,8 @@ function AwardModal({ scholarshipTypes, schoolYear, onClose, onSaved }) {
                             {`${st.first_name?.[0]??""}${st.last_name?.[0]??""}`.toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{st.last_name}, {st.first_name}</div>
-                            <div style={{ fontSize:11, color:"#8a6a6a" }}>LRN {st.lrn}</div>
+                            <div style={{ fontSize:13, fontWeight:600, color:"var(--color-neutral-900)" }}>{st.last_name}, {st.first_name}</div>
+                            <div style={{ fontSize:11, color:"var(--color-neutral-500)" }}>LRN {st.lrn}</div>
                           </div>
                         </div>
                       ))}
@@ -333,32 +336,35 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
             <div>
               {results.success.length > 0 && (
                 <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-                  style={{ background:"#e8f5e0", border:"1px solid #a3d977", borderRadius:10, padding:"14px 16px", marginBottom:12 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#2e6b0d", marginBottom:8 }}>
+                  className="border border-[#a3d977] dark:border-success-dot/40"
+                  style={{ background:"var(--color-success-50)", borderRadius:10, padding:"14px 16px", marginBottom:12 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"var(--color-success-500)", marginBottom:8 }}>
                     <i className="ti ti-circle-check" style={{ fontSize:15, marginRight:6 }} />
                     {results.success.length} scholarship{results.success.length !== 1 ? "s" : ""} awarded successfully
                   </div>
-                  {results.success.map((n, i) => <div key={i} style={{ fontSize:12, color:"#2e6b0d", marginLeft:20 }}>• {n}</div>)}
+                  {results.success.map((n, i) => <div key={i} style={{ fontSize:12, color:"var(--color-success-500)", marginLeft:20 }}>• {n}</div>)}
                 </motion.div>
               )}
               {results.failed.length > 0 && (
                 <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.06 }}
-                  style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:10, padding:"14px 16px" }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#b91c1c", marginBottom:8 }}>
+                  className="bg-[#fef2f2] dark:bg-error-50"
+                  style={{ border:"1px solid var(--color-brand-300)", borderRadius:10, padding:"14px 16px" }}>
+                  <div className="text-[#b91c1c] dark:text-error-500" style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>
                     <i className="ti ti-alert-circle" style={{ fontSize:15, marginRight:6 }} />
                     {results.failed.length} not awarded
                   </div>
-                  {results.failed.map((n, i) => <div key={i} style={{ fontSize:12, color:"#b91c1c", marginLeft:20 }}>• {n}</div>)}
+                  {results.failed.map((n, i) => <div key={i} className="text-[#b91c1c] dark:text-error-500" style={{ fontSize:12, marginLeft:20 }}>• {n}</div>)}
                 </motion.div>
               )}
               {results.reissue?.length > 0 && (
                 <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.12 }}
-                  style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, padding:"14px 16px", marginTop:12 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#7a4a08", marginBottom:8 }}>
+                  className="border border-[#fde68a] bg-[#fffbeb] dark:border-warning-dot/40 dark:bg-warning-50"
+                  style={{ borderRadius:10, padding:"14px 16px", marginTop:12 }}>
+                  <div className="text-[#7a4a08] dark:text-warning-500" style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>
                     <i className="ti ti-file-invoice" style={{ fontSize:15, marginRight:6 }} />
                     Already invoiced — re-issue these in Invoices to apply the scholarship
                   </div>
-                  {results.reissue.map((n, i) => <div key={i} style={{ fontSize:12, color:"#7a4a08", marginLeft:20 }}>• {n}</div>)}
+                  {results.reissue.map((n, i) => <div key={i} className="text-[#7a4a08] dark:text-warning-500" style={{ fontSize:12, marginLeft:20 }}>• {n}</div>)}
                 </motion.div>
               )}
             </div>
@@ -367,7 +373,8 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
               <AnimatePresence>
                 {error && (
                   <motion.div initial={{ opacity:0, y:-6 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-6 }} transition={{ duration:0.16 }}
-                    style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#b91c1c", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+                    className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+                    style={{ border:"1px solid var(--color-brand-300)", borderRadius:8, padding:"10px 14px", fontSize:13, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
                     <i className="ti ti-alert-circle" style={{ fontSize:14 }} />{error}
                   </motion.div>
                 )}
@@ -391,17 +398,17 @@ function ApplyEligibilityModal({ eligible, scholarshipTypes, onClose, onSaved })
                 <div className="mb-2 block text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">
                   Eligible Students ({eligible.length})
                 </div>
-                <div style={{ maxHeight:240, overflowY:"auto", border:"1px solid #f5eaea", borderRadius:10, overflow:"hidden" }}>
+                <div style={{ maxHeight:240, overflowY:"auto", border:"1px solid var(--color-neutral-200)", borderRadius:10, overflow:"hidden" }}>
                   {eligible.map((elig, i) => (
-                    <div key={elig.enrollment_id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderBottom:i < eligible.length - 1 ? "1px solid #f9f0f0" : "none", background:"white" }}>
+                    <div key={elig.enrollment_id} className={i < eligible.length - 1 ? "border-b border-[#f9f0f0] dark:border-neutral-200" : undefined} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"var(--color-surface)" }}>
                       <div style={{ width:34, height:34, borderRadius:"50%", background:getAvatarPalette(elig.last_name ?? "X").bg, color:getAvatarPalette(elig.last_name ?? "X").color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
                         {elig.initials}
                       </div>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:"#1a0a0a" }}>{elig.student_name}</div>
-                        <div style={{ fontSize:11, color:"#8a6a6a", marginTop:1 }}>S.Y. {elig.school_year} · {elig.grade_level} · {PERIOD_LABELS[elig.grading_period] ?? elig.grading_period}</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:"var(--color-neutral-900)" }}>{elig.student_name}</div>
+                        <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:1 }}>S.Y. {elig.school_year} · {elig.grade_level} · {PERIOD_LABELS[elig.grading_period] ?? elig.grading_period}</div>
                       </div>
-                      <span style={{ fontSize:14, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d" }}>{elig.avg.toFixed(2)}</span>
+                      <span style={{ fontSize:14, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"var(--color-success-50)", color:"var(--color-success-500)" }}>{elig.avg.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>

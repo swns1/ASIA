@@ -10,10 +10,22 @@ import { describeApiError } from "../utils/apiError";
 import { localISODate } from "../utils/format";
 import { getCurrentUser, hasAnyRole, GRADE_ROLES } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
+import useTheme from "../hooks/useTheme";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 const C = {
-  dark: "#1a0a0a", muted: "#7a5050", border: "#f5eaea", red: "#e03131",
+  dark: "var(--color-neutral-900)", muted: "var(--color-neutral-700)", border: "var(--color-neutral-200)", red: "var(--color-brand-500)",
 };
+
+// The dark finish for the learner dropdowns (MENU_DARK's shadow-float-dark):
+// a literal, since the dropdown shadow is an inline prop.
+const DARK_FLOAT_SHADOW = "0 16px 40px rgba(0,0,0,0.55)";
+// The SF2 button's fill (its light end stop is a shade off --color-info-fill-2,
+// so light keeps its literal) and a blue glow that shows on a dark page.
+const DARK_SF2_FILL = "linear-gradient(135deg,var(--color-info-fill),var(--color-info-fill-2))";
+const DARK_SF2_SHADOW = "0 4px 16px rgba(42,111,196,0.30)";
+const DARK_SF2_SHADOW_HOVER = "0 6px 20px rgba(42,111,196,0.40)";
 
 const GRADE_LEVELS = [
   "Nursery", "Kindergarten",
@@ -26,23 +38,23 @@ const OTHER_FORMS = [
   {
     code: "SF9", name: "Learner's Report Card",
     desc: "Periodic report card issued to learners at the end of each grading period.",
-    icon: "ti-file-certificate", color: "#2e6b0d", bg: "#e8f5e0", status: "available",
+    icon: "ti-file-certificate", color: "var(--color-success-500)", bg: "var(--color-success-50)", tile: `bg-success-50 ${CHIP_GLOW.success}`, status: "available",
   },
   {
     code: "SF10", name: "Learner's Permanent Record",
     desc: "Cumulative academic record maintained for each learner throughout their schooling.",
-    icon: "ti-archive", color: "#7c3aed", bg: "#f0e8fd", status: "available",
+    icon: "ti-archive", color: "var(--color-accent-500)", bg: "var(--color-accent-50)", tile: `bg-accent-50 ${CHIP_GLOW.accent}`, status: "available",
   },
 ];
 
 const inputStyle = {
-  width: "100%", height: 40, border: "1.5px solid #fde2de", borderRadius: 10,
-  padding: "0 12px", fontSize: 13, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif",
-  outline: "none", boxSizing: "border-box", background: "white",
+  width: "100%", height: 40, border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10,
+  padding: "0 12px", fontSize: 13, color: "var(--color-neutral-900)", fontFamily: "'DM Sans',sans-serif",
+  outline: "none", boxSizing: "border-box", background: "var(--color-surface)",
 };
 
 const labelStyle = {
-  display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050",
+  display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)",
   textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6,
 };
 
@@ -73,7 +85,7 @@ function enrollmentLabel(enr) {
 // input reads as unfinished rather than as waiting for input.
 function SearchHint({ form }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", marginBottom: 8, background: form.bg, border: `1px solid ${form.color}26`, borderRadius: 8, fontSize: 11.5, fontWeight: 600, color: form.color, lineHeight: 1.45 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", marginBottom: 8, background: form.bg, border: `1px solid color-mix(in srgb, ${form.color} 14.9%, transparent)`, borderRadius: 8, fontSize: 11.5, fontWeight: 600, color: form.color, lineHeight: 1.45 }}>
       <i className="ti ti-user-search" style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
       <span>Search a learner to generate their {form.code} — the print button appears once one is selected.</span>
     </div>
@@ -89,6 +101,7 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
   // empty-vs-error conflation ui/ErrorState was introduced to stamp out.
   const [searchError, setSearchError] = useState(null);
   const timerRef = useRef(null);
+  const dark = useTheme() === "dark";
 
   function handleChange(value) {
     setSearch(value);
@@ -121,39 +134,39 @@ function StudentSearch({ borderColor, dropdownBorderColor, dropdownShadow, onSel
           style={{ ...inputStyle, height: 34, border: `1.5px solid ${borderColor}` }}
         />
         {searching && (
-          <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#aaa" }}>…</span>
+          <span className="text-[#aaa] dark:text-neutral-500" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11 }}>…</span>
         )}
       </div>
       {results.length > 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, boxShadow: dropdownShadow, overflow: "hidden", marginTop: 2 }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface-raised)", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, boxShadow: dropdownShadow, overflow: "hidden", marginTop: 2 }}>
           {results.map(s => (
             <div
               key={s.student_id}
               onClick={() => { onSelect(s); setSearch(""); setResults([]); }}
-              style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #f5eaea", color: "#1a0a0a" }}
-              onMouseEnter={e => e.currentTarget.style.background = "#f9f9f9"}
-              onMouseLeave={e => e.currentTarget.style.background = "white"}
+              style={{ padding: "8px 12px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid var(--color-neutral-200)", color: "var(--color-neutral-900)" }}
+              onMouseEnter={e => e.currentTarget.style.background = dark ? "var(--color-brand-50)" : "#f9f9f9"}
+              onMouseLeave={e => e.currentTarget.style.background = "var(--color-surface-raised)"}
             >
               <span style={{ fontWeight: 700 }}>{studentLabel(s)}</span>
-              <span style={{ marginLeft: 8, fontSize: 11, color: "#855c5c" }}>LRN: {s.lrn} · {s.student_number}</span>
+              <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-neutral-600)" }}>LRN: {s.lrn} · {s.student_number}</span>
             </div>
           ))}
         </div>
       )}
       {/* A failed search must look like a failure. Error wins over empty. */}
       {search.trim().length >= 2 && !searching && searchError && (
-        <div role="alert" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1.5px solid #f1aeae", borderRadius: 8, zIndex: 100, padding: "10px 14px", marginTop: 2, boxShadow: dropdownShadow }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#c92a2a" }}>
+        <div role="alert" className="border-[1.5px] border-solid border-[#f1aeae] dark:border-error-dot/40" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface-raised)", borderRadius: 8, zIndex: 100, padding: "10px 14px", marginTop: 2, boxShadow: dropdownShadow }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "var(--color-brand-600)" }}>
             <i className="ti ti-cloud-off" style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
             {describeApiError(searchError, { subject: "students" }).title}
           </div>
-          <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 3, lineHeight: 1.45 }}>
+          <div style={{ fontSize: 11, color: "var(--color-neutral-500)", marginTop: 3, lineHeight: 1.45 }}>
             {describeApiError(searchError, { subject: "students" }).message}
           </div>
         </div>
       )}
       {search.trim().length >= 2 && !searching && !searchError && results.length === 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, padding: "10px 14px", fontSize: 12, color: "#aaa", marginTop: 2, boxShadow: dropdownShadow }}>
+        <div className="text-[#aaa] dark:text-neutral-500" style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface-raised)", border: `1.5px solid ${dropdownBorderColor}`, borderRadius: 8, zIndex: 100, padding: "10px 14px", fontSize: 12, marginTop: 2, boxShadow: dropdownShadow }}>
           No students found.
         </div>
       )}
@@ -167,6 +180,7 @@ export default function SchoolFormsPage() {
   // accounting; offering them only led to "You do not have access" pages.
   // SF1, the register, is enrollment data every staff role may read.
   const canPrintAcademic = hasAnyRole(getCurrentUser(), GRADE_ROLES);
+  const dark = useTheme() === "dark";
 
   // Shared. Forms print for any registered year, archived ones included.
   const { currentYear, options: registeredYears } = useSchoolYear();
@@ -283,17 +297,17 @@ export default function SchoolFormsPage() {
         animate="visible"
       >
         {/* ── SF1 ── */}
-        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(224,49,49,0.06)" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#fdfafa,white)", borderRadius: "16px 16px 0 0" }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <motion.div variants={pageVariants.item} className={`bg-surface shadow-[0_2px_16px_rgba(224,49,49,0.06)] ${CARD_DARK}`} style={{ borderRadius: 16, border: "1px solid var(--color-neutral-200)" }}>
+          <div className="bg-[linear-gradient(to_right,#fdfafa,white)] dark:bg-[linear-gradient(to_right,var(--color-brand-50),var(--color-surface))]" style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", alignItems: "center", gap: 14, borderRadius: "16px 16px 0 0" }}>
+            <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className="ti ti-clipboard-list" style={{ fontSize: 20, color: C.red }} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>SF1 — School Register</span>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "#fff0f0", color: C.red }}>Available</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "var(--color-brand-100)", color: C.red }}>Available</span>
               </div>
-              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 2 }}>
                 Official class list of all enrolled learners per section. Required per grade level and section every school year.
               </div>
             </div>
@@ -301,7 +315,7 @@ export default function SchoolFormsPage() {
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
-                <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...inputStyle, color: gradeLevel ? "#1a0a0a" : "#aaa", cursor: "pointer" }}>
+                <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={{ ...inputStyle, color: gradeLevel ? "var(--color-neutral-900)" : dark ? "var(--color-neutral-500)" : "#aaa", cursor: "pointer" }}>
                   <option value="">Select grade level…</option>
                   {GRADE_LEVELS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
@@ -321,7 +335,7 @@ export default function SchoolFormsPage() {
             </div>
             <div style={{ minHeight: 38, marginBottom: sf1Error ? 14 : 0 }}>
               {sf1Error && (
-                <div style={{ padding: "9px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 7 }}>
+                <div className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500" style={{ padding: "9px 14px", border: "1px solid var(--color-brand-300)", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", gap: 7 }}>
                   <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf1Error}
                 </div>
               )}
@@ -331,7 +345,7 @@ export default function SchoolFormsPage() {
               whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.12 }}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
             >
               <i className="ti ti-external-link" style={{ fontSize: 14 }} /> Open SF1
             </motion.button>
@@ -340,17 +354,17 @@ export default function SchoolFormsPage() {
 
         {/* ── SF2 ── attendance, like SF9/SF10's grades, is refused to accounting */}
         {canPrintAcademic && (
-        <motion.div variants={pageVariants.item} style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", boxShadow: "0 2px 16px rgba(20,85,160,0.06)" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(to right,#f5f8fd,white)", borderRadius: "16px 16px 0 0" }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#e3f0fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <i className="ti ti-calendar-stats" style={{ fontSize: 20, color: "#1455a0" }} />
+        <motion.div variants={pageVariants.item} className={`bg-surface shadow-[0_2px_16px_rgba(20,85,160,0.06)] ${CARD_DARK}`} style={{ borderRadius: 16, border: "1px solid var(--color-neutral-200)" }}>
+          <div className="bg-[linear-gradient(to_right,#f5f8fd,white)] dark:bg-[linear-gradient(to_right,color-mix(in_srgb,var(--color-info-50)_40%,var(--color-surface)),var(--color-surface))]" style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", alignItems: "center", gap: 14, borderRadius: "16px 16px 0 0" }}>
+            <div className={`bg-info-50 ${CHIP_GLOW.info}`} style={{ width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <i className="ti ti-calendar-stats" style={{ fontSize: 20, color: "var(--color-info-500)" }} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>SF2 — Daily Attendance Register</span>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "#e3f0fd", color: "#1455a0" }}>Available</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: "var(--color-info-50)", color: "var(--color-info-500)" }}>Available</span>
               </div>
-              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 2 }}>
                 Monthly learner attendance record per class. Pulls data from the Attendance module.
               </div>
             </div>
@@ -358,7 +372,7 @@ export default function SchoolFormsPage() {
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
-                <select value={sf2GradeLevel} onChange={(e) => setSf2GradeLevel(e.target.value)} style={{ ...inputStyle, color: sf2GradeLevel ? "#1a0a0a" : "#aaa", cursor: "pointer" }}>
+                <select value={sf2GradeLevel} onChange={(e) => setSf2GradeLevel(e.target.value)} style={{ ...inputStyle, color: sf2GradeLevel ? "var(--color-neutral-900)" : dark ? "var(--color-neutral-500)" : "#aaa", cursor: "pointer" }}>
                   <option value="">Select grade level…</option>
                   {GRADE_LEVELS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
@@ -381,17 +395,17 @@ export default function SchoolFormsPage() {
             </div>
             <div style={{ minHeight: 38, marginBottom: sf2Error ? 14 : 0 }}>
               {sf2Error && (
-                <div style={{ padding: "9px 14px", background: "#eef3fc", border: "1px solid #93b4f5", borderRadius: 8, fontSize: 12, color: "#1455a0", display: "flex", alignItems: "center", gap: 7 }}>
+                <div className="border border-[#93b4f5] bg-[#eef3fc] dark:border-info-dot/40 dark:bg-info-50" style={{ padding: "9px 14px", borderRadius: 8, fontSize: 12, color: "var(--color-info-500)", display: "flex", alignItems: "center", gap: 7 }}>
                   <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{sf2Error}
                 </div>
               )}
             </div>
             <motion.button
               onClick={handleOpenSF2}
-              whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(20,85,160,0.30)" }}
+              whileHover={{ scale: 1.02, boxShadow: dark ? DARK_SF2_SHADOW_HOVER : "0 6px 20px rgba(20,85,160,0.30)" }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.12 }}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#1455a0,#0e4080)", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(20,85,160,0.24)" }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: dark ? DARK_SF2_FILL : "linear-gradient(135deg,#1455a0,#0e4080)", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: dark ? DARK_SF2_SHADOW : "0 4px 16px rgba(20,85,160,0.24)" }}
             >
               <i className="ti ti-external-link" style={{ fontSize: 14 }} /> Open SF2
             </motion.button>
@@ -403,9 +417,9 @@ export default function SchoolFormsPage() {
         {canPrintAcademic && (
         <motion.div variants={pageVariants.item} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
           {OTHER_FORMS.map((form) => (
-            <div key={form.code} style={{ background: "white", borderRadius: 14, border: "1px solid #f5eaea", padding: "20px 22px", boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}>
+            <div key={form.code} className={`bg-surface shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${CARD_DARK}`} style={{ borderRadius: 14, border: "1px solid var(--color-neutral-200)", padding: "20px 22px" }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: form.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div className={form.tile} style={{ width: 40, height: 40, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <i className={`ti ${form.icon}`} style={{ fontSize: 18, color: form.color }} />
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 50, background: form.bg, color: form.color }}>
@@ -413,7 +427,7 @@ export default function SchoolFormsPage() {
                 </span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 5 }}>{form.code} — {form.name}</div>
-              <div style={{ fontSize: 12, color: "#8a6a6a", lineHeight: 1.6, marginBottom: 16 }}>{form.desc}</div>
+              <div style={{ fontSize: 12, color: "var(--color-neutral-500)", lineHeight: 1.6, marginBottom: 16 }}>{form.desc}</div>
 
               {/* ── SF9 ── */}
               {form.code === "SF9" && (
@@ -422,27 +436,29 @@ export default function SchoolFormsPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {/* Selected student chip + clear */}
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid ${form.color}40`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
+                        <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
                           {studentLabel(sf9Student)}
                         </div>
                         <button
                           onClick={() => { setSf9Student(null); setSf9Enrollments([]); setSf9EnrollmentId(""); }}
-                          style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#5c5752", fontFamily: "'DM Sans',sans-serif" }}
+                          aria-label="Clear the selected learner"
+                          className="border-[1.5px] border-solid border-[#ddd] dark:border-neutral-300"
+                          style={{ padding: "6px 10px", borderRadius: 8, background: "var(--color-surface)", fontSize: 12, cursor: "pointer", color: "var(--color-muted-500)", fontFamily: "'DM Sans',sans-serif" }}
                         >
                           ✕
                         </button>
                       </div>
                       {/* Enrollment picker */}
                       {sf9LoadingEnr ? (
-                        <div style={{ fontSize: 12, color: "#aaa" }}>Loading enrollments…</div>
+                        <div className="text-[#aaa] dark:text-neutral-500" style={{ fontSize: 12 }}>Loading enrollments…</div>
                       ) : sf9Enrollments.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "#c92a2a" }}>No enrollments found for this student.</div>
+                        <div style={{ fontSize: 12, color: "var(--color-brand-600)" }}>No enrollments found for this student.</div>
                       ) : (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <select
                             value={sf9EnrollmentId}
                             onChange={(e) => setSf9EnrollmentId(e.target.value)}
-                            style={{ ...inputStyle, height: 34, flex: 1, border: `1.5px solid ${form.color}40`, color: "#1a0a0a", cursor: "pointer" }}
+                            style={{ ...inputStyle, height: 34, flex: 1, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, color: "var(--color-neutral-900)", cursor: "pointer" }}
                           >
                             {sf9Enrollments.map(enr => (
                               <option key={enr.enrollment_id} value={enr.enrollment_id}>
@@ -455,7 +471,7 @@ export default function SchoolFormsPage() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.97 }}
                             transition={{ duration: 0.12 }}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid ${form.color}40`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
                           >
                             <i className="ti ti-printer" style={{ fontSize: 12 }} /> Print SF9
                           </motion.button>
@@ -466,9 +482,9 @@ export default function SchoolFormsPage() {
                     <>
                       <SearchHint form={form} />
                       <StudentSearch
-                        borderColor={`${form.color}40`}
-                        dropdownBorderColor={`${form.color}40`}
-                        dropdownShadow={`0 4px 16px rgba(46,107,13,0.12)`}
+                        borderColor={`color-mix(in srgb, ${form.color} 25%, transparent)`}
+                        dropdownBorderColor={`color-mix(in srgb, ${form.color} 25%, transparent)`}
+                        dropdownShadow={dark ? DARK_FLOAT_SHADOW : `0 4px 16px rgba(46,107,13,0.12)`}
                         onSelect={setSf9Student}
                       />
                     </>
@@ -481,12 +497,14 @@ export default function SchoolFormsPage() {
                 <div>
                   {sf10Student ? (
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid ${form.color}40`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
+                      <div style={{ flex: 1, padding: "6px 10px", background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: form.color }}>
                         {studentLabel(sf10Student)}
                       </div>
                       <button
                         onClick={() => setSf10Student(null)}
-                        style={{ padding: "6px 10px", border: "1.5px solid #ddd", borderRadius: 8, background: "white", fontSize: 12, cursor: "pointer", color: "#5c5752", fontFamily: "'DM Sans',sans-serif" }}
+                        aria-label="Clear the selected learner"
+                        className="border-[1.5px] border-solid border-[#ddd] dark:border-neutral-300"
+                        style={{ padding: "6px 10px", borderRadius: 8, background: "var(--color-surface)", fontSize: 12, cursor: "pointer", color: "var(--color-muted-500)", fontFamily: "'DM Sans',sans-serif" }}
                       >
                         ✕
                       </button>
@@ -495,7 +513,7 @@ export default function SchoolFormsPage() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.97 }}
                         transition={{ duration: 0.12 }}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid ${form.color}40`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
                       >
                         <i className="ti ti-printer" style={{ fontSize: 12 }} /> Print SF10
                       </motion.button>
@@ -504,9 +522,9 @@ export default function SchoolFormsPage() {
                     <>
                       <SearchHint form={form} />
                       <StudentSearch
-                        borderColor={`${form.color}40`}
-                        dropdownBorderColor={`${form.color}40`}
-                        dropdownShadow={`0 4px 16px rgba(124,58,237,0.12)`}
+                        borderColor={`color-mix(in srgb, ${form.color} 25%, transparent)`}
+                        dropdownBorderColor={`color-mix(in srgb, ${form.color} 25%, transparent)`}
+                        dropdownShadow={dark ? DARK_FLOAT_SHADOW : `0 4px 16px rgba(124,58,237,0.12)`}
                         onSelect={setSf10Student}
                       />
                     </>

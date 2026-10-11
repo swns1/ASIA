@@ -1,4 +1,5 @@
-import { C } from "./requirementMeta";
+import useTheme from "../../hooks/useTheme";
+import { C, DARK_C } from "./requirementMeta";
 
 /**
  * The OCR reader's verdict on a document about to be uploaded.
@@ -17,6 +18,7 @@ import { C } from "./requirementMeta";
  * deletes that bug.
  */
 export default function DocumentCheckStrip({ state, check, requirementName, studentName }) {
+  const dark = useTheme() === "dark";
   if (state === "idle") return null;
 
   // "done" with nothing to show means the reader returned no verdict. That is
@@ -58,9 +60,9 @@ export default function DocumentCheckStrip({ state, check, requirementName, stud
   return (
     <div style={{
       fontSize: 12, borderRadius: 10, padding: "10px 12px",
-      color: ok ? C.green : C.redDark,
+      color: ok ? (dark ? DARK_C.green : C.green) : C.redDark,
       background: ok ? C.greenLight : C.redLight,
-      border: `1px solid ${ok ? C.greenBorder : C.redBorder}`,
+      border: `1px solid ${ok ? (dark ? DARK_C.greenBorder : C.greenBorder) : C.redBorder}`,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
         <i className={`ti ${ok ? "ti-circle-check" : "ti-alert-triangle"}`} style={{ fontSize: 14 }} />

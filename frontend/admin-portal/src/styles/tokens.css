@@ -143,6 +143,14 @@
   --color-action:   #e03131;
   --color-action-2: #c92a2a;
   --color-danger:   #9b2020;
+  /* The green and blue confirm buttons (Record First Payment, Mark
+     Completed, Open SF2). Unlike the red ones these do change in dark: the
+     light fills sink into a dark page (2.4–2.8:1), so the dark set lifts
+     them to stand 3.3:1+ off it while white text keeps 4.9:1+. */
+  --color-success-fill:   #2e6b0d;
+  --color-success-fill-2: #256009;
+  --color-info-fill:      #1455a0;
+  --color-info-fill-2:    #0e3d7a;
 
   /* ── On the brand panel ────────────────────────────────────────────────
      Text and lines on the dark brand panel (brand-950: the login page, a
@@ -235,6 +243,23 @@
   --chart-plane:   #fdfcfb;
   --chart-dot:     #ffffff;
   --chart-on-mark: #1a0a0a;
+
+  /* Toasts (utils/toastConfig.js). react-hot-toast styles a toast inline,
+     so it reads these; AppToaster gives them the page's theme. A var() here
+     would resolve once, at the root, so each theme lists its own values. */
+  --toast-bg:              #ffffff;
+  --toast-text:            #1a0a0a;
+  --toast-shadow:          0 8px 28px rgba(224, 49, 49, 0.12);
+  --toast-success-bg:      #f0fdf4;
+  --toast-success-border:  #bbf7d0;
+  --toast-success-text:    #256009;
+  --toast-success-icon:    #2e6b0d;
+  --toast-success-icon-on: #e8f5e0;
+  --toast-error-bg:        #fff0f0;
+  --toast-error-border:    #fca5a5;
+  --toast-error-text:      #9b2020;
+  --toast-error-icon:      #9b2020;
+  --toast-error-icon-on:   #fde8e8;
 }
 
 /* ── Dark theme ─────────────────────────────────────────────────────────────
@@ -295,6 +320,12 @@
   --color-surface:        #1c1414;
   --color-surface-raised: #261c1c;
 
+  /* White text: 4.95/5.39:1 (green), 5.04/5.53:1 (blue). */
+  --color-success-fill:   #33801a;
+  --color-success-fill-2: #2b7a14;
+  --color-info-fill:      #2a6fc4;
+  --color-info-fill-2:    #1f68c0;
+
   --avatar-1-bg: #3a1c1c; --avatar-1-fg: #ff9c90;
   --avatar-2-bg: #172640; --avatar-2-fg: #9dbcf6;
   --avatar-3-bg: #142b1d; --avatar-3-fg: #8fd6a1;
@@ -313,6 +344,22 @@
   --chart-plane:   #160f0f;
   --chart-dot:     #160f0f;
   --chart-on-mark: #1c1414;
+
+  /* Raised like a menu, tinted like a status. Text 9.8:1 (success) and
+     7.4:1 (error) on its fill. */
+  --toast-bg:              #261c1c;
+  --toast-text:            #f6eded;
+  --toast-shadow:          0 16px 40px rgba(0, 0, 0, 0.55);
+  --toast-success-bg:      #13261a;
+  --toast-success-border:  rgba(127, 207, 138, 0.35);
+  --toast-success-text:    #93dc9c;
+  --toast-success-icon:    #7fcf8a;
+  --toast-success-icon-on: #13261a;
+  --toast-error-bg:        #341717;
+  --toast-error-border:    #7d3535;
+  --toast-error-text:      #ff8f85;
+  --toast-error-icon:      #ff8f85;
+  --toast-error-icon-on:   #341717;
 }
 
 /* `dark:` means "inside a dark container", replacing Tailwind's default

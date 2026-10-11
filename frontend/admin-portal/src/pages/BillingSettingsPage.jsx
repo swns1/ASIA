@@ -16,6 +16,9 @@ import { useSchoolYear } from "../context/SchoolYearContext";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
 import DeveloperTab from "./billingSettings/DeveloperTab";
+import useTheme from "../hooks/useTheme";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
+import { CHIP_GLOW, LEVEL_GLOW } from "../constants/statusTones";
 
 import {
   getSchoolSettings as _getSettings,
@@ -51,16 +54,22 @@ function describeRecalculation(result) {
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 const C = {
-  red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
-  border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
-  muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
+  red: "var(--color-brand-500)", redDark: "var(--color-brand-600)", redLight: "var(--color-brand-100)", redBorder: "var(--color-brand-300)",
+  border: "var(--color-neutral-200)", softBorder: "#f9f0f0", text: "var(--color-neutral-900)",
+  muted: "var(--color-neutral-700)", pale: "var(--color-neutral-500)", micro: "var(--color-neutral-500)", bg: "var(--color-neutral-50)", white: "#ffffff",
 };
+
+// framer-motion can't tween a var(), so what it animates takes literal
+// colours: in dark, the dark values of the same tokens (brand-50 for a row
+// hover, brand-100 for a button hover, brand-300 / brand-500 / brand-600 for
+// hover borders and text).
+const DARK_HOVER = { row: "#221616", fill: "#2f1a1a", border: "#7d3535", red: "#ef4b4b", redDark: "#ff8f8f" };
 
 const baseCss = `
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   @keyframes spin    { to{transform:rotate(360deg)} }
-  .settings-input:focus { border-color:#e03131 !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; outline:none; }
-  .settings-input::placeholder { color:#8a6a6a; }
+  .settings-input:focus { border-color:var(--color-brand-500) !important; box-shadow:0 0 0 3px rgba(224,49,49,0.09) !important; outline:none; }
+  .settings-input::placeholder { color:var(--color-neutral-500); }
   /* A card's last field must not stack its own 18px under the card's 22px
      padding: that left ~40px of air below the final input against 22px above
      the first label, so every card read as if its contents sat too high. */
@@ -82,7 +91,7 @@ const tabsFor = (user) =>
   import.meta.env.DEV && hasAnyRole(user, STAFF_ADMIN) ? [...TABS, DEVELOPER_TAB] : TABS;
 
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
+  <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -142,15 +151,16 @@ function SectionCard({ title, subtitle, icon, children, delay = 0, span = false 
     <motion.div
       initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.28, delay, ease: "easeOut" }}
+      className={`bg-surface shadow-[0_2px_16px_rgba(224,49,49,0.06)] ${CARD_DARK}`}
       style={{
-        background: C.white, borderRadius: 16, border: `1px solid ${C.border}`,
-        overflow: "hidden", boxShadow: "0 2px 16px rgba(224,49,49,0.06)",
+        borderRadius: 16, border: `1px solid ${C.border}`,
+        overflow: "hidden",
         display: "flex", flexDirection: "column",
         ...(span ? { gridColumn: "1 / -1" } : null),
       }}
     >
       <div style={{ padding: "16px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <i className={`ti ${icon}`} style={{ fontSize: 18, color: C.red }} />
         </div>
         <div>
@@ -182,9 +192,9 @@ function Field({ label, hint, children, required, grow = false }) {
 }
 
 const inputStyle = {
-  width: "100%", border: `1.5px solid #f0e4e4`, borderRadius: 10,
+  width: "100%", border: `1.5px solid var(--color-neutral-300)`, borderRadius: 10,
   padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif",
-  color: C.text, background: C.white, boxSizing: "border-box",
+  color: C.text, background: "var(--color-surface)", boxSizing: "border-box",
   transition: "border-color 0.15s, box-shadow 0.15s",
 };
 
@@ -192,11 +202,11 @@ const inputStyle = {
 // changeable through the API before; the labels here hardcoded 3% and 5%, and
 // the due months described a calendar the installment schedule no longer used.
 const RATE_ROWS = [
-  { code: "MONTHLY_PLAN",     label: "Monthly plan",     plan: "monthly",     color: "#1455a0", bg: "#e3f0fd" },
-  { code: "QUARTERLY_PLAN",   label: "Quarterly plan",   plan: "quarterly",   color: "#2e6b0d", bg: "#e8f5e0" },
-  { code: "SEMI_ANNUAL_PLAN", label: "Semi-annual plan", plan: "semi_annual", color: "#7c3aed", bg: "#f0e8fd" },
-  { code: "ANNUAL_PLAN",      label: "Annual plan",      plan: "annual",      color: "#854f0b", bg: "#fdf5e8" },
-  { code: "EARLY_BIRD",       label: "Early Bird",       plan: null,          color: "#c92a2a", bg: "#fff0f0" },
+  { code: "MONTHLY_PLAN",     label: "Monthly plan",     plan: "monthly",     color: "var(--color-info-500)", bg: "var(--color-info-50)" },
+  { code: "QUARTERLY_PLAN",   label: "Quarterly plan",   plan: "quarterly",   color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+  { code: "SEMI_ANNUAL_PLAN", label: "Semi-annual plan", plan: "semi_annual", color: "var(--color-accent-500)", bg: "var(--color-accent-50)" },
+  { code: "ANNUAL_PLAN",      label: "Annual plan",      plan: "annual",      color: "var(--color-nursery-500)", bg: "var(--color-nursery-50)" },
+  { code: "EARLY_BIRD",       label: "Early Bird",       plan: null,          color: "var(--color-brand-600)", bg: "var(--color-brand-100)" },
 ];
 // Mirrors billing-service's PLAN_SHAPE: (installments, months apart), counted
 // from the month the school year opens.
@@ -212,6 +222,7 @@ function planDueMonths(plan, syStart) {
 }
 
 function DiscountRatesCard({ syStart, earlyBirdDays }) {
+  const dark = useTheme() === "dark";
   const [rows, setRows]     = useState(null);
   const [drafts, setDrafts] = useState({});
   const [savingCode, setSavingCode] = useState(null);
@@ -250,20 +261,20 @@ function DiscountRatesCard({ syStart, earlyBirdDays }) {
 
   if (!rows) {
     return error
-      ? <div style={{ fontSize: 13, color: "#b91c1c" }}>{error}</div>
+      ? <div className="text-[#b91c1c] dark:text-error-500" style={{ fontSize: 13 }}>{error}</div>
       : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>{[1, 2, 3, 4, 5].map((i) => <Sk key={i} h={58} r={10} />)}</div>;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {error && <div role="alert" style={{ fontSize: 13, color: "#b91c1c" }}>{error}</div>}
+      {error && <div role="alert" className="text-[#b91c1c] dark:text-error-500" style={{ fontSize: 13 }}>{error}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
         {RATE_ROWS.filter((r) => rows[r.code]).map((r) => {
           const current = String(Number(rows[r.code].discount_value));
           const draft = drafts[r.code];
           const dirty = draft !== undefined && draft !== current;
           return (
-            <div key={r.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: r.bg, borderRadius: 10, border: `1px solid ${r.color}22` }}>
+            <div key={r.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: r.bg, borderRadius: 10, border: `1px solid color-mix(in srgb, ${r.color} 13.3%, transparent)` }}>
               <i className={`ti ${r.plan ? "ti-calendar-due" : "ti-clock-bolt"}`} style={{ fontSize: 16, color: r.color, flexShrink: 0 }} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: r.color }}>{r.label}</div>
@@ -277,12 +288,12 @@ function DiscountRatesCard({ syStart, earlyBirdDays }) {
                   type="number" min="0" max="100" step="0.5"
                   value={draft ?? current}
                   onChange={(e) => setDrafts((prev) => ({ ...prev, [r.code]: e.target.value }))}
-                  style={{ width: 64, border: "1.5px solid #fde2de", borderRadius: 8, padding: "5px 8px", fontSize: 13, textAlign: "right", background: "white" }}
+                  style={{ width: 64, border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "5px 8px", fontSize: 13, textAlign: "right", background: "var(--color-surface)" }}
                 />%
               </label>
               {dirty && (
                 <button type="button" onClick={() => save(r.code)} disabled={savingCode === r.code}
-                  style={{ border: "none", background: r.color, color: "white", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  style={{ border: "none", background: r.color, color: dark ? "var(--color-surface)" : "white", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   {savingCode === r.code ? "Saving…" : "Save"}
                 </button>
               )}
@@ -308,11 +319,12 @@ function syProgress(startDate, endDate) {
 }
 
 function SYProgress({ startDate, endDate }) {
+  const dark = useTheme() === "dark";
   const pct = syProgress(startDate, endDate);
   if (pct === null) return null;
 
   const label = pct === 0 ? "Not started" : pct === 100 ? "Completed" : `${pct}% through`;
-  const barColor = pct < 33 ? "#2563eb" : pct < 66 ? "#16a34a" : pct < 90 ? "#d97706" : "#e03131";
+  const barColor = pct < 33 ? "var(--color-elementary-500)" : pct < 66 ? (dark ? "var(--color-success-500)" : "#16a34a") : pct < 90 ? (dark ? "var(--color-warning-500)" : "#d97706") : "var(--color-brand-500)";
 
   return (
     <div style={{ marginBottom: 18 }}>
@@ -320,11 +332,11 @@ function SYProgress({ startDate, endDate }) {
         <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.07em" }}>School Year Progress</span>
         <span style={{ fontSize: 11, fontWeight: 600, color: barColor }}>{label}</span>
       </div>
-      <div style={{ height: 7, background: "#f0e8e8", borderRadius: 99, overflow: "hidden" }}>
+      <div className="bg-[#f0e8e8] dark:bg-neutral-200" style={{ height: 7, borderRadius: 99, overflow: "hidden" }}>
         <motion.div
           initial={{ width: 0 }} animate={{ width: `${pct}%` }}
           transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
-          style={{ height: "100%", borderRadius: 99, background: `linear-gradient(to right, ${barColor}, ${barColor}cc)` }}
+          style={{ height: "100%", borderRadius: 99, background: `linear-gradient(to right, ${barColor}, color-mix(in srgb, ${barColor} 80%, transparent))` }}
         />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 10.5, color: C.micro }}>
@@ -336,6 +348,7 @@ function SYProgress({ startDate, endDate }) {
 }
 
 function GeneralSettingsTab() {
+  const dark = useTheme() === "dark";
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -421,7 +434,8 @@ function GeneralSettingsTab() {
             {isDirty && !saving && (
               <motion.span
                 initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                style={{ fontSize: 11, fontWeight: 600, color: "#854f0b", background: "#fdf5e8", border: "1px solid #fcd34d", borderRadius: 99, padding: "3px 10px" }}
+                className="border border-[#fcd34d] dark:border-[color-mix(in_srgb,var(--color-warning-dot)_40%,transparent)]"
+                style={{ fontSize: 11, fontWeight: 600, color: "var(--color-warning-500)", background: "var(--color-nursery-50)", borderRadius: 99, padding: "3px 10px" }}
               >
                 Unsaved changes
               </motion.span>
@@ -432,7 +446,7 @@ function GeneralSettingsTab() {
             disabled={saving || loading || !isDirty}
             whileHover={isDirty && !saving ? { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" } : {}}
             whileTap={isDirty && !saving ? { scale: 0.97 } : {}}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: isDirty ? `linear-gradient(135deg,${C.red},${C.redDark})` : "#f5eeee", color: isDirty ? C.white : C.micro, border: "none", borderRadius: 10, padding: "9px 20px", fontSize: 13, fontWeight: 700, cursor: saving || loading || !isDirty ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: isDirty ? "0 4px 16px rgba(224,49,49,0.26)" : "none", transition: "background 0.2s, color 0.2s, box-shadow 0.2s" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: isDirty ? "linear-gradient(135deg,var(--color-action),var(--color-action-2))" : dark ? "var(--color-neutral-200)" : "#f5eeee", color: isDirty ? C.white : C.micro, border: "none", borderRadius: 10, padding: "9px 20px", fontSize: 13, fontWeight: 700, cursor: saving || loading || !isDirty ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: isDirty ? "0 4px 16px rgba(224,49,49,0.26)" : "none", transition: "background 0.2s, color 0.2s, box-shadow 0.2s" }}
           >
             {saving
               ? <><i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />Saving…</>
@@ -448,11 +462,12 @@ function GeneralSettingsTab() {
             <motion.div
               key="error"
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#b91c1c", display: "flex", alignItems: "center", gap: 8 }}
+              className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+              style={{ border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
             >
               <i className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0 }} />
               <span style={{ flex: 1 }}>{error}</span>
-              <motion.button onClick={() => setError("")} whileHover={{ scale: 1.1 }} style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", display: "flex" }}>
+              <motion.button onClick={() => setError("")} aria-label="Dismiss error" whileHover={{ scale: 1.1 }} className="text-[#b91c1c] dark:text-error-500" style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}>
                 <i className="ti ti-x" style={{ fontSize: 13 }} />
               </motion.button>
             </motion.div>
@@ -571,25 +586,27 @@ function GeneralSettingsTab() {
 // FEE SCHEDULES TAB — ported from the former FeeSchedulesPage.jsx
 // ════════════════════════════════════════════════════════════════════════════
 
+// Each level in the app's level palette (as on Sections, Subjects and the
+// level charts); `glow` is the dark-mode light for its icon tile.
 const SCHOOL_LEVELS = [
-  { value: "nursery",           label: "Nursery",      color: "#be185d", bg: "#fde8f8", icon: "ti-baby-carriage",
+  { value: "nursery",           label: "Nursery",      color: "var(--color-nursery-500)", bg: "var(--color-nursery-50)", glow: LEVEL_GLOW.nursery, icon: "ti-baby-carriage",
     grades: ["Nursery"] },
-  { value: "kindergarten",      label: "Kindergarten", color: "#854f0b", bg: "#fdf5e8", icon: "ti-star",
+  { value: "kindergarten",      label: "Kindergarten", color: "var(--color-kindergarten-500)", bg: "var(--color-kindergarten-50)", glow: LEVEL_GLOW.kindergarten, icon: "ti-star",
     // One Kindergarten, as on every other screen; "Senior Kinder" here meant
     // a Kindergarten enrollment found no fee schedule.
     grades: ["Kindergarten"] },
-  { value: "elementary",        label: "Elementary",   color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-book",
+  { value: "elementary",        label: "Elementary",   color: "var(--color-elementary-500)", bg: "var(--color-elementary-50)", glow: LEVEL_GLOW.elementary, icon: "ti-book",
     grades: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"] },
-  { value: "junior_highschool", label: "Junior HS",    color: "#1455a0", bg: "#e3f0fd", icon: "ti-school",
+  { value: "junior_highschool", label: "Junior HS",    color: "var(--color-juniorhigh-500)", bg: "var(--color-juniorhigh-50)", glow: LEVEL_GLOW.juniorhigh, icon: "ti-school",
     grades: ["Grade 7", "Grade 8", "Grade 9", "Grade 10"] },
-  { value: "senior_highschool", label: "Senior HS",    color: "#7c3aed", bg: "#f0e8fd", icon: "ti-certificate",
+  { value: "senior_highschool", label: "Senior HS",    color: "var(--color-seniorhigh-500)", bg: "var(--color-seniorhigh-50)", glow: LEVEL_GLOW.seniorhigh, icon: "ti-certificate",
     grades: ["Grade 11", "Grade 12"] },
 ];
 
 const CATEGORY_META = {
-  tuition: { label: "Tuition",       color: "#c92a2a", bg: "#fff0f0", icon: "ti-school" },
-  misc:    { label: "Miscellaneous",  color: "#1455a0", bg: "#e3f0fd", icon: "ti-clipboard-list" },
-  other:   { label: "Other",          color: "#2e6b0d", bg: "#e8f5e0", icon: "ti-dots-circle-horizontal" },
+  tuition: { label: "Tuition",       color: "var(--color-brand-600)", bg: "var(--color-brand-100)", icon: "ti-school" },
+  misc:    { label: "Miscellaneous",  color: "var(--color-info-500)", bg: "var(--color-info-50)", icon: "ti-clipboard-list" },
+  other:   { label: "Other",          color: "var(--color-success-500)", bg: "var(--color-success-50)", icon: "ti-dots-circle-horizontal" },
 };
 
 const fmt = (n) => `₱${parseFloat(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -632,7 +649,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
     } finally { setSaving(false); }
   };
 
-  const inp = { width: "100%", border: "1.5px solid #fde2de", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box", cursor: "pointer" };
+  const inp = { width: "100%", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none", boxSizing: "border-box", cursor: "pointer" };
 
   return (
     <Modal
@@ -667,7 +684,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
           </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level</label>
+            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {SCHOOL_LEVELS.map((lv) => {
                 const active = schoolLevel === lv.value;
@@ -676,8 +693,8 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
                     onClick={() => { setSchoolLevel(lv.value); setGradeLevel(lv.grades[0]); }}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
-                      borderRadius: 99, border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
-                      background: active ? lv.bg : "white", color: active ? lv.color : "#855c5c",
+                      borderRadius: 99, border: `1.5px solid ${active ? lv.color : "var(--color-neutral-300)"}`,
+                      background: active ? lv.bg : "var(--color-surface)", color: active ? lv.color : "var(--color-neutral-600)",
                       fontSize: 12, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -690,7 +707,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
           </div>
 
           <div style={{ marginBottom: 6 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Grade Level</label>
+            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Grade Level</label>
             <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={inp}>
               {lvl.grades.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -701,6 +718,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
 }
 
 function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
+  const dark = useTheme() === "dark";
   const [editing, setEditing] = useState(false);
   const [name,    setName]    = useState(item.item_name);
   const [amount,  setAmount]  = useState(String(item.amount));
@@ -710,7 +728,7 @@ function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
   const [deleteError, setDeleteError] = useState("");
 
   const catMeta = CATEGORY_META[item.item_category] ?? CATEGORY_META.other;
-  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+  const inp = { border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" };
 
   const handleSave = async () => {
     if (!name.trim() || !amount || parseFloat(amount) < 0) return;
@@ -747,8 +765,9 @@ function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
   return (
     <motion.div
       variants={listVariants.item}
-      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10 }}
-      whileHover={{ borderColor: "#fca5a5" }}
+      className="bg-[#fdfafa] dark:bg-neutral-50"
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", border: "1px solid var(--color-neutral-200)", borderRadius: 10 }}
+      whileHover={{ borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
       transition={{ duration: 0.12 }}
     >
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: catMeta.color, flexShrink: 0 }} />
@@ -757,39 +776,40 @@ function FeeItemRow({ item, readOnly, onUpdated, onDeleted }) {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
             style={{ ...inp, flex: 1, minWidth: 0 }} />
           <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--color-neutral-500)", fontWeight: 600 }}>₱</span>
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
               style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }} />
           </div>
           <motion.button onClick={handleSave} disabled={saving}
             whileHover={!saving ? { scale: 1.06 } : {}} whileTap={!saving ? { scale: 0.94 } : {}}
-            style={{ background: "#e03131", color: "white", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+            style={{ background: "var(--color-action)", color: "white", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
             {saving
               ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} />
               : <i className="ti ti-check" style={{ fontSize: 12 }} />
             }
           </motion.button>
           <motion.button onClick={() => { setEditing(false); setName(item.item_name); setAmount(String(item.amount)); }}
+            aria-label="Cancel editing"
             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-            style={{ background: "white", color: "#855c5c", border: "1px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
+            style={{ background: "var(--color-surface)", color: "var(--color-neutral-600)", border: "1px solid var(--color-neutral-300)", borderRadius: 7, padding: "6px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center" }}>
             <i className="ti ti-x" style={{ fontSize: 12 }} />
           </motion.button>
         </>
       ) : (
         <>
-          <span style={{ flex: 1, fontSize: 13, color: "#1a0a0a", fontWeight: 500 }}>{item.item_name}</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{fmt(item.amount)}</span>
+          <span style={{ flex: 1, fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 500 }}>{item.item_name}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{fmt(item.amount)}</span>
           {!readOnly && <>
-          <motion.button onClick={() => setEditing(true)}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+          <motion.button onClick={() => setEditing(true)} aria-label={`Edit fee item ${item.item_name}`}
+            whileHover={{ scale: 1.08, backgroundColor: dark ? DARK_HOVER.fill : "#fff0f0", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#855c5c" }}>
+            style={{ width: 26, height: 26, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-600)" }}>
             <i className="ti ti-pencil" style={{ fontSize: 11 }} />
           </motion.button>
           <motion.button onClick={() => setConfirmDelete(true)} aria-label={`Delete fee item ${item.item_name}`}
-            whileHover={{ scale: 1.08, backgroundColor: "#fff0f0", borderColor: "#fca5a5" }}
+            whileHover={{ scale: 1.08, backgroundColor: dark ? DARK_HOVER.fill : "#fff0f0", borderColor: dark ? DARK_HOVER.border : "#fca5a5" }}
             whileTap={{ scale: 0.93 }}
-            style={{ width: 26, height: 26, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a" }}>
+            style={{ width: 26, height: 26, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-500)" }}>
             <i className="ti ti-trash" style={{ fontSize: 11 }} />
           </motion.button>
           </>}
@@ -819,7 +839,7 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
   const [error,  setError]  = useState("");
 
   const catMeta = CATEGORY_META[category];
-  const inp = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+  const inp = { border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" };
 
   const handleAdd = async () => {
     if (!name.trim())                      { setError("Name required."); return; }
@@ -840,7 +860,8 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            style={{ fontSize: 11, color: "#b91c1c", marginBottom: 6 }}
+            className="text-[#b91c1c] dark:text-error-500"
+            style={{ fontSize: 11, marginBottom: 6 }}
           >{error}</motion.div>
         )}
       </AnimatePresence>
@@ -851,14 +872,14 @@ function AddFeeItemForm({ scheduleId, category, onAdded }) {
           style={{ ...inp, flex: 1, minWidth: 0 }}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
         <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>₱</span>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--color-neutral-500)", fontWeight: 600 }}>₱</span>
           <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00" style={{ ...inp, width: "100%", paddingLeft: 22, textAlign: "right" }}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
         </div>
         <motion.button onClick={handleAdd} disabled={saving}
           whileHover={!saving ? { scale: 1.04 } : {}} whileTap={!saving ? { scale: 0.96 } : {}}
-          style={{ background: saving ? "#e87474" : "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+          style={{ background: saving ? "var(--color-brand-400)" : "var(--color-brand-100)", color: "var(--color-brand-600)", border: "1px solid var(--color-brand-300)", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
           {saving
             ? <i className="ti ti-loader-2" style={{ fontSize: 12, animation: "spin 1s linear infinite" }} />
             : <i className="ti ti-plus" style={{ fontSize: 12 }} />
@@ -902,14 +923,15 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
       <motion.div
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, ease: "easeOut" }}
-        style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}
+        className={`bg-surface shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${CARD_DARK}`}
+        style={{ borderRadius: 16, border: "1px solid var(--color-neutral-200)", padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: lvl.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className={lvl.glow} style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: lvl.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className={`ti ${lvl.icon}`} style={{ fontSize: 20, color: lvl.color }} />
           </div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a" }}>{schedule.grade_level}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-neutral-900)" }}>{schedule.grade_level}</div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: lvl.bg, color: lvl.color, marginTop: 3 }}>
               <i className={`ti ${lvl.icon}`} style={{ fontSize: 11 }} />{lvl.label} · SY {schedule.school_year}
             </div>
@@ -921,7 +943,8 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
               <motion.span
                 initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
                 transition={{ duration: 0.18 }}
-                style={{ fontSize: 12, color: "#2e6b0d", fontWeight: 600, background: "#e8f5e0", border: "1px solid #a3d98a", borderRadius: 99, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
+                className="border border-[#a3d98a] dark:border-[color-mix(in_srgb,var(--color-success-dot)_40%,transparent)]"
+                style={{ fontSize: 12, color: "var(--color-success-500)", fontWeight: 600, background: "var(--color-success-50)", borderRadius: 99, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
               >
                 <i className="ti ti-circle-check" style={{ fontSize: 12 }} />{recalcMsg}
               </motion.span>
@@ -929,7 +952,7 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
           </AnimatePresence>
           {!readOnly && <motion.button onClick={handleRecalculate} disabled={recalcing}
             whileHover={!recalcing ? { scale: 1.02 } : {}} whileTap={!recalcing ? { scale: 0.97 } : {}}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff0f0", color: "#c92a2a", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--color-brand-100)", color: "var(--color-brand-600)", border: "1px solid var(--color-brand-300)", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: recalcing ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             {recalcing
               ? <i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} />
               : <i className="ti ti-refresh" style={{ fontSize: 13 }} />
@@ -945,14 +968,14 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
         style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}
       >
         {[
-          { label: "Tuition",       val: tuitionTotal, color: "#c92a2a", bg: "#fff0f0" },
-          { label: "Miscellaneous", val: miscTotal,    color: "#1455a0", bg: "#e3f0fd" },
-          { label: "Other",         val: otherTotal,   color: "#2e6b0d", bg: "#e8f5e0" },
-          { label: "Grand Total",   val: grandTotal,   color: "#7c3aed", bg: "#f0e8fd" },
+          { label: "Tuition",       val: tuitionTotal, color: "var(--color-brand-600)", bg: "var(--color-brand-100)" },
+          { label: "Miscellaneous", val: miscTotal,    color: "var(--color-info-500)", bg: "var(--color-info-50)" },
+          { label: "Other",         val: otherTotal,   color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+          { label: "Grand Total",   val: grandTotal,   color: "var(--color-accent-500)", bg: "var(--color-accent-50)" },
         ].map((s) => (
-          <div key={s.label} style={{ background: "white", borderRadius: 12, border: "1px solid #f5eaea", padding: "14px 16px", textAlign: "center", boxShadow: "0 2px 8px rgba(224,49,49,0.04)" }}>
+          <div key={s.label} className={`bg-surface shadow-[0_2px_8px_rgba(224,49,49,0.04)] ${CARD_DARK}`} style={{ borderRadius: 12, border: "1px solid var(--color-neutral-200)", padding: "14px 16px", textAlign: "center" }}>
             <AnimatedAmount value={parseFloat(s.val)} style={{ fontSize: 15, fontWeight: 700, color: s.color }} />
-            <div style={{ fontSize: 11, color: "#8a6a6a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 11, color: "var(--color-neutral-500)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
       </motion.div>
@@ -965,18 +988,19 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
             key={cat}
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, delay: 0.1 + catIdx * 0.06, ease: "easeOut" }}
-            style={{ background: "white", borderRadius: 16, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}
+            className={`bg-surface shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${CARD_DARK}`}
+            style={{ borderRadius: 16, border: "1px solid var(--color-neutral-200)", overflow: "hidden" }}
           >
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid #f9f0f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
+            <div className="border-b border-[#f9f0f0] dark:border-neutral-200 bg-[linear-gradient(to_right,#fdfafa,white)] dark:bg-[linear-gradient(to_right,var(--color-brand-50),var(--color-surface))]" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: catMeta.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <i className={`ti ${catMeta.icon}`} style={{ fontSize: 14, color: catMeta.color }} />
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{catMeta.label}</span>
-                <span style={{ fontSize: 11, color: "#8a6a6a" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{catMeta.label}</span>
+                <span style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
                 {cat !== "tuition"
-                  ? <span style={{ fontSize: 11, color: "#8a6a6a", fontStyle: "italic" }}>· no discount applied</span>
-                  : <span style={{ fontSize: 11, color: "#c92a2a", fontStyle: "italic" }}>· discounts applied here</span>
+                  ? <span style={{ fontSize: 11, color: "var(--color-neutral-500)", fontStyle: "italic" }}>· no discount applied</span>
+                  : <span style={{ fontSize: 11, color: "var(--color-brand-600)", fontStyle: "italic" }}>· discounts applied here</span>
                 }
               </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: catMeta.color }}>
@@ -985,7 +1009,7 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
             </div>
             <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
               {catItems.length === 0 && (
-                <div style={{ fontSize: 12, color: "#8a6a6a", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No items yet</div>
+                <div style={{ fontSize: 12, color: "var(--color-neutral-500)", fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>No items yet</div>
               )}
               <motion.div
                 variants={listVariants.container}
@@ -1007,6 +1031,7 @@ function ScheduleDetail({ schedule, readOnly, onUpdated }) {
 }
 
 function FeeSchedulesTab() {
+  const dark = useTheme() === "dark";
   const [schedules,    setSchedules]    = useState([]);
   const [selected,     setSelected]     = useState(null);
   const [loading,      setLoading]      = useState(true);
@@ -1057,7 +1082,7 @@ function FeeSchedulesTab() {
             {loading ? "Loading…" : `${schedules.length} schedule${schedules.length !== 1 ? "s" : ""} for S.Y. ${schoolYear}`}
           </div>
           {archived && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: "#855c5c", background: "#f5f0f0", borderRadius: 99, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span className="bg-[#f5f0f0] dark:bg-muted-50" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-neutral-600)", borderRadius: 99, padding: "3px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <i className="ti ti-archive" style={{ fontSize: 12 }} />Archived — read-only
             </span>
           )}
@@ -1065,17 +1090,17 @@ function FeeSchedulesTab() {
         {!archived && (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <motion.button
-          whileHover={{ borderColor: "#e03131", color: "#c92a2a" }}
+          whileHover={{ borderColor: dark ? DARK_HOVER.red : "#e03131", color: dark ? DARK_HOVER.redDark : "#c92a2a" }}
           whileTap={{ scale: 0.96 }}
           onClick={() => setCopying(true)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "white", color: "#855c5c", border: "1.5px solid #fde2de", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--color-surface)", color: "var(--color-neutral-600)", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
           <i className="ti ti-copy" style={{ fontSize: 15 }} />Copy from an earlier year
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
           whileTap={{ scale: 0.96 }}
           onClick={() => setShowNewModal(true)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}>
           <i className="ti ti-plus" style={{ fontSize: 15 }} />New Schedule
         </motion.button>
         </div>
@@ -1087,12 +1112,12 @@ function FeeSchedulesTab() {
         <motion.div
           initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.26, ease: "easeOut" }}
-          style={{ borderRight: "1px solid #f5eaea", display: "flex", flexDirection: "column", overflow: "hidden", background: "white" }}
+          style={{ borderRight: "1px solid var(--color-neutral-200)", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--color-surface)" }}
         >
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid #f5eaea", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 10, color: "#8a6a6a", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
+          <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 10, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {[{ value: "all", label: "All", color: "#c92a2a", bg: "#fff0f0", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
+              {[{ value: "all", label: "All", color: "var(--color-brand-600)", bg: "var(--color-brand-100)", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
                 const active = levelFilter === lv.value;
                 return (
                   <motion.button
@@ -1101,9 +1126,9 @@ function FeeSchedulesTab() {
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 4,
                       height: 26, padding: "0 10px", borderRadius: 99,
-                      border: `1.5px solid ${active ? lv.color : "#f0e4e4"}`,
-                      background: active ? lv.bg : "white",
-                      color: active ? lv.color : "#855c5c",
+                      border: `1.5px solid ${active ? lv.color : "var(--color-neutral-300)"}`,
+                      background: active ? lv.bg : "var(--color-surface)",
+                      color: active ? lv.color : "var(--color-neutral-600)",
                       fontSize: 11, fontWeight: 600, cursor: "pointer",
                       fontFamily: "'DM Sans',sans-serif",
                       transition: "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease",
@@ -1120,14 +1145,14 @@ function FeeSchedulesTab() {
           <div style={{ flex: 1, overflowY: "auto" }}>
             {loading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ padding: "14px 16px", borderBottom: "1px solid #f9f0f0", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div key={i} className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
                     <Sk w={120} h={14} /><Sk w={80} h={11} /><Sk w="100%" h={6} r={99} />
                   </div>
                 ))
               : schedules.length === 0
                 ? (
-                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#8a6a6a", fontSize: 13 }}>
-                    <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a", display: "block", marginBottom: 10 }} />
+                  <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--color-neutral-500)", fontSize: 13 }}>
+                    <i className="ti ti-cash" style={{ fontSize: 28, color: "var(--color-neutral-500)", display: "block", marginBottom: 10 }} />
                     No fee schedules for S.Y. {schoolYear} yet.<br />
                     {!archived && (
                       <span style={{ fontSize: 12 }}>Copy an earlier year&apos;s and adjust, or click &quot;New Schedule&quot;.</span>
@@ -1152,26 +1177,27 @@ function FeeSchedulesTab() {
                           key={sch.fee_schedule_id}
                           variants={listVariants.item}
                           onClick={() => handleSelectSchedule(sch)}
-                          whileHover={{ backgroundColor: isActive ? lv.bg : "#fffaf9" }}
+                          whileHover={{ backgroundColor: isActive ? lv.bg : dark ? DARK_HOVER.row : "#fffaf9" }}
+                          className="border-b border-[#f9f0f0] dark:border-neutral-200"
                           style={{
-                            padding: "14px 16px", borderBottom: "1px solid #f9f0f0",
+                            padding: "14px 16px",
                             borderLeft: `3px solid ${isActive ? lv.color : "transparent"}`,
-                            background: isActive ? lv.bg : "white",
+                            background: isActive ? lv.bg : "var(--color-surface)",
                             cursor: "pointer",
                             transition: "border-left-color 0.15s ease, background-color 0.15s ease",
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <i className={`ti ${lv.icon}`} style={{ fontSize: 13, color: lv.color }} />
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>{sch.grade_level}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{sch.grade_level}</span>
                             <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 6px", borderRadius: 99, background: lv.bg, color: lv.color }}>{lv.label}</span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#8a6a6a", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
+                          <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
                           {grandTotal > 0 && (
                             <div style={{ display: "flex", height: 4, borderRadius: 99, overflow: "hidden", gap: 1, marginBottom: 5 }}>
-                              {tTotal > 0 && <div style={{ flex: tTotal / barTotal, background: "#e03131", minWidth: 2 }} title={`Tuition: ${fmt(tTotal)}`} />}
-                              {mTotal > 0 && <div style={{ flex: mTotal / barTotal, background: "#1455a0", minWidth: 2 }} title={`Misc: ${fmt(mTotal)}`} />}
-                              {oTotal > 0 && <div style={{ flex: oTotal / barTotal, background: "#2e6b0d", minWidth: 2 }} title={`Other: ${fmt(oTotal)}`} />}
+                              {tTotal > 0 && <div style={{ flex: tTotal / barTotal, background: "var(--color-brand-500)", minWidth: 2 }} title={`Tuition: ${fmt(tTotal)}`} />}
+                              {mTotal > 0 && <div style={{ flex: mTotal / barTotal, background: "var(--color-info-500)", minWidth: 2 }} title={`Misc: ${fmt(mTotal)}`} />}
+                              {oTotal > 0 && <div style={{ flex: oTotal / barTotal, background: "var(--color-success-500)", minWidth: 2 }} title={`Other: ${fmt(oTotal)}`} />}
                             </div>
                           )}
                           <div style={{ fontSize: 14, fontWeight: 700, color: lv.color }}>{fmt(grandTotal)}</div>
@@ -1193,11 +1219,11 @@ function FeeSchedulesTab() {
                 transition={{ duration: 0.18 }}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 14 }}
               >
-                <div style={{ width: 60, height: 60, borderRadius: 18, background: "linear-gradient(135deg,#fff0f0,#fde8e8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="ti ti-cash" style={{ fontSize: 28, color: "#8a6a6a" }} />
+                <div style={{ width: 60, height: 60, borderRadius: 18, background: "linear-gradient(135deg,var(--color-brand-100),var(--color-brand-200))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-cash" style={{ fontSize: 28, color: "var(--color-neutral-500)" }} />
                 </div>
-                <div style={{ fontSize: 16, color: "#7a5050", fontWeight: 600 }}>Select a fee schedule</div>
-                <div style={{ fontSize: 13, color: "#8a6a6a" }}>Click a schedule on the left to view and edit its items</div>
+                <div style={{ fontSize: 16, color: "var(--color-neutral-700)", fontWeight: 600 }}>Select a fee schedule</div>
+                <div style={{ fontSize: 13, color: "var(--color-neutral-500)" }}>Click a schedule on the left to view and edit its items</div>
               </motion.div>
             ) : (
               <motion.div

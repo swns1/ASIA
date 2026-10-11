@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   login: vi.fn(),
@@ -369,5 +370,29 @@ describe("useCurrentUser", () => {
     act(() => setCurrentUser({ id: 2, name: "After", role: "admin" }));
 
     expect(result.current.name).toBe("After");
+  });
+});
+
+// ── Dark mode ────────────────────────────────────────────────────────────────
+
+describe("UsersPage — dark mode", () => {
+  it("shows the accounts, and the edit dialog, on a dark page", async () => {
+    signInAs({ id: 2, name: "Ada Admin", email: "ada@school.ph", role: "admin" });
+    api.getUsers.mockResolvedValue(page([SUPER, ADMIN, TEACHER]));
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={["/users"]}>
+            <UsersPage />
+          </MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+    expect(await screen.findByText("Tina Teacher")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Tina Teacher" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Edit profile")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change password" }));
+    expect(within(dialog).getByPlaceholderText("Repeat new password")).toBeTruthy();
   });
 });

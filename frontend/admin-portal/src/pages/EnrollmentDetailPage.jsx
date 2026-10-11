@@ -26,18 +26,22 @@ import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
 import { todayISO, fmtDate } from "../utils/format";
 import useArchivedYears from "../hooks/useArchivedYears";
 import ArchivedYearNotice from "../components/schoolYears/ArchivedYearNotice";
+import useTheme from "../hooks/useTheme";
+import BrandBackdrop from "../components/ui/BrandBackdrop";
+import { BRAND_PANEL_DARK } from "../components/ui/brandPanel";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
 
 const C = {
-  red: "#e03131", redLight: "#fff0f0", redBorder: "#fca5a5",
-  dark: "#1a0a0a", muted: "#7a5050", bg: "#fff8f6", white: "#ffffff",
+  red: "var(--color-brand-500)", redLight: "var(--color-brand-100)", redBorder: "var(--color-brand-300)",
+  dark: "var(--color-neutral-900)", muted: "var(--color-neutral-700)", bg: "var(--color-brand-50)", white: "var(--color-surface)",
 };
 
 
 const INVOICE_STATUS_META = {
-  unpaid:         { label: "Unpaid",   color: "#a32d2d", bg: "#fde8e8" },
-  partially_paid: { label: "Partial",  color: "#854f0b", bg: "#faeeda" },
-  paid:           { label: "Paid",     color: "#2e6b0d", bg: "#e8f5e0" },
-  void:           { label: "Void",     color: "#5c5752", bg: "#f0ede8" },
+  unpaid:         { label: "Unpaid",   color: "var(--color-error-600)",   bg: "var(--color-error-50)" },
+  partially_paid: { label: "Partial",  color: "var(--color-warning-500)", bg: "var(--color-warning-50)" },
+  paid:           { label: "Paid",     color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+  void:           { label: "Void",     color: "var(--color-muted-500)",   bg: "var(--color-muted-50)" },
 };
 
 const GRADE_LABELS = {
@@ -56,8 +60,8 @@ function Badge({ label, color, bg }) {
 
 function Card({ title, icon, children, action }) {
   return (
-    <div style={{ background: C.white, borderRadius: 14, border: "1px solid #f5eaea", overflow: "hidden", boxShadow: "0 2px 12px rgba(224,49,49,0.05)" }}>
-      <div style={{ padding: "14px 20px", borderBottom: "1px solid #f5eaea", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to right,#fdfafa,white)" }}>
+    <div className={`bg-surface shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${CARD_DARK}`} style={{ borderRadius: 14, border: "1px solid var(--color-neutral-200)", overflow: "hidden" }}>
+      <div className="bg-[linear-gradient(to_right,#fdfafa,white)] dark:bg-none" style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <i className={`ti ${icon}`} style={{ fontSize: 16, color: C.red }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>{title}</span>
@@ -71,7 +75,7 @@ function Card({ title, icon, children, action }) {
 
 function Sk({ w = "100%", h = 14, r = 6 }) {
   return (
-    <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,#f0e8e8 25%,#fde8e8 50%,#f0e8e8 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
+    <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
   );
 }
 
@@ -79,6 +83,7 @@ export default function EnrollmentDetailPage() {
   usePageTitle("Enrollment Details");
   const { id } = useParams();
   const navigate = useNavigate();
+  const dark = useTheme() === "dark";
 
   const [enrollment, setEnrollment] = useState(null);
   const isArchived = useArchivedYears();
@@ -324,7 +329,7 @@ export default function EnrollmentDetailPage() {
       <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
 
       {/* Scrollable page wrapper */}
-      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", background: C.bg, fontFamily: "'DM Sans', sans-serif" }}>
+      <div className="bg-brand-50 dark:bg-transparent" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", fontFamily: "'DM Sans', sans-serif" }}>
         <div style={{ padding: "20px 28px 40px" }}>
 
           {/* ── Back + Header bar ── */}
@@ -352,30 +357,31 @@ export default function EnrollmentDetailPage() {
               <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
               {canViewGrades && (
               <button onClick={() => navigate(`/report-card/${id}`)}
-                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card
               </button>
               )}
               <button
                 onClick={() => window.open(`/print/cor/${id}`, '_blank')}
-                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-file-invoice" style={{ fontSize: 11, marginRight: 4 }} />Print COR
               </button>
               {canEditEnrollment && !readOnly && (
               <button onClick={() => navigate(`/enrollments/${id}/edit`)}
-                style={{ background: "transparent", border: "1.5px solid #fca5a5", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 <i className="ti ti-edit" style={{ fontSize: 11, marginRight: 4 }} />Edit
               </button>
               )}
               {!readOnly && canMarkCompleted && (
                 <button onClick={() => setCompleteConfirm(true)}
-                  style={{ background: "linear-gradient(135deg,#1455a0,#0e3d7a)", color: "white", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  style={{ background: "linear-gradient(135deg,var(--color-info-fill),var(--color-info-fill-2))", color: "white", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   <i className="ti ti-circle-check" style={{ fontSize: 12, marginRight: 4 }} />Mark Completed
                 </button>
               )}
               {!readOnly && canMarkCompleted && (
                 <button onClick={() => setTransferConfirm(true)}
-                  style={{ background: "transparent", border: "1.5px solid #f0a830", color: "#7a4a08", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  className="border-[#f0a830] text-[#7a4a08] dark:border-warning-500 dark:text-warning-500"
+                  style={{ background: "transparent", borderWidth: 1.5, borderStyle: "solid", borderRadius: 50, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   <i className="ti ti-transfer" style={{ fontSize: 12, marginRight: 4 }} />Transfer Out
                 </button>
               )}
@@ -385,7 +391,7 @@ export default function EnrollmentDetailPage() {
           <ArchivedYearNotice schoolYear={enrollment.school_year} records="enrollments" className="mb-4" />
 
           {emailFailures.length > 0 && (
-            <div role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#7a4a08" }}>
+            <div role="alert" className="border-[#fde68a] bg-[#fffbeb] text-[#7a4a08] dark:border-warning-dot/40 dark:bg-warning-50 dark:text-warning-500" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderWidth: 1, borderStyle: "solid", borderRadius: 12, padding: "10px 16px", marginBottom: 12, fontSize: 13 }}>
               <span>
                 <i className="ti ti-mail-exclamation" style={{ fontSize: 15, marginRight: 6 }} />
                 The enrollment confirmation to {emailFailures[0].recipients.join(", ")} didn't go through
@@ -393,16 +399,18 @@ export default function EnrollmentDetailPage() {
                 {resendError && <strong style={{ marginLeft: 6 }}>{resendError}</strong>}
               </span>
               <button onClick={handleResendEmail} disabled={resending}
-                style={{ background: "white", border: "1.5px solid #f0a830", color: "#7a4a08", borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: resending ? "wait" : "pointer" }}>
+                className="border-[#f0a830] bg-surface text-[#7a4a08] dark:border-warning-500 dark:text-warning-500"
+                style={{ borderWidth: 1.5, borderStyle: "solid", borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: resending ? "wait" : "pointer" }}>
                 <i className="ti ti-send" style={{ fontSize: 11, marginRight: 4 }} />{resending ? "Sending…" : "Resend"}
               </button>
             </div>
           )}
 
           {/* ── Horizontal info strip ── */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 0, background: "white", borderRadius: 12, border: "1px solid #f5eaea", marginBottom: 16, overflow: "hidden", boxShadow: "0 2px 10px rgba(224,49,49,0.04)" }}>
+          <div className={`border border-neutral-200 bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.04)] ${BRAND_PANEL_DARK}`} style={{ display: "flex", flexWrap: "wrap", gap: 0, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+            {dark && <BrandBackdrop tone="dark" />}
             {infoFields.map(({ label, value }, i) => (
-              <div key={label} style={{ flex: "1 1 120px", padding: "12px 18px", borderRight: i < infoFields.length - 1 ? "1px solid #f5eaea" : "none", minWidth: 0 }}>
+              <div key={label} style={{ flex: "1 1 120px", padding: "12px 18px", borderRight: i < infoFields.length - 1 ? "1px solid var(--color-neutral-200)" : "none", minWidth: 0 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value ?? "—"}</div>
               </div>
@@ -445,7 +453,7 @@ export default function EnrollmentDetailPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                       <span style={{ color: C.muted }}>Next due</span>
-                      <span style={{ fontWeight: 600, color: invoice.is_overdue ? "#c92a2a" : C.dark }}>
+                      <span style={{ fontWeight: 600, color: invoice.is_overdue ? "var(--color-brand-600)" : C.dark }}>
                         {invoice.next_due_date ? fmtDate(invoice.next_due_date) : "—"}{invoice.is_overdue ? " · overdue" : ""}
                       </span>
                     </div>
@@ -459,7 +467,7 @@ export default function EnrollmentDetailPage() {
                 <div>
                   <p style={{ margin: "0 0 8px", fontSize: 12, color: C.muted }}>No invoice generated yet.</p>
                   <button onClick={() => navigate(`/invoices?enrollment_id=${id}`)}
-                    style={{ background: "linear-gradient(135deg,#e03131,#c92a2a)", color: "white", border: "none", borderRadius: 50, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: "white", border: "none", borderRadius: 50, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     Generate
                   </button>
                 </div>
@@ -499,7 +507,7 @@ export default function EnrollmentDetailPage() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   {scholarships.map((s) => (
-                    <div key={s.enrollment_scholarship_id} style={{ fontSize: 12, padding: "5px 9px", background: "#f8f4ff", borderRadius: 7, color: C.dark }}>
+                    <div key={s.enrollment_scholarship_id} className="bg-[#f8f4ff] dark:bg-accent-50" style={{ fontSize: 12, padding: "5px 9px", borderRadius: 7, color: C.dark }}>
                       <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.scholarship_type_detail?.scholarship_name ?? `Scholarship #${s.scholarship_type}`}
                       </div>
@@ -523,14 +531,14 @@ export default function EnrollmentDetailPage() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 480 }}>
                   <thead>
-                    <tr style={{ background: "#fdfafa" }}>
-                      <th style={{ padding: "9px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: "1px solid #f5eaea", whiteSpace: "nowrap" }}>Subject</th>
+                    <tr className="bg-[#fdfafa] dark:bg-transparent">
+                      <th style={{ padding: "9px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: "1px solid var(--color-neutral-200)", whiteSpace: "nowrap" }}>Subject</th>
                       {activePeriods.map((p) => (
-                        <th key={p} style={{ padding: "9px 14px", textAlign: "center", color: C.muted, fontWeight: 600, borderBottom: "1px solid #f5eaea", minWidth: 64, whiteSpace: "nowrap" }}>
+                        <th key={p} style={{ padding: "9px 14px", textAlign: "center", color: C.muted, fontWeight: 600, borderBottom: "1px solid var(--color-neutral-200)", minWidth: 64, whiteSpace: "nowrap" }}>
                           {GRADE_LABELS[p]}
                         </th>
                       ))}
-                      <th style={{ padding: "9px 14px", textAlign: "center", color: C.muted, fontWeight: 600, borderBottom: "1px solid #f5eaea", minWidth: 72, whiteSpace: "nowrap" }}>Remarks</th>
+                      <th style={{ padding: "9px 14px", textAlign: "center", color: C.muted, fontWeight: 600, borderBottom: "1px solid var(--color-neutral-200)", minWidth: 72, whiteSpace: "nowrap" }}>Remarks</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -541,14 +549,14 @@ export default function EnrollmentDetailPage() {
                         : allRemarks.includes("incomplete") ? "incomplete"
                         : allRemarks.includes("passed") ? "passed"
                         : null;
-                      const remColor = overallRemark === "failed" || overallRemark === "incomplete" ? "#a32d2d"
-                        : overallRemark === "passed" ? "#2e6b0d" : C.muted;
+                      const remColor = overallRemark === "failed" || overallRemark === "incomplete" ? "var(--color-error-600)"
+                        : overallRemark === "passed" ? "var(--color-success-500)" : C.muted;
                       return (
-                        <tr key={key} style={{ borderBottom: "1px solid #f9f2f2" }}>
+                        <tr key={key} className="border-b border-[#f9f2f2] dark:border-neutral-200">
                           <td style={{ padding: "8px 14px", color: C.dark, fontWeight: 500 }}>{subj.name}</td>
                           {activePeriods.map((p) => {
                             const g = subj.periods[p];
-                            const col = !g ? C.muted : g.remarks === "passed" ? "#2e6b0d" : g.remarks === "failed" ? "#a32d2d" : C.dark;
+                            const col = !g ? C.muted : g.remarks === "passed" ? "var(--color-success-500)" : g.remarks === "failed" ? "var(--color-error-600)" : C.dark;
                             return (
                               <td key={p} style={{ padding: "8px 14px", textAlign: "center", color: col, fontWeight: g ? 600 : 400 }}>
                                 {g ? g.numeric_grade : "—"}
@@ -557,7 +565,7 @@ export default function EnrollmentDetailPage() {
                           })}
                           <td style={{ padding: "8px 14px", textAlign: "center" }}>
                             {overallRemark
-                              ? <span style={{ fontSize: 11, fontWeight: 700, color: remColor, background: remColor + "18", padding: "2px 8px", borderRadius: 50, textTransform: "capitalize" }}>{overallRemark}</span>
+                              ? <span style={{ fontSize: 11, fontWeight: 700, color: remColor, background: `color-mix(in srgb, ${remColor} 9.4%, transparent)`, padding: "2px 8px", borderRadius: 50, textTransform: "capitalize" }}>{overallRemark}</span>
                               : <span style={{ color: C.muted, fontSize: 12 }}>—</span>
                             }
                           </td>

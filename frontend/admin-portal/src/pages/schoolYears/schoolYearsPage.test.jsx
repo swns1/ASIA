@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   listRegisteredSchoolYears: vi.fn(),
@@ -131,5 +132,22 @@ describe("SchoolYearsPage", () => {
     api.listRegisteredSchoolYears.mockResolvedValue([{ ...YEARS[0] }]);
     renderPage();
     expect(await screen.findByText("No current school year")).toBeTruthy();
+  });
+});
+
+describe("SchoolYearsPage — dark mode", () => {
+  it("lists the years on a dark page", async () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={["/school-years"]}>
+            <SchoolYearsPage />
+          </MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+    await waitFor(() => expect(rowFor("2025-2026")).toBeTruthy());
+    expect(within(rowFor("2025-2026")).getByText("Current")).toBeTruthy();
+    expect(within(rowFor("2025-2026")).getByText(/% through/)).toBeTruthy();
   });
 });

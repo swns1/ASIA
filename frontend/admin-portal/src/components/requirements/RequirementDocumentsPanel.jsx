@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import ConfirmModal from "../ConfirmModal";
+import useTheme from "../../hooks/useTheme";
+import { CHIP_GLOW } from "../../constants/statusTones";
 import { fetchRequirementSummary, removeRequirement, resolveMediaUrl } from "../../api/requirementApi";
 import DocumentUploadModal from "./DocumentUploadModal";
 import DocumentViewModal from "./DocumentViewModal";
-import { C, groupRequirements, isImageDoc, isPdfDoc, reqIcon } from "./requirementMeta";
+import { C, DARK_C, groupRequirements, isImageDoc, isPdfDoc, reqIcon } from "./requirementMeta";
 
 // Hoisted deliberately. Defined inside the panel these would be new component
 // types on every render, so React would unmount and remount each row — losing
@@ -26,7 +28,7 @@ function DocumentActions({ req, readOnly, onView, onUpload, onRemove }) {
             <i className="ti ti-replace" style={{ fontSize: 14 }} />
           </button>
           <button
-            className="row-action danger" title="Remove" style={{ color: "#8a6a6a" }}
+            className="row-action danger" title="Remove" style={{ color: "var(--color-neutral-500)" }}
             onClick={() => onRemove(req)}
           >
             <i className="ti ti-trash" style={{ fontSize: 14 }} />
@@ -47,20 +49,22 @@ function DocumentActions({ req, readOnly, onView, onUpload, onRemove }) {
 function DocumentRow({ req, compact, ...actions }) {
   const icon = reqIcon(req.requirement_code);
   const blocking = !req.is_submitted && req.is_required;
+  const dark = useTheme() === "dark";
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 12,
       padding: compact ? "10px 0" : "12px 4px",
-      borderBottom: `1px solid ${C.softBorder}`,
+      borderBottom: `1px solid ${dark ? DARK_C.softBorder : C.softBorder}`,
     }}>
-      <div style={{
+      <div
+        className={req.is_submitted ? `bg-success-50 ${CHIP_GLOW.success}` : blocking ? `bg-brand-100 ${CHIP_GLOW.brand}` : `bg-[#f5f5f5] dark:bg-muted-50 ${CHIP_GLOW.muted}`}
+        style={{
         width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-        background: req.is_submitted ? C.greenLight : blocking ? C.redLight : "#f5f5f5",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <i
           className={`ti ${req.is_submitted ? "ti-file-check" : icon}`}
-          style={{ fontSize: 15, color: req.is_submitted ? C.green : blocking ? C.red : "#8a6a6a" }}
+          style={{ fontSize: 15, color: req.is_submitted ? (dark ? DARK_C.green : C.green) : blocking ? C.red : "var(--color-neutral-500)" }}
         />
       </div>
 
@@ -68,11 +72,10 @@ function DocumentRow({ req, compact, ...actions }) {
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{req.requirement_name}</span>
           {!req.is_submitted && (
-            <span style={{
+            <span className={blocking ? "bg-brand-100" : "bg-[#f5f5f5] dark:bg-muted-50"} style={{
               fontSize: 10, fontWeight: 700, borderRadius: 99, padding: "2px 8px",
               textTransform: "uppercase", letterSpacing: "0.05em",
               color: blocking ? C.red : C.muted,
-              background: blocking ? C.redLight : "#f5f5f5",
             }}>
               {blocking ? "Required" : "Optional"}
             </span>
@@ -156,6 +159,7 @@ export default function RequirementDocumentsPanel({
   const [viewModal, setViewModal] = useState(null);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [removing, setRemoving] = useState(false);
+  const dark = useTheme() === "dark";
 
   // Read off `context` before the callback: hosts pass an object literal,
   // which is a new identity every render and would defeat the memo.
@@ -240,8 +244,8 @@ export default function RequirementDocumentsPanel({
       <div style={{ padding: compact ? 0 : 16 }}>
         {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 4px" }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: "#f3ebeb" }} />
-            <div style={{ flex: 1, height: 13, borderRadius: 6, background: "#f3ebeb" }} />
+            <div className="bg-[#f3ebeb] dark:bg-[var(--skeleton)]" style={{ width: 32, height: 32, borderRadius: 9 }} />
+            <div className="bg-[#f3ebeb] dark:bg-[var(--skeleton)]" style={{ flex: 1, height: 13, borderRadius: 6 }} />
           </div>
         ))}
       </div>
@@ -253,8 +257,9 @@ export default function RequirementDocumentsPanel({
   return (
     <div>
       {error && (
-        <div style={{ background: "#fef2f2", border: `1px solid ${C.redBorder}`, borderRadius: 10,
-                      padding: "10px 14px", fontSize: 13, color: "#b91c1c", display: "flex",
+        <div className="bg-[#fef2f2] text-[#b91c1c] dark:bg-error-50 dark:text-error-500"
+             style={{ border: `1px solid ${C.redBorder}`, borderRadius: 10,
+                      padding: "10px 14px", fontSize: 13, display: "flex",
                       alignItems: "center", gap: 8, marginBottom: 12 }}>
           <i className="ti ti-alert-circle" style={{ fontSize: 14 }} />{error}
         </div>
@@ -274,21 +279,21 @@ export default function RequirementDocumentsPanel({
       {total > 0 && (
         <div style={{ marginTop: compact ? 0 : 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: requiredMissing ? C.red : C.green }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: requiredMissing ? C.red : dark ? DARK_C.green : C.green }}>
               {requiredMissing === 0
                 ? "All required documents submitted."
                 : `${requiredMissing} required document${requiredMissing === 1 ? "" : "s"} still missing.`}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: allDone ? C.green : C.muted }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: allDone ? (dark ? DARK_C.green : C.green) : C.muted }}>
               {submittedCount} / {total}
             </span>
           </div>
-          <div style={{ height: 7, background: "#f0e4e4", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: 7, background: "var(--color-neutral-300)", borderRadius: 99, overflow: "hidden" }}>
             <div style={{
               height: "100%",
               width: `${total ? Math.round((submittedCount / total) * 100) : 0}%`,
               background: requiredMissing === 0
-                ? `linear-gradient(90deg,${C.green},#43a047)`
+                ? `linear-gradient(90deg,${dark ? DARK_C.green : C.green},#43a047)`
                 : `linear-gradient(90deg,#d97706,#f59e0b)`,
               borderRadius: 99, transition: "width .4s ease",
             }} />
@@ -304,7 +309,7 @@ export default function RequirementDocumentsPanel({
         <>
           <DocumentSection heading="Required" tone={C.red} rows={required} {...rowProps} />
           <DocumentSection heading="Optional" tone={C.muted} rows={optional} {...rowProps} />
-          <DocumentSection heading="Submitted" tone={C.green} rows={submitted} {...rowProps} />
+          <DocumentSection heading="Submitted" tone={dark ? DARK_C.green : C.green} rows={submitted} {...rowProps} />
           {notApplicable.length > 0 && !compact && (
             <div style={{ marginTop: 14, fontSize: 11, color: C.pale }}>
               <i className="ti ti-info-circle" style={{ fontSize: 12, marginRight: 5 }} />

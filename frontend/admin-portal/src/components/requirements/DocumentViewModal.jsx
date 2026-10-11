@@ -40,7 +40,7 @@ export default function DocumentViewModal({ url, name, isPdf = false, onClose })
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="focus-ring absolute -right-3.5 -top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 shadow-lg transition-colors hover:bg-brand-50 hover:text-brand-600"
+          className="focus-ring absolute -right-3.5 -top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-surface-raised text-neutral-900 shadow-lg transition-colors hover:bg-brand-50 hover:text-brand-600 dark:shadow-float-dark"
         >
           <i className="ti ti-x text-base" aria-hidden="true" />
         </button>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { MENU_DARK } from "./darkSurfaces";
 
 // RangeMenu — a toolbar pill like FilterMenu, for a filter that takes a range
 // rather than one choice: payment dates, amounts, when a scholarship was
@@ -83,7 +84,7 @@ export default function RangeMenu({
         aria-label={`${label}: ${valueLabel}`}
         onClick={() => (open ? close() : openPanel())}
         className={`focus-ring flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border-[1.5px] px-3.5 text-[12.5px] transition-colors duration-150 ${
-          active ? "border-brand-500 bg-brand-100" : "border-neutral-300 bg-white hover:border-brand-500"
+          active ? "border-brand-500 bg-brand-100" : "border-neutral-300 bg-surface hover:border-brand-500"
         }`}
       >
         <span className="text-neutral-500">{label}</span>
@@ -101,7 +102,7 @@ export default function RangeMenu({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.14, ease: "easeOut" }}
           // z-20 clears the table's sticky header (z-10), as FilterMenu does.
-          className={`absolute top-[calc(100%+6px)] z-20 w-[300px] rounded-lg border border-neutral-200 bg-white p-3 shadow-lg ${
+          className={`absolute top-[calc(100%+6px)] z-20 w-[300px] rounded-lg border border-neutral-200 bg-surface-raised p-3 shadow-lg ${MENU_DARK} ${
             align === "end" ? "right-0" : "left-0"
           }`}
         >
@@ -113,7 +114,7 @@ export default function RangeMenu({
               {fields.map((f, i) => (
                 <label key={f.key} htmlFor={`${fieldId}-${f.key}`} className={`flex flex-col gap-1 ${f.wide ? "col-span-2" : ""}`}>
                   <span className="text-[11px] font-semibold text-neutral-600">{f.label}</span>
-                  <span className="flex h-9 items-center gap-1 rounded-sm border-[1.5px] border-neutral-300 bg-white px-2 focus-within:border-brand-500">
+                  <span className="flex h-9 items-center gap-1 rounded-sm border-[1.5px] border-neutral-300 bg-surface px-2 focus-within:border-brand-500">
                     {f.prefix && <span className="text-[12px] font-semibold text-neutral-500">{f.prefix}</span>}
                     <input
                       id={`${fieldId}-${f.key}`}
@@ -137,7 +138,7 @@ export default function RangeMenu({
                     key={p.label}
                     type="button"
                     onClick={() => apply({ ...empty, ...p.values })}
-                    className="focus-ring h-7 rounded-full border border-neutral-300 bg-white px-2.5 text-[12px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600"
+                    className="focus-ring h-7 rounded-full border border-neutral-300 bg-surface px-2.5 text-[12px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600"
                   >
                     {p.label}
                   </button>
@@ -156,7 +157,7 @@ export default function RangeMenu({
               </button>
               <button
                 type="submit"
-                className="focus-ring h-8 rounded-full bg-brand-500 px-4 text-[12px] font-bold text-white transition-colors duration-150 hover:bg-brand-600"
+                className="focus-ring h-8 rounded-full bg-action px-4 text-[12px] font-bold text-white transition-colors duration-150 hover:bg-action-2"
               >
                 Apply
               </button>

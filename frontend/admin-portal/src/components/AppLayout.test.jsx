@@ -81,29 +81,61 @@ describe("AppLayout dark mode", () => {
     localStorage.setItem("asia.dev.theme", "dark");
   });
 
-  it("darkens the sidebar and a converted page for an admin", () => {
+  // One line per converted page: a path that must turn dark for an admin.
+  // A page adds its route here when it joins constants/darkReady.js.
+  const DARK_PATHS = [
+    "/dashboard",
+    "/students",
+    "/users",
+    "/teacher-advisories",
+    "/subjects",
+    "/audit-trail",
+    "/school-years",
+    "/school-years/2025-2026",
+    "/grades",
+    "/grades/entry",
+    "/grades/summary",
+    "/grades/observed",
+    "/grading-templates",
+    "/enrollments",
+    "/invoices",
+    "/payments",
+    "/requirements",
+    "/enrollments/12",
+    "/students/12",
+    "/student-applications",
+    "/scholarships",
+    "/scholarship-types",
+    "/analytics",
+    "/school-years/compare",
+    "/school-forms",
+    "/my-sections",
+    "/sections",
+    "/academic-calendar",
+    "/settings",
+  ];
+
+  // Paths that stay light beside the dark sidebar: a converted list page
+  // doesn't bring its detail pages along, and nothing off the list goes dark.
+  const LIGHT_PATHS = [
+    "/students/12/history",
+    "/student-applications/7",
+    "/a-page-not-converted-yet",
+    "/grades/12",
+    "/grading-templates/3",
+  ];
+
+  it.each(DARK_PATHS)("darkens the sidebar and %s for an admin", (path) => {
     signInAs("admin");
-    renderShell();
+    renderShell(<p>Page content</p>, path);
     expect(themeOf(nav())).toBe("dark");
     expect(themeOf(screen.getByText("Page content"))).toBe("dark");
   });
 
-  it("darkens the dashboard (the admin home) for an admin", () => {
+  it.each(LIGHT_PATHS)("keeps %s light, beside a dark sidebar", (path) => {
     signInAs("super_admin");
-    renderShell(<p>Page content</p>, "/dashboard");
-    expect(themeOf(screen.getByText("Page content"))).toBe("dark");
-  });
-
-  it("keeps a page that isn't converted yet light, beside a dark sidebar", () => {
-    signInAs("admin");
-    renderShell(<p>Page content</p>, "/enrollments");
+    renderShell(<p>Page content</p>, path);
     expect(themeOf(nav())).toBe("dark");
-    expect(themeOf(screen.getByText("Page content"))).toBeNull();
-  });
-
-  it("leaves a list page's detail pages light", () => {
-    signInAs("super_admin");
-    renderShell(<p>Page content</p>, "/students/12");
     expect(themeOf(screen.getByText("Page content"))).toBeNull();
   });
 

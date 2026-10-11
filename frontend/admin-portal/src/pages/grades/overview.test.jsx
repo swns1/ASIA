@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   getEnrollments: vi.fn(),
@@ -198,5 +199,23 @@ describe("Grades overview — search as you type", () => {
     }
     await settled();
     expect(api.getGradeAverages).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Grades overview — dark mode", () => {
+  it("renders the band, the rows and the grade legend inside a dark page", async () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">{page()}</div>
+      </ThemeContext.Provider>,
+    );
+    await settled();
+
+    expect(await legend().findByRole("button", { name: "Failed 2" })).toBeTruthy();
+    expect(screen.getByText("Ben Uy")).toBeTruthy();
+    // An average reads its band in token classes, so it follows the theme.
+    expect(screen.getByText("89.00").className).toContain("text-success-500");
+    // The 80–84 band's fill has no token: its light value keeps a dark pair.
+    expect(screen.getByText("80–84").className).toContain("dark:bg-success-50");
   });
 });

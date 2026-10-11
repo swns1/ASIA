@@ -87,7 +87,7 @@ export default function SummaryCard({ enrollment, subjects, grades, loading }) {
             {s.generalAverage === null ? (
               <span className="text-[11.5px] font-semibold text-neutral-500">Shown once every subject has a final rating</span>
             ) : (
-              <span className="text-[11.5px] font-semibold" style={{ color: band.color }}>{band.label}</span>
+              <span className={`text-[11.5px] font-semibold ${band.color}`}>{band.label}</span>
             )}
           </div>
           <Button

@@ -20,13 +20,15 @@ import { useNavigate } from "react-router-dom";
 import { getCurrentUser, canViewAuditTrail } from "../utils/auth";
 import { fetchAuditLogs, fetchAuditFacets } from "../api/auditTrailApi";
 import { modalVariants, springTransition } from "../utils/motion";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const C = {
-  red: "#e03131", redDark: "#c92a2a", redLight: "#fff0f0", redBorder: "#fca5a5",
-  border: "#f5eaea", softBorder: "#f9f0f0", text: "#1a0a0a",
-  muted: "#7a5050", pale: "#8a6a6a", micro: "#8a6a6a", bg: "#fdf8f6", white: "#ffffff",
+  red: "var(--color-brand-500)", redDark: "var(--color-brand-600)", redLight: "var(--color-brand-100)", redBorder: "var(--color-brand-300)",
+  border: "var(--color-neutral-200)", softBorder: "#f9f0f0", text: "var(--color-neutral-900)",
+  muted: "var(--color-neutral-700)", pale: "var(--color-neutral-500)", micro: "var(--color-neutral-500)", bg: "var(--color-neutral-50)", white: "#ffffff",
 };
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
@@ -248,9 +250,10 @@ function AccessDenied({ navigate }) {
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <motion.div
           variants={modalVariants} initial="hidden" animate="visible" transition={springTransition}
-          style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "34px 38px", width: 420, boxShadow: "0 18px 50px rgba(224,49,49,0.12)", textAlign: "center" }}
+          className={`bg-surface shadow-[0_18px_50px_rgba(224,49,49,0.12)] ${CARD_DARK}`}
+          style={{ border: `1px solid ${C.border}`, borderRadius: 20, padding: "34px 38px", width: 420, textAlign: "center" }}
         >
-          <div style={{ width: 58, height: 58, borderRadius: 16, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 58, height: 58, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
             <i className="ti ti-shield-lock" style={{ fontSize: 26, color: C.red }} />
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Access Denied</div>
@@ -258,7 +261,7 @@ function AccessDenied({ navigate }) {
           <motion.button
             onClick={() => navigate("/dashboard")}
             whileHover={{ scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }} whileTap={{ scale: 0.97 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg,${C.red},${C.redDark})`, color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)", marginTop: 22 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: C.white, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.24)", marginTop: 22 }}
           >
             <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Back to Dashboard
           </motion.button>
@@ -608,7 +611,7 @@ export default function AuditTrailPage() {
                 aria-label="Rows per page"
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="focus-ring h-8 rounded-lg border border-neutral-300 bg-white px-2 text-[12px] text-neutral-700 outline-none"
+                className="focus-ring h-8 rounded-lg border border-neutral-300 bg-surface px-2 text-[12px] text-neutral-700 outline-none"
               >
                 {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
               </select>

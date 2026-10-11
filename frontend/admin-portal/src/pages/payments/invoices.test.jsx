@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   getInvoices: vi.fn(),
@@ -158,5 +159,63 @@ describe("Generate", { timeout: 20_000 }, () => {
     expect(await within(dialog).findByText(/Already invoiced for SY 2026-2027/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Open INV-2026-000001" }));
     await waitFor(() => expect(api.getInvoice).toHaveBeenCalledWith(1));
+  });
+});
+
+// Dark-only branches (the plan tones, the plan cards' framer colours) never
+// run in a light render, so the page and its windows render once in dark.
+function renderDark() {
+  return render(
+    <ThemeContext.Provider value="dark">
+      <div data-theme="dark">
+        <MemoryRouter initialEntries={["/invoices"]}><InvoicesPage /></MemoryRouter>
+      </div>
+    </ThemeContext.Provider>,
+  );
+}
+
+describe("Invoices — dark mode", { timeout: 20_000 }, () => {
+  it("shows the list and an invoice's breakdown, payments and Re-issue window", async () => {
+    const full = invoice(1, {
+      payment_plan: "annual",
+      items: [
+        { invoice_item_id: 1, description: "[Tuition] Tuition Fee", amount: "40000.00" },
+        { invoice_item_id: 2, description: "[Miscellaneous] Library", amount: "6000.00" },
+      ],
+      discounts: [{ invoice_discount_id: 1, description: "Annual plan", amount: "2000.00" }],
+    });
+    api.getInvoices.mockResolvedValue({ results: [full], count: 1 });
+    api.getInvoice.mockResolvedValue(full);
+    renderDark();
+
+    fireEvent.click(await screen.findByText("INV-2026-000001"));
+    expect(await screen.findByText("Tuition Fees", {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByText("Discounts Applied to Tuition")).toBeTruthy();
+    expect(screen.getByText("Net Amount Due")).toBeTruthy();
+    expect(screen.getAllByText("Annual").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("tab", { name: /Payments/ }));
+    expect(await screen.findByText("No payments recorded yet.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Record First Payment/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Re-issue/ }));
+    const dialog = await screen.findByRole("dialog", {}, { timeout: 5000 });
+    expect(within(dialog).getByRole("button", { name: /^Annual/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByRole("button", { name: /^Monthly/ })).toBeTruthy();
+  });
+
+  it("shows the Generate window's search results and its error", async () => {
+    api.getInvoices.mockResolvedValue({ results: [], count: 0 });
+    api.getEnrollments.mockResolvedValue({ results: [{ enrollment_id: 5, student_name: "Ana Cruz", school_year: "2026-2027", grade_level: "Grade 11", section: "STEM-A" }] });
+    api.generateInvoice.mockRejectedValue({ response: { status: 400, data: { detail: "No fee schedule for Grade 11." } } });
+    renderDark();
+
+    fireEvent.click((await screen.findAllByRole("button", { name: /Generate Invoice/ }))[0]);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByPlaceholderText(/Search by student name/), { target: { value: "Ana" } });
+    fireEvent.click(await within(dialog).findByText("Ana Cruz"));
+    expect(within(dialog).getByRole("button", { name: "Change" })).toBeTruthy();
+    fireEvent.click(within(dialog).getAllByRole("button", { name: /Generate Invoice/ }).at(-1));
+    expect(await within(dialog).findByText("No fee schedule for Grade 11.")).toBeTruthy();
   });
 });

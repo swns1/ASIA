@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 
 import { GRADE_ORDER } from "../../../utils/grading";
 import { peso } from "../../../utils/format";
+import useTheme from "../../../hooks/useTheme";
 import { NoData } from "../ChartFrame";
 import useElementSize from "../useElementSize";
 import { fmtOne, num, pesoCompact, pesoWhole, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
 import Legend from "../Legend";
-import { FEE_RANGE, yearRamp } from "./palette";
+import { DARK_FEE_RANGE, FEE_RANGE, yearRamp } from "./palette";
 import { niceStep } from "../scale";
 
 // 1g — every grade's total fee as one dot per year on a shared peso scale, so
@@ -72,6 +73,7 @@ function FeesByGrade({ years, get }) {
   // The plot column's width, which sets how many peso labels fit under it.
   const [axisEl, setAxisEl] = useState(null);
   const plotWidth = useElementSize(axisEl)?.width;
+  const theme = useTheme();
   const schedules = (y) => get(y) ?? [];
   const rank = (g) => (GRADE_ORDER.includes(g) ? GRADE_ORDER.indexOf(g) : GRADE_ORDER.length);
   const grades = [...new Set(years.flatMap((y) => schedules(y).map((s) => s.grade_level)))]
@@ -91,7 +93,7 @@ function FeesByGrade({ years, get }) {
 
   const first = years[0];
   const last = years.at(-1);
-  const colors = yearRamp(years.length);
+  const colors = yearRamp(years.length, theme);
   const rows = grades.map((grade) => {
     const fees = years.map((y) => num(schedules(y).find((s) => s.grade_level === grade)?.grand_total));
     const known = fees.filter((v) => v != null);
@@ -153,7 +155,7 @@ function FeesByGrade({ years, get }) {
                     style={{
                       left: `${scale.at(row.low)}%`,
                       width: `${scale.at(row.high) - scale.at(row.low)}%`,
-                      background: FEE_RANGE,
+                      background: theme === "dark" ? DARK_FEE_RANGE : FEE_RANGE,
                     }}
                   />
                 )}
@@ -161,7 +163,7 @@ function FeesByGrade({ years, get }) {
                   <div
                     key={years[k]}
                     title={`${row.grade} · S.Y. ${years[k]} · ${peso(fee)}`}
-                    className="absolute top-1/2 -ml-1.5 -mt-1.5 h-3 w-3 rounded-full border-2 border-white"
+                    className="absolute top-1/2 -ml-1.5 -mt-1.5 h-3 w-3 rounded-full border-2 border-surface"
                     style={{ left: `${scale.at(fee)}%`, background: colors[k] }}
                   />
                 )))}

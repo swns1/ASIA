@@ -24,6 +24,7 @@ import Card from "../../components/ui/Card";
 import { todayISO } from "../../utils/format";
 import { IMPOSSIBLE_DATE_MESSAGE } from "../../utils/validation";
 import { emptyGuardian, emptySibling, emptySchool } from "./formShapes";
+import { CHIP_GLOW } from "../../constants/statusTones";
 
 export { default as StepBar } from "../../components/ui/StepBar";
 export { SectionHeader, Divider } from "../../components/ui/FormSection";
@@ -89,7 +90,7 @@ export function StudentStep({ data, onChange, showStatus = true, lrnRequired = t
               style={STATUS_TINTS[data.status] ?? STATUS_TINTS.active}
             >
               {["active", "inactive", "transferred", "graduated", "dropped"].map((s) => (
-                <option key={s} value={s} className="bg-white font-normal text-neutral-900">
+                <option key={s} value={s} className="bg-surface-raised font-normal text-neutral-900">
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </option>
               ))}
@@ -255,7 +256,7 @@ function RepeaterCard({ icon, title, meta, accent = true, onRemove, removeLabel 
       <div className="py-5 pl-6 pr-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-500">
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-500 ${CHIP_GLOW.brand}`}>
               <i className={`ti ${icon} text-base`} aria-hidden="true" />
             </span>
             <div className="min-w-0">
@@ -408,7 +409,7 @@ export function SiblingsStep({ data, onChange }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="flex items-center gap-3.5 rounded-xl border-[1.5px] border-brand-border-soft bg-white px-4 py-3.5"
+              className="flex items-center gap-3.5 rounded-xl border-[1.5px] border-brand-border-soft bg-surface px-4 py-3.5"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-500">
                 {i + 1}

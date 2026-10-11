@@ -262,7 +262,7 @@ function DeleteModal({ item, teacherName, onConfirm, onCancel, deleting }) {
     <ConfirmModal
       icon="ti-trash"
       title="Remove advisory assignment?"
-      message={<>You're about to remove <strong style={{ color: "#1a0a0a" }}>{teacherName}</strong>'s advisory of <strong style={{ color: "#1a0a0a" }}>{item.grade_level} - {item.section}</strong>. They will lose access to that section's grades, attendance, and narrative reports.</>}
+      message={<>You're about to remove <strong style={{ color: "var(--color-neutral-900)" }}>{teacherName}</strong>'s advisory of <strong style={{ color: "var(--color-neutral-900)" }}>{item.grade_level} - {item.section}</strong>. They will lose access to that section's grades, attendance, and narrative reports.</>}
       loading={deleting}
       onConfirm={onConfirm}
       onCancel={onCancel}

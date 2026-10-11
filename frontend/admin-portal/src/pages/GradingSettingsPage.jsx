@@ -21,6 +21,7 @@ import { StatusDot } from "../components/ui/Badge";
 import { LEVEL_DOTS, LEVEL_FILTER_OPTIONS, LEVEL_LABELS } from "../constants/schoolLevels";
 import { COMPONENT_COLORS } from "./grades/gradeRules";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
+import useTheme from "../hooks/useTheme";
 
 import {
   getGradingTemplates as _getTemplates,
@@ -142,7 +143,14 @@ function WeightBar({ components }) {
   );
 }
 
+// framer-motion can't tween a var(), so what it animates takes literal
+// colours: in dark, the dark values of the same tokens (success-500,
+// error-600, brand-500 for the weight bar; brand-100 for the remove hover).
+const DARK_WEIGHT_BAR = { ok: "#7fcf8a", over: "#ffa39b", under: "#ef4b4b" };
+const DARK_REMOVE_HOVER = "#2f1a1a";
+
 function TemplateModal({ template, onClose, onRefresh }) {
+  const dark = useTheme() === "dark";
   const isEdit = Boolean(template?.grading_template_id);
 
   const [form, setForm] = useState({
@@ -173,9 +181,9 @@ function TemplateModal({ template, onClose, onRefresh }) {
     setComponents((arr) => arr.map((c) => c._key === key ? { ...c, [field]: val } : c));
 
   const inp = {
-    width: "100%", border: "1.5px solid #fde2de", borderRadius: 10,
+    width: "100%", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10,
     padding: "9px 12px", fontSize: 13, fontFamily: "'DM Sans', sans-serif",
-    color: "#1a0a0a", background: "#fffbfb", outline: "none", boxSizing: "border-box",
+    color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none", boxSizing: "border-box",
   };
 
   const handleSave = async () => {
@@ -284,18 +292,18 @@ function TemplateModal({ template, onClose, onRefresh }) {
           </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
+            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
             <input value={form.template_name} onChange={(e) => setForm((f) => ({ ...f, template_name: e.target.value }))} placeholder="e.g. DepEd K-12 Standard" style={inp} />
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Description</label>
+            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Description</label>
             <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional description…" rows={2}
               style={{ ...inp, resize: "vertical" }} />
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#7a5050", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
+            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {SCHOOL_LEVELS.map((lvl) => {
                 const active = form.school_level === lvl.value;
@@ -305,7 +313,7 @@ function TemplateModal({ template, onClose, onRefresh }) {
                     className={`focus-ring inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-3 py-[7px] text-[12px] transition-colors duration-150 ${
                       active
                         ? `${lvl.chip} border-current font-bold`
-                        : "border-neutral-200 bg-white font-medium text-neutral-600 hover:border-neutral-300"
+                        : "border-neutral-200 bg-surface font-medium text-neutral-600 hover:border-neutral-300"
                     }`}>
                     <i className={`ti ${lvl.icon} text-[13px]`} aria-hidden="true" />{lvl.label}
                   </button>
@@ -314,43 +322,43 @@ function TemplateModal({ template, onClose, onRefresh }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 10 }}>
+          <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "12px 14px", border: "1px solid var(--color-neutral-200)", borderRadius: 10 }}>
             <input type="checkbox" id="is_active" checked={form.is_active}
               onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-              style={{ width: 15, height: 15, accentColor: "#e03131", cursor: "pointer" }} />
-            <label htmlFor="is_active" style={{ fontSize: 13, color: "#1a0a0a", cursor: "pointer", fontWeight: 500 }}>
+              style={{ width: 15, height: 15, accentColor: "var(--color-brand-500)", cursor: "pointer" }} />
+            <label htmlFor="is_active" style={{ fontSize: 13, color: "var(--color-neutral-900)", cursor: "pointer", fontWeight: 500 }}>
               Active — available for assignment to subjects
             </label>
           </div>
 
-          <div style={{ borderTop: "1px solid #f5eaea", paddingTop: 18 }}>
+          <div style={{ borderTop: "1px solid var(--color-neutral-200)", paddingTop: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a0a0a" }}>Grading Components</div>
-                <div style={{ fontSize: 11, color: "#8a6a6a", marginTop: 2 }}>Weights must sum to exactly 100%</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>Grading Components</div>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", marginTop: 2 }}>Weights must sum to exactly 100%</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: weightOk ? "#2e6b0d" : totalWeight > 0 ? "#a32d2d" : "#8a6a6a" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: weightOk ? "var(--color-success-500)" : totalWeight > 0 ? "var(--color-error-600)" : "var(--color-neutral-500)" }}>
                   {totalWeight.toFixed(1)}% / 100%
                 </span>
                 <motion.button type="button" onClick={addComponent}
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: "#fff0f0", color: "#c92a2a", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: "var(--color-brand-100)", color: "var(--color-brand-600)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                   <i className="ti ti-plus" style={{ fontSize: 13 }} />Add
                 </motion.button>
               </div>
             </div>
 
-            <div style={{ height: 6, borderRadius: 99, background: "#f0e8e8", overflow: "hidden", marginBottom: 16 }}>
+            <div className="bg-[#f0e8e8] dark:bg-neutral-200" style={{ height: 6, borderRadius: 99, overflow: "hidden", marginBottom: 16 }}>
               <motion.div
-                animate={{ width: `${Math.min(totalWeight, 100)}%`, background: weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131" }}
+                animate={{ width: `${Math.min(totalWeight, 100)}%`, background: dark ? (weightOk ? DARK_WEIGHT_BAR.ok : totalWeight > 100 ? DARK_WEIGHT_BAR.over : DARK_WEIGHT_BAR.under) : weightOk ? "#2e6b0d" : totalWeight > 100 ? "#a32d2d" : "#e03131" }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 style={{ height: "100%", borderRadius: 99 }}
               />
             </div>
 
             {components.length === 0 && (
-              <div style={{ textAlign: "center", padding: "20px 0", color: "#8a6a6a", fontSize: 13, fontStyle: "italic" }}>
+              <div style={{ textAlign: "center", padding: "20px 0", color: "var(--color-neutral-500)", fontSize: 13, fontStyle: "italic" }}>
                 No components yet. Click "Add" to get started.
               </div>
             )}
@@ -364,7 +372,8 @@ function TemplateModal({ template, onClose, onRefresh }) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10, height: 0, marginBottom: 0 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 12, overflow: "hidden" }}
+                    className="bg-[#fdfafa] dark:bg-neutral-50"
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "1px solid var(--color-neutral-200)", borderRadius: 12, overflow: "hidden" }}
                   >
                     <div style={{ width: 10, height: 10, borderRadius: "50%", background: COMPONENT_COLORS[i % COMPONENT_COLORS.length], flexShrink: 0 }} />
                     <input value={comp.component_name}
@@ -377,12 +386,13 @@ function TemplateModal({ template, onClose, onRefresh }) {
                         onChange={(e) => updateComp(comp._key, "weight", e.target.value)}
                         placeholder="0"
                         style={{ ...inp, width: 70, padding: "8px 10px", textAlign: "right" }} />
-                      <span style={{ fontSize: 12, color: "#8a6a6a", fontWeight: 600 }}>%</span>
+                      <span style={{ fontSize: 12, color: "var(--color-neutral-500)", fontWeight: 600 }}>%</span>
                     </div>
                     <motion.button onClick={() => removeComponent(comp._key)}
-                      whileHover={{ scale: 1.08, backgroundColor: "#fff0f0" }}
+                      aria-label={`Remove ${comp.component_name || "this component"}`}
+                      whileHover={{ scale: 1.08, backgroundColor: dark ? DARK_REMOVE_HOVER : "#fff0f0" }}
                       whileTap={{ scale: 0.92 }}
-                      style={{ width: 28, height: 28, border: "1px solid #f0e4e4", borderRadius: 7, background: "white", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#8a6a6a", flexShrink: 0 }}>
+                      style={{ width: 28, height: 28, border: "1px solid var(--color-neutral-300)", borderRadius: 7, background: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-neutral-500)", flexShrink: 0 }}>
                       <i className="ti ti-x" style={{ fontSize: 12 }} />
                     </motion.button>
                   </motion.div>
@@ -399,7 +409,7 @@ function DeleteTemplateModal({ template, onConfirm, onCancel, deleting, deleteEr
     <ConfirmModal
       icon="ti-trash"
       title="Delete template?"
-      message={<>You're about to delete <strong style={{ color: "#1a0a0a" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.</>}
+      message={<>You're about to delete <strong style={{ color: "var(--color-neutral-900)" }}>{template.template_name}</strong>. Subjects using this template will lose their grading configuration.</>}
       error={deleteError}
       loading={deleting}
       onConfirm={onConfirm}
@@ -704,7 +714,7 @@ function GradingTemplatesTab({ header }) {
 // ════════════════════════════════════════════════════════════════════════════
 
 const textInput =
-  "h-9 rounded-sm border-[1.5px] border-neutral-300 bg-white px-2.5 text-[13px] text-neutral-900 outline-none focus:border-brand-500";
+  "h-9 rounded-sm border-[1.5px] border-neutral-300 bg-surface px-2.5 text-[13px] text-neutral-900 outline-none focus:border-brand-500";
 
 function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
   const [editing,  setEditing]  = useState(false);

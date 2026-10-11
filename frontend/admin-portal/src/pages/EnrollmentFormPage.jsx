@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import RequirementDocumentsPanel from "../components/requirements/RequirementDocumentsPanel";
 import Modal, { ConfirmDialog } from "../components/ui/Modal";
 import PageHeader from "../components/ui/PageHeader";
+import ThemeArea from "../components/ThemeArea";
+import { MENU_DARK } from "../components/ui/darkSurfaces";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Alert from "../components/ui/Alert";
@@ -12,6 +14,7 @@ import Badge, { StatusBadge } from "../components/ui/Badge";
 import ChipGroup from "../components/ui/ChipGroup";
 import { Field, Input, Select, Textarea } from "../components/FormField";
 import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { CHIP_GLOW } from "../constants/statusTones";
 import { readinessChecks, canSwitchToPending } from "./enrollment/enrollmentReadiness";
 import toast from "react-hot-toast";
 import { getCurrentUser, canViewAuditTrail, hasAnyRole, BILLING_READ_ROLES } from "../utils/auth";
@@ -93,10 +96,10 @@ const nullify = (obj, fields) => {
 
 
 const PALETTES = [
-  { bg: "#fde8e8", color: "#c0392b" }, { bg: "#e8f0fd", color: "#2563eb" },
-  { bg: "#e8fdf0", color: "#2e6b0d" }, { bg: "#fdf5e8", color: "#854f0b" },
-  { bg: "#f0e8fd", color: "#7c3aed" }, { bg: "#fde8f8", color: "#be185d" },
-  { bg: "#e8fdfd", color: "#1455a0" },
+  { bg: "bg-brand-200", color: "text-[#c0392b] dark:text-brand-600" }, { bg: "bg-elementary-50", color: "text-elementary-500" },
+  { bg: "bg-juniorhigh-50", color: "text-juniorhigh-500" }, { bg: "bg-nursery-50", color: "text-nursery-500" },
+  { bg: "bg-kindergarten-50", color: "text-kindergarten-500" }, { bg: "bg-seniorhigh-50", color: "text-seniorhigh-500" },
+  { bg: "bg-[#e8fdfd] dark:bg-info-50", color: "text-info-500" },
 ];
 const getPalette = (name = "X") => PALETTES[name.charCodeAt(0) % PALETTES.length];
 
@@ -221,8 +224,7 @@ function Avatar({ student, size = "md" }) {
   const initials = `${student.first_name?.[0] ?? ""}${student.last_name?.[0] ?? ""}`.toUpperCase();
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full font-bold ${AVATAR_SIZES[size] ?? AVATAR_SIZES.md}`}
-      style={{ background: p.bg, color: p.color }}
+      className={`flex shrink-0 items-center justify-center rounded-full font-bold ${AVATAR_SIZES[size] ?? AVATAR_SIZES.md} ${p.bg} ${p.color}`}
       aria-hidden="true"
     >
       {initials || "?"}
@@ -240,11 +242,11 @@ function Avatar({ student, size = "md" }) {
 // and documents (`missing_docs`) are separate on the server, and separate here.
 
 const ROW_TONES = {
-  ok:    { chip: "bg-success-50 text-success-500", title: "text-neutral-900" },
-  warn:  { chip: "bg-warning-50 text-warning-500", title: "text-warning-500" },
-  block: { chip: "bg-error-50 text-error-500",     title: "text-error-500" },
-  info:  { chip: "bg-info-50 text-info-500",       title: "text-info-500" },
-  busy:  { chip: "bg-brand-100 text-brand-600",    title: "text-neutral-700" },
+  ok:    { chip: `bg-success-50 text-success-500 ${CHIP_GLOW.success}`, title: "text-neutral-900" },
+  warn:  { chip: `bg-warning-50 text-warning-500 ${CHIP_GLOW.warning}`, title: "text-warning-500" },
+  block: { chip: `bg-error-50 text-error-500 ${CHIP_GLOW.error}`,       title: "text-error-500" },
+  info:  { chip: `bg-info-50 text-info-500 ${CHIP_GLOW.info}`,          title: "text-info-500" },
+  busy:  { chip: `bg-brand-100 text-brand-600 ${CHIP_GLOW.brand}`,     title: "text-neutral-700" },
 };
 
 function EligibilityRow({ tone, icon, title, detail, action, children }) {
@@ -330,7 +332,7 @@ function MissingDocsRow({ missingDocs, student, eligibility, onDocumentsChanged,
         Enrollment can be created as <strong>Pending</strong>. Documents must be submitted before activating to <strong>Enrolled</strong>.
       </p>
       {student && uploadOpen && (
-        <div className="mt-3 rounded-lg border border-neutral-200 bg-white p-3.5">
+        <div className="mt-3 rounded-lg border border-neutral-200 bg-surface p-3.5">
           <RequirementDocumentsPanel
             studentId={student.student_id}
             student={student}
@@ -542,7 +544,7 @@ function StudentPicker({ value, onChange, disabled }) {
       {open && query && (
         // z-20 keeps the list above the cards below it but under the sticky
         // page header (z-30) when the page scrolls.
-        <div className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-80 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg">
+        <div className={`absolute inset-x-0 top-full z-20 mt-1.5 max-h-80 overflow-y-auto rounded-lg border border-neutral-200 bg-surface-raised shadow-lg ${MENU_DARK}`}>
           {results.length === 0 && !loading && (
             <div className="px-4 py-5 text-center text-sm text-neutral-500">No students match "{query}".</div>
           )}
@@ -1240,7 +1242,7 @@ export default function EnrollmentFormPage() {
 
   return (
     <>
-    <div className="min-h-screen bg-neutral-50">
+    <ThemeArea className="min-h-screen bg-neutral-50">
       <PageHeader
         title={title}
         icon={isEdit ? "ti-pencil" : "ti-clipboard-plus"}
@@ -1553,7 +1555,7 @@ export default function EnrollmentFormPage() {
                           className={[
                             "flex cursor-pointer items-start gap-2.5 rounded-lg border-[1.5px] px-3.5 py-3 transition-colors",
                             "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand-500/25",
-                            checked ? tone.on : "border-neutral-300 bg-white hover:border-brand-300",
+                            checked ? tone.on : "border-neutral-300 bg-surface hover:border-brand-300",
                           ].join(" ")}
                         >
                           <input
@@ -1600,7 +1602,7 @@ export default function EnrollmentFormPage() {
                             key={sc.scholarship_type_id}
                             className={[
                               "flex cursor-pointer items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-3 transition-colors",
-                              active ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-white hover:border-brand-300",
+                              active ? "border-brand-500 bg-brand-50" : "border-neutral-300 bg-surface hover:border-brand-300",
                             ].join(" ")}
                           >
                             <input
@@ -1649,7 +1651,6 @@ export default function EnrollmentFormPage() {
           </div>
         )}
       </div>
-    </div>
 
     {/* ── Invoice Prompt Modal ─────────────────────────────────────────────── */}
     <AnimatePresence>
@@ -1679,6 +1680,7 @@ export default function EnrollmentFormPage() {
         />
       )}
     </AnimatePresence>
+    </ThemeArea>
     </>
   );
 }

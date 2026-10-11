@@ -487,8 +487,7 @@ function OverviewTab({ onNavigate }) {
                   <TableCell align="center">
                     {r.avg !== null ? (
                       <span
-                        className="rounded-lg px-3 py-0.5 text-[13px] font-bold tabular-nums"
-                        style={{ background: gs.bg, color: gs.color }}
+                        className={`rounded-lg px-3 py-0.5 text-[13px] font-bold tabular-nums ${gs.bg} ${gs.color}`}
                       >
                         {r.avg.toFixed(2)}
                       </span>
@@ -508,8 +507,7 @@ function OverviewTab({ onNavigate }) {
               {GRADE_LEGEND.map((l) => (
                 <div key={l.range} className="flex items-center gap-1.5">
                   <span
-                    className="rounded-md px-1.5 py-0.5 text-xs font-bold"
-                    style={{ background: l.bg, color: l.color }}
+                    className={`rounded-md px-1.5 py-0.5 text-xs font-bold ${l.bg} ${l.color}`}
                   >
                     {l.range}
                   </span>

@@ -25,7 +25,7 @@ function SectionChip({ section, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="focus-ring group inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-neutral-800 transition-colors hover:border-brand-300 hover:text-brand-600"
+      className="focus-ring group inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-surface px-3 py-1.5 text-[13px] font-semibold text-neutral-800 transition-colors hover:border-brand-300 hover:text-brand-600"
       aria-label={`${section.grade_level} ${section.name}${section.strand ? `, ${section.strand}` : ""}: ${learners} ${learners === 1 ? "learner" : "learners"}${section.adviser_count ? ", has an adviser" : ", no adviser"}. Edit`}
     >
       {section.name}
@@ -99,7 +99,7 @@ export default function SectionsPanel({ schoolYear, years, sections, loading, re
                     {list.map((s) => (
                       <SectionChip key={s.section_id} section={s} onClick={() => !readOnly && setModal({ section: s })} />
                     ))}
-                    {list.length === 0 && <span className="text-[12.5px] italic text-neutral-400">No sections</span>}
+                    {list.length === 0 && <span className="text-[12.5px] italic text-neutral-400 dark:text-neutral-500">No sections</span>}
                     {!readOnly && (
                       <Button variant="ghost" size="sm" icon="ti-plus" aria-label={`Add a ${grade} section`}
                         onClick={() => setModal({ grade })}>

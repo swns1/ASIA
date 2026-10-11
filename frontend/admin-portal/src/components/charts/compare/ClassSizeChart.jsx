@@ -1,5 +1,6 @@
 import { NoData } from "../ChartFrame";
 import { token } from "../tokens";
+import useTheme from "../../../hooks/useTheme";
 import { fmtCount, fmtOne, plural } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
 
@@ -36,6 +37,7 @@ function Track({ ratio, color, title }) {
 }
 
 function ClassSize({ years, get }) {
+  const theme = useTheme();
   const rows = years.map((year) => {
     const s = get(year);
     const sections = s?.sections.total ?? 0;
@@ -51,7 +53,7 @@ function ClassSize({ years, get }) {
 
   // Class size bars are measured against the fullest year's.
   const fullest = Math.max(...rows.map((r) => r.perSection ?? 0));
-  const colors = { size: token("--color-brand-400"), advised: token("--color-brand-600") };
+  const colors = { size: token("--color-brand-400", theme), advised: token("--color-brand-600", theme) };
   const latest = rows.at(-1);
   const unadvised = latest.sections - latest.advised;
 

@@ -1,6 +1,7 @@
 import SegmentedControl from "../../ui/SegmentedControl";
 import { NoData } from "../ChartFrame";
 import { chartInk, token } from "../tokens";
+import useTheme from "../../../hooks/useTheme";
 import { fmtCount, fmtOne, plural, share, shortYear, signedCount } from "../../schoolYears/compareFigures";
 import { bridgeFloor, bridgePairs, bridgeSteps } from "./bridge";
 import ChartCard, { Caption } from "./ChartCard";
@@ -38,7 +39,8 @@ export default function LearnerBridgeChart({ years, source, bridgeTo, onBridgeTo
 }
 
 function LearnerBridge({ years, get, bridgeTo, onBridgeTo }) {
-  const ink = chartInk();
+  const theme = useTheme();
+  const ink = chartInk(theme);
   const pairs = bridgePairs(years, get);
   if (!pairs.length) return <NoData message="Pick two neighbouring years to see how one became the next." />;
 
@@ -49,15 +51,15 @@ function LearnerBridge({ years, get, bridgeTo, onBridgeTo }) {
   const steps = bridgeSteps(before, after);
   const axis = linearAxis(bridgeFloor(steps), Math.max(before.learners, after.learners), { integer: true });
 
-  const loss = token("--color-neutral-400");
+  const loss = token("--color-neutral-400", theme);
   const colors = {
-    start: token("--color-brand-400"),
+    start: token("--color-brand-400", theme),
     transferred: loss,
     left: loss,
     pending: loss,
-    rejoined: token("--color-brand-300"),
-    new: token("--color-brand-500"),
-    end: token("--color-brand-600"),
+    rejoined: token("--color-brand-300", theme),
+    new: token("--color-brand-500", theme),
+    end: token("--color-brand-600", theme),
   };
   const textOf = (s) => (s.total
     ? { label: shortYear(s.key === "start" ? pair.from : pair.to), sub: "learners" }

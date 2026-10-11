@@ -40,7 +40,7 @@ function ChecklistItem({ done, title, detail, children }) {
   return (
     <li className="flex items-start gap-3 py-3">
       <i
-        className={`ti ${done ? "ti-circle-check text-success-500" : "ti-circle-dashed text-neutral-400"} mt-0.5 text-[18px]`}
+        className={`ti ${done ? "ti-circle-check text-success-500" : "ti-circle-dashed text-neutral-400 dark:text-neutral-500"} mt-0.5 text-[18px]`}
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
@@ -67,7 +67,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-      <Card padding="md">
+      <Card padding="md" brandPanel>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-neutral-900">Dates</h2>
           {!readOnly && <Button variant="ghost" size="sm" icon="ti-pencil" onClick={onEditDates}>Edit</Button>}
@@ -75,7 +75,7 @@ function Overview({ year, setup, sectionsCount, canCopy, readOnly, onEditDates, 
         <div className="text-[13.5px] text-neutral-800">{fmtDate(year.start_date)} – {fmtDate(year.end_date)}</div>
         {pct !== null && (
           <div className="mt-3">
-            <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-white/6">
               <div className="h-full rounded-full bg-success-dot" style={{ width: `${pct}%` }} />
             </div>
             <div className="mt-1 text-[12px] text-neutral-500">{pct}% of the year has passed</div>

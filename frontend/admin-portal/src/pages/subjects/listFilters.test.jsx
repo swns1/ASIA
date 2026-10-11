@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ThemeContext } from "../../hooks/useTheme";
 
 const api = {
   getSubjects: vi.fn(),
@@ -234,5 +235,24 @@ describe("Subjects — a failed load", () => {
 
     await waitFor(() => expect(screen.queryByText(/No subjects for S\.Y\./)).toBeNull());
     expect(await screen.findByRole("button", { name: /try again|retry/i })).toBeTruthy();
+  });
+});
+
+describe("Subjects — dark mode", () => {
+  it("shows the list, and the subject form with its Senior HS block, on a dark page", async () => {
+    render(
+      <ThemeContext.Provider value="dark">
+        <div data-theme="dark">
+          <MemoryRouter initialEntries={["/subjects"]}>
+            <SubjectsPage />
+          </MemoryRouter>
+        </div>
+      </ThemeContext.Provider>,
+    );
+    await settled();
+    fireEvent.click(screen.getByText("Mathematics 7"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /Senior HS/ }));
+    expect(await within(dialog).findByText("Senior HS specifics")).toBeTruthy();
   });
 });

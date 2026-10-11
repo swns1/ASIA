@@ -30,6 +30,11 @@ import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
 import { STUDENT_STATUS_MAP } from "../constants/statusMaps";
 import { getAvatarPalette } from "../utils/avatarPalette";
+import useTheme from "../hooks/useTheme";
+import BrandBackdrop from "../components/ui/BrandBackdrop";
+import { BRAND_PANEL_DARK } from "../components/ui/brandPanel";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
+import { CHIP_GLOW } from "../constants/statusTones";
 
 const CAN_LINK_ROLES = ["super_admin", "admin", "registrar"];
 
@@ -350,9 +355,9 @@ function SiblingLinkModal({ student, onClose, onLinked }) {
       </Field>
 
       <div style={{ marginTop: 4, maxHeight: 260, overflowY: "auto" }}>
-        {searching && <div style={{ fontSize: 13, color: "#8a6a6a", padding: "8px 2px" }}>Searching…</div>}
+        {searching && <div style={{ fontSize: 13, color: "var(--color-neutral-500)", padding: "8px 2px" }}>Searching…</div>}
         {!searching && term.trim().length >= 2 && results.length === 0 && (
-          <div style={{ fontSize: 13, color: "#8a6a6a", padding: "8px 2px" }}>No other students matched.</div>
+          <div style={{ fontSize: 13, color: "var(--color-neutral-500)", padding: "8px 2px" }}>No other students matched.</div>
         )}
         {results.map((s) => (
           <button
@@ -362,8 +367,8 @@ function SiblingLinkModal({ student, onClose, onLinked }) {
             onClick={() => handleLink(s)}
             style={{
               display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
-              padding: "10px 12px", border: "1px solid #f0e4e4", borderRadius: 10,
-              background: "white", cursor: saving ? "not-allowed" : "pointer", marginBottom: 8,
+              padding: "10px 12px", border: "1px solid var(--color-neutral-300)", borderRadius: 10,
+              background: "var(--color-surface)", cursor: saving ? "not-allowed" : "pointer", marginBottom: 8,
               fontFamily: "'DM Sans',sans-serif",
             }}
           >
@@ -371,14 +376,14 @@ function SiblingLinkModal({ student, onClose, onLinked }) {
               {(s.first_name || "?")[0].toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1a0a0a" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-neutral-900)" }}>
                 {s.first_name} {s.last_name}
               </div>
-              <div style={{ fontSize: 11.5, color: "#8a6a6a" }}>
+              <div style={{ fontSize: 11.5, color: "var(--color-neutral-500)" }}>
                 {s.student_number}{s.lrn ? ` · LRN ${s.lrn}` : ""}
               </div>
             </div>
-            <i className="ti ti-link" style={{ fontSize: 15, color: "#c92a2a" }} aria-hidden="true" />
+            <i className="ti ti-link" style={{ fontSize: 15, color: "var(--color-brand-600)" }} aria-hidden="true" />
           </button>
         ))}
       </div>
@@ -391,6 +396,14 @@ function SiblingLinkModal({ student, onClose, onLinked }) {
 // (constants/statusMaps.js, utils/avatarPalette.js) so a student looks the same
 // here as in the list.
 const getPalette = (name = "") => getAvatarPalette(name);
+
+// Dark mode: framer-motion animates these cards' shadows and can't tween a
+// var(), so dark gets literals. A card keeps Card's dark elevation (the
+// --shadow-card-dark value) at rest and on hover, where the lift alone says
+// it's hovered; an invoice row, bare at rest, gets a black hover shadow in
+// place of the red one.
+const DARK_CARD_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.5), 0 14px 32px -12px rgba(0,0,0,0.6)";
+const DARK_ROW_HOVER = "0 3px 12px rgba(0,0,0,0.45)";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function calcAge(birthDate) {
@@ -428,7 +441,7 @@ function InfoRow({ icon, label, value, mono = false }) {
   if (!value && value !== 0) return null;
   return (
     <div className="flex items-start gap-3 border-b border-neutral-200/70 py-3 last:border-0">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50">
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50 ${CHIP_GLOW.brand}`}>
         <i className={`ti ${icon} text-[14px] text-brand-600`} aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
@@ -448,11 +461,11 @@ function SectionCard({ title, icon, children, badge, action, motionProps = {} })
   return (
     <motion.div
       {...motionProps}
-      className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm"
+      className={`overflow-hidden rounded-2xl border border-neutral-200 bg-surface shadow-sm ${CARD_DARK}`}
     >
       <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-100">
+          <div className={`flex h-8 w-8 items-center justify-center rounded-md bg-brand-100 ${CHIP_GLOW.brand}`}>
             <i className={`ti ${icon} text-[15px] text-brand-600`} aria-hidden="true" />
           </div>
           <h2 className="text-base font-bold text-neutral-900">{title}</h2>
@@ -485,6 +498,7 @@ export default function StudentDetailPage() {
   usePageTitle("Student Details");
   const { id } = useParams();
   const navigate = useNavigate();
+  const dark = useTheme() === "dark";
 
   const [student,       setStudent]       = useState(null);
   const [guardians,     setGuardians]     = useState([]);
@@ -630,7 +644,7 @@ export default function StudentDetailPage() {
             {loading ? (
               /* ── Skeleton hero + cards ── */
               <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-                <div style={{ background:"white", borderRadius:20, padding:"28px 28px", border:"1px solid #f5eaea", display:"flex", gap:20, alignItems:"center" }}>
+                <div className={`bg-surface ${CARD_DARK}`} style={{ borderRadius:20, padding:"28px 28px", border:"1px solid var(--color-neutral-200)", display:"flex", gap:20, alignItems:"center" }}>
                   <Sk w={80} h={80} r={99} />
                   <div style={{ flex:1, display:"flex", flexDirection:"column", gap:10 }}>
                     <Sk w={220} h={22} />
@@ -642,7 +656,7 @@ export default function StudentDetailPage() {
                   </div>
                 </div>
                 {[1,2,3].map(i => (
-                  <div key={i} style={{ background:"white", borderRadius:16, padding:"20px 22px", border:"1px solid #f5eaea", display:"flex", flexDirection:"column", gap:14 }}>
+                  <div key={i} className={`bg-surface ${CARD_DARK}`} style={{ borderRadius:16, padding:"20px 22px", border:"1px solid var(--color-neutral-200)", display:"flex", flexDirection:"column", gap:14 }}>
                     <Sk w={140} h={16} />
                     <Sk w="80%" h={13} />
                     <Sk w="60%" h={13} />
@@ -658,7 +672,7 @@ export default function StudentDetailPage() {
                 </Button>
               </div>
             ) : !student ? (
-              <div style={{ textAlign:"center", padding:"80px 0", color:"#8a6a6a", fontSize:15 }}>
+              <div style={{ textAlign:"center", padding:"80px 0", color:"var(--color-neutral-500)", fontSize:15 }}>
                 Student not found.
               </div>
             ) : (
@@ -689,17 +703,17 @@ export default function StudentDetailPage() {
                   initial={isFirstRender ? { y: 16, opacity: 0 } : false}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.28, ease: "easeOut", delay: isFirstRender ? 0.06 : 0 }}
+                  className={`border border-b-0 border-neutral-200 bg-surface shadow-[0_4px_24px_rgba(224,49,49,0.07)] ${BRAND_PANEL_DARK}`}
                   style={{
-                    background:"white", borderRadius:"20px 20px 0 0",
-                    border:"1px solid #f5eaea", borderBottom:"none",
-                    boxShadow:"0 4px 24px rgba(224,49,49,0.07)",
+                    borderRadius:"20px 20px 0 0",
                     overflow:"hidden",
                   }}
                 >
+                  {dark && <BrandBackdrop tone="dark" />}
                   {/* Top accent strip */}
                   <div style={{
                     height:6,
-                    background:"linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)",
+                    background:"linear-gradient(to right, var(--color-brand-500), #ff6b6b, var(--color-brand-300), var(--color-brand-200))",
                   }} />
 
                   <div style={{ padding:"26px 28px", display:"flex", alignItems:"flex-start", gap:22, flexWrap:"wrap" }}>
@@ -726,10 +740,10 @@ export default function StudentDetailPage() {
 
                     {/* Name + identifiers */}
                     <div style={{ flex:1, minWidth:200 }}>
-                      <div style={{ fontSize:22, fontWeight:700, color:"#1a0a0a", lineHeight:1.2, letterSpacing:"-0.01em" }}>
+                      <div style={{ fontSize:22, fontWeight:700, color:"var(--color-neutral-900)", lineHeight:1.2, letterSpacing:"-0.01em" }}>
                         {fullName}
                       </div>
-                      <div style={{ fontSize:12, color:"#8a6a6a", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:12, color:"var(--color-neutral-500)", marginTop:5, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                         {student.student_number && (
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <i className="ti ti-id-badge" style={{ fontSize:13 }} />
@@ -776,17 +790,17 @@ export default function StudentDetailPage() {
                     {/* Quick contact */}
                     <div style={{ display:"flex", flexDirection:"column", gap:8, alignSelf:"center" }}>
                       {student.mobile_number && (
-                        <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#5a4a4a" }}>
-                          <div style={{ width:30, height:30, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <i className="ti ti-phone" style={{ fontSize:13, color:"#c92a2a" }} />
+                        <div className="text-[#5a4a4a] dark:text-neutral-800" style={{ display:"flex", alignItems:"center", gap:8, fontSize:13 }}>
+                          <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width:30, height:30, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <i className="ti ti-phone" style={{ fontSize:13, color:"var(--color-brand-600)" }} />
                           </div>
                           {student.mobile_number}
                         </div>
                       )}
                       {student.email && (
-                        <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#5a4a4a" }}>
-                          <div style={{ width:30, height:30, borderRadius:8, background:"#fff0f0", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <i className="ti ti-mail" style={{ fontSize:13, color:"#c92a2a" }} />
+                        <div className="text-[#5a4a4a] dark:text-neutral-800" style={{ display:"flex", alignItems:"center", gap:8, fontSize:13 }}>
+                          <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width:30, height:30, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <i className="ti ti-mail" style={{ fontSize:13, color:"var(--color-brand-600)" }} />
                           </div>
                           {student.email}
                         </div>
@@ -809,10 +823,10 @@ export default function StudentDetailPage() {
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.24, ease: "easeOut", delay: isFirstRender ? 0.16 : 0 }}
                   style={{
-                    background:"#fafafa", borderRadius:"0 0 20px 20px",
-                    border:"1px solid #f5eaea", borderTop:"1px solid #f0e4e4",
+                    borderRadius:"0 0 20px 20px",
+                    border:"1px solid var(--color-neutral-200)", borderTop:"1px solid var(--color-neutral-300)",
                   }}
-                  className="flex min-h-[52px] items-center overflow-hidden px-3 [&>div]:!overflow-visible [&>div]:!border-b-0 [&>div]:w-full [&>div]:justify-between"
+                  className="bg-[#fafafa] dark:bg-surface flex min-h-[52px] items-center overflow-hidden px-3 [&>div]:!overflow-visible [&>div]:!border-b-0 [&>div]:w-full [&>div]:justify-between"
                 >
                   {/* Shared Tabs adds the WAI-ARIA keyboard contract (arrows,
                       Home/End, roving tabindex) the hand-rolled bar lacked. */}
@@ -882,19 +896,22 @@ export default function StudentDetailPage() {
                           initial={{ opacity:0, y:10 }}
                           animate={{ opacity:1, y:0 }}
                           transition={{ delay: i * 0.07, duration:0.22 }}
-                          whileHover={{ y:-2, boxShadow: g.is_primary_contact ? "0 6px 22px rgba(224,49,49,0.16)" : "0 6px 18px rgba(224,49,49,0.10)" }}
+                          whileHover={{ y:-2, boxShadow: dark ? DARK_CARD_SHADOW : g.is_primary_contact ? "0 6px 22px rgba(224,49,49,0.16)" : "0 6px 18px rgba(224,49,49,0.10)" }}
+                          className={`bg-surface ${CARD_DARK}`}
                           style={{
-                            background:"white", borderRadius:16,
-                            border:"1px solid #f5eaea",
-                            boxShadow: g.is_primary_contact ? "0 2px 16px rgba(224,49,49,0.10)" : "0 2px 10px rgba(224,49,49,0.04)",
+                            borderRadius:16,
+                            border:"1px solid var(--color-neutral-200)",
+                            boxShadow: dark ? DARK_CARD_SHADOW : g.is_primary_contact ? "0 2px 16px rgba(224,49,49,0.10)" : "0 2px 10px rgba(224,49,49,0.04)",
                             overflow:"hidden",
                           }}
                         >
-                          <div style={{ height:4, background: g.is_primary_contact ? "linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" : "linear-gradient(to right, #f5eaea, #fde8e8, #f5eaea)" }} />
-                          <div style={{
+                          <div style={{ height:4, background: g.is_primary_contact ? "linear-gradient(to right, var(--color-brand-500), #ff6b6b, var(--color-brand-300), var(--color-brand-200))" : "linear-gradient(to right, var(--color-neutral-200), var(--color-brand-200), var(--color-neutral-200))" }} />
+                          <div
+                            className={`border-b border-[#f9f0f0] dark:border-neutral-200 ${g.is_primary_contact
+                              ? "bg-[linear-gradient(to_right,var(--color-brand-100),#fdfafa)] dark:bg-[linear-gradient(to_right,var(--color-brand-100),var(--color-surface))]"
+                              : "bg-[linear-gradient(to_right,#fff8f8,white)] dark:bg-[linear-gradient(to_right,var(--color-brand-50),var(--color-surface))]"}`}
+                            style={{
                             padding:"14px 22px",
-                            background: g.is_primary_contact ? "linear-gradient(to right, #fff0f0, #fdfafa)" : "linear-gradient(to right, #fff8f8, white)",
-                            borderBottom:"1px solid #f9f0f0",
                             display:"flex", alignItems:"center", justifyContent:"space-between",
                           }}>
                             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -902,33 +919,34 @@ export default function StudentDetailPage() {
                                 {(g.full_name ?? "?")[0].toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{g.full_name}</div>
-                                <div style={{ fontSize:11.5, color:"#8a6a6a", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
+                                <div style={{ fontSize:14, fontWeight:700, color:"var(--color-neutral-900)" }}>{g.full_name}</div>
+                                <div style={{ fontSize:11.5, color:"var(--color-neutral-500)", marginTop:2, textTransform:"capitalize" }}>{g.relationship}</div>
                               </div>
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                               {g.is_primary_contact && (
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#fff0f0", color:"#c92a2a", fontSize:11, fontWeight:700, border:"1px solid #fca5a5" }}>
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"var(--color-brand-100)", color:"var(--color-brand-600)", fontSize:11, fontWeight:700, border:"1px solid var(--color-brand-300)" }}>
                                   <i className="ti ti-star-filled" style={{ fontSize:10 }} />
                                   Primary Contact
                                 </span>
                               )}
                               {g.user_id ? (
                                 <span title="This guardian can log into the parent portal"
-                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"#e8f5e0", color:"#2e6b0d", fontSize:11, fontWeight:700, border:"1px solid #86efac" }}>
+                                  className="border border-[#86efac] dark:border-success-dot/40"
+                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"var(--color-success-50)", color:"var(--color-success-500)", fontSize:11, fontWeight:700 }}>
                                   <i className="ti ti-user-check" style={{ fontSize:11 }} />
                                   Portal access
                                 </span>
                               ) : canLink ? (
                                 <button onClick={() => setLinkGuardian(g)}
-                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"white", color:"#7a5050", fontSize:11, fontWeight:600, border:"1px solid #f0e4e4", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 11px", borderRadius:99, background:"var(--color-surface)", color:"var(--color-neutral-700)", fontSize:11, fontWeight:600, border:"1px solid var(--color-neutral-300)", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
                                   <i className="ti ti-link" style={{ fontSize:11 }} />
                                   Link account
                                 </button>
                               ) : null}
                               {g.user_id && canLink && (
                                 <button title="Manage portal access" onClick={() => setLinkGuardian(g)}
-                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid #f0e4e4", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#855c5c" }}>
+                                  style={{ width:26, height:26, borderRadius:7, border:"1px solid var(--color-neutral-300)", background:"var(--color-surface)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"var(--color-neutral-600)" }}>
                                   <i className="ti ti-settings" style={{ fontSize:12 }} />
                                 </button>
                               )}
@@ -961,13 +979,13 @@ export default function StudentDetailPage() {
                         ) : (
                           <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
                             {enrolledSiblings.map((s, i) => (
-                              <div key={s.student_id} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom: i < enrolledSiblings.length - 1 ? "1px solid #f9f0f0" : "none" }}>
+                              <div key={s.student_id} className={i < enrolledSiblings.length - 1 ? "border-b border-[#f9f0f0] dark:border-neutral-200" : undefined} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0" }}>
                                 <div style={{ width:36, height:36, borderRadius:"50%", background:getPalette(`${s.first_name} ${s.last_name}`).bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:getPalette(`${s.first_name} ${s.last_name}`).color, flexShrink:0 }}>
                                   {(s.first_name ?? "?")[0].toUpperCase()}
                                 </div>
                                 <div style={{ flex:1, minWidth:0 }}>
-                                  <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.first_name} {s.last_name}</div>
-                                  <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>
+                                  <div style={{ fontSize:13.5, fontWeight:600, color:"var(--color-neutral-900)" }}>{s.first_name} {s.last_name}</div>
+                                  <div style={{ fontSize:12, color:"var(--color-neutral-500)", marginTop:2 }}>
                                     {s.student_number}{s.lrn ? ` · LRN ${s.lrn}` : ""}
                                   </div>
                                 </div>
@@ -977,7 +995,7 @@ export default function StudentDetailPage() {
                               </div>
                             ))}
                             {canLink && (
-                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f9f0f0", display: "flex", justifyContent: "flex-end" }}>
+                              <div className="border-t border-[#f9f0f0] dark:border-neutral-200" style={{ marginTop: 12, paddingTop: 12, display: "flex", justifyContent: "flex-end" }}>
                                 <Button variant="ghost" size="sm" icon="ti-unlink" onClick={handleUnlinkSibling}>
                                   Remove this student from the household
                                 </Button>
@@ -999,15 +1017,15 @@ export default function StudentDetailPage() {
                           motionProps={{ initial:{ opacity:0, y:10 }, animate:{ opacity:1, y:0 }, transition:{ delay:0, duration:0.22 } }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
                             {siblings.map((s, i) => (
-                              <div key={s.sibling_id ?? i} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom: i < siblings.length - 1 ? "1px solid #f9f0f0" : "none" }}>
+                              <div key={s.sibling_id ?? i} className={i < siblings.length - 1 ? "border-b border-[#f9f0f0] dark:border-neutral-200" : undefined} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0" }}>
                                 <div style={{ width:36, height:36, borderRadius:"50%", background:getPalette(s.full_name ?? "").bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:getPalette(s.full_name ?? "").color, flexShrink:0 }}>
                                   {(s.full_name ?? "?")[0].toUpperCase()}
                                 </div>
                                 <div style={{ flex:1 }}>
-                                  <div style={{ fontSize:13.5, fontWeight:600, color:"#1a0a0a" }}>{s.full_name}</div>
-                                  {s.age && <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>{s.age} years old</div>}
+                                  <div style={{ fontSize:13.5, fontWeight:600, color:"var(--color-neutral-900)" }}>{s.full_name}</div>
+                                  {s.age && <div style={{ fontSize:12, color:"var(--color-neutral-500)", marginTop:2 }}>{s.age} years old</div>}
                                 </div>
-                                <div style={{ fontSize:11, color:"#8a6a6a", background:"#f9f4f4", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
+                                <div className="bg-[#f9f4f4] dark:bg-neutral-200" style={{ fontSize:11, color:"var(--color-neutral-500)", padding:"3px 10px", borderRadius:99, fontWeight:500 }}>
                                   Sibling {i + 1}
                                 </div>
                               </div>
@@ -1030,17 +1048,18 @@ export default function StudentDetailPage() {
                           initial={{ opacity:0, y:10 }}
                           animate={{ opacity:1, y:0 }}
                           transition={{ delay: i * 0.07, duration:0.22 }}
-                          whileHover={{ y:-2, boxShadow:"0 6px 18px rgba(224,49,49,0.10)" }}
-                          style={{ background:"white", borderRadius:16, border:"1px solid #f5eaea", boxShadow:"0 2px 10px rgba(224,49,49,0.04)", overflow:"hidden" }}
+                          whileHover={{ y:-2, boxShadow: dark ? DARK_CARD_SHADOW : "0 6px 18px rgba(224,49,49,0.10)" }}
+                          className={`bg-surface ${CARD_DARK}`}
+                          style={{ borderRadius:16, border:"1px solid var(--color-neutral-200)", boxShadow: dark ? DARK_CARD_SHADOW : "0 2px 10px rgba(224,49,49,0.04)", overflow:"hidden" }}
                         >
-                          <div style={{ height:4, background:"linear-gradient(to right, #e03131, #ff6b6b, #fca5a5, #fde8e8)" }} />
-                          <div style={{ padding:"14px 22px", background:"linear-gradient(to right, #fff8f8, white)", borderBottom:"1px solid #f9f0f0", display:"flex", alignItems:"center", gap:12 }}>
-                            <div style={{ width:38, height:38, borderRadius:10, background:"#e8f0fd", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                              <i className="ti ti-school" style={{ fontSize:17, color:"#2563eb" }} />
+                          <div style={{ height:4, background:"linear-gradient(to right, var(--color-brand-500), #ff6b6b, var(--color-brand-300), var(--color-brand-200))" }} />
+                          <div className="border-b border-[#f9f0f0] dark:border-neutral-200 bg-[linear-gradient(to_right,#fff8f8,white)] dark:bg-[linear-gradient(to_right,var(--color-brand-50),var(--color-surface))]" style={{ padding:"14px 22px", display:"flex", alignItems:"center", gap:12 }}>
+                            <div className={`bg-elementary-50 ${CHIP_GLOW.info}`} style={{ width:38, height:38, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                              <i className="ti ti-school" style={{ fontSize:17, color:"var(--color-elementary-500)" }} />
                             </div>
                             <div>
-                              <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{s.school_name}</div>
-                              <div style={{ fontSize:11, color:"#8a6a6a", marginTop:2 }}>School {i + 1}</div>
+                              <div style={{ fontSize:14, fontWeight:700, color:"var(--color-neutral-900)" }}>{s.school_name}</div>
+                              <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:2 }}>School {i + 1}</div>
                             </div>
                           </div>
                           <div style={{ padding:"4px 22px 14px" }}>
@@ -1055,7 +1074,7 @@ export default function StudentDetailPage() {
                       <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
                         <button
                           onClick={() => navigate(`/enrollments/new?student=${student.student_id}`)}
-                          style={{ display:"flex", alignItems:"center", gap:8, height:36, padding:"0 16px", border:"none", borderRadius:10, background:"#e03131", color:"white", fontSize:13, fontFamily:"'DM Sans', sans-serif", fontWeight:700, cursor:"pointer" }}
+                          style={{ display:"flex", alignItems:"center", gap:8, height:36, padding:"0 16px", border:"none", borderRadius:10, background:"var(--color-action)", color:"white", fontSize:13, fontFamily:"'DM Sans', sans-serif", fontWeight:700, cursor:"pointer" }}
                         >
                           <i className="ti ti-clipboard-plus" style={{ fontSize:14 }} />
                           New Enrollment
@@ -1068,11 +1087,11 @@ export default function StudentDetailPage() {
                         </SectionCard>
                       ) : enrollments.map((en, i) => {
                         const statusColors = {
-                          enrolled:        { color:"#2e6b0d", bg:"#e8f5e0", label:"Enrolled" },
-                          pending:         { color:"#854f0b", bg:"#faeeda", label:"Pending" },
-                          completed:       { color:"#1455a0", bg:"#e3f0fd", label:"Completed" },
-                          cancelled:       { color:"#5c5752", bg:"#f0ede8", label:"Cancelled" },
-                          transferred_out: { color:"#7a4a08", bg:"#fef3e2", label:"Transferred Out" },
+                          enrolled:        { color:"var(--color-success-500)", bg:"var(--color-success-50)", label:"Enrolled" },
+                          pending:         { color:"var(--color-warning-500)", bg:"var(--color-warning-50)", label:"Pending" },
+                          completed:       { color:"var(--color-info-500)", bg:"var(--color-info-50)", label:"Completed" },
+                          cancelled:       { color:"var(--color-muted-500)", bg:"var(--color-muted-50)", label:"Cancelled" },
+                          transferred_out: { color: dark ? "var(--color-warning-500)" : "#7a4a08", bg: dark ? "var(--color-warning-50)" : "#fef3e2", label:"Transferred Out" },
                         };
                         const sc = statusColors[en.enrollment_status] ?? statusColors.pending;
                         return (
@@ -1081,18 +1100,19 @@ export default function StudentDetailPage() {
                             initial={{ opacity:0, y:10 }}
                             animate={{ opacity:1, y:0 }}
                             transition={{ delay: i * 0.05, duration:0.22 }}
-                            whileHover={{ y:-2, boxShadow:"0 4px 16px rgba(224,49,49,0.12)" }}
+                            whileHover={{ y:-2, boxShadow: dark ? DARK_CARD_SHADOW : "0 4px 16px rgba(224,49,49,0.12)" }}
                             whileTap={{ scale:0.99 }}
                             onClick={() => navigate(`/enrollments/${en.enrollment_id}`)}
-                            style={{ background:"white", borderRadius:14, border:"1px solid #f5eaea", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", boxShadow:"0 2px 10px rgba(224,49,49,0.04)" }}
+                            className={`bg-surface ${CARD_DARK}`}
+                            style={{ borderRadius:14, border:"1px solid var(--color-neutral-200)", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", boxShadow: dark ? DARK_CARD_SHADOW : "0 2px 10px rgba(224,49,49,0.04)" }}
                           >
                             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                              <div style={{ width:38, height:38, borderRadius:10, background:"#fde8e8", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"#c92a2a" }} />
+                              <div className={`bg-brand-200 ${CHIP_GLOW.brand}`} style={{ width:38, height:38, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                                <i className="ti ti-clipboard-list" style={{ fontSize:16, color:"var(--color-brand-600)" }} />
                               </div>
                               <div>
-                                <div style={{ fontSize:14, fontWeight:700, color:"#1a0a0a" }}>{en.grade_level} — {en.section}</div>
-                                <div style={{ fontSize:12, color:"#8a6a6a", marginTop:2 }}>
+                                <div style={{ fontSize:14, fontWeight:700, color:"var(--color-neutral-900)" }}>{en.grade_level} — {en.section}</div>
+                                <div style={{ fontSize:12, color:"var(--color-neutral-500)", marginTop:2 }}>
                                   {en.school_year}{en.semester ? ` · ${en.semester === "1st" ? "1st Sem" : "2nd Sem"}` : ""}{en.strand ? ` · ${en.strand}` : ""}
                                 </div>
                               </div>
@@ -1101,7 +1121,7 @@ export default function StudentDetailPage() {
                               <span style={{ fontSize:11, fontWeight:700, color:sc.color, background:sc.bg, padding:"2px 10px", borderRadius:50 }}>
                                 {sc.label}
                               </span>
-                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"#8a6a6a" }} />
+                              <i className="ti ti-chevron-right" style={{ fontSize:14, color:"var(--color-neutral-500)" }} />
                             </div>
                           </motion.div>
                         );
@@ -1139,9 +1159,9 @@ export default function StudentDetailPage() {
                       {!ledgerLoading && ledger && !ledger.error && ledger.school_years?.length > 0 && (<>
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                           {[
-                            { label:"Total Billed",  value:ledger.total_billed,   color:"#1a0a0a", bg:"#fff8f6", border:"#f5eaea" },
-                            { label:"Total Paid",    value:ledger.total_paid,     color:"#2e6b0d", bg:"#f0faf0", border:"#d4edda" },
-                            { label:"Total Balance", value:ledger.total_balance,  color:parseFloat(ledger.total_balance) > 0 ? "#c92a2a" : "#2e6b0d", bg:parseFloat(ledger.total_balance) > 0 ? "#fff0f0" : "#f0faf0", border:parseFloat(ledger.total_balance) > 0 ? "#fca5a5" : "#d4edda" },
+                            { label:"Total Billed",  value:ledger.total_billed,   color:"var(--color-neutral-900)", bg:"var(--color-brand-50)", border:"var(--color-neutral-200)" },
+                            { label:"Total Paid",    value:ledger.total_paid,     color:"var(--color-success-500)", bg: dark ? "var(--color-success-50)" : "#f0faf0", border: dark ? "color-mix(in srgb, var(--color-success-dot) 40%, transparent)" : "#d4edda" },
+                            { label:"Total Balance", value:ledger.total_balance,  color:parseFloat(ledger.total_balance) > 0 ? "var(--color-brand-600)" : "var(--color-success-500)", bg:parseFloat(ledger.total_balance) > 0 ? "var(--color-brand-100)" : dark ? "var(--color-success-50)" : "#f0faf0", border:parseFloat(ledger.total_balance) > 0 ? "var(--color-brand-300)" : dark ? "color-mix(in srgb, var(--color-success-dot) 40%, transparent)" : "#d4edda" },
                           ].map(({ label, value, color, bg, border }, i) => (
                             <motion.div
                               key={label}
@@ -1150,7 +1170,7 @@ export default function StudentDetailPage() {
                               transition={{ delay: i * 0.06, duration:0.22 }}
                               style={{ background:bg, border:`1px solid ${border}`, borderRadius:12, padding:"14px 18px" }}
                             >
-                              <div style={{ fontSize:10, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:11, fontWeight:700, color:"var(--color-neutral-500)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
                               <div style={{ fontSize:18, fontWeight:800, color }}>
                                 ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                               </div>
@@ -1159,8 +1179,8 @@ export default function StudentDetailPage() {
                         </div>
                         {ledger.school_years.map((yr, yi) => {
                           const balanceAmt = parseFloat(yr.year_balance);
-                          const yrStatusColor = balanceAmt > 0 ? "#c92a2a" : "#2e6b0d";
-                          const yrStatusBg    = balanceAmt > 0 ? "#fde8e8" : "#e8f5e0";
+                          const yrStatusColor = balanceAmt > 0 ? "var(--color-brand-600)" : "var(--color-success-500)";
+                          const yrStatusBg    = balanceAmt > 0 ? "var(--color-error-50)" : "var(--color-success-50)";
                           const levelLabel    = yr.school_level?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
                           return (
                             <SectionCard
@@ -1174,17 +1194,17 @@ export default function StudentDetailPage() {
                                 </span>
                               }
                             >
-                              <div style={{ fontSize:11, color:"#8a6a6a", marginBottom:10 }}>
+                              <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginBottom:10 }}>
                                 {levelLabel}{yr.section ? ` · ${yr.section}` : ""} · <span style={{ fontWeight:600 }}>{yr.enrollment_status}</span>
                               </div>
                               {yr.invoices.length === 0 ? (
                                 <EmptySection message="No invoices for this school year." />
                               ) : yr.invoices.map((inv) => {
                                 const INV_STATUS = {
-                                  unpaid:         { label:"Unpaid",  color:"#a32d2d", bg:"#fde8e8" },
-                                  partially_paid: { label:"Partial", color:"#854f0b", bg:"#faeeda" },
-                                  paid:           { label:"Paid",    color:"#2e6b0d", bg:"#e8f5e0" },
-                                  void:           { label:"Void",    color:"#5c5752", bg:"#f0ede8" },
+                                  unpaid:         { label:"Unpaid",  color:"var(--color-error-600)", bg:"var(--color-error-50)" },
+                                  partially_paid: { label:"Partial", color:"var(--color-warning-500)", bg:"var(--color-warning-50)" },
+                                  paid:           { label:"Paid",    color:"var(--color-success-500)", bg:"var(--color-success-50)" },
+                                  void:           { label:"Void",    color:"var(--color-muted-500)", bg:"var(--color-muted-50)" },
                                 };
                                 const isMeta = INV_STATUS[inv.status] ?? INV_STATUS.unpaid;
                                 const netAmt  = parseFloat(inv.net_amount || 0);
@@ -1193,28 +1213,28 @@ export default function StudentDetailPage() {
                                 return (
                                   <motion.div
                                     key={inv.invoice_id}
-                                    whileHover={{ boxShadow:"0 3px 12px rgba(224,49,49,0.10)" }}
+                                    whileHover={{ boxShadow: dark ? DARK_ROW_HOVER : "0 3px 12px rgba(224,49,49,0.10)" }}
                                     onClick={() => navigate(`/invoices?selected=${inv.invoice_id}`)}
-                                    style={{ border:"1px solid #f5eaea", borderRadius:10, padding:"12px 16px", marginBottom:8, cursor:"pointer" }}
+                                    style={{ border:"1px solid var(--color-neutral-200)", borderRadius:10, padding:"12px 16px", marginBottom:8, cursor:"pointer" }}
                                   >
                                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
                                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                                        <span style={{ fontSize:13, fontWeight:700, color:"#1a0a0a" }}>{inv.invoice_no}</span>
-                                        <span style={{ fontSize:10, fontWeight:700, color:isMeta.color, background:isMeta.bg, padding:"2px 8px", borderRadius:50 }}>{isMeta.label}</span>
+                                        <span style={{ fontSize:13, fontWeight:700, color:"var(--color-neutral-900)" }}>{inv.invoice_no}</span>
+                                        <span style={{ fontSize:11, fontWeight:700, color:isMeta.color, background:isMeta.bg, padding:"2px 8px", borderRadius:50 }}>{isMeta.label}</span>
                                       </div>
-                                      <span style={{ fontSize:11, color:"#8a6a6a" }}>
+                                      <span style={{ fontSize:11, color:"var(--color-neutral-500)" }}>
                                         {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-PH", { month:"short", day:"numeric", year:"numeric" }) : "—"}
                                         {" · "}{inv.payment_plan?.replace(/_/g, " ")}
                                       </span>
                                     </div>
                                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
                                       {[
-                                        { label:"Billed",  value:netAmt,  color:"#1a0a0a" },
-                                        { label:"Paid",    value:paidAmt, color:"#2e6b0d" },
-                                        { label:"Balance", value:balAmt,  color:balAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                        { label:"Billed",  value:netAmt,  color:"var(--color-neutral-900)" },
+                                        { label:"Paid",    value:paidAmt, color:"var(--color-success-500)" },
+                                        { label:"Balance", value:balAmt,  color:balAmt > 0 ? "var(--color-brand-600)" : "var(--color-success-500)" },
                                       ].map(({ label, value, color }) => (
                                         <div key={label}>
-                                          <div style={{ fontSize:9.5, fontWeight:700, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
+                                          <div style={{ fontSize:11, fontWeight:700, color:"var(--color-neutral-500)", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</div>
                                           <div style={{ fontSize:13, fontWeight:700, color }}>₱{value.toLocaleString("en-PH", { minimumFractionDigits:2 })}</div>
                                         </div>
                                       ))}
@@ -1222,15 +1242,15 @@ export default function StudentDetailPage() {
                                   </motion.div>
                                 );
                               })}
-                              <div style={{ display:"flex", justifyContent:"flex-end", gap:20, paddingTop:8, borderTop:"1px dashed #f0e4e4", marginTop:4 }}>
+                              <div style={{ display:"flex", justifyContent:"flex-end", gap:20, paddingTop:8, borderTop:"1px dashed var(--color-neutral-300)", marginTop:4 }}>
                                 {[
                                   { label:"Year Billed",  value:yr.year_billed  },
                                   { label:"Year Paid",    value:yr.year_paid    },
-                                  { label:"Year Balance", value:yr.year_balance, bold:true, color:balanceAmt > 0 ? "#c92a2a" : "#2e6b0d" },
+                                  { label:"Year Balance", value:yr.year_balance, bold:true, color:balanceAmt > 0 ? "var(--color-brand-600)" : "var(--color-success-500)" },
                                 ].map(({ label, value, bold, color }) => (
                                   <div key={label} style={{ textAlign:"right" }}>
-                                    <div style={{ fontSize:9.5, color:"#8a6a6a", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
-                                    <div style={{ fontSize:13, fontWeight:bold ? 800 : 600, color:color || "#1a0a0a" }}>
+                                    <div style={{ fontSize:11, color:"var(--color-neutral-500)", textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{label}</div>
+                                    <div style={{ fontSize:13, fontWeight:bold ? 800 : 600, color:color || "var(--color-neutral-900)" }}>
                                       ₱{parseFloat(value).toLocaleString("en-PH", { minimumFractionDigits:2 })}
                                     </div>
                                   </div>

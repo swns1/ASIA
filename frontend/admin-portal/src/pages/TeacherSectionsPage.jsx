@@ -26,6 +26,11 @@ import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
 import { localISODate, todayISO } from "../utils/format";
 import { OBSERVED_VALUES, observedMark, observedValueMeta } from "../constants/observedValues";
 import useLatestRequest from "../hooks/useLatestRequest";
+import useTheme from "../hooks/useTheme";
+import { CHIP_GLOW, LEVEL_GLOW } from "../constants/statusTones";
+import { BRAND_PANEL_DARK } from "../components/ui/brandPanel";
+import BrandBackdrop from "../components/ui/BrandBackdrop";
+import { MENU_DARK, SELECTED_DARK } from "../components/ui/darkSurfaces";
 
 const SCHOOL_LEVEL_LABELS = {
   nursery: "Nursery",
@@ -35,16 +40,18 @@ const SCHOOL_LEVEL_LABELS = {
   senior_highschool: "Senior High School",
 };
 
-// School-level color coding for section icons (left rail + header) — extends
-// the two colors from the design handoff (JHS red, SHS blue, Elementary
-// green) to every level in SCHOOL_LEVEL_LABELS using the app's existing
-// level-color convention (see project design-system memory).
+// School-level colour for the section icons (left rail + header): the app's
+// level palette, as on Sections, Subjects and the level charts. (These were
+// once green/red/blue for Elementary/JHS/SHS, from a design handoff; the red
+// JHS tile vanished into the red-tinted selected row.)
+// `glow` is the tile's dark-mode light (LEVEL_GLOW). The tiles set
+// backgroundColor, not background, so its gradient layers on top.
 const SCHOOL_LEVEL_COLORS = {
-  nursery:           { color: "#854f0b", bg: "#fdf5e8" },
-  kindergarten:      { color: "#7c3aed", bg: "#f0e8fd" },
-  elementary:        { color: "#2e6b0d", bg: "#e8f5e0" },
-  junior_highschool: { color: "#c92a2a", bg: "#fff0f0" },
-  senior_highschool: { color: "#1455a0", bg: "#e3f0fd" },
+  nursery:           { color: "var(--color-nursery-500)", bg: "var(--color-nursery-50)", glow: LEVEL_GLOW.nursery },
+  kindergarten:      { color: "var(--color-kindergarten-500)", bg: "var(--color-kindergarten-50)", glow: LEVEL_GLOW.kindergarten },
+  elementary:        { color: "var(--color-elementary-500)", bg: "var(--color-elementary-50)", glow: LEVEL_GLOW.elementary },
+  junior_highschool: { color: "var(--color-juniorhigh-500)", bg: "var(--color-juniorhigh-50)", glow: LEVEL_GLOW.juniorhigh },
+  senior_highschool: { color: "var(--color-seniorhigh-500)", bg: "var(--color-seniorhigh-50)", glow: LEVEL_GLOW.seniorhigh },
 };
 
 const GRADING_PERIODS_BY_LEVEL = {
@@ -70,15 +77,20 @@ const PASS_THRESHOLD = GRADE_PASSING;
 // constants/observedValues.js), so a rating reads the same everywhere.
 function narrativeRatingColor(value) {
   const r = observedValueMeta(value);
-  return r ? { color: r.color, bg: r.bg } : { color: "#7a5050", bg: "#fffbfb" };
+  return r ? { color: r.color, bg: r.bg } : { color: "var(--color-neutral-700)", bg: "var(--color-neutral-100)" };
 }
 
 const ATTENDANCE_STATUSES = [
-  { value: "P", label: "Present", color: "#2e6b0d", bg: "#e8f5e0" },
-  { value: "A", label: "Absent",  color: "#9b2020", bg: "#fde8e8" },
+  { value: "P", label: "Present", color: "var(--color-success-500)", bg: "var(--color-success-50)" },
+  { value: "A", label: "Absent",  color: "var(--color-error-500)", bg: "var(--color-error-50)" },
   { value: "L", label: "Late",    color: "#b45309", bg: "#fef3e2" },
-  { value: "E", label: "Excused", color: "#1455a0", bg: "#e3f0fd" },
+  { value: "E", label: "Excused", color: "var(--color-info-500)", bg: "var(--color-info-50)" },
 ];
+// Late's amber has no exact token, so light keeps it and dark takes the
+// warning pair; the other statuses are tokens already and follow the theme.
+const DARK_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.map((s) =>
+  s.value === "L" ? { ...s, color: "var(--color-warning-500)", bg: "var(--color-warning-50)" } : s
+);
 
 function shiftISODate(iso, delta) {
   const d = new Date(`${iso}T00:00:00`);
@@ -101,7 +113,7 @@ function formatShortDate(iso) {
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
-  <div style={{ width: w, height: h, borderRadius: r, background: "#f0e8e8" }} />
+  <div style={{ width: w, height: h, borderRadius: r, background: "var(--skeleton)" }} />
 );
 
 function fullName(s) {
@@ -117,11 +129,11 @@ function sectionLabel(advisory) {
 }
 
 function gradeColor(g) {
-  if (g === null || g === undefined || g === "") return { color: "#7a5050", bg: "#f9f4f4" };
+  if (g === null || g === undefined || g === "") return { color: "var(--color-neutral-700)", bg: "#f9f4f4" };
   const n = parseFloat(g);
-  if (n >= GRADE_OUTSTANDING) return { color: "#1455a0", bg: "#e3f0fd" };
-  if (n >= PASS_THRESHOLD) return { color: "#2e6b0d", bg: "#e8f5e0" };
-  return { color: "#9b2020", bg: "#fde8e8" };
+  if (n >= GRADE_OUTSTANDING) return { color: "var(--color-info-500)", bg: "var(--color-info-50)" };
+  if (n >= PASS_THRESHOLD) return { color: "var(--color-success-500)", bg: "var(--color-success-50)" };
+  return { color: "var(--color-error-500)", bg: "var(--color-error-50)" };
 }
 
 // ── Students tab: roster table with an inline read-only quick-view row ──────
@@ -137,6 +149,7 @@ const ROSTER_COLUMNS = [
 export function StudentsTab({ students, todayAttendanceByStudent }) {
   const navigate = useNavigate();
   const [quickViewId, setQuickViewId] = useState(null);
+  const dark = useTheme() === "dark";
 
   return (
     <Table
@@ -151,7 +164,7 @@ export function StudentsTab({ students, todayAttendanceByStudent }) {
         {students.map((s) => {
           const open = quickViewId === s.student_id;
           const today = todayAttendanceByStudent?.[s.student_id];
-          const statusMeta = today ? ATTENDANCE_STATUSES.find((a) => a.value === today.status) : null;
+          const statusMeta = today ? (dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).find((a) => a.value === today.status) : null;
           return (
             <Fragment key={s.student_id}>
               <TableRow onClick={() => navigate(`/students/${s.student_id}`)}>
@@ -175,25 +188,25 @@ export function StudentsTab({ students, todayAttendanceByStudent }) {
                   <td colSpan={ROSTER_COLUMNS.length} className="border-b border-neutral-200 bg-neutral-50 p-0">
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 24, padding: "14px 26px" }}>
                       <div>
-                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
-                        <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.lrn}</div>
+                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
+                        <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.lrn}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
-                        <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.student_number}</div>
+                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
+                        <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.student_number}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
-                        <div style={{ fontSize: 13, color: "#1a0a0a", fontWeight: 600, marginTop: 2 }}>{s.sex}</div>
+                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
+                        <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.sex}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
+                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
                         {statusMeta ? (
                           <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, marginTop: 2, display: "inline-block" }}>
                             {statusMeta.label}
                           </span>
                         ) : (
-                          <div style={{ fontSize: 13, color: "#8a6a6a", marginTop: 2 }}>Not marked yet</div>
+                          <div style={{ fontSize: 13, color: "var(--color-neutral-500)", marginTop: 2 }}>Not marked yet</div>
                         )}
                       </div>
                       <div style={{ marginLeft: "auto", alignSelf: "center" }}>
@@ -201,8 +214,8 @@ export function StudentsTab({ students, todayAttendanceByStudent }) {
                           onClick={() => navigate(`/students/${s.student_id}`)}
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 6,
-                            border: "1px solid #f0e4e4", borderRadius: 8, background: "white",
-                            padding: "6px 12px", fontSize: 12, color: "#855c5c", cursor: "pointer",
+                            border: "1px solid var(--color-neutral-300)", borderRadius: 8, background: "var(--color-surface)",
+                            padding: "6px 12px", fontSize: 12, color: "var(--color-neutral-600)", cursor: "pointer",
                             fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
                           }}
                         >
@@ -350,7 +363,7 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
 
   if (subjects.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "var(--color-neutral-500)" }}>
         No subjects configured for this grade level yet.
       </div>
     );
@@ -359,11 +372,11 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
   return (
     <div>
       {/* Selectors */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
         <select
           value={subjectId}
           onChange={(e) => setSubjectId(e.target.value)}
-          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+          style={{ border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" }}
         >
           {subjects.map((s) => (
             <option key={s.subject_id} value={s.subject_id}>{s.subject_name}</option>
@@ -372,7 +385,7 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+          style={{ border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" }}
         >
           {periods.map((p) => (
             <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
@@ -382,9 +395,10 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
           <button
             onClick={handleSaveAll}
             disabled={saving || loading}
+            className="text-white"
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-              background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+              background: saving ? "var(--color-brand-400)" : "var(--color-action)", border: "none",
               borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
               cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
             }}
@@ -433,7 +447,7 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
                     {draft !== "" && !Number.isNaN(parseFloat(draft)) && (
                       <span
                         className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
-                        style={gc}
+                        style={{ color: gc.color, background: gc.bg }}
                       >
                         {parseFloat(draft) >= PASS_THRESHOLD ? "Passed" : "Failed"}
                       </span>
@@ -562,7 +576,7 @@ function NarrativeTab({ advisory, readOnly = false }) {
     }
   };
 
-  const selectStyle = { border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" };
+  const selectStyle = { border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" };
 
   if (categoriesLoading || loading) {
     return (
@@ -574,9 +588,9 @@ function NarrativeTab({ advisory, readOnly = false }) {
 
   if (categories.length === 0) {
     return (
-      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
+      <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "var(--color-neutral-500)" }}>
         No narrative categories configured yet.{" "}
-        <a href="/grading-templates?tab=narrative" style={{ color: "#c92a2a", fontWeight: 600 }}>Ask an admin to add some</a>.
+        <a href="/grading-templates?tab=narrative" style={{ color: "var(--color-brand-600)", fontWeight: 600 }}>Ask an admin to add some</a>.
       </div>
     );
   }
@@ -584,7 +598,7 @@ function NarrativeTab({ advisory, readOnly = false }) {
   return (
     <div>
       {/* Selectors */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
         <select value={period} onChange={(e) => setPeriod(e.target.value)} style={selectStyle}>
           {periods.map((p) => (
             <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
@@ -596,9 +610,10 @@ function NarrativeTab({ advisory, readOnly = false }) {
             // Not while loading: the grid still holds the previous period's
             // ratings, and saving would file them under the period just picked.
             disabled={saving || loading}
+            className="text-white"
             style={{
               marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
-              background: saving || loading ? "#e87474" : "#e03131", color: "white", border: "none",
+              background: saving || loading ? "var(--color-brand-400)" : "var(--color-action)", border: "none",
               borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: 700,
               cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
             }}
@@ -610,19 +625,19 @@ function NarrativeTab({ advisory, readOnly = false }) {
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
+        <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "var(--color-neutral-500)" }}>
           No enrolled students in this section.
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: "#fdfafa" }}>
-                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 26px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+              <tr className="bg-[#fdfafa] dark:bg-transparent">
+                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 26px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                   Name
                 </th>
                 {categories.map((c) => (
-                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "#8a6a6a", padding: "10px 16px", borderBottom: "1px solid #f5eaea", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 16px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                     {c.name}
                   </th>
                 ))}
@@ -634,18 +649,18 @@ function NarrativeTab({ advisory, readOnly = false }) {
                 const draft = drafts[sid] || {};
                 return (
                   <tr key={sid}>
-                    <td style={{ padding: "9px 26px", borderBottom: "1px solid #f9f0f0", fontWeight: 600, color: "#1a0a0a", whiteSpace: "nowrap" }}>
+                    <td className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ padding: "9px 26px", fontWeight: 600, color: "var(--color-neutral-900)", whiteSpace: "nowrap" }}>
                       {fullName(r.student)}
                     </td>
                     {categories.map((c) => {
                       const value = draft[c.category_id] || "";
                       const rc = narrativeRatingColor(value);
                       return (
-                        <td key={c.category_id} style={{ padding: "9px 16px", borderBottom: "1px solid #f9f0f0" }}>
+                        <td key={c.category_id} className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ padding: "9px 16px" }}>
                           {readOnly ? (
                             <span
                               className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
-                              style={value ? { color: rc.color, background: rc.bg } : { color: "#8a6a6a" }}
+                              style={value ? { color: rc.color, background: rc.bg } : { color: "var(--color-neutral-500)" }}
                             >
                               {observedValueMeta(value)?.label ?? "—"}
                             </span>
@@ -654,9 +669,9 @@ function NarrativeTab({ advisory, readOnly = false }) {
                               value={value}
                               onChange={(e) => setRating(sid, c.category_id, e.target.value)}
                               style={{
-                                border: "1.5px solid #fde2de", borderRadius: 7, padding: "5px 10px",
+                                border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 7, padding: "5px 10px",
                                 fontSize: 12, fontFamily: "'DM Sans',sans-serif", outline: "none",
-                                color: rc.color, background: value ? rc.bg : "#fffbfb",
+                                color: rc.color, background: value ? rc.bg : "var(--color-neutral-100)",
                                 fontWeight: value ? 700 : 400,
                               }}
                             >
@@ -693,6 +708,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
   const [drafts, setDrafts] = useState({}); // student_id -> { status, remarks }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const dark = useTheme() === "dark";
 
   // Only the newest load fills the grid. Stepping through dates faster than
   // the server answers could land an earlier day's marks under the date now
@@ -788,12 +804,13 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
       {/* Header: two independent rows — date/action controls never wrap
           against the count pills (an earlier version had them in one row,
           which shifted the date/save controls whenever pills wrapped). */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button
               onClick={() => setDate((d) => shiftISODate(d, -1))}
-              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", color: "#7a5050", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              aria-label="Previous day"
+              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
               <i className="ti ti-chevron-left" style={{ fontSize: 14 }} />
             </button>
@@ -801,21 +818,22 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{ border: "1.5px solid #f0e4e4", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "#1a0a0a", background: "white", fontFamily: "'DM Sans',sans-serif", cursor: "pointer", flexShrink: 0 }}
+              style={{ border: "1.5px solid var(--color-neutral-300)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "var(--color-neutral-900)", background: "var(--color-surface)", fontFamily: "'DM Sans',sans-serif", cursor: "pointer", flexShrink: 0 }}
             />
             <button
               onClick={() => setDate((d) => shiftISODate(d, 1))}
-              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", color: "#7a5050", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              aria-label="Next day"
+              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
               <i className="ti ti-chevron-right" style={{ fontSize: 14 }} />
             </button>
             <button
               onClick={() => setDate(todayISO())}
-              style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px solid #f0e4e4", background: "white", color: "#855c5c", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
+              style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-600)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
             >
               Today
             </button>
-            <span style={{ fontSize: 12, color: "#8a6a6a", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
+            <span style={{ fontSize: 12, color: "var(--color-neutral-500)", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
           </div>
           {!readOnly && (
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -824,7 +842,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
               disabled={loading || rows.length === 0}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
-                borderRadius: 8, border: "1.5px solid #f0e4e4", background: "white", color: "#7a5050",
+                borderRadius: 8, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)",
                 fontSize: 12, fontWeight: 600, cursor: loading || rows.length === 0 ? "not-allowed" : "pointer",
                 fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap",
               }}
@@ -835,9 +853,10 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
             <button
               onClick={handleSaveAll}
               disabled={saving || loading}
+              className="text-white"
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: saving ? "#e87474" : "#e03131", color: "white", border: "none",
+                background: saving ? "var(--color-brand-400)" : "var(--color-action)", border: "none",
                 borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 700,
                 cursor: saving || loading ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
                 whiteSpace: "nowrap",
@@ -850,12 +869,12 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
           )}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>{counts.P} present</span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#fde8e8", color: "#9b2020" }}>{counts.A} absent</span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#fef3e2", color: "#b45309" }}>{counts.L} late</span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#e3f0fd", color: "#1455a0" }}>{counts.E} excused</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "var(--color-success-50)", color: "var(--color-success-500)" }}>{counts.P} present</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "var(--color-error-50)", color: "var(--color-error-500)" }}>{counts.A} absent</span>
+          <span className="bg-[#fef3e2] text-[#b45309] dark:bg-warning-50 dark:text-warning-500" style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99 }}>{counts.L} late</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "var(--color-info-50)", color: "var(--color-info-500)" }}>{counts.E} excused</span>
           {counts.none > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>{counts.none} not marked</span>
+            <span className="bg-[#f9f4f4] dark:bg-neutral-200" style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, color: "var(--color-neutral-700)" }}>{counts.none} not marked</span>
           )}
         </div>
       </div>
@@ -880,7 +899,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
                   </TableCell>
                   <TableCell>
                     {readOnly ? (() => {
-                      const st = ATTENDANCE_STATUSES.find((a) => a.value === draft.status);
+                      const st = (dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).find((a) => a.value === draft.status);
                       return st ? (
                         <span className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold" style={{ background: st.bg, color: st.color }}>
                           {st.label}
@@ -890,7 +909,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
                       );
                     })() : (
                     <div className="flex gap-1">
-                      {ATTENDANCE_STATUSES.map((st) => {
+                      {(dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).map((st) => {
                         const active = draft.status === st.value;
                         return (
                           <button
@@ -942,12 +961,12 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
 // ── Stats tab: grade metrics + semester/daily/per-student attendance ────────
 function GradeDistribution({ distribution, gradedCount }) {
   const bands = [
-    { key: "90_100", label: "90-100", color: "#1455a0" },
-    { key: "75_89", label: "75-89", color: "#2e6b0d" },
-    { key: "below_75", label: "Below 75", color: "#9b2020" },
+    { key: "90_100", label: "90-100", color: "var(--color-info-500)" },
+    { key: "75_89", label: "75-89", color: "var(--color-success-500)" },
+    { key: "below_75", label: "Below 75", color: "var(--color-error-500)" },
   ];
   if (!gradedCount) {
-    return <div style={{ fontSize: 12.5, color: "#8a6a6a" }}>No grades recorded yet.</div>;
+    return <div style={{ fontSize: 12.5, color: "var(--color-neutral-500)" }}>No grades recorded yet.</div>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -956,11 +975,11 @@ function GradeDistribution({ distribution, gradedCount }) {
         const pct = gradedCount ? Math.round((count / gradedCount) * 100) : 0;
         return (
           <div key={band.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 64, fontSize: 11.5, color: "#7a5050", flexShrink: 0 }}>{band.label}</span>
-            <div style={{ flex: 1, height: 10, background: "#f5eaea", borderRadius: 99, overflow: "hidden" }}>
+            <span style={{ width: 64, fontSize: 11.5, color: "var(--color-neutral-700)", flexShrink: 0 }}>{band.label}</span>
+            <div style={{ flex: 1, height: 10, background: "var(--color-neutral-200)", borderRadius: 99, overflow: "hidden" }}>
               <div style={{ height: "100%", borderRadius: 99, background: band.color, width: `${pct}%`, transition: "width 0.4s ease" }} />
             </div>
-            <span style={{ width: 36, textAlign: "right", fontSize: 11.5, fontWeight: 700, color: "#1a0a0a", flexShrink: 0 }}>{count}</span>
+            <span style={{ width: 36, textAlign: "right", fontSize: 11.5, fontWeight: 700, color: "var(--color-neutral-900)", flexShrink: 0 }}>{count}</span>
           </div>
         );
       })}
@@ -970,11 +989,12 @@ function GradeDistribution({ distribution, gradedCount }) {
 
 function DailyBarChart({ daily }) {
   const [hoverIdx, setHoverIdx] = useState(null);
+  const dark = useTheme() === "dark";
   const maxTotal = Math.max(1, ...daily.map((d) => d.total));
 
   if (daily.length === 0) {
     return (
-      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "#8a6a6a" }}>
+      <div style={{ padding: "28px 22px", textAlign: "center", fontSize: 12.5, color: "var(--color-neutral-500)" }}>
         No attendance recorded yet for this range.
       </div>
     );
@@ -984,7 +1004,7 @@ function DailyBarChart({ daily }) {
     <div style={{ padding: "18px 22px" }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 140, position: "relative" }}>
         {daily.map((d, i) => {
-          const segments = ATTENDANCE_STATUSES.map((s) => ({
+          const segments = (dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).map((s) => ({
             ...s,
             count: d[{ P: "present", A: "absent", L: "late", E: "excused" }[s.value]] || 0,
           })).filter((s) => s.count > 0);
@@ -998,14 +1018,14 @@ function DailyBarChart({ daily }) {
               style={{ flex: "1 1 0", minWidth: 3, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", cursor: "pointer", position: "relative" }}
             >
               {hovered && (
-                <div style={{
+                <div className={`bg-brand-900 text-white shadow-[0_8px_24px_rgba(0,0,0,0.22)] dark:bg-surface-raised ${MENU_DARK}`} style={{
                   position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
-                  marginBottom: 8, background: "#1a0a0a", color: "white", borderRadius: 8,
+                  marginBottom: 8, borderRadius: 8,
                   padding: "8px 11px", fontSize: 11, whiteSpace: "nowrap", zIndex: 10,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.22)", fontFamily: "'DM Sans',sans-serif",
+                  fontFamily: "'DM Sans',sans-serif",
                 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>{formatShortDate(d.date)}</div>
-                  {ATTENDANCE_STATUSES.map((s) => {
+                  {(dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).map((s) => {
                     const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
                     if (!d[key]) return null;
                     return (
@@ -1017,7 +1037,7 @@ function DailyBarChart({ daily }) {
                   })}
                 </div>
               )}
-              <div style={{ display: "flex", flexDirection: "column-reverse", width: "100%", height: barHeight, borderRadius: "4px 4px 0 0", overflow: "hidden", gap: 1.5, outline: hovered ? "2px solid #e03131" : "none", outlineOffset: 1 }}>
+              <div style={{ display: "flex", flexDirection: "column-reverse", width: "100%", height: barHeight, borderRadius: "4px 4px 0 0", overflow: "hidden", gap: 1.5, outline: hovered ? "2px solid var(--color-brand-500)" : "none", outlineOffset: 1 }}>
                 {segments.map((s) => (
                   <div
                     key={s.value}
@@ -1029,13 +1049,13 @@ function DailyBarChart({ daily }) {
           );
         })}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#8a6a6a" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "var(--color-neutral-500)" }}>
         <span>{formatShortDate(daily[0]?.date)}</span>
         {daily.length > 1 && <span>{formatShortDate(daily[daily.length - 1]?.date)}</span>}
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
-        {ATTENDANCE_STATUSES.map((s) => (
-          <div key={s.value} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#7a5050", fontWeight: 600 }}>
+        {(dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).map((s) => (
+          <div key={s.value} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--color-neutral-700)", fontWeight: 600 }}>
             <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color }} />
             {s.label}
           </div>
@@ -1053,17 +1073,20 @@ const ATTENDANCE_RATE_COLUMNS = [
 
 function StudentRateRow({ row }) {
   const rate = row.attendance_rate;
+  const dark = useTheme() === "dark";
   // Meter colour is a threshold verdict, not a brand tone — kept as values.
-  const meterColor = rate === null ? "#e0d0d0"
-    : rate >= GRADE_OUTSTANDING ? "#2e6b0d"
-    : rate >= GRADE_PASSING ? "#b45309"
-    : "#9b2020";
+  // The pale "no rate" grey and the late amber have no exact token: dark
+  // takes the nearest by meaning.
+  const meterColor = rate === null ? (dark ? "var(--color-neutral-500)" : "#e0d0d0")
+    : rate >= GRADE_OUTSTANDING ? "var(--color-success-500)"
+    : rate >= GRADE_PASSING ? (dark ? "var(--color-warning-500)" : "#b45309")
+    : "var(--color-error-500)";
   return (
     <TableRow>
       <TableCell className="font-semibold text-neutral-900">{row.name}</TableCell>
       <TableCell>
         <div className="flex gap-2.5 text-[11.5px]">
-          {ATTENDANCE_STATUSES.map((s) => {
+          {(dark ? DARK_ATTENDANCE_STATUSES : ATTENDANCE_STATUSES).map((s) => {
             const key = { P: "present", A: "absent", L: "late", E: "excused" }[s.value];
             return (
               <span key={s.value} className="font-bold" style={{ color: s.color }}>
@@ -1143,26 +1166,26 @@ function StatsTab({ advisory }) {
     <div>
       {/* Date range controls (attendance analytics only — grade metrics
           cover every recorded grade for the section, no range needed) */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "14px 26px", borderBottom: "1px solid #f5eaea" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
         <input
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
-          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+          style={{ border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" }}
         />
-        <span style={{ color: "#8a6a6a", fontSize: 12 }}>to</span>
+        <span style={{ color: "var(--color-neutral-500)", fontSize: 12 }}>to</span>
         <input
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
-          style={{ border: "1.5px solid #fde2de", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "#1a0a0a", background: "#fffbfb", outline: "none" }}
+          style={{ border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" }}
         />
         <button
           onClick={() => { setDateFrom(defaultRange.from); setDateTo(defaultRange.to); }}
           style={{
-            border: "1.5px solid #f0e4e4", borderRadius: 8, background: "white",
-            padding: "7px 12px", fontSize: 12, color: "#855c5c", cursor: "pointer",
+            border: "1.5px solid var(--color-neutral-300)", borderRadius: 8, background: "var(--color-surface)",
+            padding: "7px 12px", fontSize: 12, color: "var(--color-neutral-600)", cursor: "pointer",
             fontFamily: "'DM Sans',sans-serif", fontWeight: 600,
           }}
         >
@@ -1194,16 +1217,16 @@ function StatsTab({ advisory }) {
             </div>
 
             {/* Grade distribution */}
-            <div style={{ margin: "14px 26px 0", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 14, padding: "14px 18px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+            <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ margin: "14px 26px 0", border: "1px solid var(--color-neutral-200)", borderRadius: 14, padding: "14px 18px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
                 Grade Distribution
               </div>
               <GradeDistribution distribution={gradeSummary?.distribution} gradedCount={gradeSummary?.graded_count} />
             </div>
 
             {/* Per-day composition chart */}
-            <div style={{ margin: "14px 26px 0", background: "#fdfafa", border: "1px solid #f5eaea", borderRadius: 14 }}>
-              <div style={{ padding: "12px 22px 0", fontSize: 11, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ margin: "14px 26px 0", border: "1px solid var(--color-neutral-200)", borderRadius: 14 }}>
+              <div style={{ padding: "12px 22px 0", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Daily Attendance Breakdown
               </div>
               <DailyBarChart daily={stats?.daily ?? []} />
@@ -1212,7 +1235,7 @@ function StatsTab({ advisory }) {
             {/* Per-student table */}
             <div style={{ marginTop: 18 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 26px 10px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#8a6a6a", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Per-Student Attendance
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -1220,11 +1243,10 @@ function StatsTab({ advisory }) {
                     <button
                       key={opt.key}
                       onClick={() => setSortBy(opt.key)}
+                      className={sortBy === opt.key ? `border-brand-500 bg-brand-100 text-brand-600 ${SELECTED_DARK}` : "border-neutral-300 bg-surface text-neutral-600"}
                       style={{
                         padding: "5px 11px", borderRadius: 7,
-                        border: `1.5px solid ${sortBy === opt.key ? "#e03131" : "#f0e4e4"}`,
-                        background: sortBy === opt.key ? "#fff0f0" : "white",
-                        color: sortBy === opt.key ? "#c92a2a" : "#855c5c",
+                        borderWidth: 1.5, borderStyle: "solid",
                         fontSize: 11, fontWeight: 700, cursor: "pointer",
                         fontFamily: "'DM Sans',sans-serif",
                       }}
@@ -1256,6 +1278,7 @@ function StatsTab({ advisory }) {
 // teacher never needs to be told they advise their own section) and
 // `readOnly` for the registrar and archived years.
 export function SectionDetail({ entry, adviserName, readOnly = false }) {
+  const dark = useTheme() === "dark";
   const { advisory, student_count, students, subjects } = entry;
   // Keyed by advisory_id at the call site, so a fresh mount (and a reset
   // to the Students tab) happens automatically when the section changes.
@@ -1282,42 +1305,43 @@ export function SectionDetail({ entry, adviserName, readOnly = false }) {
   ];
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "white" }}>
-      <div style={{ padding: "20px 26px", borderBottom: "1px solid #f5eaea" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--color-surface)" }}>
+      <div className={`border-b border-neutral-200 ${BRAND_PANEL_DARK}`} style={{ padding: "20px 26px" }}>
+        {dark && <BrandBackdrop tone="dark" />}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 11, background: levelColors.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <div className={levelColors.glow} style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: levelColors.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <i className="ti ti-users-group" style={{ fontSize: 17, color: levelColors.color }} />
           </div>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#1a0a0a" }}>{sectionLabel(advisory)}</div>
-            <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-neutral-900)" }}>{sectionLabel(advisory)}</div>
+            <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 2 }}>
               {SCHOOL_LEVEL_LABELS[advisory.school_level] || advisory.school_level} · SY {advisory.school_year}
             </div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#e3f0fd", color: "#1455a0" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "var(--color-info-50)", color: "var(--color-info-500)" }}>
             {student_count} student{student_count === 1 ? "" : "s"}
           </span>
           {adviserName && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>
+            <span className="bg-[#f9f4f4] dark:bg-neutral-200" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, color: "var(--color-neutral-700)" }}>
               <i className="ti ti-user-check" style={{ fontSize: 12 }} />Adviser: {adviserName}
             </span>
           )}
           {readOnly && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#f9f4f4", color: "#7a5050" }}>
+            <span className="bg-[#f9f4f4] dark:bg-neutral-200" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, color: "var(--color-neutral-700)" }}>
               <i className="ti ti-eye" style={{ fontSize: 12 }} />View only
             </span>
           )}
           {presentToday !== null && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "#e8f5e0", color: "#2e6b0d" }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "var(--color-success-50)", color: "var(--color-success-500)" }}>
               {presentToday}% present today
             </span>
           )}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 4, padding: "12px 26px 0", borderBottom: "1px solid #f5eaea" }}>
+      <div style={{ display: "flex", gap: 4, padding: "12px 26px 0", borderBottom: "1px solid var(--color-neutral-200)" }}>
         {tabs.map((t) => {
           const active = tab === t.key;
           return (
@@ -1327,10 +1351,10 @@ export function SectionDetail({ entry, adviserName, readOnly = false }) {
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
                 borderRadius: "10px 10px 0 0", border: "none",
-                borderBottom: `2px solid ${active ? "#e03131" : "transparent"}`,
+                borderBottom: `2px solid ${active ? "var(--color-brand-500)" : "transparent"}`,
                 background: "transparent", cursor: "pointer",
                 fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: active ? 700 : 500,
-                color: active ? "#c92a2a" : "#855c5c",
+                color: active ? "var(--color-brand-600)" : "var(--color-neutral-600)",
               }}
             >
               <i className={`ti ${t.icon}`} style={{ fontSize: 13 }} />{t.label}
@@ -1366,22 +1390,22 @@ function SectionRail({ sections, selectedKey, onSelect }) {
   }, [sections, query]);
 
   return (
-    <div style={{ width: 270, flexShrink: 0, borderRight: "1px solid #f5eaea", background: "white", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: 16, borderBottom: "1px solid #f5eaea" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#1a0a0a", marginBottom: 10 }}>My Sections</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #f0e4e4", borderRadius: 10, padding: "8px 12px", background: "#fdfafa" }}>
-          <i className="ti ti-search" style={{ fontSize: 14, color: "#8a6a6a" }} />
+    <div style={{ width: 270, flexShrink: 0, borderRight: "1px solid var(--color-neutral-200)", background: "var(--color-surface)", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 16, borderBottom: "1px solid var(--color-neutral-200)" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--color-neutral-900)", marginBottom: 10 }}>My Sections</div>
+        <div className="bg-[#fdfafa] dark:bg-neutral-50" style={{ display: "flex", alignItems: "center", gap: 8, border: "1.5px solid var(--color-neutral-300)", borderRadius: 10, padding: "8px 12px" }}>
+          <i className="ti ti-search" style={{ fontSize: 14, color: "var(--color-neutral-500)" }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search sections…"
-            style={{ border: "none", background: "transparent", outline: "none", fontSize: 12.5, color: "#1a0a0a", fontFamily: "'DM Sans',sans-serif", width: "100%" }}
+            style={{ border: "none", background: "transparent", outline: "none", fontSize: 12.5, color: "var(--color-neutral-900)", fontFamily: "'DM Sans',sans-serif", width: "100%" }}
           />
         </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 10 }}>
         {filtered.length === 0 ? (
-          <div style={{ padding: "24px 10px", textAlign: "center", fontSize: 12, color: "#8a6a6a" }}>
+          <div style={{ padding: "24px 10px", textAlign: "center", fontSize: 12, color: "var(--color-neutral-500)" }}>
             No sections match "{query}".
           </div>
         ) : (
@@ -1397,18 +1421,18 @@ function SectionRail({ sections, selectedKey, onSelect }) {
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 10,
                   cursor: "pointer", marginBottom: 4,
-                  background: selected ? "#fff0f0" : "transparent",
-                  border: `1.5px solid ${selected ? "#e03131" : "transparent"}`,
+                  background: selected ? "var(--color-brand-100)" : "transparent",
+                  border: `1.5px solid ${selected ? "var(--color-brand-500)" : "transparent"}`,
                 }}
               >
-                <div style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: levelColors.bg }}>
+                <div className={levelColors.glow} style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, backgroundColor: levelColors.bg }}>
                   <i className="ti ti-users-group" style={{ fontSize: 15, color: levelColors.color }} />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "#c92a2a" : "#1a0a0a" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "var(--color-brand-600)" : "var(--color-neutral-900)" }}>
                     {sectionLabel(a)}
                   </div>
-                  <div style={{ fontSize: 11, color: "#8a6a6a" }}>
+                  <div style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>
                     {entry.student_count} student{entry.student_count === 1 ? "" : "s"}
                   </div>
                 </div>
@@ -1539,14 +1563,14 @@ export default function TeacherSectionsPage() {
           />
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", padding: "80px 16px" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                <i className="ti ti-user-search" style={{ fontSize: 22, color: "#8a6a6a" }} />
+              <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 52, height: 52, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                <i className="ti ti-user-search" style={{ fontSize: 22, color: "var(--color-neutral-500)" }} />
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-neutral-700)" }}>
                 {teachersUnavailable ? "Teacher list unavailable" : "Select a teacher to view their sections"}
               </div>
               {teachersUnavailable && (
-                <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 6 }}>Listing users requires admin access.</div>
+                <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 6 }}>Listing users requires admin access.</div>
               )}
             </div>
           </div>
@@ -1596,11 +1620,11 @@ export default function TeacherSectionsPage() {
         ) : sections.length === 0 ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", padding: "80px 16px" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: "#fff0f0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                <i className="ti ti-users-group" style={{ fontSize: 22, color: "#8a6a6a" }} />
+              <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 52, height: 52, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                <i className="ti ti-users-group" style={{ fontSize: 22, color: "var(--color-neutral-500)" }} />
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#7a5050" }}>No section assignments found</div>
-              <div style={{ fontSize: 12, color: "#8a6a6a", marginTop: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-neutral-700)" }}>No section assignments found</div>
+              <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 4 }}>
                 {isTeacher ? "You haven't been assigned as an adviser of any section yet." : "This teacher has no advisory assignments yet."}
               </div>
             </div>

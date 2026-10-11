@@ -19,9 +19,9 @@ import { COMPONENT_COLORS, PERIOD_LABELS, percentageScore } from "./gradeRules";
 
 const COLS = "grid grid-cols-[minmax(0,1fr)_88px_72px_64px_80px] items-center gap-x-3";
 const NUMBER_INPUT =
-  "h-8 w-full rounded-sm border-[1.5px] bg-neutral-100 px-2.5 text-right text-[13px] tabular-nums text-neutral-900 outline-none transition-colors focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+  "h-8 w-full rounded-sm border-[1.5px] bg-neutral-100 px-2.5 text-right text-[13px] tabular-nums text-neutral-900 outline-none transition-colors focus:bg-surface [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 const DASHED_INPUT =
-  "h-8 rounded-sm border-[1.5px] border-dashed border-brand-border bg-white px-2.5 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-solid focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+  "h-8 rounded-sm border-[1.5px] border-dashed border-brand-border bg-surface px-2.5 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-solid focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
 const num = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v));
 // Scores arrive as decimal strings ("20.00"); show them as typed ("20", "18.5").
@@ -119,7 +119,7 @@ function ScoreRow({ entry, onUpdate, onDelete, readOnly }) {
         ariaLabel="Item name"
         onSave={(label) => save({ label })}
         className="truncate pl-[18px] text-[13px] text-neutral-900"
-        inputClassName="ml-[18px] h-8 w-[calc(100%-18px)] rounded-sm border-[1.5px] border-brand-500 bg-white px-2.5 text-[13px] outline-none"
+        inputClassName="ml-[18px] h-8 w-[calc(100%-18px)] rounded-sm border-[1.5px] border-brand-500 bg-surface px-2.5 text-[13px] outline-none"
       >
         {entry.label}
       </InlineEdit>

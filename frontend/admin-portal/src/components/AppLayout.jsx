@@ -1,10 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import { PageGlow } from "./ui/BrandBackdrop";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { ThemeContext, useAppTheme } from "../hooks/useTheme";
-import { isDarkReady } from "../constants/darkReady";
+import { ThemeContext, useAppTheme, usePageTheme } from "../hooks/useTheme";
 
 // AppLayout — the staff shell (sidebar + content column).
 //
@@ -41,7 +39,6 @@ const themeAttr = (theme) => (theme === "dark" ? "dark" : undefined);
 export default function AppLayout({ children }) {
   const alreadyInside = useContext(InsideAppLayout);
   const { ensureYears } = useSchoolYear();
-  const { pathname } = useLocation();
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -49,7 +46,7 @@ export default function AppLayout({ children }) {
   // Dark mode reaches the sidebar whenever it's on, but a page only once it
   // has been converted (constants/darkReady.js); the rest stay light.
   const appTheme = useAppTheme();
-  const pageTheme = appTheme === "dark" && isDarkReady(pathname) ? "dark" : "light";
+  const pageTheme = usePageTheme();
 
   // AppLayout is the first thing to mount once a user is actually
   // authenticated (SchoolYearProvider itself mounts before login, when there's

@@ -4,6 +4,7 @@ import { peso } from "../../../utils/format";
 import { NoData } from "../ChartFrame";
 import { columnPath } from "../geometry";
 import { chartInk, token } from "../tokens";
+import useTheme from "../../../hooks/useTheme";
 import { fmtOne, num, pesoCompact, share, shortYear } from "../../schoolYears/compareFigures";
 import ChartCard, { Caption } from "./ChartCard";
 import ColumnPlot from "../ColumnPlot";
@@ -33,11 +34,12 @@ function Collection({ years, states, get }) {
   // The collected fill is clipped to its column's rounded outline; each clip
   // needs a document-unique id.
   const clipId = `collected-${useId().replace(/[^\w-]/g, "")}`;
-  const ink = chartInk();
+  const theme = useTheme();
+  const ink = chartInk(theme);
   const colors = {
-    collected: token("--color-brand-600"),
-    outstanding: token("--color-brand-300"),
-    note: token("--color-neutral-600"),
+    collected: token("--color-brand-600", theme),
+    outstanding: token("--color-brand-300", theme),
+    note: token("--color-neutral-600", theme),
   };
 
   const columns = years.map((year) => {

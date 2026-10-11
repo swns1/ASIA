@@ -17,8 +17,9 @@ import Table, { TableCell, TableRow } from "../components/ui/Table";
 import { Field, Select } from "../components/FormField";
 import AIInsightPanel from "../components/AIInsightPanel";
 import ChartFrame from "../components/charts/ChartFrame";
-import { SURFACE, chartInk, token } from "../components/charts/tokens";
+import { chartInk, token } from "../components/charts/tokens";
 import useElementSize from "../components/charts/useElementSize";
+import useTheme from "../hooks/useTheme";
 
 import RiskTable, { RiskBadge } from "./analytics/RiskTable";
 import RiskChart, { RiskLegend } from "./analytics/RiskCharts";
@@ -130,9 +131,10 @@ function RiskTrendChart({ points, name }) {
   const [tip, setTip] = useState(null);
   const [plotEl, setPlotEl] = useState(null);
   const size = useElementSize(plotEl);
+  const theme = useTheme();
   if (!points?.length) return null;
 
-  const ink = chartInk();
+  const ink = chartInk(theme);
   // The card's own width, so the band names and dates stay their real size.
   const W = size?.width ?? 760;
   const H = 220;
@@ -175,7 +177,7 @@ function RiskTrendChart({ points, name }) {
               <rect x={PAD_L} y={top} width={plotW} height={bottom - top} fill={meta.tint} />
               <text
                 x={PAD_L - 12} y={(top + bottom) / 2 + 4}
-                textAnchor="end" fontSize="11" fontWeight="600" fill={token("--color-neutral-700")}
+                textAnchor="end" fontSize="11" fontWeight="600" fill={token("--color-neutral-700", theme)}
               >
                 {meta.label}
               </text>
@@ -197,7 +199,7 @@ function RiskTrendChart({ points, name }) {
 
         <path
           d={linePath} fill="none"
-          stroke={token("--color-neutral-400")} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+          stroke={token("--color-neutral-400", theme)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
         />
 
         {points.map((p, i) => {
@@ -206,7 +208,7 @@ function RiskTrendChart({ points, name }) {
           const cy = scaleY(p.risk_score);
           return (
             <g key={p.run_id}>
-              <circle cx={cx} cy={cy} r={5.5} fill={meta.color} stroke={SURFACE} strokeWidth={2.5} />
+              <circle cx={cx} cy={cy} r={5.5} fill={meta.color} stroke={ink.plane} strokeWidth={2.5} />
               <circle
                 cx={cx}
                 cy={cy}

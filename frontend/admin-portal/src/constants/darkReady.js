@@ -12,6 +12,37 @@ export const DARK_READY_PAGES = [
   // (hooks/useTheme: dark is for super admins and admins).
   { label: "Dashboard", match: /^\/dashboard\/?$/ },
   { label: "Students", match: /^\/students\/?$/ },
+  { label: "Student detail", match: /^\/students\/\d+\/?$/ },
+  // The full-page form (ThemeArea), new and edit.
+  { label: "Student form", match: /^\/students\/(new|\d+\/edit)\/?$/ },
+  { label: "Student Applications", match: /^\/student-applications\/?$/ },
+  // The list and its entry, summary and observed-values tabs.
+  { label: "Grades", match: /^\/grades(\/[a-z]+)?\/?$/ },
+  { label: "Grading Setup", match: /^\/grading-templates\/?$/ },
+  { label: "Enrollments", match: /^\/enrollments\/?$/ },
+  // The full-page form (ThemeArea), new and edit; not the detail page.
+  { label: "Enrollment form", match: /^\/enrollments\/(new|\d+\/edit)\/?$/ },
+  { label: "Users", match: /^\/users\/?$/ },
+  { label: "Teacher Advisories", match: /^\/teacher-advisories\/?$/ },
+  { label: "Subjects", match: /^\/subjects\/?$/ },
+  { label: "Audit Trail", match: /^\/audit-trail\/?$/ },
+  // The list and one year's page, not Compare (/school-years/compare).
+  { label: "School Years", match: /^\/school-years(\/(?!compare\/?$)[^/]+)?\/?$/ },
+  { label: "School Year Compare", match: /^\/school-years\/compare\/?$/ },
+  { label: "Analytics", match: /^\/analytics\/?$/ },
+  { label: "Invoices", match: /^\/invoices\/?$/ },
+  { label: "Payments", match: /^\/payments\/?$/ },
+  { label: "Requirements", match: /^\/requirements\/?$/ },
+  // One enrollment's page; not the list or the full-page form.
+  { label: "Enrollment detail", match: /^\/enrollments\/\d+\/?$/ },
+  { label: "Scholarships", match: /^\/scholarships\/?$/ },
+  { label: "Scholarship Types", match: /^\/scholarship-types\/?$/ },
+  { label: "School Forms", match: /^\/school-forms\/?$/ },
+  { label: "Academic Calendar", match: /^\/academic-calendar\/?$/ },
+  { label: "Billing Settings", match: /^\/settings\/?$/ },
+  { label: "My Sections", match: /^\/my-sections\/?$/ },
+  // Renders My Sections' SectionDetail and StudentsTab, so it joins with it.
+  { label: "Sections", match: /^\/sections\/?$/ },
 ];
 
 export const isDarkReady = (pathname) => DARK_READY_PAGES.some((page) => page.match.test(pathname));

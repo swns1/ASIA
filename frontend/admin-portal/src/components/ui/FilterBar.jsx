@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { CARD_DARK } from "./darkSurfaces";
 
 // FilterBar — the search + chip-row filter panel that sits above every list
 // page's table.
@@ -20,7 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // rather than the page-level <style> block EnrollmentsPage used.
 const SEARCH_FOCUS_CSS = `
   .filterbar-search:focus-within {
-    border-color: #e03131;
+    border-color: var(--color-brand-500);
     box-shadow: 0 0 0 3px rgba(224, 49, 49, 0.09);
   }
 `;
@@ -104,7 +105,7 @@ export default function FilterBar({
 
   const content = (
     <div
-      className={`flex flex-col rounded-[14px] border border-neutral-200 bg-white px-5 py-[18px] shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${className}`}
+      className={`flex flex-col rounded-[14px] border border-neutral-200 bg-surface px-5 py-[18px] shadow-[0_2px_12px_rgba(224,49,49,0.05)] ${CARD_DARK} ${className}`}
     >
       <style>{SEARCH_FOCUS_CSS}</style>
 
@@ -116,7 +117,7 @@ export default function FilterBar({
           buttons to a second line instead of pushing them past the edge. */}
       <div className="flex flex-wrap items-center gap-2.5">
         {showSearch && (
-          <div className="filterbar-search flex h-[42px] flex-1 basis-64 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-white px-4 transition-[border-color,box-shadow] duration-150">
+          <div className="filterbar-search flex h-[42px] flex-1 basis-64 items-center gap-2.5 rounded-lg border-[1.5px] border-neutral-300 bg-surface px-4 transition-[border-color,box-shadow] duration-150">
             <i className="ti ti-search shrink-0 text-[15px] text-neutral-500" aria-hidden="true" />
             <label htmlFor={searchInputId} className="sr-only">
               {searchLabel}
@@ -152,7 +153,7 @@ export default function FilterBar({
           <button
             type="button"
             onClick={onSearch}
-            className="focus-ring h-[42px] shrink-0 rounded-lg border-[1.5px] border-neutral-300 bg-white px-5 text-[13px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600"
+            className="focus-ring h-[42px] shrink-0 rounded-lg border-[1.5px] border-neutral-300 bg-surface px-5 text-[13px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600"
           >
             Search
           </button>
@@ -166,7 +167,7 @@ export default function FilterBar({
             className={`focus-ring flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border-[1.5px] px-3.5 text-[13px] font-semibold transition-colors duration-150 ${
               advancedOpen || advancedActive
                 ? "border-brand-500 bg-brand-100 text-brand-600"
-                : "border-neutral-300 bg-white text-neutral-700 hover:border-brand-500 hover:text-brand-600"
+                : "border-neutral-300 bg-surface text-neutral-700 hover:border-brand-500 hover:text-brand-600"
             }`}
           >
             <i className={`ti ${advancedIcon} text-[13px]`} aria-hidden="true" />
@@ -206,7 +207,7 @@ export default function FilterBar({
                 transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                 whileTap={{ scale: 0.93 }}
                 onClick={onClearFilters}
-                className="focus-ring flex h-[42px] w-max items-center gap-[5px] whitespace-nowrap rounded-lg border-[1.5px] border-brand-300 bg-white px-3.5 text-[12px] font-semibold text-error-600"
+                className="focus-ring flex h-[42px] w-max items-center gap-[5px] whitespace-nowrap rounded-lg border-[1.5px] border-brand-300 bg-surface px-3.5 text-[12px] font-semibold text-error-600"
               >
                 <i className="ti ti-filter-off text-[13px]" aria-hidden="true" />
                 Clear
