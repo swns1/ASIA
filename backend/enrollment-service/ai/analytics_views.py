@@ -94,15 +94,18 @@ from collections import defaultdict
 
 import numpy as np
 import requests
+from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import HasRole
+from grading.deped import descriptor
 from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
 from subjects.models import Subject
 
+from .providers import require_text
 from .services import LEGACY_RATING_MARKS, build_student_features
 
 logger = logging.getLogger(__name__)
@@ -147,6 +150,11 @@ taken together), and the school colours them red, amber and green in that order.
 its place: never name a cluster as stronger than one listed after it. A cluster with high grades but
 poor attendance is not a group of high achievers.
 
+Each cluster's DepEd descriptor is given. The school's system computed it from the cluster's average
+grade; never work one out from the average yourself. A cluster whose descriptor is "Did Not Meet
+Expectations" is below the passing grade of 75: never give it a name that suggests achievement,
+passing or good performance, however close to 75 its average is.
+
 Your tasks:
 1. Give each cluster a SHORT, descriptive name (2-4 words max).
    Example names: "High Achievers", "At-Risk Learners", "Steady Performers", "Needs Intervention"
@@ -168,8 +176,7 @@ Context:
 - Grading Period: {grading_period}
 - Subject: {subject}
 - Total Students: {total_students}
-- DepEd grade scale: 90-100 Outstanding, 85-89 Very Satisfactory, 80-84 Satisfactory,
-  75-79 Fairly Satisfactory, Below 75 Did Not Meet Expectations
+- Passing grade: 75. Use each cluster's given DepEd descriptor as it is.
 - Attendance rate: proportion of school days attended (1.00 = perfect, 0.00 = never attended)
 - Narrative score: DepEd Observed Values, 3=Always Observed, 2=Sometimes Observed, 1.5=Rarely Observed, 1=Not Observed (averaged across all rated categories)
 - Cluster separation quality (silhouette score, -1 to 1, higher = better separated): {silhouette_score}
@@ -226,22 +233,25 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": settings.GROQ_TEXT_MODEL,
                 "temperature": 0.2,
-                "max_tokens": 512,
+                # Room for a reasoning model's thinking as well as the JSON;
+                # see ai/views.py.
+                "max_tokens": 1200,
                 "messages": [{"role": "user", "content": prompt}],
             },
             headers={"Authorization": f"Bearer {groq_key}"},
             timeout=15,
         )
         response.raise_for_status()
-        return _parse_interpretation_json(response.json()["choices"][0]["message"]["content"])
+        content = response.json()["choices"][0]["message"].get("content")
+        return _parse_interpretation_json(require_text(content, "groq"))
 
     def _call_gemini() -> dict:
         from google import genai
         client = genai.Client(api_key=gemini_key)
-        response = client.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
-        return _parse_interpretation_json(response.text)
+        response = client.models.generate_content(model=settings.GEMINI_TEXT_MODEL, contents=prompt)
+        return _parse_interpretation_json(require_text(response.text, "gemini"))
 
     providers = []
     if groq_key:
@@ -552,7 +562,9 @@ class ClusterAnalyticsView(APIView):
             }
             cluster_summary_lines.append(
                 f"Cluster {new_id}: {summary['student_count']} students, "
-                f"avg_grade={summary['avg_grade']}, range=[{summary['min_grade']}–{summary['max_grade']}], "
+                f"avg_grade={summary['avg_grade']}, "
+                f"deped_descriptor={descriptor(summary['avg_grade'])}, "
+                f"range=[{summary['min_grade']}–{summary['max_grade']}], "
                 f"avg_attendance={att_str}, avg_narrative_score={narr_str}/3"
             )
             band = GROUP_BANDS[n_clusters][new_id]

@@ -48,8 +48,16 @@ DOCUMENT_MARKERS: dict[str, tuple[str, ...]] = {
                           "acr", "bureau of immigration"),
 }
 
-# A surname this short is too common to be evidence of anything.
-_MIN_NAME_TOKEN = 3
+NAME_MATCH = "match"
+NAME_SURNAME_ONLY = "surname_only"
+NAME_GIVEN_ONLY = "given_only"
+NAME_NONE = "none"
+
+_NAME_NOTES = {
+    NAME_SURNAME_ONLY: "Only the surname matches — this may be a sibling's or a relative's document.",
+    NAME_GIVEN_ONLY: "Only the first name matches — the surname on this document is different.",
+    NAME_NONE: "The student's name was not found on this document.",
+}
 
 
 def _document_markers_found(requirement_code: str, text: str) -> list[str]:
@@ -57,13 +65,36 @@ def _document_markers_found(requirement_code: str, text: str) -> list[str]:
     return [m for m in markers if m in text]
 
 
-def _name_tokens(*parts: str | None) -> list[str]:
-    """Meaningful name tokens to look for, longest first."""
-    tokens: list[str] = []
-    for part in parts:
-        tokens.extend(t for t in normalize_text(part).split() if len(t) >= _MIN_NAME_TOKEN)
-    # Longest first: matching "dela cruz" is stronger evidence than "cruz".
-    return sorted(set(tokens), key=len, reverse=True)
+def _surname_found(surname: list[str], words: list[str]) -> bool:
+    """
+    The whole surname, as consecutive whole words, spacing-insensitive:
+    "Dela Cruz", "De La Cruz" and "DELACRUZ" are one surname on paper.
+
+    Matching any one word of it, anywhere in the text, was the old rule. It
+    passed a sibling's certificate (same surname), a "Dela Rosa" family for a
+    "Dela Cruz" student ("dela" alone), and found "ana" inside "Mariana".
+    """
+    target = "".join(surname)
+    for start in range(len(words)):
+        joined = ""
+        for word in words[start:]:
+            joined += word
+            if joined == target:
+                return True
+            if len(joined) >= len(target):
+                break
+    return False
+
+
+def _given_names_found(given: list[str], words: list[str]) -> bool:
+    """
+    Every given name, as whole words. One shared given name is not evidence of
+    identity: "Mary Grace" and her sister "Mary Ann" share "Mary". A missed
+    match costs a soft "worth a second look"; a false match vouches for the
+    wrong child's document, so this errs strict.
+    """
+    present = set(words)
+    return all(name in present for name in given)
 
 
 def verify_document(parsed: ParsedDocument, requirement_code: str,
@@ -76,33 +107,51 @@ def verify_document(parsed: ParsedDocument, requirement_code: str,
     none of them appear — an unrecognised requirement code produces no claim
     either way rather than a spurious warning.
 
-    Name matching is done on the *surname* primarily. A document that names a
-    different student is the signal worth catching: it means the wrong file was
-    attached to this student's record, which no amount of field extraction
-    would ever have revealed.
+    A document names the student only when every part of the name supplied is
+    on it: the whole surname and every given name, each as whole words. A
+    document that names a different student is the signal worth catching: it
+    means the wrong file was attached to this student's record, which no
+    amount of field extraction would ever have revealed. The likeliest such
+    file is a sibling's, enrolled the same day with the same surname -- which
+    is why a surname alone is reported as `surname_only`, not as a match.
+
+    Known limit: the check reads the whole page, not the name field, so a
+    sibling's birth certificate whose *father* shares this student's given
+    name still matches.
     """
-    text = normalize_text(parsed.text)
+    words = normalize_text(parsed.text).split()
     raw_lower = parsed.text.lower()
 
     markers = _document_markers_found(requirement_code, raw_lower)
     has_known_markers = bool(DOCUMENT_MARKERS.get((requirement_code or "").lower()))
     is_expected = bool(markers) if has_known_markers else True
 
-    surname_tokens = _name_tokens(last_name)
-    given_tokens = _name_tokens(first_name)
-    surname_hit = next((t for t in surname_tokens if t in text), None)
-    given_hit = next((t for t in given_tokens if t in text), None)
+    surname = normalize_text(last_name).split()
+    # A lone initial ("Juan M.") proves nothing about who is named.
+    given = [name for name in normalize_text(first_name).split() if len(name) > 1]
 
-    if not surname_tokens and not given_tokens:
-        names_student = None  # nothing to check against yet
+    if not surname and not given:
+        names_student, name_match, matched_name = None, None, None  # nothing to check against yet
     else:
-        names_student = bool(surname_hit or given_hit)
+        surname_ok = _surname_found(surname, words) if surname else None
+        given_ok = _given_names_found(given, words) if given else None
+        names_student = surname_ok is not False and given_ok is not False
+        if names_student:
+            name_match = NAME_MATCH
+        elif surname_ok:
+            name_match = NAME_SURNAME_ONLY
+        elif given_ok:
+            name_match = NAME_GIVEN_ONLY
+        else:
+            name_match = NAME_NONE
+        found = (given if given_ok else []) + (surname if surname_ok else [])
+        matched_name = " ".join(found) or None
 
     notes: list[str] = []
     if has_known_markers and not markers:
         notes.append("This does not look like the document type it was filed under.")
     if names_student is False:
-        notes.append("The student's name was not found on this document.")
+        notes.append(_NAME_NOTES[name_match])
     if not parsed.blocks:
         notes.append("No readable text was found — the photo may be too blurred or dark.")
 
@@ -110,7 +159,8 @@ def verify_document(parsed: ParsedDocument, requirement_code: str,
         "document_type_seen": markers[0] if markers else None,
         "is_expected_document": is_expected,
         "names_student": names_student,
-        "matched_name": surname_hit or given_hit,
+        "name_match": name_match,
+        "matched_name": matched_name,
         "notes": notes,
         "mean_confidence": round(parsed.mean_confidence, 3),
     }

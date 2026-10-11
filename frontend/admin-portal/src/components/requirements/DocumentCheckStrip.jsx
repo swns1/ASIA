@@ -50,7 +50,11 @@ export default function DocumentCheckStrip({ state, check, requirementName, stud
     problems.push(`This does not look like a ${requirementName}.`);
   }
   if (check?.names_student === false) {
-    problems.push(`This document does not name ${studentName || "this student"}.`);
+    // A surname alone is what a sibling's document looks like -- the mix-up
+    // most likely when a family enrolls several children at once.
+    problems.push(check.name_match === "surname_only"
+      ? `Only the surname matches ${studentName || "this student"} — this may be a sibling's or relative's document.`
+      : `This document does not name ${studentName || "this student"}.`);
   }
   (check?.notes || []).forEach((n) => {
     if (n.startsWith("No readable text")) problems.push(n);

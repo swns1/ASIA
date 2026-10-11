@@ -372,6 +372,14 @@ DEFAULT_FROM_EMAIL  = env(
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
+# Model ids are settings, not code: providers retire models, and a retired id
+# fails with a 404 that the fallback chain swallows. llama-3.3-70b-versatile
+# went that way and took the Groq fallback with it, unnoticed, because every
+# test mocks the provider. `python manage.py check_ai_providers` confirms the
+# configured ids are still served by these keys.
+GEMINI_TEXT_MODEL = os.environ.get("GEMINI_TEXT_MODEL", "gemini-2.5-flash-lite")
+GROQ_TEXT_MODEL   = os.environ.get("GROQ_TEXT_MODEL", "openai/gpt-oss-120b")
+
 # See shared/logging_config.py. Console + a rotating file under logs/,
 # structured as JSON outside local dev, every record tagged with the request
 # ID shared.request_id.RequestIDMiddleware assigns.

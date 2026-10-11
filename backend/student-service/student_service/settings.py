@@ -39,6 +39,11 @@ def _env_int(name: str, default: int) -> int:
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Vision models for the OCR fallback (students/ocr/groq_vision.py). Settings
+# rather than constants so a provider retiring a model is an env change:
+# qwen/qwen3.6-27b was retired and answered 404 until this was moved.
+GROQ_VISION_MODEL = os.environ.get("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+GEMINI_VISION_MODEL = os.environ.get("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

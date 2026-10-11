@@ -34,8 +34,10 @@ ENGINE_GEMINI = "gemini"
 ENGINE_NAME = ENGINE_GROQ
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "qwen/qwen3.6-27b"
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+# From settings, so a provider retiring a model is an env change, not a code
+# change (qwen/qwen3.6-27b was retired and answered 404 until this moved).
+GROQ_MODEL = settings.GROQ_VISION_MODEL
+GEMINI_MODEL = settings.GEMINI_VISION_MODEL
 
 MAX_ATTEMPTS = 3
 REQUEST_TIMEOUT = 45

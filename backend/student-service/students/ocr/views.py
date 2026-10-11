@@ -236,6 +236,7 @@ class OCRScanView(APIView):
                 # is "no claim", which the UI must not render as a failure.
                 "is_expected_document": None,
                 "names_student": None,
+                "name_match": None,
                 "matched_name": None,
                 "notes": ["This document could not be read, so it was not checked."],
                 "mean_confidence": 0.0,

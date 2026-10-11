@@ -353,26 +353,29 @@ function PerformanceGroups({ result }) {
 }
 
 function ClusterInsightPanel({ result }) {
-  const onFetch = () => {
-    const details = result.clusters
-      .map((c) => {
-        const att = c.avg_attendance != null ? `, attendance=${(c.avg_attendance * 100).toFixed(0)}%` : "";
-        const narr = c.avg_narrative != null ? `, behavior=${c.avg_narrative}/3` : "";
-        return `${c.label}: ${c.student_count} student(s), avg grade=${c.avg_grade}, range=[${c.min_grade}–${c.max_grade}]${att}${narr}`;
-      })
-      .join("\n");
-
-    return callGemini("clustering_insights", {
+  // Each group's figures go as data, not as a sentence: the server labels
+  // every average with its DepEd descriptor before the AI sees it, because
+  // the AI, left to place averages on the scale itself, called a group
+  // averaging 73.8 "Fairly Satisfactory".
+  const onFetch = () =>
+    callGemini("clustering_insights", {
       school_year: result.meta.school_year,
       grading_period: result.meta.grading_period,
       grade_level: result.meta.grade_level || "All Grade Levels",
       subject: result.meta.subject,
       total_students: result.meta.total_students,
       n_clusters: result.meta.n_clusters,
-      cluster_details: details,
+      clusters: result.clusters.map((c) => ({
+        label: c.label,
+        student_count: c.student_count,
+        avg_grade: c.avg_grade,
+        min_grade: c.min_grade,
+        max_grade: c.max_grade,
+        avg_attendance: c.avg_attendance,
+        avg_narrative: c.avg_narrative,
+      })),
       include_recommendations: true,
     });
-  };
 
   return (
     // Deliberately NOT autoFetch. With no AI provider configured the interpret
