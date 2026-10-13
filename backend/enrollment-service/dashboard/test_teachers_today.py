@@ -161,6 +161,23 @@ class TestShapeTeachersToday:
         assert out["attendance"]["sections_taken"] == 1
         assert out["attendance"]["sections_total"] == 3
 
+    def test_a_part_marked_section_isnt_taken_yet(self):
+        # One of Rizal's two learners marked: the teacher's own home still
+        # lists it as not done, so the admin's tile mustn't go green.
+        out = _shape(attendance_rows=[{"key": G3_RIZAL, "status": "P", "n": 1}])
+        rizal = next(s for s in out["sections"] if s["section"] == "Rizal")
+        assert rizal["attendance_taken"] is False
+        assert rizal["attendance_marked"] == 1
+        assert out["attendance"]["sections_taken"] == 0
+        # Its marks still count toward today's rate, and say where it's from.
+        assert out["attendance"]["present"] == 1
+        assert out["attendance"]["sections_marked"] == 1
+
+    def test_excused_marks_count_toward_taken(self):
+        out = _shape(attendance_rows=[{"key": G3_MABINI, "status": "E", "n": 1}])
+        mabini = next(s for s in out["sections"] if s["section"] == "Mabini")
+        assert mabini["attendance_taken"] is True
+
     def test_rate_counts_late_as_attended(self):
         out = _shape(attendance_rows=[
             {"key": G3_RIZAL, "status": "P", "n": 6},
@@ -223,23 +240,25 @@ class TestShapeTeachersToday:
         assert by["STEM"] == ["Ana Lim", "Ben Cruz"]
 
     def test_a_deactivated_adviser_leaves_their_section_without_one(self):
+        # Which advisers are active is with_active_teacher's one rule
+        # (enrollments/test_active_advisers.py); here, that the card goes
+        # through it and names the advisers it keeps.
         rows = [
             {"teacher_user_id": 7, "school_level": "elementary", "grade_level": "Grade 3",
              "section": "Rizal", "strand": None},
-            {"teacher_user_id": 9, "school_level": "elementary", "grade_level": "Grade 3",
-             "section": "Mabini", "strand": None},
             {"teacher_user_id": 12, "school_level": "elementary", "grade_level": "Grade 4",
              "section": "Luna", "strand": None},
         ]
-        with patch("dashboard.views.SectionAdvisory.objects") as advisories, \
+        with patch("dashboard.views.with_active_teacher") as active, \
+             patch("dashboard.views.SectionAdvisory.objects") as advisories, \
              patch("dashboard.views.User.objects") as users:
-            advisories.filter.return_value.values.return_value = rows
-            # 9 has been deactivated; 12's account is gone altogether.
-            users.filter.return_value.values_list.return_value = [
-                (7, "Ana Lim", True), (9, "Ben Reyes", False),
-            ]
+            active.return_value.values.return_value = rows
+            # 12's name can't be found: still an adviser, just unnamed.
+            users.filter.return_value.values_list.return_value = [(7, "Ana Lim")]
             advisers = TeachersTodayView._advisers("2026-2027")
 
+        active.assert_called_once_with(advisories.filter.return_value)
+        advisories.filter.assert_called_once_with(school_year="2026-2027")
         assert advisers == {
             section_key("elementary", "Grade 3", "Rizal", None): ["Ana Lim"],
             section_key("elementary", "Grade 4", "Luna", None): ["Unknown teacher"],

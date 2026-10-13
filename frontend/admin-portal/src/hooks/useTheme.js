@@ -1,36 +1,43 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import useCurrentUser from "./useCurrentUser";
-import { hasAnyRole, STAFF_ADMIN } from "../utils/auth";
+import { CURRENT_USER_EVENT, getCurrentUser, hasAnyRole, STAFF_ALL } from "../utils/auth";
 import { isDarkReady } from "../constants/darkReady";
 
 // useTheme — light or dark.
 //
-// Dark mode is a development tool for now, not something staff can find. An
-// admin picks Light, Dark or "Same as my computer" in Billing Settings ›
-// Developer, a tab only a development build has, for super admins and admins.
-// The choice is kept in this browser, and it only takes effect while a super
-// admin or admin is signed in: anyone else, and every production build, gets
-// light.
+// Every staff member picks Light, Dark or Auto (the same as their computer)
+// on their own My Settings page (pages/MySettingsPage), linked from the foot
+// of the sidebar; a guardian does the same on the portal's My settings
+// (pages/GuardianSettingsPage), from the account button in its top bar. The
+// choice is kept in this browser under their own account, so people who
+// share a computer each keep theirs. Anyone signed out gets light.
 //
 // The theme isn't set on the whole document. AppLayout sets `data-theme` on
 // the sidebar, and on the page area only for pages already converted
 // (constants/darkReady.js), so an unconverted page stays fully light rather
-// than half dark. ThemeArea does the same for the full-page forms, which
-// have no AppLayout. ThemeContext tells a component which theme it sits in.
+// than half dark. ThemeArea does the same for the full-page forms and the
+// guardian portal, which have no AppLayout. ThemeContext tells a component
+// which theme it sits in.
 
-const KEY = "asia.dev.theme";
-// The status band's own switch, which this replaced.
-const OLD_BAND_KEY = "asia.dev.statusBandTone";
+const KEY = "asia.theme";
+// The switches this replaced: the admin-only developer switch, and the status
+// band's own before it. Cleared on the next save.
+const OLD_KEYS = ["asia.dev.theme", "asia.dev.statusBandTone"];
 // Same-tab updates; the `storage` event covers other tabs.
 const EVENT = "asia:theme";
 const PREFERENCES = ["light", "dark", "system"];
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
+// One choice per person: the key carries the signed-in user's id.
+function storageKey() {
+  const id = getCurrentUser()?.id;
+  return id == null ? KEY : `${KEY}.${id}`;
+}
+
 function readPreference() {
-  if (!import.meta.env.DEV) return "light";
   try {
-    const stored = localStorage.getItem(KEY);
+    const stored = localStorage.getItem(storageKey());
     return PREFERENCES.includes(stored) ? stored : "light";
   } catch {
     // Storage blocked (private window, cleared site data): the default.
@@ -38,28 +45,29 @@ function readPreference() {
   }
 }
 
+// Re-read on a save (this tab or another) and when someone else signs in,
+// since their own choice then applies.
+const PREFERENCE_EVENTS = [EVENT, "storage", CURRENT_USER_EVENT];
+
 function subscribePreference(onChange) {
-  window.addEventListener(EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
+  PREFERENCE_EVENTS.forEach((name) => window.addEventListener(name, onChange));
+  return () => PREFERENCE_EVENTS.forEach((name) => window.removeEventListener(name, onChange));
 }
 
-/** Saves the developer switch: "light", "dark" or "system". */
+/** Saves the signed-in person's choice: "light", "dark" or "system". */
 export function setThemePreference(preference) {
   try {
-    if (preference === "dark" || preference === "system") localStorage.setItem(KEY, preference);
-    else localStorage.removeItem(KEY);
-    localStorage.removeItem(OLD_BAND_KEY);
+    const key = storageKey();
+    if (preference === "dark" || preference === "system") localStorage.setItem(key, preference);
+    else localStorage.removeItem(key);
+    OLD_KEYS.forEach((old) => localStorage.removeItem(old));
   } catch {
     // Nowhere to keep it; the app stays light.
   }
   window.dispatchEvent(new Event(EVENT));
 }
 
-/** The developer switch as set: "light", "dark" or "system". */
+/** The signed-in person's choice: "light", "dark" or "system". */
 export function useThemePreference() {
   return useSyncExternalStore(subscribePreference, readPreference, () => "light");
 }
@@ -78,12 +86,16 @@ function subscribeSystem(onChange) {
 
 const systemPrefersDark = () => Boolean(mediaQuery()?.matches);
 
-/** The theme the signed-in user gets: dark only for an admin who chose it. */
+// Everyone who has a settings page to choose on.
+const THEME_ROLES = [...STAFF_ALL, "guardian"];
+
+/** The theme the signed-in user gets: their choice; light for anyone
+ *  signed out. */
 export function useAppTheme() {
   const preference = useThemePreference();
   const systemDark = useSyncExternalStore(subscribeSystem, systemPrefersDark, () => false);
   const user = useCurrentUser();
-  if (!hasAnyRole(user, STAFF_ADMIN)) return "light";
+  if (!hasAnyRole(user, THEME_ROLES)) return "light";
   return preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
 }
 

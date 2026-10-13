@@ -12,6 +12,8 @@ against a real database.
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from rest_framework.test import APIRequestFactory
 
 from accounts.permissions import (
@@ -161,6 +163,24 @@ class TestTeacherStudentIds:
         assert result == {1}
         mock_qs.filter.assert_called_once_with(strand="STEM")
 
+
+    @patch("enrollments.models.Enrollment")
+    @patch("enrollments.models.SectionAdvisory")
+    def test_a_school_year_reads_only_that_years_advisories(self, mock_advisory, mock_enrollment):
+        # A past year's home used to count this year's learners' old rows,
+        # many of them in colleagues' sections.
+        mock_advisory.objects.filter.return_value.filter.return_value = []
+        assert teacher_student_ids(_user("teacher", user_id=7), " 2025-2026 ") == set()
+        mock_advisory.objects.filter.assert_called_once_with(teacher_user_id=7)
+        mock_advisory.objects.filter.return_value.filter.assert_called_once_with(school_year="2025-2026")
+
+    @pytest.mark.parametrize("year", [None, "", "all"])
+    @patch("enrollments.models.Enrollment")
+    @patch("enrollments.models.SectionAdvisory")
+    def test_no_school_year_narrows_nothing(self, mock_advisory, mock_enrollment, year):
+        mock_advisory.objects.filter.return_value = MagicMock(__iter__=lambda self: iter([]))
+        teacher_student_ids(_user("teacher", user_id=7), year)
+        mock_advisory.objects.filter.return_value.filter.assert_not_called()
 
 class TestIsAdvisoryTeacherOrStaff:
     perm = IsAdvisoryTeacherOrStaff()

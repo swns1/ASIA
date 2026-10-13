@@ -18,6 +18,11 @@ const getFinancialSummary = vi.fn();
 const getStudentApplications = vi.fn();
 const compareSchoolYears = vi.fn();
 const getStudents = vi.fn();
+// The registrar-side queues every academic home now counts (attention.js):
+// nothing in them unless a test says so.
+const getDocumentStatus = vi.fn();
+const getSections = vi.fn();
+const getUnplacedStudents = vi.fn();
 let yearStates;
 
 vi.mock("../../utils/auth", async (importOriginal) => ({
@@ -33,10 +38,16 @@ vi.mock("../../api/enrollmentApi", () => ({
   getDashboardSummary: (...a) => getDashboardSummary(...a),
   getTeachersToday: (...a) => getTeachersToday(...a),
   compareSchoolYears: (...a) => compareSchoolYears(...a),
+  getDocumentStatus: (...a) => getDocumentStatus(...a),
+  getSections: (...a) => getSections(...a),
+  getUnplacedStudents: (...a) => getUnplacedStudents(...a),
+  getCalendarEvents: () => Promise.resolve({ results: [] }),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: (...a) => getInvoices(...a),
   getFinancialSummary: (...a) => getFinancialSummary(...a),
+  // Last year's balances (attention.js): none unless a test says so.
+  getInvoiceSummary: () => Promise.resolve({ unpaid: 0, partially_paid: 0, paid: 0, void: 0, total: 0 }),
 }));
 vi.mock("../../api/applicationApi", () => ({
   getStudentApplications: (...a) => getStudentApplications(...a),
@@ -50,8 +61,9 @@ vi.mock("../../context/SchoolYearContext", () => ({
 
 const { default: DashboardPage } = await import("../DashboardPage");
 const {
-  dueLine, attentionRows, withYear, yearChange, levelRows, sectionShortName, sectionsByLevel, collectionPace, monthSpans,
+  dueLine, gradesDue, withYear, yearChange, levelRows, sectionShortName, sectionsByLevel, collectionPace, monthSpans,
 } = await import("./adminHomeData");
+const { attentionRows } = await import("./attention");
 
 // What /school-years/compare/ and /invoices/financial-summary/ answer, per
 // year. 2026-2027 is the seed data's: 24 learners against 23 the year before.
@@ -111,7 +123,7 @@ function teachersToday(overrides = {}) {
       semester: "1st_semester", semester_label: "1st Semester", semester_due_date: "2099-10-23",
       source: "calendar",
     },
-    attendance: { sections_taken: 1, sections_total: 3, present: 29, late: 1, absent: 1, excused: 0, rate: 0.9677 },
+    attendance: { sections_taken: 1, sections_marked: 1, sections_total: 3, present: 29, late: 1, absent: 1, excused: 0, rate: 0.9677 },
     grades: { sections_complete: 2, sections_total: 3 },
     sections: SECTIONS,
     ...overrides,
@@ -157,37 +169,58 @@ beforeEach(() => {
   getEnrollments.mockResolvedValue({ count: 12, results: [] });
   getInvoices.mockImplementation((params) =>
     Promise.resolve({ count: params.overdue ? 6 : 18, results: [] }));
+  getDocumentStatus.mockResolvedValue({ count: 0, results: [], summary: null });
+  getSections.mockResolvedValue({ count: 0, results: [] });
+  getUnplacedStudents.mockResolvedValue({ count: 0, results: [] });
 });
 
 describe("DashboardPage — who gets which home", () => {
   it.each(["admin", "super_admin"])("sends %s to the admin home", async (role) => {
     renderAs(role);
     expect(await screen.findByRole("heading", { name: /Teresa$/ })).toBeTruthy();
-    expect(screen.queryByText("Recent Enrollments")).toBeNull();
+    expect(screen.queryByText("Recent enrollments")).toBeNull();
   });
 
-  it("keeps the shared dashboard for registrars", async () => {
-    renderAs("registrar");
-    expect(await screen.findByText("Recent Enrollments")).toBeTruthy();
+  it("sends registrars to their own home", async () => {
+    renderAs("registrar", "Lorna Villareal");
+    expect(await screen.findByRole("heading", { name: /Lorna$/ })).toBeTruthy();
+    expect(screen.getByText("Needs your attention")).toBeTruthy();
     expect(getTeachersToday).not.toHaveBeenCalled();
   });
 });
 
+// Needs your attention lives in the header's bell now (2026-10-12), as on the
+// staff dashboard. The bell only fills once the counts are in.
+async function openBell(waitFor = /^Notifications, 4 need your attention/) {
+  fireEvent.click(await screen.findByRole("button", { name: waitFor }));
+}
+
 describe("AdminHome — needs your attention", () => {
-  it("lists each queue with its count", async () => {
+  it("lists each queue with its count in the bell", async () => {
     renderAs("admin");
-    expect(await screen.findByText("4 things are waiting on you")).toBeTruthy();
-    expect(screen.getByText("12 enrollments waiting for your approval")).toBeTruthy();
-    expect(screen.getByText("5 new applications to look over")).toBeTruthy();
-    expect(screen.getByText("18 invoices with no payment yet")).toBeTruthy();
-    expect(screen.getByText("6 invoices with a payment past due")).toBeTruthy();
+    await openBell();
+    expect(screen.getByText("4 need your attention")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /12 enrollments waiting for your approval/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /5 new applications to look over/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /18 invoices with no payment yet/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /6 invoices with a payment past due/ })).toBeTruthy();
   });
 
   it("counts and links on the same school year", async () => {
     renderAs("admin");
-    fireEvent.click(await screen.findByRole("button", { name: /View: 6 invoices with a payment past due/ }));
+    await openBell();
+    fireEvent.click(screen.getByRole("link", { name: /6 invoices with a payment past due/ }));
     expect(screen.getByTestId("location").textContent).toBe("/invoices?overdue=1&school_year=2026-2027");
     expect(getInvoices).toHaveBeenCalledWith(expect.objectContaining({ overdue: "true", school_year: "2026-2027" }));
+  });
+
+  it("keeps each queue's colour, applications in blue", async () => {
+    renderAs("admin");
+    await openBell();
+    const tile = (name) => screen.getByRole("link", { name }).querySelector("span");
+    expect(tile(/new applications/).className).toContain("bg-info-50");
+    expect(tile(/waiting for your approval/).className).toContain("bg-warning-50");
+    expect(tile(/no payment yet/).className).toContain("bg-error-50");
   });
 
   it("leaves out empty queues, and says so when all are empty", async () => {
@@ -195,7 +228,10 @@ describe("AdminHome — needs your attention", () => {
     getStudentApplications.mockResolvedValue({ count: 0, results: [] });
     getInvoices.mockResolvedValue({ count: 0, results: [] });
     renderAs("admin");
-    expect(await screen.findByText("Nothing is waiting on you")).toBeTruthy();
+    // The pipeline's caption arrives with the counts, so the bell has settled.
+    await screen.findByText(/854 enrollments in the pipeline/);
+    await openBell("Notifications, nothing new");
+    expect(screen.getByText("You're all caught up")).toBeTruthy();
     expect(screen.queryByText(/waiting for your approval/)).toBeNull();
   });
 
@@ -203,8 +239,16 @@ describe("AdminHome — needs your attention", () => {
     getStudentApplications.mockRejectedValue(new Error("down"));
     renderAs("admin");
     expect(await screen.findByText("Some of this page didn't load")).toBeTruthy();
-    // The rest of the page still renders.
-    expect(screen.getByText("12 enrollments waiting for your approval")).toBeTruthy();
+    // The rest still arrives, and the bell says one count is missing.
+    await openBell(/^Notifications, 3 need your attention, some couldn't be checked$/);
+    expect(screen.getByRole("link", { name: /12 enrollments waiting for your approval/ })).toBeTruthy();
+    expect(screen.getByText("Some notifications couldn't be checked")).toBeTruthy();
+  });
+
+  it("no longer draws the attention panel on the page", async () => {
+    renderAs("admin");
+    await openBell();
+    expect(screen.queryByText("Needs your attention")).toBeNull();
   });
 });
 
@@ -232,6 +276,20 @@ describe("AdminHome — teachers today", () => {
     expect(screen.queryByText("Ana Lim")).toBeNull();
     expect(screen.queryByText("60 of 240 grades in")).toBeNull();
     expect(screen.queryByText(/Add each quarter's dates/)).toBeNull();
+  });
+
+  it("keeps a part-marked section amber, and says how far it got", async () => {
+    getTeachersToday.mockResolvedValue(teachersToday({
+      sections: [{ ...SECTIONS[0], attendance_marked: 12 }, SECTIONS[1], SECTIONS[2]],
+      attendance: { ...teachersToday().attendance, sections_marked: 2 },
+    }));
+    renderAs("admin");
+    const card = within(await screen.findByRole("button", { name: "Teachers today: open details" }));
+    expect(card.getByTitle("Grade 3 · Rizal · attendance 12 of 30 marked")).toBeTruthy();
+    // Present today's rate counts the part-marked section's marks, and says so.
+    expect(screen.getByText("From 2 of 3 sections")).toBeTruthy();
+    await openDetails();
+    expect(within(screen.getByRole("dialog")).getByText("12 of 30 marked")).toBeTruthy();
   });
 
   it("shows the due date when the calendar has quarter dates", async () => {
@@ -430,11 +488,6 @@ describe("AdminHome — school at a glance", () => {
     expect(screen.queryByRole("button", { name: "Filter by school year" })).toBeNull();
   });
 
-  it("keeps the Billing panel's year filter on the staff dashboard", async () => {
-    renderAs("accounting");
-    expect(await screen.findByRole("button", { name: "Filter by school year" })).toBeTruthy();
-  });
-
   it("hides amounts in both money panels with one eye button", async () => {
     renderAs("admin");
     await screen.findByRole("button", { name: "₱540,666.40" });
@@ -443,13 +496,23 @@ describe("AdminHome — school at a glance", () => {
     expect(screen.getByRole("button", { name: "Show financial amounts" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("opens unpaid invoices on the page's year", async () => {
+  it("opens the invoices still owing money on the page's year", async () => {
     renderAs("admin");
     await screen.findByRole("button", { name: "₱540,666.40" });
     await pickYearFrom("2027-2028");
     await screen.findByText("Collection pace · S.Y. 2027-2028 vs 2026-2027");
     fireEvent.click(await screen.findByRole("button", { name: "₱84,300.00" }));
-    expect(screen.getByTestId("location").textContent).toBe("/invoices?status=unpaid&school_year=2027-2028");
+    // Partly paid ones too: a status would hold only part of the figure.
+    expect(screen.getByTestId("location").textContent).toBe("/invoices?money=balance&school_year=2027-2028");
+  });
+
+  it("opens Analytics on the page's year", async () => {
+    renderAs("admin");
+    await screen.findByRole("button", { name: "₱540,666.40" });
+    await pickYearFrom("2027-2028");
+    await screen.findByText("Collection pace · S.Y. 2027-2028 vs 2026-2027");
+    fireEvent.click(screen.getByRole("button", { name: "Analytics" }));
+    expect(screen.getByTestId("location").textContent).toBe("/analytics?school_year=2027-2028");
   });
 
   it("opens Compare School Years on the same two years", async () => {
@@ -621,6 +684,32 @@ describe("dueLine", () => {
   });
 });
 
+describe("gradesDue", () => {
+  const now = new Date(2026, 8, 25, 9, 0);
+  const period = {
+    label: "1st Quarter", due_date: "2026-08-21",
+    semester_label: "1st Semester", semester_due_date: "2026-10-23", source: "calendar",
+  };
+  const elem = { school_level: "elementary", grades: {} };
+  const shs = { school_level: "senior_highschool", grades: {} };
+
+  it("gives Senior High its semester's due date, not the quarter's", () => {
+    const [due] = gradesDue(period, [shs], now);
+    expect(due).toMatchObject({ late: false, label: null });
+    expect(due.text).toMatch(/28 days left$/);
+  });
+
+  it("labels both lines when the school has both", () => {
+    const dues = gradesDue(period, [elem, shs], now);
+    expect(dues.map((d) => [d.label, d.late])).toEqual([["1st Quarter", true], ["Senior High 1st Semester", false]]);
+  });
+
+  it("leaves out sections with no subjects, and periods not from the calendar", () => {
+    expect(gradesDue(period, [{ ...shs, grades: null }, elem], now).map((d) => d.label)).toEqual([null]);
+    expect(gradesDue({ ...period, source: "grades" }, [elem], now)).toEqual([]);
+  });
+});
+
 describe("attentionRows", () => {
   it("drops queues whose count is zero or missing", () => {
     const rows = attentionRows({ pending: 2, applications: 0, unpaid: undefined, overdue: 1 }, "2026-2027");
@@ -645,7 +734,7 @@ describe("AdminHome — school year", () => {
 
   it("moves the counts and their links to the picked year", async () => {
     renderAs("admin");
-    await screen.findByText("4 things are waiting on you");
+    await screen.findByRole("button", { name: /^Notifications, 4 need your attention/ });
     await pickYear("2027-2028");
     await screen.findByRole("button", { name: /Back to 2026-2027/ });
 
@@ -654,14 +743,15 @@ describe("AdminHome — school year", () => {
     expect(getDashboardSummary).toHaveBeenLastCalledWith({ school_year: "2027-2028" });
     expect(getFinancialSummary).toHaveBeenLastCalledWith("2027-2028");
 
-    fireEvent.click(await screen.findByRole("button", { name: /Review: 12 enrollments waiting/ }));
+    await openBell();
+    fireEvent.click(screen.getByRole("link", { name: /12 enrollments waiting/ }));
     expect(screen.getByTestId("location").textContent)
       .toBe("/enrollments?enrollment_status=pending&school_year=2027-2028");
   });
 
   it("keeps Teachers today on the current year, and says so", async () => {
     renderAs("admin");
-    await screen.findByText("4 things are waiting on you");
+    await screen.findByRole("button", { name: /^Notifications, 4 need your attention/ });
     await pickYear("2027-2028");
     await screen.findByRole("button", { name: /Back to 2026-2027/ });
     expect(getTeachersToday).toHaveBeenLastCalledWith({ school_year: "2026-2027" });
@@ -671,7 +761,7 @@ describe("AdminHome — school year", () => {
 
   it("goes back to the current year", async () => {
     renderAs("admin");
-    await screen.findByText("4 things are waiting on you");
+    await screen.findByRole("button", { name: /^Notifications, 4 need your attention/ });
     await pickYear("2027-2028");
     fireEvent.click(await screen.findByRole("button", { name: /Back to 2026-2027/ }));
     expect(await screen.findByRole("button", { name: /^School year: 2026-2027/ })).toBeTruthy();

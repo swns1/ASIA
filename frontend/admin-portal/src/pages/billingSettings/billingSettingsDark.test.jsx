@@ -3,11 +3,11 @@
  * year's progress, the discount rates with an unsaved rate and a failed save),
  * the Fee Schedules tab (the list, a chosen schedule with its totals and item
  * rows, editing a row, the add form's error, deleting a row), the New Schedule
- * and Copy from an earlier year windows, an archived year, and the Developer
- * tab. Dark-only branches are otherwise never run by the suite.
+ * and Copy from an earlier year windows, and an archived year. Dark-only
+ * branches are otherwise never run by the suite.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeContext } from "../../hooks/useTheme";
 
@@ -145,11 +145,9 @@ describe("Billing Settings in dark mode", () => {
     expect(screen.getByText("Select a fee schedule")).toBeTruthy();
   });
 
-  it("shows the Developer tab's appearance switch", async () => {
+  it("has no Developer tab: the theme is on each person's My Settings", async () => {
     renderDark();
-    fireEvent.click(screen.getByRole("tab", { name: /developer/i }));
-    await waitFor(() => expect(screen.getByText("Appearance")).toBeTruthy());
-    // Listed among the ready pages, wherever it falls in the list.
-    expect(screen.getByText(/Billing Settings[^)]* so far/)).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: /general/i })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /developer/i })).toBeNull();
   });
 });

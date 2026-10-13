@@ -450,6 +450,158 @@ describe("GuardianHomePage — next school year", () => {
   });
 });
 
+// A cancelled (void) invoice owes nothing. Its installments used to stay
+// pending, and this page read them: the summary said Overdue on every one of
+// the child's pages, and Billing listed each month as owed.
+describe("GuardianChildPage — cancelled invoices", () => {
+  const VOID_AND_REISSUED = {
+    total_billed: "27850.00", total_paid: "27850.00", total_balance: "0.00",
+    school_years: [{
+      school_year: "2025-2026", grade_level: "Kindergarten", enrollment_id: 200,
+      year_billed: "27850.00", year_paid: "27850.00", year_balance: "0.00",
+      invoices: [
+        {
+          invoice_id: 320, invoice_no: "INV-2025-000320", status: "paid", payment_plan: "quarterly",
+          items: [], discounts: [], payments: [], net_amount: "27850.00", total_paid: "27850.00",
+          installments: [{ installment_id: 9, sequence: 1, status: "paid", balance: "0.00", amount: "27850.00", due_date: "2025-06-30" }],
+        },
+        {
+          // Written before services.void_invoice: still pending, and past due.
+          invoice_id: 319, invoice_no: "INV-2025-000319", status: "void", payment_plan: "monthly",
+          items: [], discounts: [], payments: [], net_amount: "27850.00", total_paid: "0.00",
+          installments: [{ installment_id: 8, sequence: 2, status: "pending", balance: "2785.00", amount: "2785.00", due_date: "2025-07-31" }],
+        },
+      ],
+    }],
+  };
+
+  it("does not count a cancelled invoice as due", async () => {
+    getStudentLedger.mockResolvedValue(VOID_AND_REISSUED);
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+
+    expect(await screen.findByText("Nothing due")).toBeTruthy();
+    expect(screen.queryByText("Overdue")).toBeNull();
+    expect(screen.queryByText("₱2,785.00")).toBeNull();
+  });
+
+  it("lists it as cancelled, with no schedule", async () => {
+    getStudentLedger.mockResolvedValue(VOID_AND_REISSUED);
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+    openTab("Billing");
+
+    expect(await screen.findByText("Cancelled")).toBeTruthy();
+    expect(screen.getByText(/Nothing is owed on it/)).toBeTruthy();
+    expect(screen.queryByText("Overdue")).toBeNull();
+    expect(screen.queryByText("Jul 31, 2025")).toBeNull();
+  });
+});
+
+describe("GuardianChildPage — what the bill is for", () => {
+  const LEDGER_IN_FULL = {
+    total_billed: "19745.00", total_paid: "1974.50", total_balance: "17770.50",
+    school_years: [{
+      school_year: "2025-2026", grade_level: "Kindergarten", enrollment_id: 200,
+      year_billed: "19745.00", year_paid: "1974.50", year_balance: "17770.50",
+      invoices: [{
+        invoice_id: 500, invoice_no: "INV-2026-000500", status: "partially_paid", payment_plan: "monthly",
+        invoice_date: "2026-05-18", net_amount: "19745.00", total_paid: "1974.50",
+        items: [
+          { invoice_item_id: 1, description: "[Tuition] Tuition Fee", amount: "18000.00" },
+          { invoice_item_id: 2, description: "[Miscellaneous] Books & Materials", amount: "1500.00" },
+        ],
+        discounts: [{ invoice_discount_id: 1, description: "Scholarship discount (1 item)", amount: "900.00" }],
+        payments: [{ payment_id: 1, payment_date: "2026-05-18", amount_paid: "1974.50", payment_method: "gcash", reference_number: "GC-6140373849" }],
+        installments: [
+          { installment_id: 1, sequence: 1, status: "paid", balance: "0.00", amount: "1974.50", amount_paid: "1974.50", due_date: "2999-06-30" },
+          { installment_id: 2, sequence: 2, status: "pending", balance: "1974.50", amount: "1974.50", amount_paid: "0", due_date: "2999-07-31" },
+          { installment_id: 3, sequence: 3, status: "pending", balance: "1974.50", amount: "1974.50", amount_paid: "0", due_date: "2999-08-31" },
+        ],
+      }],
+    }],
+  };
+
+  beforeEach(() => getStudentLedger.mockResolvedValue(LEDGER_IN_FULL));
+
+  it("shows the fees, what was taken off, and the payments received", async () => {
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+    openTab("Billing");
+
+    expect(await screen.findByText("Tuition Fee")).toBeTruthy();
+    expect(screen.getByText("Books & Materials")).toBeTruthy();
+    expect(screen.getByText("Scholarship discount (1 item)")).toBeTruthy();
+    expect(screen.getByText("−₱900.00")).toBeTruthy();
+    expect(screen.getByText("GCash · GC-6140373849")).toBeTruthy();
+    expect(screen.getByText("Monthly plan · Issued May 18, 2026")).toBeTruthy();
+  });
+
+  it("folds the paid installments away and marks the next one due", async () => {
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+    openTab("Billing");
+
+    expect(await screen.findByText("Due next")).toBeTruthy();
+    expect(screen.getByText("Upcoming")).toBeTruthy();
+    expect(screen.queryByText("Jun 30, 2999")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 paid installment" }));
+    expect(screen.getByText("Jun 30, 2999")).toBeTruthy();
+  });
+});
+
+describe("GuardianChildPage — the child's school years", () => {
+  const enrollment = (id, year, grade, status) => ({
+    enrollment_id: id, student_id: 100, school_year: year, grade_level: grade, enrollment_status: status,
+  });
+
+  it("asks for this child's enrollments only", async () => {
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+    await waitFor(() => expect(getEnrollments).toHaveBeenCalledWith({ student: 100, page_size: 50 }));
+  });
+
+  it("offers the child's other years and opens the one picked", async () => {
+    getEnrollments.mockResolvedValue({
+      results: [
+        enrollment(200, "2025-2026", "Kindergarten", "completed"),
+        enrollment(300, "2026-2027", "Grade 1", "enrolled"),
+      ],
+    });
+    render(
+      <MemoryRouter initialEntries={["/guardian/child/200"]}>
+        <Routes>
+          <Route path="/guardian/child/:enrollmentId" element={<GuardianChildPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("Maria Santos Reyes");
+
+    fireEvent.click(await screen.findByRole("button", { name: /School year/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /S\.Y\. 2026-2027/ }));
+
+    await waitFor(() => expect(getReportCard).toHaveBeenLastCalledWith("300"));
+  });
+
+  it("shows the year as plain text when the child has only one", async () => {
+    getEnrollments.mockResolvedValue({ results: [enrollment(200, "2025-2026", "Kindergarten", "completed")] });
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+
+    expect(await screen.findByText("SY 2025-2026")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /School year/ })).toBeNull();
+  });
+
+  it("names a level once when it is also the grade", async () => {
+    renderChildPage();
+    expect(await screen.findByText("Kindergarten · Sunflower")).toBeTruthy();
+  });
+});
+
 describe("GuardianChildPage — switching children", () => {
   it("never shows one child's records under another's", async () => {
     // Maria's report card is slow; the parent moves on to Jose before it

@@ -17,6 +17,7 @@ import Modal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
 import { StatusBadge, StatusDot } from "../components/ui/Badge";
 import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP, fallbackStatus } from "../constants/statusMaps";
+import { isGrade12Finisher } from "./enrollment/unplaced";
 import { CHIP_GLOW, STATUS_TEXT } from "../constants/statusTones";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
 
@@ -134,7 +135,7 @@ const inp = {
   background:"var(--color-neutral-100)", outline:"none", width:"100%", boxSizing:"border-box",
 };
 const sel = { ...inp, cursor:"pointer" };
-const lbl = { display:"block", fontSize:10, fontWeight:700, color:"var(--color-neutral-600)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
+const lbl = { display:"block", fontSize:11, fontWeight:700, color:"var(--color-neutral-600)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:5 };
 
 function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, initGradeLevel }) {
   // The years an admin has set up and not archived — next year included once
@@ -512,17 +513,17 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                           <div className={`${p.bg} ${p.color}`} style={{ width:30, height:30, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:12.5, fontWeight:600, color:"var(--color-neutral-900)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                            <div style={{ fontSize:10.5, color:"var(--color-neutral-500)", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                            <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:1, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                               <span>LRN {st.lrn ?? "—"}</span>
                               {st.lastGrade ? (
-                                <span className="border border-[#fcd9a8] bg-[#fff0e8] text-[#b45309] dark:border-warning-dot/40 dark:bg-warning-50 dark:text-warning-500" style={{ borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                <span className="border border-[#fcd9a8] bg-[#fff0e8] text-[#b45309] dark:border-warning-dot/40 dark:bg-warning-50 dark:text-warning-500" style={{ borderRadius:99, padding:"1px 6px", fontSize:11, fontWeight:700 }}>
                                   {st.lastGrade} → <span style={{ color:"var(--color-brand-600)" }}>{gradeLevel}</span>
                                 </span>
                               ) : (
-                                <span className="border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d] dark:border-success-dot/40 dark:bg-success-50 dark:text-success-500" style={{ borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>New</span>
+                                <span className="border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d] dark:border-success-dot/40 dark:bg-success-50 dark:text-success-500" style={{ borderRadius:99, padding:"1px 6px", fontSize:11, fontWeight:700 }}>New</span>
                               )}
                               {eligBadge && (
-                                <span className={`border ${eligBadge.bg} ${eligBadge.color} ${eligBadge.border}`} style={{ display:"inline-flex", alignItems:"center", gap:3, borderRadius:99, padding:"1px 6px", fontSize:10, fontWeight:700 }}>
+                                <span className={`border ${eligBadge.bg} ${eligBadge.color} ${eligBadge.border}`} style={{ display:"inline-flex", alignItems:"center", gap:3, borderRadius:99, padding:"1px 6px", fontSize:11, fontWeight:700 }}>
                                   <i className={`ti ${eligBadge.icon}`} style={{ fontSize:10 }} />{eligBadge.label}
                                 </span>
                               )}
@@ -576,7 +577,7 @@ function MassEnrollModal({ onClose, onSuccess, initSchoolYear, initSchoolLevel, 
                         <div className={`${p.bg} ${p.color}`} style={{ width:30, height:30, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{initials||"?"}</div>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:12.5, fontWeight:600, color:"var(--color-neutral-900)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
-                          <div style={{ fontSize:10.5, color:"var(--color-neutral-500)", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
+                          <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:1, display:"flex", gap:6, alignItems:"center" }}>
                             <span>#{en.enrollment_id}</span>
                             {en.enrollment_status && (
                               <StatusBadge
@@ -956,7 +957,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                           readOnly
                           style={{ ...inp, background: dark ? "var(--color-neutral-200)" : "#f8f4f4", color:"var(--color-neutral-700)", cursor:"default" }}
                         />
-                        <div style={{ fontSize:10, color:"var(--color-neutral-500)", marginTop:3 }}>The year after the source year</div>
+                        <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:3 }}>The year after the source year</div>
                       </div>
                       <div>
                         <label style={lbl}>Grade Level</label>
@@ -965,7 +966,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                           readOnly
                           style={{ ...inp, background: dark ? "var(--color-neutral-200)" : "#f8f4f4", color:"var(--color-neutral-700)", cursor:"default" }}
                         />
-                        <div style={{ fontSize:10, color:"var(--color-neutral-500)", marginTop:3 }}>Auto-computed from source grade</div>
+                        <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:3 }}>Auto-computed from source grade</div>
                       </div>
                       <div>
                         <label style={lbl}>Section <span style={{ color:"var(--color-brand-600)" }}>*</span></label>
@@ -977,7 +978,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                           style={sel}
                           onChange={(name) => setToSection(name)}
                         />
-                        <div style={{ fontSize:10, color:"var(--color-neutral-500)", marginTop:3 }}>Set up under School Years → Sections</div>
+                        <div style={{ fontSize:11, color:"var(--color-neutral-500)", marginTop:3 }}>Set up under School Years → Sections</div>
                       </div>
                     </div>
                   </div>
@@ -1036,7 +1037,7 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2, ease: "easeOut", delay: i * 0.055 }}
                         style={{ background:"var(--color-brand-50)", border:"1px solid var(--color-neutral-200)", borderRadius:10, padding:"12px 16px" }}>
-                        <div style={{ fontSize:10, fontWeight:700, color:"var(--color-neutral-500)", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color:"var(--color-neutral-500)", textTransform:"uppercase", letterSpacing:"0.07em" }}>{label}</div>
                         <div style={{ fontSize:15, fontWeight:700, color, marginTop:4 }}>{value}</div>
                       </motion.div>
                     ))}
@@ -1229,14 +1230,6 @@ function PromoteSectionModal({ onClose, onSuccess, onOpenMassEnroll, initSchoolY
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
-/** Completed the 2nd semester of Grade 12: finished, not waiting for a class. */
-function isGrade12Finisher(st) {
-  const last = st.last_enrollment;
-  return Boolean(
-    last && last.grade_level === "Grade 12" && last.semester === "2nd" && last.enrollment_status === "completed",
-  );
-}
-
 export default function EnrollmentsPage() {
   usePageTitle("Enrollments");
   const navigate = useNavigate();
@@ -1254,7 +1247,8 @@ export default function EnrollmentsPage() {
   const [showPromote,     setShowPromote]     = useState(false);
   // Active students with no enrolled/pending row in the selected year.
   const [unplaced,        setUnplaced]        = useState(null);
-  const [unplacedOpen,    setUnplacedOpen]    = useState(false);
+  // Open from a link (?unplaced=1): the home pages' "no class" row lands here.
+  const [unplacedOpen,    setUnplacedOpen]    = useState(() => searchParams.get("unplaced") === "1");
   const [unplacedReload,  setUnplacedReload]  = useState(0);
   const [markingGraduated, setMarkingGraduated] = useState(false);
   const [statusCounts,   setStatusCounts]   = useState({ total: 0, enrolled: 0, pending: 0, completed: 0, cancelled: 0, transferred_out: 0 });

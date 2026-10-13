@@ -41,6 +41,8 @@ vi.mock("../../api/enrollmentApi", () => ({
   getNarrativeCategories: () => Promise.resolve([]),
   getSectionNarrativeReports: () => Promise.resolve([]),
   saveSectionNarrativeReports: () => Promise.resolve({}),
+  // The quarter dates the grids open on; none here, so the 1st period.
+  getCalendarEvents: () => Promise.resolve([]),
 }));
 vi.mock("../../context/SchoolYearContext", () => ({
   useSchoolYear: () => ({ currentYear: "2026-2027", yearStates: { "2026-2027": "current" }, options: ["2026-2027"], yearCounts: {} }),
@@ -69,6 +71,15 @@ describe("SectionsPage — dark mode", () => {
     renderDark();
     expect(await screen.findByText("Grade 4 · Rosal")).toBeTruthy();
     expect(await screen.findByText(/Santos/)).toBeTruthy();
+  });
+
+  it("marks each section's tile with its level's icon", async () => {
+    renderDark();
+    const tileIcon = (el) => el.querySelector("i").className;
+    expect(tileIcon(await screen.findByRole("button", { name: /^Rosal/ }))).toContain("ti-book");
+    expect(tileIcon(screen.getByRole("button", { name: /^Hope/ }))).toContain("ti-certificate");
+    // The open section's header (Rosal, with no adviser).
+    expect(tileIcon((await screen.findByText("Grade 4 · Rosal")).closest(".items-center"))).toContain("ti-book");
   });
 
   it("switches between a section's advisers", async () => {

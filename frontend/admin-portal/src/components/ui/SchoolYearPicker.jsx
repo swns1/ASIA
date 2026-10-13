@@ -221,7 +221,7 @@ export default function SchoolYearPicker({
       >
         <span className="flex flex-col">
           <span
-            className={`text-[9.5px] font-bold uppercase leading-none tracking-[0.09em] ${
+            className={`text-[11px] font-bold uppercase leading-none tracking-[0.09em] ${
               emphasised ? "text-brand-500" : "text-neutral-500"
             }`}
           >
@@ -237,14 +237,14 @@ export default function SchoolYearPicker({
         </span>
 
         {isArchived(value) && (
-          <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-px text-[10px] font-bold text-neutral-700">
+          <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-px text-[11px] font-bold text-neutral-700">
             Archived
           </span>
         )}
 
         {triggerCount != null && (
           <span
-            className={`shrink-0 rounded-full px-[7px] py-px text-[10px] font-bold tabular-nums text-white ${
+            className={`shrink-0 rounded-full px-[7px] py-px text-[11px] font-bold tabular-nums text-white ${
               // A fill under white text: the action red, which stays deep in dark mode.
               emphasised ? "bg-action" : "bg-neutral-400"
             }`}
@@ -316,7 +316,7 @@ export default function SchoolYearPicker({
                   return (
                     <div
                       key={`g-${row.label}`}
-                      className="px-2.5 pb-[5px] pt-[9px] text-[9.5px] font-bold uppercase tracking-[0.1em] text-neutral-500"
+                      className="px-2.5 pb-[5px] pt-[9px] text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-500"
                     >
                       {row.label}
                     </div>
@@ -354,7 +354,7 @@ export default function SchoolYearPicker({
                     />
                     <span className="flex-1 tabular-nums">{isAll ? "All years" : year}</span>
                     {!isAll && isArchived(year) && (
-                      <span className="text-[10.5px] font-semibold text-neutral-500">Archived</span>
+                      <span className="text-[11px] font-semibold text-neutral-500">Archived</span>
                     )}
                     {n != null && (
                       <span

@@ -5,17 +5,21 @@
 // principle: start from what needs doing, then how the school is doing.
 //
 //   1. Start a task: find a student, enroll one, record a payment.
-//   2. Needs your attention: one row per queue with its own button, listing
-//      only queues that have something in them.
-//   3. Teachers today, beside it: one tile per section (attendance taken or
-//      not, no adviser) and grades in. Clicking it opens every section with
-//      filters.
+//   2. Needs your attention: one row per queue, listing only queues that
+//      have something in them. In the header's notification bell, as on the
+//      staff dashboard (the queues are shared: ./attention.js).
+//   3. Teachers today: one tile per section (attendance taken or not, no
+//      adviser) and grades in. Clicking it opens every section with filters.
 //   4. School at a glance: two headline numbers (present today, need
 //      follow-up), then this year against last for enrollees and for
 //      collection pace (YearOverYear.jsx), with the year's Billing panel
 //      under the pair. No filter drawers; those stay on the list pages.
 //   5. Trends: learners to follow up by school level beside weekly
 //      attendance against target, then the enrollment pipeline.
+//
+// The header, Start a task and the partial-load warning are the pieces every
+// home shares (./HomeParts.jsx). The on-page attention list (AttentionPanel,
+// there too) is the registrar's; here the bell carries it (2026-10-12).
 //
 // Two-card rows share one grid (TWO_UP): two equal columns where both fit,
 // one where they don't, and cards in a row end level.
@@ -26,14 +30,11 @@
 // in their link. Teachers today is the exception: today's attendance only
 // exists in the current year, so it always shows that and says so.
 
-import { useCallback, useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 
-import PageHeader from "../../components/ui/PageHeader";
-import SchoolYearPicker from "../../components/ui/SchoolYearPicker";
 import Button from "../../components/ui/Button";
-import Alert from "../../components/ui/Alert";
 import Modal from "../../components/ui/Modal";
 import Skeleton from "../../components/ui/Skeleton";
 import Card, { Panel, StatCard } from "../../components/ui/Card";
@@ -41,115 +42,58 @@ import BillingPanel from "../../components/ui/BillingPanel";
 import ChipGroup from "../../components/ui/ChipGroup";
 import Table, { TableRow, TableCell } from "../../components/ui/Table";
 import Meter from "../../components/charts/Meter";
-import { chartInk, token } from "../../components/charts/tokens";
-import { GLASS_BUTTON, GLASS_SEARCH } from "../../components/ui/brandPanel";
+import { token } from "../../components/charts/tokens";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
-import { AttendanceTargetBand, PipelineBand, RiskByLevelBand } from "./DashboardBands";
 import { CollectionPacePanel, EnrolleesPanel } from "./YearOverYear";
 import useYearComparison from "./useYearComparison";
-import StudentFinder from "./StudentFinder";
+import { HomeHeader, MiniMeter, PartialLoadAlert, QuickActions, TrendsSection } from "./HomeParts";
+import useHomeData from "./useHomeData";
 
-import { getDashboardSummary, getEnrollments, getTeachersToday } from "../../api/enrollmentApi";
-import { getInvoices } from "../../api/billingApi";
-import { getStudentApplications } from "../../api/applicationApi";
-import { useSchoolYear } from "../../context/SchoolYearContext";
-import useYearFilter, { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
+import { getDashboardSummary, getTeachersToday } from "../../api/enrollmentApi";
+import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import useTheme from "../../hooks/useTheme";
-import { CHIP_GLOW } from "../../constants/statusTones";
-import { getCurrentUser } from "../../utils/auth";
 import { pageVariants } from "../../utils/motion";
+import { fmtLongDay } from "../../utils/format";
+import { bellItems } from "./attention";
 import {
-  attentionRows, dueLine, greeting, plural, sectionName, sectionShortName, sectionsByLevel, withYear,
+  TWO_UP, gradesDue, plural, sectionName, sectionShortName, sectionsByLevel, withYear,
 } from "./adminHomeData";
-
-// Two cards to a row: two equal columns while both get 420px or more, one
-// column below that -- and never three, however wide the screen. Cards in a
-// row stretch to the taller one's height.
-const TWO_UP = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,max(420px,calc(50%_-_8px))),1fr))] gap-4";
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+// The admin home's own requests, beside its attention queues: the year's
+// summary, and today's teachers (always the current year's).
+const requests = (year, currentYear) => ({
+  summary:  getDashboardSummary({ school_year: year }),
+  teachers: getTeachersToday({ school_year: currentYear }),
+});
+
 export default function AdminHome() {
   const navigate = useNavigate();
-  const user = getCurrentUser();
-  const firstName = String(user?.name ?? "").trim().split(/\s+/)[0];
-  const { currentYear } = useSchoolYear();
-  // No "All years": a home page that adds up several years is hard to read.
-  const [year, setYear, yearIsDefault] = useYearFilter({ allowAll: false });
   const [now] = useState(() => new Date());
-
-  const [loading, setLoading] = useState(true);
-  const [partialError, setPartialError] = useState(false);
-  const [data, setData] = useState({});
+  const home = useHomeData("Admin home", requests);
+  const { year, yearIsDefault, currentYear, loading, data } = home;
   const [showAmounts, setShowAmounts] = useState(true);
   const [showTeachers, setShowTeachers] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const comparison = useYearComparison(year);
 
-  const load = useCallback(async () => {
-    if (!year || !currentYear) return;
-    setLoading(true);
-    const sy = year;
-    const count = (p) => p.then((r) => r?.count ?? 0);
-    const parts = {
-      summary:      getDashboardSummary({ school_year: sy }),
-      teachers:     getTeachersToday({ school_year: currentYear }),
-      pending:      count(getEnrollments({ enrollment_status: "pending", school_year: sy, page_size: 1 })),
-      applications: count(getStudentApplications({ status: "submitted", page_size: 1 })),
-      unpaid:       count(getInvoices({ status: "unpaid", school_year: sy, page_size: 1 })),
-      overdue:      count(getInvoices({ overdue: "true", school_year: sy, page_size: 1 })),
-    };
-    // One failed request shouldn't blank the whole page, but it must not
-    // pass silently either: a missing count would read as "nothing to do".
-    const keys = Object.keys(parts);
-    const results = await Promise.allSettled(Object.values(parts));
-    const next = {};
-    let failed = false;
-    results.forEach((r, i) => {
-      if (r.status === "fulfilled") next[keys[i]] = r.value;
-      else { failed = true; console.error(`Admin home: ${keys[i]} failed`, r.reason); }
-    });
-    setData(next);
-    setPartialError(failed);
-    setLoading(false);
-  }, [year, currentYear]);
-
-  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
-
   const teachers = data.teachers;
   const period = teachers?.grading_period;
-  const subtitle = [
-    now.toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
-    period?.source === "calendar" ? period.label : null,
-    year ? `S.Y. ${year}` : null,
-  ].filter(Boolean).join(" · ");
   // Set only while another year is picked, for the cards that stay on today.
   const todayYear = yearIsDefault ? null : currentYear;
 
   return (
     <>
-      <PageHeader
-        title={firstName ? `${greeting(now)}, ${firstName}` : greeting(now)}
-        icon="ti-home"
-        subtitle={subtitle}
-        actions={
-          <div className="flex items-center gap-2">
-            {!yearIsDefault && (
-              <Button variant="ghost" size="sm" icon="ti-arrow-back-up" onClick={() => setYear(null)}>
-                Back to {currentYear}
-              </Button>
-            )}
-            <SchoolYearPicker
-              value={year}
-              onChange={setYear}
-              includeAllYears={false}
-              // Red only while it narrows to a year other than the current one.
-              active={!yearIsDefault}
-              // The pill is at the page's right edge; open the panel leftward.
-              align="end"
-            />
-          </div>
-        }
+      <HomeHeader
+        now={now}
+        period={period?.source === "calendar" ? period.label : null}
+        year={year}
+        onYearChange={home.setYear}
+        yearIsDefault={yearIsDefault}
+        currentYear={currentYear}
+        notifications={bellItems(home.rows)}
+        notificationsFailed={home.attentionFailed}
       />
 
       {/* Every child of the scroller keeps its height (shrink-0), so the page
@@ -161,16 +105,7 @@ export default function AdminHome() {
         animate="visible"
         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
       >
-        <AnimatePresence>
-          {partialError && !loading && (
-            <Alert variant="warning" title="Some of this page didn't load" className="shrink-0">
-              A few numbers may be missing.{" "}
-              <button type="button" onClick={load} className="focus-ring rounded-sm font-semibold underline">
-                Try again
-              </button>
-            </Alert>
-          )}
-        </AnimatePresence>
+        <PartialLoadAlert show={home.partialError} onRetry={home.reload} />
 
         {/* Above the panels below, which the finder's matches drop over. */}
         <motion.div variants={pageVariants.item} className="relative z-20 shrink-0">
@@ -182,13 +117,16 @@ export default function AdminHome() {
                 ? `/students?search=${encodeURIComponent(term)}&school_year=${ALL_YEARS_PARAM}`
                 : "/students",
             )}
-            onEnroll={() => navigate("/enrollments/new")}
-            onRecordPayment={() => setShowPayment(true)}
+            actions={[
+              { label: "Enroll a student", icon: "ti-user-plus", primary: true, onClick: () => navigate("/enrollments/new") },
+              { label: "Record a payment", icon: "ti-cash", onClick: () => setShowPayment(true) },
+            ]}
           />
         </motion.div>
 
+        {/* Needs your attention used to sit beside this; it's in the header's
+            bell now, so Teachers today has the row to itself. */}
         <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
-          <AttentionPanel data={data} loading={loading} schoolYear={year} onGo={navigate} />
           <TeachersTodayPreview
             teachers={teachers}
             loading={loading}
@@ -203,7 +141,7 @@ export default function AdminHome() {
           className="flex shrink-0 flex-col gap-4"
         >
           <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
-          <Glance data={data} loading={loading} todayYear={todayYear} onGo={navigate} />
+          <Glance data={data} loading={loading} year={year} todayYear={todayYear} onGo={navigate} />
           {/* Both follow the page's year picker, so neither gets a year
               filter of its own; two year controls could disagree. Their links
               carry the year for the same reason every other link here does. */}
@@ -231,27 +169,12 @@ export default function AdminHome() {
           )}
         </motion.section>
 
-        <motion.section
-          variants={pageVariants.item}
-          aria-labelledby="trends-heading"
-          className="flex shrink-0 flex-col gap-4"
-        >
-          <h2 id="trends-heading" className="text-sm font-bold text-neutral-900">Trends</h2>
-          <div className={TWO_UP}>
-            <RiskByLevelBand
-              risk={data.summary?.risk}
-              loading={loading}
-              onOpen={
-                <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => navigate("/analytics")}>
-                  Analytics
-                </Button>
-              }
-            />
-            <AttendanceTargetBand series={data.summary?.attendance_series} loading={loading} />
-          </div>
-          {/* Full width, so drawn at its real size rather than scaled up. */}
-          <PipelineBand pipeline={data.summary?.pipeline} loading={loading} schoolYear={year} measured />
-        </motion.section>
+        <motion.div variants={pageVariants.item} className="shrink-0">
+          <TrendsSection
+            summary={data.summary} loading={loading} year={year} onGo={navigate}
+            failed={home.failed.includes("summary")} onRetry={home.reload}
+          />
+        </motion.div>
       </motion.div>
 
       {showTeachers && teachers && (
@@ -266,91 +189,10 @@ export default function AdminHome() {
         <RecordPaymentModal
           preloadedInvoiceId={null}
           onClose={() => setShowPayment(false)}
-          onSaved={() => { setShowPayment(false); load(); comparison.reload(); }}
+          onSaved={() => { setShowPayment(false); home.reload(); comparison.reload(); }}
         />
       )}
     </>
-  );
-}
-
-// ── Start a task ─────────────────────────────────────────────────────────────
-
-// The page's lead block: in dark mode the login's brand panel, as the status
-// band is on the list pages, with its search and second button in glass.
-function QuickActions({ onOpenStudent, onFind, onEnroll, onRecordPayment }) {
-  return (
-    <Card brandPanel className="flex flex-col gap-3 lg:flex-row lg:items-center">
-      <StudentFinder onOpen={onOpenStudent} onSeeAll={onFind} fieldClassName={GLASS_SEARCH} />
-      <div className="flex flex-wrap gap-2">
-        <Button icon="ti-user-plus" onClick={onEnroll}>Enroll a student</Button>
-        <Button variant="secondary" icon="ti-cash" onClick={onRecordPayment} className={GLASS_BUTTON}>
-          Record a payment
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-// ── Needs your attention ─────────────────────────────────────────────────────
-
-const ROW_TONES = {
-  warning: `bg-warning-50 text-warning-500 ${CHIP_GLOW.warning}`,
-  info:    `bg-info-50 text-info-500 ${CHIP_GLOW.info}`,
-  error:   `bg-error-50 text-error-500 ${CHIP_GLOW.error}`,
-};
-
-function AttentionPanel({ data, loading, schoolYear, onGo }) {
-  const rows = attentionRows(data, schoolYear);
-  const subtitle = loading
-    ? "Checking…"
-    : rows.length
-      ? `${plural(rows.length, "thing is", "things are")} waiting on you`
-      : "Nothing is waiting on you";
-
-  return (
-    <Panel
-      title="Needs your attention"
-      subtitle={subtitle}
-      icon="ti-bell"
-      padding="none"
-      className="min-w-0"
-      bodyClassName="flex flex-col"
-    >
-      {loading ? (
-        <div className="flex flex-col gap-3 p-5">
-          {[0, 1, 2].map((i) => <Skeleton key={i} height={40} variant="pulse" />)}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="flex items-center gap-3 p-5 text-sm text-neutral-600">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success-50 text-success-500">
-            <i className="ti ti-circle-check text-lg" aria-hidden="true" />
-          </span>
-          All caught up. New enrollments, applications and unpaid bills will show up here.
-        </div>
-      ) : (
-        // Rows share out the height when Teachers today beside it is taller.
-        <ul className="flex flex-1 flex-col divide-y divide-neutral-200">
-          {rows.map((r) => (
-            <li key={r.id} className="flex flex-1 items-center gap-3 px-5 py-3">
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${ROW_TONES[r.tone]}`}>
-                <i className={`ti ${r.icon} text-lg`} aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1 text-sm font-semibold text-neutral-900">{r.text(r.count)}</span>
-              {/* One width for "View" and "Review", so the buttons line up. */}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="min-w-[72px]"
-                onClick={() => onGo(r.to)}
-                aria-label={`${r.action}: ${r.text(r.count)}`}
-              >
-                {r.action}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
   );
 }
 
@@ -367,33 +209,20 @@ function noAdviserCount(sections) {
   return sections.filter((s) => !s.advisers?.length).length;
 }
 
-// One compact progress row: label, bar, "N of M sections".
-function MiniMeter({ label, value, max, color }) {
-  const theme = useTheme();
-  const pct = max > 0 ? Math.round((Math.min(value, max) / max) * 100) : 0;
-  // Dark: the fill fades in from the left and glows faintly.
-  const fillStyle = theme === "dark"
-    ? { background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})`, boxShadow: `0 0 8px color-mix(in srgb, ${color} 45%, transparent)` }
-    : { background: color };
-  const text = `${value.toLocaleString()} of ${plural(max, "section")}`;
+// Taken once every learner has a mark (teachers_today.py); a part-marked
+// section still owes the rest, and says how far it got.
+function attendanceStatus(s) {
+  if (s.attendance_taken) return "taken";
+  if (s.attendance_marked) return `${s.attendance_marked.toLocaleString()} of ${s.students.toLocaleString()} marked`;
+  return "not taken yet";
+}
+
+// A due line, labelled when there are two (gradesDue); red once it's late.
+function DueText({ due }) {
   return (
-    <div className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 text-xs">
-      <span className="truncate font-semibold text-neutral-700">{label}</span>
-      <span
-        className="block h-2 overflow-hidden rounded-full"
-        style={{ background: chartInk(theme).grid }}
-        role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`${label}: ${text}`}
-      >
-        <span className="block h-full rounded-full" style={{ width: `${pct}%`, ...fillStyle }} />
-      </span>
-      <span className="tabular-nums text-neutral-600">
-        <strong className="text-neutral-900">{value.toLocaleString()}</strong> of {plural(max, "section")}
-      </span>
-    </div>
+    <span className={due.late ? "text-error-500" : "text-neutral-600"}>
+      {due.label && `${due.label}: `}{due.text}
+    </span>
   );
 }
 
@@ -404,7 +233,7 @@ function SectionTile({ section }) {
   const noAdviser = !section.advisers?.length;
   return (
     <span
-      title={`${sectionName(section)} · attendance ${taken ? "taken" : "not taken yet"}${noAdviser ? " · no adviser" : ""}`}
+      title={`${sectionName(section)} · attendance ${attendanceStatus(section)}${noAdviser ? " · no adviser" : ""}`}
       className={[
         "inline-flex h-6 min-w-10 items-center justify-center gap-0.5 rounded-[6px] border-[1.5px] px-[5px] text-xs font-semibold",
         taken ? "border-success-50 bg-success-50 text-success-500" : "border-warning-dot bg-warning-50 text-warning-500",
@@ -468,7 +297,7 @@ function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
   }
 
   const { grades, grading_period: period, no_classes: noClasses, sections } = teachers;
-  const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
+  const dues = gradesDue(period, sections, now);
   const noAdviser = noAdviserCount(sections);
 
   return (
@@ -516,9 +345,9 @@ function TeachersTodayPreview({ teachers, loading, now, onOpen }) {
           </div>
           {/* Sections with no adviser are marked on their tiles; without
               tiles, they're said here. */}
-          {(due || (noClasses && noAdviser > 0)) && (
+          {(dues.length > 0 || (noClasses && noAdviser > 0)) && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
-              {due && <span className={due.late ? "text-error-500" : "text-neutral-600"}>{due.text}</span>}
+              {dues.map((d) => <DueText key={d.label ?? "due"} due={d} />)}
               {noClasses && noAdviser > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-warning-500">
                   <i className="ti ti-alert-triangle" aria-hidden="true" />
@@ -563,7 +392,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
   const theme = useTheme();
   const [filter, setFilter] = useState("all");
   const { attendance, grades, grading_period: period, no_classes: noClasses, sections } = teachers;
-  const due = period?.source === "calendar" ? dueLine(period.due_date, now) : null;
+  const dues = gradesDue(period, sections, now);
   const hasSeniorHigh = sections.some((s) => s.school_level === "senior_highschool" && s.grades);
   const noAdviser = noAdviserCount(sections);
   const shown = sections.filter(SECTION_FILTERS[filter]);
@@ -582,7 +411,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
       size="xl"
       title="Teachers today"
       description={[
-        now.toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" }),
+        fmtLongDay(now),
         period.label,
         `S.Y. ${teachers.school_year}`,
       ].join(" · ")}
@@ -622,7 +451,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
             ) : (
               <p className="text-sm text-neutral-600">No subjects are set up yet.</p>
             )}
-            {due && <p className={`mt-2 text-xs font-semibold ${due.late ? "text-error-500" : "text-neutral-600"}`}>{due.text}</p>}
+            {dues.map((d) => <p key={d.label ?? "due"} className="mt-2 text-xs font-semibold"><DueText due={d} /></p>)}
             {hasSeniorHigh && <p className="mt-1 text-xs text-neutral-500">Senior High counts its {period.semester_label}.</p>}
           </SummaryBox>
           <SummaryBox>
@@ -669,7 +498,9 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
                 ) : s.attendance_taken ? (
                   <span className="font-semibold text-success-500">Taken</span>
                 ) : (
-                  <span className="font-semibold text-warning-500">Not yet</span>
+                  <span className="font-semibold text-warning-500">
+                    {s.attendance_marked ? `${s.attendance_marked.toLocaleString()} of ${s.students.toLocaleString()} marked` : "Not yet"}
+                  </span>
                 )}
               </TableCell>
               <TableCell>
@@ -695,7 +526,7 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
 
 // No enrollees tile: the Enrollees panel (YearOverYear.jsx) leads with that
 // number, counted the same way for both years it compares.
-function Glance({ data, loading, todayYear, onGo }) {
+function Glance({ data, loading, year, todayYear, onGo }) {
   const risk = data.summary?.risk;
   const att = data.teachers?.attendance;
   const noClasses = data.teachers?.no_classes;
@@ -716,7 +547,8 @@ function Glance({ data, loading, todayYear, onGo }) {
           noClasses ? `No classes · ${noClasses.label}`
             : !att ? "Attendance didn't load"
             : todayYear ? `Today · S.Y. ${todayYear}`
-            : att.sections_taken ? `From ${att.sections_taken} of ${plural(att.sections_total, "section")}`
+            // The sections the rate comes from: any marked, part-marked too.
+            : att.sections_marked ? `From ${att.sections_marked} of ${plural(att.sections_total, "section")}`
             : "No attendance taken yet today"
         }
       />
@@ -727,7 +559,7 @@ function Glance({ data, loading, todayYear, onGo }) {
         loading={loading}
         value={risk ? risk.flagged.toLocaleString() : "—"}
         hint={riskDate ? `Risk check on ${riskDate}` : "No risk check yet"}
-        onClick={() => onGo("/analytics")}
+        onClick={() => onGo(withYear("/analytics", year))}
       />
     </div>
   );

@@ -413,7 +413,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
       {/* Day-of-week header */}
       <div className="bg-[linear-gradient(135deg,#fff5f5,#fff)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid var(--color-neutral-200)" }}>
         {DAYS_SHORT.map((d, i) => (
-          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "var(--color-brand-700)" : "var(--color-neutral-500)", textTransform: "uppercase" }}>{d}</div>
+          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "var(--color-brand-700)" : "var(--color-neutral-500)", textTransform: "uppercase" }}>{d}</div>
         ))}
       </div>
 
@@ -519,7 +519,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
 
                       return (
                         <div key={ev.event_id} style={{
-                          fontSize: 10, fontWeight: 600,
+                          fontSize: 11, fontWeight: 600,
                           height: 18, flexShrink: 0, boxSizing: "border-box",
                           color: showTitle ? (dark ? DARK_EVENT_TEXT : meta.color) : "transparent",
                           background: dark ? DARK_EVENT_BG(meta.color) : meta.bg,
@@ -532,7 +532,10 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                           borderBottom: `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
                           borderRight: "none",
                           borderRadius,
-                          padding: "2px 4px",
+                          // 1px, not 2px: the strip's height is fixed (18px,
+                          // so strips line up across days), and 11px text
+                          // needs the room.
+                          padding: "1px 4px",
                           marginLeft,
                           marginRight,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -551,7 +554,7 @@ function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
                       );
                     })}
                     {overflow > 0 && (
-                      <div style={{ fontSize: 9.5, color: "var(--color-neutral-500)", paddingLeft: 2 }}>+{overflow} more</div>
+                      <div style={{ fontSize: 11, color: "var(--color-neutral-500)", paddingLeft: 2 }}>+{overflow} more</div>
                     )}
                   </div>
                 </div>
@@ -580,7 +583,7 @@ function EventCard({ event, onEdit, onDelete }) {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "2px 7px", borderRadius: 99, letterSpacing: "0.04em" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "2px 7px", borderRadius: 99, letterSpacing: "0.04em" }}>
                   <i className={`ti ${meta.icon}`} style={{ fontSize: 10 }} />{meta.label}
                 </span>
               </div>
@@ -619,7 +622,7 @@ function EventCard({ event, onEdit, onDelete }) {
 // ── Add / Edit Modal ──────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "", grading_period: "" };
-const LBL = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
+const LBL = { display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
 const INP = { width: "100%", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none", boxSizing: "border-box" };
 
 function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
@@ -807,9 +810,9 @@ function ColorSettingsModal({ onClose, onSaved }) {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-neutral-900)" }}>{t.label}</div>
-                <div style={{ fontSize: 10.5, color: "var(--color-neutral-500)", marginTop: 1 }}>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", marginTop: 1 }}>
                   {/* Mini strip preview */}
-                  <span style={{ display: "inline-block", background: dark ? DARK_EVENT_BG(t.color) : t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 10, color: dark ? DARK_EVENT_TEXT : t.color, fontWeight: 600 }}>
+                  <span style={{ display: "inline-block", background: dark ? DARK_EVENT_BG(t.color) : t.bg, borderLeft: `3px solid ${t.color}`, borderRadius: "3px 0 0 3px", padding: "1px 8px", fontSize: 11, color: dark ? DARK_EVENT_TEXT : t.color, fontWeight: 600 }}>
                     Sample event
                   </span>
                 </div>
@@ -954,7 +957,7 @@ function ImportHolidaysModal({ schoolYear, existingEvents, onClose, onImported }
               {/* Holiday list preview */}
               {toAdd.length > 0 ? (
                 <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>Will be added</div>
                   {toAdd.map((h) => (
                     <div key={h.date} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: dark ? "var(--color-brand-50)" : "#fff8f8", borderRadius: 9, border: "1px solid var(--color-brand-200)" }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-500)", flexShrink: 0 }} />
@@ -1065,7 +1068,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
       <div className="bg-[linear-gradient(135deg,#fff5f5,white)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ padding: "13px 14px 10px", borderBottom: "1px solid var(--color-neutral-200)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>All Events</div>
-          <span style={{ fontSize: 10.5, color: "var(--color-neutral-500)" }}>{filtered.length} / {events.length}</span>
+          <span style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>{filtered.length} / {events.length}</span>
         </div>
 
         {/* Search */}
@@ -1094,7 +1097,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           <button
             onClick={() => setFilterType("all")}
-            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "var(--color-brand-500)" : "var(--color-neutral-300)"}`, background: filterType === "all" ? "var(--color-brand-100)" : "var(--color-surface)", fontSize: 10.5, color: filterType === "all" ? "var(--color-brand-600)" : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
+            style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${filterType === "all" ? "var(--color-brand-500)" : "var(--color-neutral-300)"}`, background: filterType === "all" ? "var(--color-brand-100)" : "var(--color-surface)", fontSize: 11, color: filterType === "all" ? "var(--color-brand-600)" : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: filterType === "all" ? 700 : 500 }}>
             All
           </button>
           {EVENT_TYPES.map((t) => {
@@ -1103,7 +1106,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
             if (count === 0) return null;
             return (
               <button key={t.value} onClick={() => setFilterType(active ? "all" : t.value)}
-                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "var(--color-neutral-300)"}`, background: active ? (dark ? DARK_EVENT_BG(t.color) : t.bg) : "var(--color-surface)", fontSize: 10.5, color: active ? (dark ? DARK_EVENT_TEXT : t.color) : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
+                style={{ height: 22, padding: "0 8px", borderRadius: 99, border: `1.5px solid ${active ? t.color : "var(--color-neutral-300)"}`, background: active ? (dark ? DARK_EVENT_BG(t.color) : t.bg) : "var(--color-surface)", fontSize: 11, color: active ? (dark ? DARK_EVENT_TEXT : t.color) : "var(--color-neutral-600)", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontWeight: active ? 700 : 500, display: "flex", alignItems: "center", gap: 4 }}>
                 <i className={`ti ${t.icon}`} style={{ fontSize: 10 }} />{t.label} <span style={{ opacity: 0.7 }}>·{count}</span>
               </button>
             );
@@ -1138,10 +1141,10 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--color-brand-50)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0", transition: "background-color 0.12s ease" }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.07em", textTransform: "uppercase", flex: 1, textAlign: "left" }}>
                     {MONTHS[m]}
                   </span>
-                  <span style={{ fontSize: 10, color: "var(--color-neutral-500)", fontWeight: 600 }}>{monthEvs.length}</span>
+                  <span style={{ fontSize: 11, color: "var(--color-neutral-500)", fontWeight: 600 }}>{monthEvs.length}</span>
                   <motion.i
                     animate={{ rotate: isCollapsed ? 0 : 180 }}
                     transition={{ duration: 0.18 }}
@@ -1171,8 +1174,8 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                             <div style={{ flex: 1, padding: "7px 10px", minWidth: 0 }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-neutral-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
                               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
-                                <span style={{ fontSize: 10, color: "var(--color-neutral-500)" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "1px 6px", borderRadius: 99 }}>{meta.label}</span>
+                                <span style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                               </div>
                             </div>
                             {onEdit && <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
@@ -1705,7 +1708,7 @@ export default function AcademicCalendarPage() {
                 className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`}
                 style={{ borderRadius: 14, padding: "14px 16px" }}
               >
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Year</div>
                 <motion.div
                   variants={listVariants.container} initial={ifr ? "hidden" : false} animate="visible"
                   style={{ display: "flex", flexDirection: "column", gap: 7 }}
@@ -1752,7 +1755,7 @@ export default function AcademicCalendarPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{selectedLabel}</div>
-                    <div style={{ fontSize: 10.5, color: "var(--color-neutral-500)", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: 11, color: "var(--color-neutral-500)", marginTop: 1 }}>{uniqueForDay.length} event{uniqueForDay.length !== 1 ? "s" : ""}</div>
                   </div>
                   <motion.button onClick={() => setSelectedDay(null)} aria-label="Close this day's events"
                     whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}

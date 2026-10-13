@@ -1,8 +1,8 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { getReportCard } from "../api/enrollmentApi";
+import { getEnrollments, getReportCard } from "../api/enrollmentApi";
 import { getAttendanceSummary } from "../api/attendanceApi";
 import { getStudentLedger } from "../api/billingApi";
 import { fetchRequirementSummary } from "../api/requirementApi";
@@ -13,16 +13,19 @@ import { gradeBand as gradeVariant, attendanceBand as attendanceVariant } from "
 // This page composes dates into sentences rather than table cells, so it asks
 // for a null fallback instead of the shared em dash.
 import { peso, fmtDate, todayISO } from "../utils/format";
+import { isVoid, planLabel, splitItem } from "../utils/invoice";
 import Button from "../components/ui/Button";
 import Card, { StatCard, Panel } from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
 import Badge, { StatusBadge } from "../components/ui/Badge";
+import FilterMenu from "../components/ui/FilterMenu";
 import GuardianHero from "../components/GuardianHero";
 import Tabs, { TabPanel } from "../components/ui/Tabs";
 import useTabs from "../hooks/useTabs";
 import useLatestRequest from "../hooks/useLatestRequest";
 import { LEVEL_LABELS } from "../constants/schoolLevels";
-import { ENROLLMENT_STATUS_MAP } from "../constants/statusMaps";
+import { ENROLLMENT_STATUS_MAP, INVOICE_STATUS_MAP } from "../constants/statusMaps";
+import { paymentMethodMeta } from "../constants/paymentMethods";
 import { initialsFrom } from "../utils/avatarPalette";
 
 const GRADE_TEXT_CLASS = {
@@ -89,16 +92,20 @@ function latestPostedPeriod(report) {
   return null;
 }
 
-/** Earliest unpaid installment across every invoice, plus how many are late. */
+/** An installment nothing more is owed on. */
+const settled = (inst) =>
+  inst.status === "paid" || inst.status === "voided" || Number(inst.balance ?? 0) <= 0;
+
+/** Earliest unpaid installment across every live invoice, plus how many are
+ *  late. A void invoice owes nothing: reading its schedule here is what told
+ *  parents a cancelled bill was overdue, on every page for that child. */
 function nextDue(ledger) {
   const today = todayISO();
   const open = [];
   (ledger?.school_years || []).forEach((yr) =>
-    (yr.invoices || []).forEach((inv) =>
+    (yr.invoices || []).filter((inv) => !isVoid(inv)).forEach((inv) =>
       (inv.installments || []).forEach((inst) => {
-        const balance = Number(inst.balance ?? 0);
-        if (inst.status === "paid" || inst.status === "voided" || balance <= 0) return;
-        if (!inst.due_date) return;
+        if (settled(inst) || !inst.due_date) return;
         open.push({ ...inst, invoice_no: inv.invoice_no });
       })
     )
@@ -132,7 +139,7 @@ const GLANCE_VALUE = {
 /** One cell of the at-a-glance strip: icon (or `visual`), label, value, hint. */
 function GlanceItem({ icon, visual, tone = "neutral", label, value, hint, loading }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 bg-white px-4 py-3.5 sm:py-4">
+    <div className="flex min-w-0 items-center gap-3 bg-surface px-4 py-3.5 sm:py-4">
       {/* Two cells a row on a phone leaves no room for the icon; the tone
           colour on the value still carries the signal there. */}
       <div className="hidden shrink-0 sm:block">
@@ -255,6 +262,40 @@ function StatusStrip({ report, att, ledger: ledgerSection, reqs }) {
   );
 }
 
+// ── School year switcher ──────────────────────────────────────────────────────
+// Each child page is one enrollment, and nothing led from it to the child's
+// other years: last year's grades and bills could only be reached by URL.
+// This lists the child's own enrollments (the guardian-scoped list,
+// ?student=), newest first, on the banner's dark tone.
+function YearSwitch({ enrollment, years }) {
+  const navigate = useNavigate();
+  const rows = [...years].sort((a, b) =>
+    (b.school_year || "").localeCompare(a.school_year || "") || b.enrollment_id - a.enrollment_id);
+  const options = rows.map((e) => ({
+    value: String(e.enrollment_id),
+    label: `S.Y. ${e.school_year}`,
+    note: (
+      <span className="text-[11px] font-semibold text-neutral-500">
+        {[e.grade_level, ENROLLMENT_STATUS_MAP[e.enrollment_status]?.label ?? e.enrollment_status].filter(Boolean).join(" · ")}
+      </span>
+    ),
+  }));
+  const current = rows.find((e) => e.school_year === enrollment.school_year && e.grade_level === enrollment.grade_level)
+    ?? rows.find((e) => e.school_year === enrollment.school_year);
+
+  return (
+    <FilterMenu
+      tone="dark"
+      label="School year"
+      valueLabel={enrollment.school_year}
+      options={options}
+      value={current ? String(current.enrollment_id) : ""}
+      onChange={(id) => navigate(`/guardian/child/${id}`)}
+      menuWidth={260}
+    />
+  );
+}
+
 // ── Requirements tab ──────────────────────────────────────────────────────────
 function RequirementsTab({ requirements, loading, failed, onRetry }) {
   if (loading) return <Card><Skeleton height={120} radius={12} /></Card>;
@@ -319,13 +360,16 @@ function RequirementsTab({ requirements, loading, failed, onRetry }) {
 }
 
 // ── Report card tab ───────────────────────────────────────────────────────────
+// 11px, the app's smallest text, for the column heads.
+const TH = "py-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-neutral-500";
+
 function ReportCardTab({ data, error }) {
   // `return null` here left the default tab's body completely empty whenever
   // the report card failed to load — the banner above said something went
   // wrong, then the page showed nothing at all under it.
   if (!data) {
     return (
-      <Panel title="Report Card">
+      <Panel title="Report card">
         <div className="px-4 py-10 text-center">
           <div className="text-sm font-semibold text-neutral-900">
             {error ? "Grades couldn't be loaded" : "No report card yet"}
@@ -342,7 +386,7 @@ function ReportCardTab({ data, error }) {
   const periods = data.grading_periods || [];
   return (
     <Panel
-      title="Report Card"
+      title="Report card"
       padding="none"
       action={(data.general_average ?? data.overall_gpa) != null && (
         // "General Average" is DepEd's term; GPA implies a weighting DO 8
@@ -356,11 +400,11 @@ function ReportCardTab({ data, error }) {
         <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr className="bg-neutral-50">
-              <th className="px-[18px] py-[11px] text-left text-[10.5px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Subject</th>
+              <th className={`${TH} px-[18px] text-left`}>Subject</th>
               {periods.map((p) => (
-                <th key={p.key} className="px-3 py-2.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.05em] text-neutral-500">{p.label}</th>
+                <th key={p.key} className={`${TH} px-3 text-center`}>{p.label}</th>
               ))}
-              <th className="px-3.5 py-2.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.06em] text-neutral-500">Avg</th>
+              <th className={`${TH} px-3.5 text-center`}>Average</th>
             </tr>
           </thead>
           <tbody>
@@ -449,7 +493,205 @@ function AttendanceTab({ summary, loading, failed, onRetry }) {
 }
 
 // ── Billing tab ───────────────────────────────────────────────────────────────
-function BillingTab({ ledger, loading, failed, onRetry }) {
+// The ledger already carried each invoice's status, plan, fee items,
+// discounts (scholarships, early bird) and payments, but the tab showed only
+// the schedule: a parent could see what was due, not what it was for, what
+// had been taken off, or which payments the school had recorded.
+
+const SUBHEAD = "text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500";
+
+/** One row of a two-column money list. */
+function MoneyRow({ label, amount, className = "", children }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 py-1 text-sm ${className}`}>
+      <span className="min-w-0">{children ?? label}</span>
+      <span className="shrink-0 tabular-nums">{amount}</span>
+    </div>
+  );
+}
+
+/** What the invoice charges: its fee items, then what was taken off. */
+function FeeBreakdown({ inv }) {
+  const items = inv.items || [];
+  const discounts = inv.discounts || [];
+  return (
+    <div className="rounded-lg border border-neutral-200 px-3.5 py-3">
+      <div className={`mb-1.5 ${SUBHEAD}`}>What's billed</div>
+      {items.length === 0 && <p className="py-1 text-sm text-neutral-500">No fee items.</p>}
+      {items.map((item) => (
+        <MoneyRow key={item.invoice_item_id} label={splitItem(item.description).name} amount={peso(item.amount)}
+          className="text-neutral-700 [&>span:last-child]:text-neutral-900" />
+      ))}
+      {discounts.length > 0 && <div className="my-1.5 border-t border-dashed border-neutral-300" />}
+      {discounts.map((d) => (
+        <MoneyRow key={d.invoice_discount_id} amount={`−${peso(d.amount)}`} className="text-success-500">
+          <span className="flex items-center gap-1.5">
+            <i className="ti ti-discount text-[14px]" aria-hidden="true" />
+            {d.description}
+          </span>
+        </MoneyRow>
+      ))}
+      <MoneyRow label="Total" amount={peso(inv.net_amount)}
+        className="mt-1.5 border-t border-neutral-200 pt-2 font-bold text-neutral-900" />
+    </div>
+  );
+}
+
+/** The payments the school has recorded on the invoice, newest first. */
+function PaymentsReceived({ inv }) {
+  const payments = [...(inv.payments || [])].sort((a, b) =>
+    (b.payment_date || "").localeCompare(a.payment_date || "") || b.payment_id - a.payment_id);
+  return (
+    <div className="rounded-lg border border-neutral-200 px-3.5 py-3">
+      <div className={`mb-1.5 ${SUBHEAD}`}>Payments received</div>
+      {payments.length === 0 && <p className="py-1 text-sm text-neutral-500">No payments recorded yet.</p>}
+      {payments.map((p) => (
+        <div key={p.payment_id} className="flex items-center gap-3 py-1.5 text-sm">
+          <span className="min-w-0 flex-1">
+            <span className="block text-neutral-900">{fmtDate(p.payment_date)}</span>
+            <span className="block truncate text-xs text-neutral-500">
+              {[paymentMethodMeta(p.payment_method).label, p.reference_number].filter(Boolean).join(" · ")}
+            </span>
+          </span>
+          <span className="shrink-0 font-semibold tabular-nums text-success-500">{peso(p.amount_paid)}</span>
+        </div>
+      ))}
+      <MoneyRow label="Total paid" amount={peso(inv.total_paid)}
+        className="mt-1.5 border-t border-neutral-200 pt-2 font-bold text-neutral-900 [&>span:last-child]:text-success-500" />
+    </div>
+  );
+}
+
+const SCHEDULE_TAG = {
+  paid:     { label: "Paid",     variant: "success" },
+  overdue:  { label: "Overdue",  variant: "error" },
+  next:     { label: "Due next", variant: "warning" },
+  upcoming: { label: "Upcoming", variant: "muted" },
+};
+
+/** The installments, with what's paid folded away and the next one marked. */
+function PaymentSchedule({ inv }) {
+  const [showPaid, setShowPaid] = useState(false);
+  const today = todayISO();
+  // A transfer close-out voids the months after the move; the waiver shows
+  // as a discount above, so those rows are left out here.
+  const schedule = (inv.installments || [])
+    .filter((inst) => inst.status !== "voided")
+    .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || "") || (a.sequence ?? 0) - (b.sequence ?? 0));
+  if (schedule.length === 0) return null;
+
+  const paidCount = schedule.filter(settled).length;
+  const nextId = schedule.find((inst) => !settled(inst) && !(inst.due_date && inst.due_date < today))?.installment_id;
+  const rows = showPaid ? schedule : schedule.filter((inst) => !settled(inst));
+
+  return (
+    <div className="border-t border-neutral-200/70">
+      <div className="flex items-center justify-between gap-3 px-5 pb-1.5 pt-3">
+        <span className={SUBHEAD}>Payment schedule · {paidCount} of {schedule.length} paid</span>
+        {paidCount > 0 && paidCount < schedule.length && (
+          <Button variant="ghost" size="sm" onClick={() => setShowPaid((v) => !v)}>
+            {showPaid ? "Hide paid installments" : `Show ${paidCount} paid installment${paidCount === 1 ? "" : "s"}`}
+          </Button>
+        )}
+      </div>
+      {(paidCount === schedule.length ? schedule : rows).map((inst) => {
+        const late = !settled(inst) && inst.due_date && inst.due_date < today;
+        const kind = settled(inst) ? "paid" : late ? "overdue" : inst.installment_id === nextId ? "next" : "upcoming";
+        const partly = !settled(inst) && Number(inst.amount_paid ?? 0) > 0;
+        return (
+          <div
+            key={inst.installment_id}
+            className={`flex items-center gap-3 px-5 py-2 text-sm ${kind === "next" ? "bg-warning-50/60" : ""}`}
+          >
+            <span className="w-6 shrink-0 text-neutral-500">#{inst.sequence}</span>
+            <span className={`min-w-0 flex-1 ${late ? "font-bold text-error-500" : kind === "next" ? "font-bold text-neutral-900" : "text-neutral-900"}`}>
+              {fmtDate(inst.due_date, null) || "No due date"}
+              {partly && <span className="ml-2 text-xs font-normal text-neutral-500">{peso(inst.balance)} left</span>}
+            </span>
+            <span className="tabular-nums text-neutral-700">{peso(inst.amount)}</span>
+            <Badge variant={SCHEDULE_TAG[kind].variant} size="sm">{SCHEDULE_TAG[kind].label}</Badge>
+          </div>
+        );
+      })}
+      <div className="h-2" />
+    </div>
+  );
+}
+
+/** One live invoice: its header, the breakdown beside the payments, then the
+ *  schedule. */
+function InvoiceBlock({ inv }) {
+  return (
+    <div className="border-t border-neutral-200/70 first:border-t-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 pb-1 pt-3.5">
+        <span className="text-sm font-bold text-neutral-900">{inv.invoice_no}</span>
+        <StatusBadge status={inv.status} map={INVOICE_STATUS_MAP} size="sm" />
+        <span className="text-xs text-neutral-500">
+          {[planLabel(inv.payment_plan), inv.invoice_date && `Issued ${fmtDate(inv.invoice_date)}`].filter(Boolean).join(" · ")}
+        </span>
+      </div>
+      <div className="grid gap-3 px-5 pb-4 pt-2.5 md:grid-cols-2">
+        <FeeBreakdown inv={inv} />
+        <PaymentsReceived inv={inv} />
+      </div>
+      <PaymentSchedule inv={inv} />
+    </div>
+  );
+}
+
+/** A cancelled invoice: listed as history, never as owed. */
+function CancelledInvoice({ inv }) {
+  return (
+    <div className="mx-5 my-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-dashed border-neutral-300 bg-muted-50 px-3.5 py-3">
+      <span className="text-sm font-bold text-muted-500 line-through">{inv.invoice_no}</span>
+      <Badge variant="muted" size="sm" icon="ti-ban">Cancelled</Badge>
+      <span className="text-xs text-muted-500">The school cancelled this invoice. Nothing is owed on it.</span>
+    </div>
+  );
+}
+
+/** One school year's bills. The year on screen opens; the others fold to a
+ *  line, since a settled past year is rarely what a parent came for. */
+function YearBills({ yr, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const balance = Number(yr.year_balance);
+  const invoices = yr.invoices || [];
+  const live = invoices.filter((inv) => !isVoid(inv));
+  const cancelled = invoices.filter(isVoid);
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="focus-ring flex w-full items-center gap-3 px-5 py-3.5 text-left"
+      >
+        <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-neutral-900">
+          SY {yr.school_year} · {yr.grade_level}
+        </h3>
+        {!open && balance <= 0 && (
+          <span className="hidden text-xs text-neutral-500 sm:inline">{peso(yr.year_paid)} paid</span>
+        )}
+        {balance > 0
+          ? <Badge variant="error">Balance {peso(balance)}</Badge>
+          : <Badge variant="success">Settled</Badge>}
+        <i className={`ti ti-chevron-down text-base text-neutral-600 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="border-t border-neutral-200">
+          {live.length === 0 && cancelled.length === 0 && (
+            <p className="px-5 py-4 text-sm text-neutral-500">No invoices for this school year.</p>
+          )}
+          {live.map((inv) => <InvoiceBlock key={inv.invoice_id} inv={inv} />)}
+          {cancelled.map((inv) => <CancelledInvoice key={inv.invoice_id} inv={inv} />)}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function BillingTab({ ledger, loading, failed, onRetry, schoolYear }) {
   if (loading) return <Card><Skeleton height={120} radius={12} /></Card>;
   if (failed) {
     return (
@@ -463,10 +705,14 @@ function BillingTab({ ledger, loading, failed, onRetry }) {
 
   const balance = Number(ledger.total_balance || 0);
   const summaryTiles = [
-    { label: "Total Billed", value: peso(ledger.total_billed), icon: "ti-receipt-2", iconTone: "brand" },
-    { label: "Total Paid",   value: peso(ledger.total_paid),   icon: "ti-cash",      iconTone: "success" },
+    { label: "Total billed", value: peso(ledger.total_billed), icon: "ti-receipt-2", iconTone: "brand" },
+    { label: "Total paid",   value: peso(ledger.total_paid),   icon: "ti-cash",      iconTone: "success" },
     { label: "Balance",      value: peso(ledger.total_balance), icon: "ti-wallet",   iconTone: balance > 0 ? "error" : "success" },
   ];
+  // Newest first, as the ledger sends them; the year on screen opens (or the
+  // newest, when that year has no bills).
+  const years = ledger.school_years || [];
+  const openYear = years.some((yr) => yr.school_year === schoolYear) ? schoolYear : years[0]?.school_year;
 
   return (
     <div className="flex flex-col gap-4">
@@ -476,58 +722,8 @@ function BillingTab({ ledger, loading, failed, onRetry }) {
         ))}
       </div>
 
-      {(ledger.school_years || []).map((yr) => (
-        <Panel
-          key={yr.school_year + yr.enrollment_id}
-          title={`SY ${yr.school_year} · ${yr.grade_level}`}
-          padding="none"
-          action={
-            <Badge variant={Number(yr.year_balance) > 0 ? "error" : "success"}>
-              Balance {peso(yr.year_balance)}
-            </Badge>
-          }
-        >
-          <div className="flex flex-wrap gap-6 px-5 py-3 text-sm text-neutral-700">
-            <span>Billed: <strong className="text-neutral-900">{peso(yr.year_billed)}</strong></span>
-            <span>Paid: <strong className="text-success-500">{peso(yr.year_paid)}</strong></span>
-            <span>{(yr.invoices || []).length} invoice{(yr.invoices || []).length !== 1 ? "s" : ""}</span>
-          </div>
-
-          {/* The payment schedule was already in this payload (every invoice
-              carries its installments with due dates) but nothing rendered it,
-              so a parent could see what they owed and not when it was due --
-              the one thing they actually needed from this page. */}
-          {(yr.invoices || []).map((inv) => {
-            const schedule = (inv.installments || [])
-              .slice()
-              .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-            if (schedule.length === 0) return null;
-            return (
-              <div key={inv.invoice_id} className="border-t border-neutral-200/70">
-                <div className="px-5 pb-1.5 pt-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">
-                  Payment schedule · {inv.invoice_no}
-                </div>
-                {schedule.map((inst) => {
-                  const instBalance = Number(inst.balance ?? 0);
-                  const settled = inst.status === "paid" || instBalance <= 0;
-                  const late = !settled && inst.due_date && inst.due_date < todayISO();
-                  const variant = settled ? "success" : late ? "error" : "warning";
-                  const label = settled ? "Paid" : late ? "Overdue" : "Due";
-                  return (
-                    <div key={inst.installment_id} className="flex items-center gap-3 px-5 py-2 text-sm">
-                      <span className="w-6 shrink-0 text-neutral-500">#{inst.sequence}</span>
-                      <span className={`min-w-0 flex-1 ${late ? "font-bold text-error-500" : "text-neutral-900"}`}>
-                        {fmtDate(inst.due_date, null) || "No due date"}
-                      </span>
-                      <span className="text-neutral-700">{peso(inst.amount)}</span>
-                      <Badge variant={variant} size="sm">{label}</Badge>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </Panel>
+      {years.map((yr) => (
+        <YearBills key={yr.school_year + yr.enrollment_id} yr={yr} defaultOpen={yr.school_year === openYear} />
       ))}
 
       <p className="text-center text-xs leading-relaxed text-neutral-500">
@@ -550,6 +746,7 @@ export default function GuardianChildPage() {
   const [att, setAtt]       = useState(SECTION_INIT);
   const [ledger, setLedger] = useState(SECTION_INIT);
   const [reqs, setReqs]     = useState(SECTION_INIT);
+  const [years, setYears]   = useState(SECTION_INIT);
 
   const beginLoad = useLatestRequest();
   const load = useCallback(async () => {
@@ -571,6 +768,7 @@ export default function GuardianChildPage() {
     setReport(null);
     setLedger(SECTION_INIT);
     setReqs(SECTION_INIT);
+    setYears(SECTION_INIT);
 
     // Attendance is keyed off the enrollment we already have, so it starts
     // straight away — it never needed the report card at all.
@@ -589,16 +787,22 @@ export default function GuardianChildPage() {
       if (isCurrent()) setLoading(false);
     }
 
-    // Billing and documents are keyed off student_id, which only the report
-    // card carries — so if that call failed they genuinely can't be fetched.
-    // They still have to leave their loading state, which is exactly what the
-    // old control flow skipped.
+    // Billing, documents and the child's other years are keyed off
+    // student_id, which only the report card carries — so if that call
+    // failed they genuinely can't be fetched. They still have to leave their
+    // loading state, which is exactly what the old control flow skipped.
     if (studentId) {
       runSection(getStudentLedger(studentId), only(setLedger));
       runSection(fetchRequirementSummary(studentId), only(setReqs));
+      runSection(
+        getEnrollments({ student: studentId, page_size: 50 })
+          .then((data) => (Array.isArray(data) ? data : data?.results ?? [])),
+        only(setYears),
+      );
     } else {
       setLedger(SECTION_UNAVAILABLE);
       setReqs(SECTION_UNAVAILABLE);
+      setYears(SECTION_UNAVAILABLE);
     }
   }, [enrollmentId, beginLoad]);
 
@@ -609,6 +813,14 @@ export default function GuardianChildPage() {
   const student = report?.student;
   const enrollment = report?.enrollment;
   const fullName = student ? [student.first_name, student.middle_name, student.last_name, student.suffix].filter(Boolean).join(" ") : "";
+  // Nursery and Kindergarten are both a grade and a level; name them once.
+  const levelLabel = enrollment && (LEVEL_LABELS[enrollment.school_level] || enrollment.school_level);
+  const placeLine = enrollment
+    ? [enrollment.grade_level, enrollment.section, levelLabel !== enrollment.grade_level ? levelLabel : null]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const otherYears = (years.data?.length ?? 0) > 1;
 
   const missingDocs = missingRequirements(reqs.data);
 
@@ -653,18 +865,14 @@ export default function GuardianChildPage() {
                 rather than squeezing the name into a one-word-wide column. */}
             <div className="min-w-[12rem] flex-1">
               <h1 className="text-xl font-semibold leading-tight text-white">{fullName}</h1>
-              {enrollment && (
-                <div className="mt-1 text-sm text-white/75">
-                  {[enrollment.grade_level, enrollment.section, LEVEL_LABELS[enrollment.school_level] || enrollment.school_level]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </div>
-              )}
+              {placeLine && <div className="mt-1 text-sm text-white/75">{placeLine}</div>}
               <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-white/65">
                 {enrollment?.enrollment_status && (
                   <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} size="sm" />
                 )}
-                {enrollment?.school_year && <span>SY {enrollment.school_year}</span>}
+                {enrollment?.school_year && (otherYears
+                  ? <YearSwitch enrollment={enrollment} years={years.data} />
+                  : <span>SY {enrollment.school_year}</span>)}
                 {student.lrn && <span className="tabular-nums">LRN {student.lrn}</span>}
               </div>
             </div>
@@ -705,7 +913,12 @@ export default function GuardianChildPage() {
       <TabPanel id={tab} direction={direction}>
         {tab === "grades" && (loading ? <Card><Skeleton height={160} radius={12} /></Card> : <ReportCardTab data={report} error={error} />)}
         {tab === "attendance" && <AttendanceTab summary={att.data} loading={att.loading} failed={att.failed} onRetry={load} />}
-        {tab === "billing" && <BillingTab ledger={ledger.data} loading={ledger.loading} failed={ledger.failed} onRetry={load} />}
+        {tab === "billing" && (
+          <BillingTab
+            ledger={ledger.data} loading={ledger.loading} failed={ledger.failed} onRetry={load}
+            schoolYear={enrollment?.school_year}
+          />
+        )}
         {tab === "requirements" && <RequirementsTab requirements={reqs.data} loading={reqs.loading} failed={reqs.failed} onRetry={load} />}
       </TabPanel>
     </>

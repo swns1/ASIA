@@ -202,7 +202,7 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
 
           {/* School level chips */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {SCHOOL_LEVELS.map((lvl) => {
                 const active = form.school_level === lvl.value;
@@ -257,7 +257,7 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
                 style={{ overflow: "hidden" }}
               >
                 <div style={{ padding: "14px 16px", background: "var(--color-brand-50)", border: "1px dashed var(--color-brand-300)", borderRadius: 10, marginBottom: 14 }}>
-                  <div style={{ fontSize: 10.5, color: "var(--color-brand-600)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10 }}>Senior HS specifics</div>
+                  <div style={{ fontSize: 11, color: "var(--color-brand-600)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10 }}>Senior HS specifics</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 16px" }}>
                     <Field label="Strand">
                       <Select value={form.strand} onChange={(e) => setF("strand", e.target.value)}>

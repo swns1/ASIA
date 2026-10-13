@@ -89,7 +89,7 @@ function Collection({ years, states, get }) {
           // Five years on a phone leave ~50px a column; a note wider than
           // that would run into the next one's. The rate stays, and the pale
           // part of the column still shows what's owed.
-          const noteFits = note.length * 10.5 * 0.5 <= geo.slotW - 4;
+          const noteFits = note.length * 11 * 0.5 <= geo.slotW - 4;
           return (
             <g key={c.year}>
               <title>{`Billed ${peso(c.billed)} · Collected ${peso(c.collected)}`}</title>
@@ -113,7 +113,7 @@ function Collection({ years, states, get }) {
                 {c.rate == null ? "—" : `${fmtOne(c.rate)}%`}
               </text>
               {noteFits && (
-                <text x={geo.x(i)} y={top - 6} textAnchor="middle" fontSize="10.5" fill={colors.note}>
+                <text x={geo.x(i)} y={top - 6} textAnchor="middle" fontSize="11" fill={colors.note}>
                   {note}
                 </text>
               )}

@@ -107,6 +107,25 @@ describe("Invoices — menus", () => {
     expect(screen.getByRole("button", { name: "Due: Past due" })).toBeTruthy();
   });
 
+  it("opens on the invoices still owing money from the Billing panel's Outstanding", async () => {
+    // Not status=unpaid: a partly paid invoice still owes money too.
+    renderAt("/invoices?money=balance");
+    await screen.findByText("INV-2026-000001");
+    expect(lastList().has_balance).toBe("true");
+    expect(lastList().status).toBeUndefined();
+    await waitFor(() => expect(lastSummary().has_balance).toBe("true"));
+    expect(screen.getByRole("button", { name: "Money: Owes money" })).toBeTruthy();
+  });
+
+  it("narrows to invoices with a payment, for the Billing panel's Collected", async () => {
+    renderAt();
+    await screen.findByText("INV-2026-000001");
+    pick("Money", "Has a payment");
+    await waitFor(() => expect(lastList().has_payments).toBe("true"));
+    await waitFor(() => expect(lastSummary().has_payments).toBe("true"));
+    expect(lastList().has_balance).toBeUndefined();
+  });
+
   it("sorts by balance, which the server now works out", async () => {
     renderAt();
     await screen.findByText("INV-2026-000001");

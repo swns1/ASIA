@@ -76,7 +76,7 @@ export default function ColumnPlot({
               <line x1={gutter} x2={width} y1={geo.y(t)} y2={geo.y(t)} stroke={ink.grid} shapeRendering="crispEdges" />
               <text
                 x={gutter - 8} y={geo.y(t)} dy="0.35em"
-                textAnchor="end" fontSize="10.5" fill={ink.axis}
+                textAnchor="end" fontSize="11" fill={ink.axis}
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {formatTick(t)}
@@ -102,7 +102,7 @@ export default function ColumnPlot({
             }
           >
             <div className={`text-[11px] font-semibold ${l.muted ? "text-neutral-500" : "text-neutral-800"}`}>{l.label}</div>
-            {l.sub && <div className="text-[10.5px] text-neutral-500">{l.sub}</div>}
+            {l.sub && <div className="text-[11px] text-neutral-500">{l.sub}</div>}
           </div>
         ))}
       </div>

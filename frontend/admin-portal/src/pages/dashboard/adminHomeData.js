@@ -3,6 +3,8 @@
 // and so these can be tested on their own.
 
 import { LEVEL_LABELS, LEVEL_SHORT_LABELS } from "../../constants/schoolLevels";
+import { PERIOD_LABEL, quarterEventOn } from "../../utils/grading";
+import { fmtLongDay, localISODate } from "../../utils/format";
 
 export const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
@@ -25,18 +27,57 @@ function daysUntil(iso, now) {
   return Math.round((parseDate(iso) - today) / 86_400_000);
 }
 
+/**
+ * The label of the quarter `now` falls in, from the Academic Calendar's
+ * Grading Period events (utils/grading.js), or null on a day between quarters
+ * or a calendar without them. The admin home gets the same label from the
+ * teachers-today endpoint, which other roles can't read.
+ */
+export function quarterOn(events, now) {
+  const hit = quarterEventOn(events, now);
+  return hit ? PERIOD_LABEL[hit.grading_period] ?? hit.title ?? null : null;
+}
+
 export function dueLine(iso, now) {
   if (!iso) return null;
   const days = daysUntil(iso, now);
-  const date = parseDate(iso).toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" });
+  const date = fmtLongDay(parseDate(iso));
   if (days > 1)   return { text: `Due ${date} · ${days} days left`, late: false };
   if (days === 1) return { text: `Due tomorrow, ${date}`, late: false };
   if (days === 0) return { text: "Due today", late: false };
   return { text: `Was due ${date} · ${plural(-days, "day")} ago`, late: true };
 }
 
+/**
+ * Teachers today's due lines. Grades below Senior High are due when the
+ * quarter ends; Senior High grades by semester, so its are due when the
+ * semester does (teachers_today.py). A school with both gets a labelled line
+ * for each. Only sections with subjects count, and only calendar dates: a
+ * period guessed from grades has no due date.
+ */
+export function gradesDue(period, sections, now) {
+  if (period?.source !== "calendar") return [];
+  const graded = sections.filter((s) => s.grades);
+  const shs = graded.some((s) => s.school_level === "senior_highschool");
+  const rest = graded.some((s) => s.school_level !== "senior_highschool");
+  const both = shs && rest;
+  return [
+    rest && { ...dueLine(period.due_date, now), label: both ? period.label : null },
+    shs && { ...dueLine(period.semester_due_date, now), label: both ? `Senior High ${period.semester_label}` : null },
+  ].filter((d) => d?.text);
+}
+
 export function sectionName(s) {
   return [s.grade_level, s.strand, s.section].filter(Boolean).join(" · ");
+}
+
+// My Sections opened on one section's tab (TeacherSectionsPage reads
+// ?school_year=&section=&tab=&period=&subject=), for the teacher's home.
+export function mySectionsLink(year, advisoryId, tab, { period, subject } = {}) {
+  const q = new URLSearchParams({ school_year: year, section: String(advisoryId), tab });
+  if (period) q.set("period", period);
+  if (subject) q.set("subject", String(subject));
+  return `/my-sections?${q.toString()}`;
 }
 
 // A section's name on a tile, where "Grade 3 · Rizal" won't fit: "3-Rizal",
@@ -60,39 +101,51 @@ export function sectionsByLevel(sections) {
     .filter((group) => group.sections.length);
 }
 
+// The teacher's "Coming up": today and the next COMING_UP_DAYS days, as local
+// calendar dates. One window for the request and the list, so the list can't
+// ask for days it wasn't sent. Asked for by date, not by school year: near a
+// year's end the window runs into the next one's opening days.
+export const COMING_UP_DAYS = 45;
+
+export function comingUpWindow(now = new Date()) {
+  const until = new Date(now.getFullYear(), now.getMonth(), now.getDate() + COMING_UP_DAYS);
+  return { from: localISODate(now), to: localISODate(until) };
+}
+
+// Two cards to a row on a home page: two equal columns while both get 420px
+// or more, one column below that -- and never three, however wide the screen.
+// Cards in a row stretch to the taller one's height.
+export const TWO_UP = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,max(420px,calc(50%_-_8px))),1fr))] gap-4";
+
+/**
+ * Settles every request in `parts` ({ key: promise }) and answers
+ * `{ data, failed }`: each fulfilled value by its key, and the keys that
+ * failed. One failed request shouldn't blank a home page, but it must not
+ * pass silently either: a missing count would read as "nothing to do".
+ */
+export async function settleAll(parts, label = "Home") {
+  const keys = Object.keys(parts);
+  const results = await Promise.allSettled(Object.values(parts));
+  const data = {};
+  const failed = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") data[keys[i]] = r.value;
+    else {
+      failed.push(keys[i]);
+      console.error(`${label}: ${keys[i]} failed`, r.reason);
+    }
+  });
+  return { data, failed };
+}
+
 // Adds the page's year to a list-page link that doesn't carry one.
 export function withYear(link, year) {
   if (!year || /[?&]school_year=/.test(link)) return link;
   return `${link}${link.includes("?") ? "&" : "?"}school_year=${encodeURIComponent(year)}`;
 }
 
-// Every link carries the school year its count came from, because the list
-// pages open on the year in their link.
-export function attentionRows(data, schoolYear) {
-  const sy = encodeURIComponent(schoolYear ?? "");
-  return [
-    {
-      id: "pending", count: data.pending, icon: "ti-clipboard-list", tone: "warning", action: "Review",
-      text: (n) => `${plural(n, "enrollment")} waiting for your approval`,
-      to: `/enrollments?enrollment_status=pending&school_year=${sy}`,
-    },
-    {
-      id: "applications", count: data.applications, icon: "ti-user-plus", tone: "info", action: "Review",
-      text: (n) => `${plural(n, "new application")} to look over`,
-      to: "/student-applications",
-    },
-    {
-      id: "unpaid", count: data.unpaid, icon: "ti-receipt-off", tone: "error", action: "View",
-      text: (n) => `${plural(n, "invoice")} with no payment yet`,
-      to: `/invoices?status=unpaid&school_year=${sy}`,
-    },
-    {
-      id: "overdue", count: data.overdue, icon: "ti-clock-exclamation", tone: "error", action: "View",
-      text: (n) => `${plural(n, "invoice")} with a payment past due`,
-      to: `/invoices?overdue=1&school_year=${sy}`,
-    },
-  ].filter((r) => r.count > 0);
-}
+// What's waiting on the admin (the bell's queues) is in ./attention.js,
+// shared with the staff dashboard.
 
 // ── This year vs last year ──────────────────────────────────────────────────
 

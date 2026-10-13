@@ -27,9 +27,7 @@ to return True for any authenticated user when a view forgot this line,
 guardians included, which is why every `HasRole` view in this codebase sets
 it explicitly rather than relying on the (now safe) default.
 """
-from datetime import timedelta
-
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import Count, Max, OuterRef, Subquery
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 from rest_framework.response import Response
@@ -40,18 +38,20 @@ from accounts.models import User
 from accounts.permissions import HasRole, teacher_student_ids
 from ai.models import RiskAssessmentRun, StudentRiskScore, run_scope
 from attendance.models import AttendanceRecord
-from enrollments.models import Enrollment, SectionAdvisory
-from grades.models import Grade
+from enrollments.models import Enrollment, SectionAdvisory, advisory_roster, with_active_teacher
+from grades.models import Grade, NarrativeCategory, NarrativeReport
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from subjects.models import Subject
 
 from .services import (
+    attendance_window_start,
     shape_attendance_series,
     shape_level_distribution,
     shape_pipeline,
     shape_risk_bands,
     shape_risk_by_level,
 )
+from .my_day import shape_my_day
 from .teachers_today import (
     NO_CLASS_EVENT_TYPES,
     QUARTERS,
@@ -78,11 +78,12 @@ class DashboardSummaryView(APIView):
         school_year = request.query_params.get("school_year") or None
         weeks = self._weeks(request)
 
-        # None = no restriction. A teacher gets their advisory roster; an empty
-        # set (teacher with no advisory yet) correctly yields zeroes rather
-        # than the whole school — teacher_student_ids() fails closed.
+        # None = no restriction. A teacher gets their advisory roster for the
+        # year asked about; an empty set (teacher with no advisory yet)
+        # correctly yields zeroes rather than the whole school —
+        # teacher_student_ids() fails closed.
         student_ids = (
-            teacher_student_ids(request.user)
+            teacher_student_ids(request.user, school_year)
             if getattr(request.user, "role", None) == "teacher"
             else None
         )
@@ -140,11 +141,15 @@ class DashboardSummaryView(APIView):
         return shape_level_distribution(rows)
 
     def _attendance(self, school_year, student_ids, weeks):
-        since = timezone.localdate() - timedelta(weeks=weeks)
-        qs = AttendanceRecord.objects.filter(date__gte=since)
-        qs = self._scoped(qs, school_year, student_ids, prefix="enrollment__")
+        qs = self._scoped(AttendanceRecord.objects.all(), school_year, student_ids, prefix="enrollment__")
+        # The year's last `weeks` of attendance, so a past year shows its own
+        # final weeks rather than an empty window ending today.
+        since = attendance_window_start(
+            timezone.localdate(), qs.aggregate(last=Max("date"))["last"], weeks,
+        )
         rows = (
-            qs.annotate(week=TruncWeek("date"))
+            qs.filter(date__gte=since)
+              .annotate(week=TruncWeek("date"))
               .values("week", "status")
               .annotate(n=Count("attendance_id"))
         )
@@ -255,23 +260,18 @@ class TeachersTodayView(APIView):
 
     @staticmethod
     def _advisers(school_year):
-        rows = list(SectionAdvisory.objects.filter(school_year=school_year).values(
+        # Active advisers only: the same rule as the home pages' no-adviser
+        # queue (enrollments.models.with_active_teacher).
+        rows = list(with_active_teacher(SectionAdvisory.objects.filter(school_year=school_year)).values(
             "teacher_user_id", "school_level", "grade_level", "section", "strand",
         ))
-        accounts = {
-            user_id: (name, is_active)
-            for user_id, name, is_active in User.objects.filter(
-                user_id__in={r["teacher_user_id"] for r in rows},
-            ).values_list("user_id", "name", "is_active")
-        }
+        names = dict(User.objects.filter(
+            user_id__in={r["teacher_user_id"] for r in rows},
+        ).values_list("user_id", "name"))
         advisers = {}
         for r in rows:
             key = section_key(r["school_level"], r["grade_level"], r["section"], r["strand"])
-            name, is_active = accounts.get(r["teacher_user_id"], ("Unknown teacher", True))
-            # A deactivated adviser has left: nobody is taking that section's
-            # attendance, so it reads as having no adviser until reassigned.
-            if is_active:
-                advisers.setdefault(key, []).append(name)
+            advisers.setdefault(key, []).append(names.get(r["teacher_user_id"], "Unknown teacher"))
         return advisers
 
     @staticmethod
@@ -312,3 +312,92 @@ class TeachersTodayView(APIView):
         for period, eid, sid in rows:
             graded[period].add((eid, sid))
         return graded
+
+
+class MyDayView(APIView):
+    """
+    GET /api/dashboard/my-day/?school_year=2026-2027
+
+    The teacher's home: for each section the caller advises in that year,
+    today's saved attendance, and how many of the current grading period's
+    grades (per subject) and narrative ratings are in. Teachers only, and
+    only their own sections -- the caller is the teacher, never a parameter.
+    All decisions live in my_day.py; this only gathers the rows.
+    """
+    permission_classes = [HasRole]
+    required_roles     = {"teacher"}
+
+    def get(self, request):
+        try:
+            school_year = normalize_school_year(request.query_params.get("school_year"))
+        except InvalidSchoolYear as exc:
+            return Response({"detail": str(exc)}, status=400)
+        today = timezone.localdate()
+        teacher_id = getattr(request.user, "user_id", None) or getattr(request.user, "id", None)
+
+        advisories = list(
+            SectionAdvisory.objects.filter(teacher_user_id=teacher_id, school_year=school_year)
+            .order_by("grade_level", "section")
+        )
+        rosters = {
+            a.advisory_id: list(advisory_roster(a).values_list("enrollment_id", flat=True))
+            for a in advisories
+        }
+        advisory_of = {eid: aid for aid, eids in rosters.items() for eid in eids}
+        enrollment_ids = list(advisory_of)
+
+        attendance = {}
+        for eid, status in AttendanceRecord.objects.filter(
+            date=today, enrollment_id__in=enrollment_ids,
+        ).values_list("enrollment_id", "status"):
+            counts = attendance.setdefault(advisory_of[eid], {})
+            counts[status] = counts.get(status, 0) + 1
+
+        period = current_grading_period(
+            CalendarEvent.objects.filter(school_year=school_year, event_type="grading_period")
+                                 .values("grading_period", "start_date", "end_date"),
+            today,
+            graded_quarters=TeachersTodayView._graded_quarters(school_year),
+        )
+        periods = [period["key"], period["semester"]]
+
+        graded = {p: set() for p in periods}
+        for p, eid, sid in Grade.objects.filter(
+            enrollment_id__in=enrollment_ids, grading_period__in=periods,
+        ).values_list("grading_period", "enrollment_id", "subject_id"):
+            graded[p].add((eid, sid))
+
+        narratives = {p: set() for p in periods}
+        for p, eid, cid in NarrativeReport.objects.filter(
+            enrollment_id__in=enrollment_ids, grading_period__in=periods,
+        ).values_list("grading_period", "enrollment_id", "category_id"):
+            narratives[p].add((eid, cid))
+
+        return Response({
+            "school_year": school_year,
+            "date":        today.isoformat(),
+            **shape_my_day(
+                advisories=[
+                    {"advisory_id": a.advisory_id, "school_level": a.school_level,
+                     "grade_level": a.grade_level, "section": a.section, "strand": a.strand}
+                    for a in advisories
+                ],
+                rosters=rosters,
+                attendance=attendance,
+                subjects=list(Subject.objects.filter(school_year=school_year).values(
+                    "subject_id", "subject_code", "subject_name",
+                    "school_level", "grade_level", "strand", "semester",
+                )),
+                graded=graded,
+                narratives=narratives,
+                category_ids=list(NarrativeCategory.objects.filter(is_active=True).values_list("category_id", flat=True)),
+                period=period,
+                no_classes=no_classes_today(
+                    today,
+                    CalendarEvent.objects.filter(
+                        start_date__lte=today, end_date__gte=today,
+                        event_type__in=NO_CLASS_EVENT_TYPES,
+                    ).values("event_type", "title"),
+                ),
+            ),
+        })

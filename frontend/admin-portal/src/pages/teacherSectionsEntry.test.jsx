@@ -14,6 +14,10 @@ vi.mock("../utils/auth", async (importOriginal) => ({
   ...(await importOriginal()),
   getCurrentUser: () => ({ role: "teacher", user_id: 5 }),
 }));
+// My Sections shows one school year at a time (useYearFilter).
+vi.mock("../context/SchoolYearContext", () => ({
+  useSchoolYear: () => ({ currentYear: "2026-2027", yearStates: { "2026-2027": "current" }, options: ["2026-2027"], yearCounts: {} }),
+}));
 vi.mock("../api/identityApi", () => ({ getUsers: () => Promise.resolve([]) }));
 vi.mock("../api/enrollmentApi", () => ({
   getMySections: () =>
@@ -37,6 +41,8 @@ vi.mock("../api/enrollmentApi", () => ({
   getNarrativeCategories: () => Promise.resolve([]),
   getSectionNarrativeReports: () => Promise.resolve([]),
   saveSectionNarrativeReports: () => Promise.resolve({}),
+  // The quarter dates the grids open on; none here, so the 1st period.
+  getCalendarEvents: () => Promise.resolve([]),
 }));
 
 const { default: TeacherSectionsPage } = await import("./TeacherSectionsPage");

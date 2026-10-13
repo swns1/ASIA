@@ -112,6 +112,18 @@ def test_level_and_grade_narrow_the_count_too():
     calls.scope.filter.assert_any_call(grade_level__iexact="Grade 7")
 
 
+def test_a_status_narrows_the_band_too():
+    # The home pages read the pending queue's split from the summary.
+    _, calls = _run("school_year=2026-2027&enrollment_status=pending")
+    calls.scope.filter.assert_any_call(enrollment_status="pending")
+
+
+def test_a_status_the_tracker_doesnt_cover_is_refused():
+    response, calls = _run("school_year=2026-2027&enrollment_status=cancelled")
+    assert response.status_code == 400
+    calls.scope.order_by.assert_not_called()
+
+
 def test_the_documents_filter_narrows_the_rows_but_not_the_band():
     response, _ = _run("school_year=2026-2027&documents=missing")
     assert [r["student_id"] for r in response.data["results"]] == [2, 3]

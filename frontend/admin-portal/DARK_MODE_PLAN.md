@@ -4,12 +4,14 @@ For agents converting pages to dark mode. Read all of it before editing.
 Paths are relative to `frontend/admin-portal/src/` unless they start with
 `frontend/` or `/`.
 
-**Status (2026-10-11): every staff page is converted** (uncommitted,
-awaiting the user's visual check). 27 entries in `DARK_READY_PAGES`: all
-admin-reachable pages under the shell, plus the student and enrollment forms.
-Still light by design: login, /apply, report card, /print/*, guardian portal,
-NotFound, and the staff dashboard. Next is the closeout (§4, the user
-decides). Open questions and findings: `.claude/darkmode/findings.md`.
+**Status (2026-10-12): dark mode is live for every staff member.** Rounds 1–3
+are committed (728ee96b); rounds 4 and 5 (below) are uncommitted, awaiting the
+user's visual check. 28 entries in `DARK_READY_PAGES` cover every staff page
+under the shell (My Settings included), both dashboards, and the student and
+enrollment forms. Still light by
+design: login, /apply, report card, /print/*, NotFound. The guardian portal
+went dark-ready on 2026-10-13 (round 6, below).
+Open questions and findings: `.claude/darkmode/findings.md`.
 
 **Round 2 (2026-10-11), the user's answers:** fixed the three bugs (Invoices
 discounts heading → `text-warning-600`; the My Sections Passed/Failed chip's
@@ -29,6 +31,24 @@ labels are 11px; school-level colours are one palette app-wide (the level
 tokens: My Sections and Fee Schedules moved onto them, with `LEVEL_GLOW`).
 Staff don't get the switch for now.
 
+**Round 4 (2026-10-11):** every text size under 11px raised to 11px (icons
+and the print sheets excepted; the Calendar's event strips trimmed to 1px
+padding to fit). Dark mode opened to all staff: `useAppTheme` gates on
+STAFF_ALL (guardians light), works in production builds, and keeps one choice
+per person (`asia.theme.<user id>`). The Developer tab is gone.
+StaffDashboard converted (NotificationBell panel `bg-surface-raised` +
+MENU_DARK, lit tiles, `ring-surface` dot, the stat filters `bg-surface`).
+
+**Round 5 (2026-10-12):** the setting moved from the sidebar to each person's
+own page, **My Settings** (`/my-settings`, `pages/MySettingsPage.jsx`, every
+staff role), linked from the foot of the sidebar above the account card (the
+link is drawn like a nav item: `SidebarLink` in Sidebar.jsx). The page has
+the theme (three cards, each with a picture of the portal in that theme,
+drawn in fixed colours) and the account's Change password and Log out (the
+sidebar's account card lost its key and log-out buttons: the page is the one
+place for both; Log out still confirms). `ThemeSwitch.jsx` is gone. Section tiles on Sections and My Sections show their level's icon
+(`LEVEL_ICONS`), so a level doesn't rest on colour alone.
+
 ---
 
 ## 0. Ground rules (set by the user)
@@ -38,9 +58,13 @@ Staff don't get the switch for now.
 - **Branded dark is the approved look:** the login page's brand panel
   (`#180c0c`, dot grid, red corner glows), glass controls, lit icon tiles.
   **Glows hold still** (no drift animation, ever).
-- **The switch is an admin dev tool:** Billing Settings › Developer, dev builds
-  only, super_admin/admin only, Light / Dark / Same as my computer. Never
-  surface it to staff.
+- **The switch is every staff member's own:** the Theme setting on their My
+  Settings page (`pages/MySettingsPage.jsx`, linked from the foot of the
+  sidebar), Light / Dark / Auto (same as my computer), kept per person in
+  this browser, in every build. Guardians choose on the portal's own My
+  settings (`pages/GuardianSettingsPage.jsx`, round 6); anyone signed out
+  gets light. (Until 2026-10-11 it was an admin-only dev tool in Billing Settings
+  › Developer; that tab is gone. On 2026-10-11 it sat in the sidebar itself.)
 - **Restyle only.** No behaviour changes. Don't add or remove attributes other
   than `className`, `style` and `data-theme` (not even `aria-*` or
   `type="button"`; list such findings in your report instead). Don't split,
@@ -52,10 +76,9 @@ Staff don't get the switch for now.
 - **Process:** never commit. Don't verify UI in a browser; the user does. Run
   the checks in §5.
 - **Stays light by design (don't convert):** `/login`, `/apply/:inviteId`,
-  `/report-card/:id`, `/print/*`, the guardian portal, NotFound, in-page print
-  windows (the QR card `<style>` in StudentApplicationsPage), and the staff
-  `/dashboard` (`StaffDashboard`, `DashboardStat`, `NotificationBell`): dark
-  is admin-only.
+  `/report-card/:id`, `/print/*`, NotFound, in-page print
+  windows (the QR card `<style>` in StudentApplicationsPage), and the
+  Calendar's print sheets (portalled to `<body>`).
 
 ---
 
@@ -170,14 +193,21 @@ else is shared; see §7. Routes are what the group adds to `DARK_READY_PAGES`.
 | **G9 School Forms** | `^\/school-forms\/?$` | `pages/SchoolFormsPage.jsx` | Data colours with hex-alpha → color-mix. |
 | **G10 Calendar** | `^\/academic-calendar\/?$` | `pages/AcademicCalendarPage.jsx` | Event-type colours are user-chosen (§2). Injected hover `<style>` → `var()`. |
 | **G11 My Sections** | `^\/my-sections\/?$` | `pages/TeacherSectionsPage.jsx` | `SCHOOL_LEVEL_COLORS` → level tokens where exact, else §2 pairs. The gradebook and narrative cross-tabs are deliberately not `Table`: restyle in place. Its exported `SectionDetail` / `StudentsTab` also render on /sections (already converted, waiting on you): keep their props, and add `{ label: "Sections", match: /^\/sections\/?$/ }` + `"/sections"` to DARK_PATHS once they're done. |
-| **G12 Billing Settings** | `^\/settings\/?$` | `pages/BillingSettingsPage.jsx`, `pages/billingSettings/*` | Keep the Developer tab's gating exactly. Injected `baseCss` (`.settings-input`, shimmer) → `var()`. |
+| **G12 Billing Settings** | `^\/settings\/?$` | `pages/BillingSettingsPage.jsx`, `pages/billingSettings/*` | (Its Developer tab was removed 2026-10-11: the theme is on each person's My Settings page.) Injected `baseCss` (`.settings-input`, shimmer) → `var()`. |
 
-**Closeout (the user decides):** with every page ready, put `data-theme` on
-`<html>` and retire `DARK_READY_PAGES` (or keep it as the allowlist); dark for
-non-admins (StaffDashboard, the guardian portal). **Decided 2026-10-11: staff
-don't get the switch for now** (it stays dev-only and admin-only; useTheme.test
-pins every non-admin role to light). Before staff ever do, StaffDashboard's
-NotificationBell dropdown and filter select (both `bg-white`) need converting.
+**Closeout:** done 2026-10-11. Staff have the switch (My Settings), the staff
+dashboard is converted, and `DARK_READY_PAGES` stays as the allowlist (it keeps
+print and other light-by-design pages light). The guardian portal joined
+in round 6.
+
+**Round 6 (2026-10-13): the guardian portal.** Reverses "the guardian portal
+stays light". `useAppTheme` gates on STAFF_ALL + guardian; GuardianLayout
+renders through ThemeArea; `/guardian`, `/guardian/child/:id` and
+`/guardian/settings` are in `DARK_READY_PAGES`. The Theme and Account cards
+moved out of MySettingsPage into `components/settings/` (ThemeSettings takes
+`scene="staff"|"portal"` for its pictures), shared by both settings pages.
+GuardianHero no longer clips (BrandBackdrop clips itself), so the child
+page's school-year menu opens below it.
 Known, unfixed: the Dashboard pipeline's in-bar numbers measure 2.6–3.0:1 in
 light.
 

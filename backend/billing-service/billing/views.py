@@ -37,6 +37,7 @@ from .services import (
     apply_payment,
     close_out_invoice_for_transfer,
     compute_discount_waterfall,
+    void_invoice,
 )
 
 PAYMENT_PLANS = {"monthly", "quarterly", "semi_annual", "annual"}
@@ -447,6 +448,34 @@ def filter_overdue(queryset, flag):
     return queryset.filter(installments__status="overdue").distinct()
 
 
+def _flag(params, name):
+    return str(params.get(name)).lower() in ("1", "true")
+
+
+def filter_money(queryset, params):
+    """
+    `?has_balance=true`: non-void invoices that still owe money (balance > 0).
+    `?has_payments=true`: non-void invoices with at least one payment.
+
+    The lists behind the Billing panel's Outstanding and Collected figures
+    (financial_summary: net billed less payments, and all payments, over
+    non-void invoices). They used to link to `status=unpaid` and
+    `status=paid`, and a partly paid invoice counts toward both figures but
+    is neither, so each list held only part of its figure. Applied to the
+    list and its summary tiles alike, like filter_overdue.
+    """
+    from django.db.models import Exists, OuterRef
+
+    live = StudentInvoice.objects.exclude(status="void")
+    if _flag(params, "has_balance"):
+        owing = with_amounts(live).filter(balance__gt=0).values("invoice_id")
+        queryset = queryset.filter(invoice_id__in=owing)
+    if _flag(params, "has_payments"):
+        paid = live.filter(Exists(StudentPayment.objects.filter(invoice_id=OuterRef("invoice_id"))))
+        queryset = queryset.filter(invoice_id__in=paid.values("invoice_id"))
+    return queryset
+
+
 class StudentInvoiceViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -520,6 +549,7 @@ class StudentInvoiceViewSet(
                 Q(invoice_no__icontains=term) |
                 Q(enrollment_id__in=enrollment_ids_matching_student(term))
             )
+        queryset = filter_money(queryset, self.request.query_params)
         return filter_overdue(queryset, self.request.query_params.get("overdue"))
 
     @action(detail=False, methods=["post"], url_path="generate")
@@ -599,8 +629,7 @@ class StudentInvoiceViewSet(
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
-            invoice.status = "void"
-            invoice.save(update_fields=["status"])
+            void_invoice(invoice)
         return Response(StudentInvoiceSerializer(invoice).data)
 
     @action(detail=True, methods=["post"], url_path="reissue")
@@ -668,8 +697,8 @@ class StudentInvoiceViewSet(
         GET /api/invoices/summary/?school_year=2025-2026
 
         Returns real aggregate counts across ALL invoices (not just the current page).
-        Accepts the same status/payment_plan/enrollment_id/school_year filter params
-        as the list view — these counts drive the page's stat tiles, so they must be
+        Accepts the same payment_plan/enrollment_id/school_year/overdue/has_balance/
+        has_payments filter params as the list view — these counts drive the page's stat tiles, so they must be
         scoped exactly as the list is or the tiles would contradict the rows below.
 
         `school_years` lists every year that has invoices, for the year picker. It
@@ -690,6 +719,7 @@ class StudentInvoiceViewSet(
             qs = qs.filter(payment_plan=payment_plan)
         qs = scope_invoices_to_school_year(qs, request.query_params.get("school_year"))
         qs = filter_overdue(qs, request.query_params.get("overdue"))
+        qs = filter_money(qs, request.query_params)
 
         from django.db.models import Count
         counts = qs.values("status").annotate(n=Count("invoice_id"))

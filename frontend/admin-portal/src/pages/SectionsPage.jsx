@@ -16,7 +16,7 @@ import { getCurrentUser, hasAnyRole, STAFF_ADMIN } from "../utils/auth";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import useYearFilter from "../hooks/useYearFilter";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { GRADE_LEVELS_BY_LEVEL, LEVEL_LABELS } from "../constants/schoolLevels";
+import { GRADE_LEVELS_BY_LEVEL, LEVEL_ICONS, LEVEL_LABELS } from "../constants/schoolLevels";
 import { LEVEL_GLOW } from "../constants/statusTones";
 import useTheme from "../hooks/useTheme";
 import { SectionDetail, StudentsTab } from "./TeacherSectionsPage";
@@ -31,7 +31,9 @@ import { SectionDetail, StudentsTab } from "./TeacherSectionsPage";
 
 const GRADE_ORDER = Object.values(GRADE_LEVELS_BY_LEVEL).flat();
 
-// Complete literal class strings: Tailwind can't see interpolated names.
+// Complete literal class strings: Tailwind can't see interpolated names. The
+// tile holds its level's icon too (levelIcon), so a level never rests on
+// colour alone.
 const LEVEL_CHIP = {
   nursery:           `bg-nursery-50 text-nursery-500 ${LEVEL_GLOW.nursery}`,
   kindergarten:      `bg-kindergarten-50 text-kindergarten-500 ${LEVEL_GLOW.kindergarten}`,
@@ -39,6 +41,8 @@ const LEVEL_CHIP = {
   junior_highschool: `bg-juniorhigh-50 text-juniorhigh-500 ${LEVEL_GLOW.juniorhigh}`,
   senior_highschool: `bg-seniorhigh-50 text-seniorhigh-500 ${LEVEL_GLOW.seniorhigh}`,
 };
+
+const levelIcon = (level) => LEVEL_ICONS[level] ?? "ti-users-group";
 
 const asList = (data) => (Array.isArray(data) ? data : data?.results ?? []);
 
@@ -98,7 +102,7 @@ function SectionList({ rows, selectedId, onSelect, adviserNames }) {
         ) : (
           groups.map(([grade, list]) => (
             <div key={grade}>
-              <div className="px-2.5 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-neutral-500">
+              <div className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.07em] text-neutral-500">
                 {grade}
               </div>
               {list.map((r) => {
@@ -115,7 +119,7 @@ function SectionList({ rows, selectedId, onSelect, adviserNames }) {
                     }`}
                   >
                     <span className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${LEVEL_CHIP[r.school_level] ?? LEVEL_CHIP.elementary}`}>
-                      <i className="ti ti-users-group text-[15px]" aria-hidden="true" />
+                      <i className={`ti ${levelIcon(r.school_level)} text-[15px]`} aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-[13px] font-bold ${selected ? "text-brand-600" : "text-neutral-900"}`}>
@@ -244,12 +248,12 @@ function UnadvisedSection({ section, schoolYear, canManage }) {
         {dark && <BrandBackdrop tone="dark" />}
         <div className="flex items-center gap-3">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] ${LEVEL_CHIP[section.school_level] ?? LEVEL_CHIP.elementary}`}>
-            <i className="ti ti-users-group text-[17px]" aria-hidden="true" />
+            <i className={`ti ${levelIcon(section.school_level)} text-[17px]`} aria-hidden="true" />
           </span>
           <div>
             <div className="text-lg font-bold text-neutral-900">{sectionTitle(section)}</div>
             <div className="mt-0.5 text-xs text-neutral-500">
-              {LEVEL_LABELS[section.school_level] || section.school_level} · SY {schoolYear}
+              {LEVEL_LABELS[section.school_level] || section.school_level} · S.Y. {schoolYear}
             </div>
           </div>
         </div>

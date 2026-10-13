@@ -75,7 +75,7 @@ vi.mock("../../context/SchoolYearContext", () => ({
 const { default: EnrollmentsPage } = await import("../EnrollmentsPage");
 const { default: EnrollmentFormPage } = await import("../EnrollmentFormPage");
 const { default: ThemeArea } = await import("../../components/ThemeArea");
-const { default: useTheme, ThemeContext } = await import("../../hooks/useTheme");
+const { default: useTheme, ThemeContext, setThemePreference } = await import("../../hooks/useTheme");
 const { invalidateSections } = await import("../../hooks/useSections");
 
 // "dark", or null for light (a light container carries no attribute).
@@ -290,7 +290,7 @@ describe("Enrollment form in dark", () => {
   beforeEach(() => {
     // An admin who chose dark: the form themes itself (ThemeArea).
     signInAs("admin");
-    localStorage.setItem("asia.dev.theme", "dark");
+    setThemePreference("dark");
     api.getStudent.mockResolvedValue(STUDENT);
     api.getEnrollments.mockResolvedValue({ results: [{
       enrollment_id: 70, student_id: 7, school_year: "2024-2025",

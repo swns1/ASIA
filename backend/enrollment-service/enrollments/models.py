@@ -184,6 +184,25 @@ def advisory_roster(advisory):
     return qs
 
 
+def with_active_teacher(advisories):
+    """
+    Narrows a SectionAdvisory queryset to advisers whose account is active.
+
+    A deactivated adviser has left: nobody is taking that section's attendance
+    or entering its grades, so the section reads as having no adviser until
+    it's reassigned. Every "does this section have an adviser?" count goes
+    through here (Teachers today, the home pages' no-adviser queue via the
+    sections list) so the two can't disagree on the same page.
+
+    Not for "is this section in use?": a deactivated adviser's row still ties
+    the section down (sections list `adviser_count`).
+    """
+    from accounts.models import User  # accounts never imports this app; kept lazy anyway
+    return advisories.filter(
+        teacher_user_id__in=User.objects.filter(is_active=True).values("user_id"),
+    )
+
+
 # ─── Transfer audit log ───────────────────────────────────────────────────────
 class EnrollmentTransfer(models.Model):
     """

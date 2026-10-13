@@ -41,6 +41,7 @@ from .models import (
     SectionAdvisory,
     Student,
     advisory_roster,
+    with_active_teacher,
 )
 from .serializers import (
     EnrollmentSerializer,
@@ -1388,6 +1389,7 @@ class SectionViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             **self.get_serializer_context(),
             "enrollment_counts": self._counts(Enrollment.objects.exclude(enrollment_status="cancelled"), years),
             "adviser_counts": self._counts(SectionAdvisory.objects.all(), years),
+            "active_adviser_counts": self._counts(with_active_teacher(SectionAdvisory.objects.all()), years),
         }
         return Response(SectionSerializer(queryset, many=True, context=context).data)
 
@@ -1543,8 +1545,8 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
     def documents(self, request):
         """
         GET /api/enrollments/documents/?school_year=2026-2027
-            [&school_level=…&grade_level=…&search=…&documents=missing|complete
-             &student=…&page=…&page_size=…]
+            [&school_level=…&grade_level=…&enrollment_status=pending|enrolled|completed
+             &search=…&documents=missing|complete&student=…&page=…&page_size=…]
 
         Each learner in a school year with the required documents their
         placement asks for: how many are in, and which are still missing. The
@@ -1557,6 +1559,10 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         the other list pages' bands, `summary` counts the year, level and
         grade, and ignores the search and the documents filter, which only
         narrow the rows.
+
+        `enrollment_status` narrows the scope itself, `summary` included: with
+        `pending` the summary is the approval queue split by whether the gate
+        would let each one through, which is what the home pages count.
         """
         from requirements.models import RequirementType, StudentRequirementSubmission
         from requirements.rules import document_rows
@@ -1582,6 +1588,14 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             scope = scope.filter(school_level__iexact=params["school_level"])
         if params.get("grade_level"):
             scope = scope.filter(grade_level__iexact=params["grade_level"])
+        wanted_status = (params.get("enrollment_status") or "").strip()
+        if wanted_status:
+            if wanted_status not in DOCUMENT_TRACKED_STATUSES:
+                return Response(
+                    {"detail": f"enrollment_status must be one of: {', '.join(DOCUMENT_TRACKED_STATUSES)}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            scope = scope.filter(enrollment_status=wanted_status)
         enrollments = list(scope.order_by("enrollment_id"))
         student_ids = {e.student_id for e in enrollments}
 
@@ -1735,9 +1749,12 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         if role == "guardian":
             qs = qs.filter(student_id__in=guardian_student_ids(self.request.user))
         # Teachers only see their own SectionAdvisory roster — matches how
-        # grades/attendance are already scoped for the teacher role.
+        # grades/attendance are already scoped for the teacher role. A list of
+        # one year reads that year's sections (teacher_student_ids).
         elif role == "teacher":
-            qs = qs.filter(student_id__in=teacher_student_ids(self.request.user))
+            qs = qs.filter(student_id__in=teacher_student_ids(
+                self.request.user, self.request.query_params.get("school_year"),
+            ))
         return qs
     search_fields = (
         "student__first_name",

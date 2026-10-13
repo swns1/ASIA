@@ -25,6 +25,12 @@ export const getDashboardSummary = (params = {}) =>
  * check on teachers: advisers, attendance taken today, and how many of the
  * current grading period's grades are in. super_admin/admin only.
  */
+// The teacher's home: per section they advise in the year, today's saved
+// attendance and this period's grades (per subject) and narrative ratings.
+// Teachers only; always the caller's own sections.
+export const getMyDay = (params = {}) =>
+  enrollmentClient.get("/dashboard/my-day/", { params }).then((r) => r.data);
+
 export const getTeachersToday = (params = {}) =>
   enrollmentClient.get("/dashboard/teachers-today/", { params }).then((r) => r.data);
 

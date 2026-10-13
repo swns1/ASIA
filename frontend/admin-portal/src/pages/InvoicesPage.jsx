@@ -42,6 +42,7 @@ import {
 } from "../api/billingApi";
 import { getEnrollments as _getEnrollments } from "../api/enrollmentApi";
 import { fmtDate } from "../utils/format";
+import { splitItem } from "../utils/invoice";
 
 const getInvoices       = (p = {}) => _getInvoices(p);
 const getInvoice        = (id)     => _getInvoice(id);
@@ -73,6 +74,16 @@ const DUE_FILTERS = [
   { value: "",        label: "Any" },
   { value: "overdue", label: "A payment is past due" },
 ];
+
+// The lists behind the Billing panel's Outstanding and Collected figures
+// (?money=balance / ?money=payments). Not statuses: a partly paid invoice
+// both still owes money and has a payment.
+const MONEY_FILTERS = [
+  { value: "",         label: "Any" },
+  { value: "balance",  label: "Still owes money", short: "Owes money" },
+  { value: "payments", label: "Has a payment",    short: "Has a payment" },
+];
+const MONEY_PARAMS = { balance: "has_balance", payments: "has_payments" };
 
 // Long enough that a word is finished, short enough that the list keeps up.
 // The same wait as the other list pages.
@@ -270,7 +281,7 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
 
           {/* Search enrollment */}
           <div style={{ marginBottom:14 }}>
-            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 }}>Enrollment *</label>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:6 }}>Enrollment *</label>
             {selected ? (
               <motion.div
                 initial={{ opacity:0, scale:0.97 }}
@@ -324,7 +335,7 @@ function GenerateModal({ onClose, onGenerated, onOpenExisting }) {
 
           {/* Payment plan */}
           <div style={{ marginBottom:6 }}>
-            <label style={{ display:"block", fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan *</label>
             <PlanChoice plan={plan} onChange={setPlan} />
           </div>
         </div>
@@ -390,7 +401,7 @@ function ReissueModal({ invoice, onClose, onReissued }) {
           The original invoice date is kept, so an Early Bird discount already earned still applies.
         </div>
         <div>
-          <div style={{ fontSize:10.5, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"var(--color-neutral-700)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:8 }}>Payment Plan</div>
           <PlanChoice plan={plan} onChange={setPlan} />
         </div>
       </div>
@@ -471,7 +482,7 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
               <span style={{ fontSize:18, fontWeight:700, color:"var(--color-neutral-900)" }}>{invoice.invoice_no}</span>
               <StatusBadge status={invoice.status} map={INVOICE_STATUS_MAP} size="sm" />
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99, background:dark ? planMeta.dark.bg : planMeta.bg, color:dark ? planMeta.dark.color : planMeta.color }}>{planMeta.label}</span>
-              {invoice.recalculated_at && <span style={{ fontSize:10, color:"var(--color-neutral-500)", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
+              {invoice.recalculated_at && <span style={{ fontSize:11, color:"var(--color-neutral-500)", fontStyle:"italic" }}>Recalculated {fmtDate(invoice.recalculated_at)}</span>}
             </div>
             {en && (
               <div className="text-[#5a4a4a] dark:text-neutral-800" style={{ fontSize:13 }}>
@@ -590,7 +601,7 @@ function InvoiceDetail({ invoiceId, onVoided, onReissued, onRecordPayment }) {
                 </div>
                 {group.items.map((item) => (
                   <div key={item.invoice_item_id} className="border-b border-[#f9f0f0] dark:border-neutral-200" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 18px", fontSize:13 }}>
-                    <span style={{ color:"var(--color-neutral-900)" }}>{item.description.replace(/^\[.*?\]\s*/, "")}</span>
+                    <span style={{ color:"var(--color-neutral-900)" }}>{splitItem(item.description).name}</span>
                     <span style={{ fontWeight:600, color:"var(--color-neutral-900)" }}>{fmt(item.amount)}</span>
                   </div>
                 ))}
@@ -818,12 +829,18 @@ export default function InvoicesPage() {
   // overdue count, which links here with ?overdue=1. Overdue is flagged on
   // installments, not on the invoice's status, so it's its own menu.
   const [overdueOnly,  setOverdueOnly]  = useState(() => ["1", "true"].includes(searchParams.get("overdue")));
+  const [moneyFilter,  setMoneyFilter]  = useState(() => (MONEY_PARAMS[searchParams.get("money")] ? searchParams.get("money") : ""));
   const [search,       setSearch]       = useState("");
   const [inputVal,     setInputVal]     = useState("");
-  const [ordering,     setOrdering]     = useState(DEFAULT_ORDERING);
+  // A link may name a sort (?ordering=-balance: the homes' last-year balances
+  // open on the largest first); anything not on the menu is ignored.
+  const [ordering,     setOrdering]     = useState(() =>
+    SORT_OPTIONS.find((o) => o.value === searchParams.get("ordering"))?.value ?? DEFAULT_ORDERING);
   const [page,         setPage]         = useState(1);
   const [pageMeta,     setPageMeta]     = useState({ count:0, next:null, previous:null });
-  const [showGenModal,      setShowGenModal]      = useState(false);
+  // Open from a link (?generate=1): the accounting home's "Generate an
+  // invoice" lands here, so there is one generate window, not two.
+  const [showGenModal,      setShowGenModal]      = useState(() => searchParams.get("generate") === "1");
   const [payModalInvoiceId, setPayModalInvoiceId] = useState(null);
   const [refreshKey,        setRefreshKey]        = useState(0);
   const searchRef = useRef(null);
@@ -843,6 +860,7 @@ export default function InvoicesPage() {
       if (search.trim())          params.search = search.trim();
       if (yearFilter)             params.school_year = yearFilter;
       if (overdueOnly)            params.overdue = "true";
+      if (moneyFilter)            params[MONEY_PARAMS[moneyFilter]] = "true";
       const data = await getInvoices(params);
       if (seq !== fetchSeq.current) return;
       setInvoices(Array.isArray(data) ? data : data?.results ?? []);
@@ -858,7 +876,7 @@ export default function InvoicesPage() {
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [statusFilter, planFilter, search, ordering, yearFilter, overdueOnly]);
+  }, [statusFilter, planFilter, search, ordering, yearFilter, overdueOnly, moneyFilter]);
 
   // Any filter, another year, or a change made here (a payment, a void) is
   // another list: back to its first page.
@@ -868,18 +886,19 @@ export default function InvoicesPage() {
   // like the list, but not the status (each count is its own status) or the
   // search, which narrows only the rows, as on the other list pages. Kept
   // with the scope it was counted for, so a stale answer never shows.
-  const scopeKey = JSON.stringify({ yearFilter, planFilter, overdueOnly, refreshKey });
+  const scopeKey = JSON.stringify({ yearFilter, planFilter, overdueOnly, moneyFilter, refreshKey });
   const [summary, setSummary] = useState({ key: null, data: null });
   // The year menu lists years that have invoices, which the summary reports;
   // kept across scopes so the menu doesn't empty while the next one loads.
   const [invoiceYears, setInvoiceYears] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    const { yearFilter: year, planFilter: plan, overdueOnly: overdue } = JSON.parse(scopeKey);
+    const { yearFilter: year, planFilter: plan, overdueOnly: overdue, moneyFilter: money } = JSON.parse(scopeKey);
     const params = {};
     if (plan)    params.payment_plan = plan;
     if (year)    params.school_year = year;
     if (overdue) params.overdue = "true";
+    if (money) params[MONEY_PARAMS[money]] = "true";
     getInvoiceSummary(params)
       .then((d) => {
         if (cancelled) return;
@@ -902,15 +921,16 @@ export default function InvoicesPage() {
 
   // The current year is where the page opens, so it isn't a filter to clear.
   const hasActiveFilters =
-    search || statusFilter !== "all" || planFilter || overdueOnly ||
+    search || statusFilter !== "all" || planFilter || overdueOnly || moneyFilter ||
     ordering !== DEFAULT_ORDERING || !yearIsDefault;
   // What narrows the list. The year doesn't: every visit opens on one.
-  const narrowed = search || statusFilter !== "all" || planFilter || overdueOnly;
+  const narrowed = search || statusFilter !== "all" || planFilter || overdueOnly || moneyFilter;
 
   const handleClearAll = () => {
     setInputVal(""); setSearch("");
     setStatusFilter("all"); setPlanFilter("");
     setOverdueOnly(false);
+    setMoneyFilter("");
     setOrdering(DEFAULT_ORDERING);
     // Clearing returns to the current school year, not to all-years: falling
     // back to every year would resurrect the mixed-year view this filter exists
@@ -927,6 +947,8 @@ export default function InvoicesPage() {
     `invoice${counts?.total === 1 ? "" : "s"} in ${yearFilter ? `S.Y. ${yearFilter}` : "all school years"}`,
     planFilter && `${PLAN_META[planFilter]?.label} plan`,
     overdueOnly && "with a payment past due",
+    moneyFilter === "balance" && "still owing money",
+    moneyFilter === "payments" && "with a payment",
   ].filter(Boolean).join(" · ");
 
   const statusMeta = INVOICE_STATUS_MAP[statusFilter];
@@ -1004,6 +1026,17 @@ export default function InvoicesPage() {
             onChange={(v) => setOverdueOnly(v === "overdue")}
             align="end"
             menuWidth={240}
+          />
+
+          <FilterMenu
+            label="Money"
+            valueLabel={MONEY_FILTERS.find((o) => o.value === moneyFilter)?.short ?? "Any"}
+            active={Boolean(moneyFilter)}
+            options={MONEY_FILTERS}
+            value={moneyFilter}
+            onChange={setMoneyFilter}
+            align="end"
+            menuWidth={200}
           />
 
           <FilterMenu

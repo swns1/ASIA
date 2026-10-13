@@ -180,7 +180,7 @@ function FeesByGrade({ years, get }) {
             {scale.ticks.map((t) => (
               <span
                 key={t}
-                className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap text-[10.5px] leading-none text-neutral-500"
+                className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap text-[11px] leading-none text-neutral-500"
                 style={{ left: `${scale.at(t)}%` }}
               >
                 {pesoCompact(t)}

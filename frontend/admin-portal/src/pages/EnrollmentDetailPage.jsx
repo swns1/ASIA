@@ -411,7 +411,7 @@ export default function EnrollmentDetailPage() {
             {dark && <BrandBackdrop tone="dark" />}
             {infoFields.map(({ label, value }, i) => (
               <div key={label} style={{ flex: "1 1 120px", padding: "12px 18px", borderRight: i < infoFields.length - 1 ? "1px solid var(--color-neutral-200)" : "none", minWidth: 0 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value ?? "—"}</div>
               </div>
             ))}

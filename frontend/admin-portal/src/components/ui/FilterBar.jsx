@@ -34,7 +34,7 @@ export function FilterRow({ label, children }) {
   return (
     <div>
       {label && (
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">
+        <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500">
           {label}
         </div>
       )}

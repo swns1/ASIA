@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { Link, useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 
 import {
-  hasAnyRole, clearAuthSession, portalLabelFor,
+  hasAnyRole, portalLabelFor,
   STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
 } from "../utils/auth";
 import useCurrentUser from "../hooks/useCurrentUser";
 import useTheme from "../hooks/useTheme";
-import AccountSettingsModal from "./AccountSettingsModal";
 import useMediaQuery from "../hooks/useMediaQuery";
 import BrandBackdrop from "./ui/BrandBackdrop";
-import { ConfirmDialog } from "./ui/Modal";
 import { springTransition } from "../utils/motion";
 import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
@@ -68,16 +66,62 @@ const NAV = [
   },
 ];
 
+// Every staff member's own page (their theme and password, and logging out),
+// at the foot of the sidebar beside their account card rather than among the
+// school's pages.
+const MY_SETTINGS = { label: "My Settings", icon: "ti-adjustments-horizontal", path: "/my-settings" };
+
+const isCurrent = (pathname, path) => pathname === path || pathname.startsWith(path + "/");
+
+function SidebarLink({ item, showLabels, active, className = "" }) {
+  return (
+    <Link
+      to={item.path}
+      aria-current={active ? "page" : undefined}
+      title={showLabels ? undefined : item.label}
+      className={[
+        "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+        showLabels ? "" : "justify-center",
+        active
+          ? "font-semibold text-brand-600 dark:text-white"
+          : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
+        className,
+      ].join(" ")}
+    >
+      {active && (
+        // Dark: a red wash fading to the right, edged in red.
+        <motion.span
+          layoutId="sidebar-active-pill"
+          transition={springTransition}
+          className="absolute inset-0 rounded-md bg-brand-100 dark:bg-transparent dark:bg-[linear-gradient(90deg,rgba(224,49,49,0.34),rgba(224,49,49,0.08))] dark:shadow-[inset_0_0_0_1px_rgba(224,49,49,0.28)]"
+        />
+      )}
+      <span className="relative flex items-center gap-2.5">
+        <i
+          className={`ti ${item.icon} w-5 shrink-0 text-center text-[16px]`}
+          aria-hidden="true"
+        />
+        {showLabels ? <span className="truncate">{item.label}</span> : (
+          <span className="sr-only">{item.label}</span>
+        )}
+      </span>
+      {active && (
+        <span
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-brand-500 dark:bg-action dark:shadow-[0_0_10px_rgba(224,49,49,0.9)]"
+          aria-hidden="true"
+        />
+      )}
+    </Link>
+  );
+}
+
 export default function Sidebar({
   collapsed = false,
   onToggleCollapsed,
   mobileOpen = false,
   onCloseMobile,
 }) {
-  const navigate = useNavigate();
   const location = useLocation();
-  const [showLogout, setShowLogout] = useState(false);
-  const [showAccount, setShowAccount] = useState(false);
   // Sections marked `defaultCollapsed` (currently just "Admin") start closed;
   // this is the only per-section collapse state — independent of the
   // whole-rail `collapsed` prop below.
@@ -114,11 +158,6 @@ export default function Sidebar({
     if (mobileOpen) onCloseMobile?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
-
-  function handleLogout() {
-    clearAuthSession();
-    navigate("/");
-  }
 
   return (
     <>
@@ -181,50 +220,14 @@ export default function Sidebar({
             // so its items always render flat rather than disappearing.
             const isOpen = !group.collapsible || !showLabels || !collapsedSections.has(group.section);
 
-            const items = group.items.map((item) => {
-              const active =
-                location.pathname === item.path ||
-                location.pathname.startsWith(item.path + "/");
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  aria-current={active ? "page" : undefined}
-                  title={showLabels ? undefined : item.label}
-                  className={[
-                    "focus-ring relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                    showLabels ? "" : "justify-center",
-                    active
-                      ? "font-semibold text-brand-600 dark:text-white"
-                      : "text-neutral-700 hover:bg-brand-50 hover:text-brand-600",
-                  ].join(" ")}
-                >
-                  {active && (
-                    // Dark: a red wash fading to the right, edged in red.
-                    <motion.span
-                      layoutId="sidebar-active-pill"
-                      transition={springTransition}
-                      className="absolute inset-0 rounded-md bg-brand-100 dark:bg-transparent dark:bg-[linear-gradient(90deg,rgba(224,49,49,0.34),rgba(224,49,49,0.08))] dark:shadow-[inset_0_0_0_1px_rgba(224,49,49,0.28)]"
-                    />
-                  )}
-                  <span className="relative flex items-center gap-2.5">
-                    <i
-                      className={`ti ${item.icon} w-5 shrink-0 text-center text-[16px]`}
-                      aria-hidden="true"
-                    />
-                    {showLabels ? <span className="truncate">{item.label}</span> : (
-                      <span className="sr-only">{item.label}</span>
-                    )}
-                  </span>
-                  {active && (
-                    <span
-                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-brand-500 dark:bg-action dark:shadow-[0_0_10px_rgba(224,49,49,0.9)]"
-                      aria-hidden="true"
-                    />
-                  )}
-                </Link>
-              );
-            });
+            const items = group.items.map((item) => (
+              <SidebarLink
+                key={item.path}
+                item={item}
+                showLabels={showLabels}
+                active={isCurrent(location.pathname, item.path)}
+              />
+            ));
 
             return (
               <div key={group.section} className="mb-1.5">
@@ -291,8 +294,16 @@ export default function Sidebar({
         </div>
 
         {/* User card. Dark: glass over the panel's strongest glow, with the
-            avatar in the login button's red. */}
+            avatar in the login button's red. Above it, the link to the
+            person's own settings, where they change their password and log
+            out. */}
         <div className="border-t border-neutral-200 p-2.5 dark:border-white/[0.07]">
+          <SidebarLink
+            item={MY_SETTINGS}
+            showLabels={showLabels}
+            active={isCurrent(location.pathname, MY_SETTINGS.path)}
+            className={showLabels ? "mb-1.5" : ""}
+          />
           {showLabels && (
             <div className="flex items-center gap-2.5 rounded-md bg-brand-50 p-2.5 dark:bg-white/[0.06] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
               <div
@@ -314,70 +325,10 @@ export default function Sidebar({
                   {portalLabelFor(currentUser?.role)}
                 </div>
               </div>
-              <button
-                type="button"
-                title="Change password"
-                aria-label="Change password"
-                onClick={() => setShowAccount(true)}
-                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
-              >
-                <i className="ti ti-key text-[15px]" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                title="Log out"
-                aria-label="Log out"
-                onClick={() => setShowLogout(true)}
-                className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
-              >
-                <i className="ti ti-logout text-[15px]" aria-hidden="true" />
-              </button>
             </div>
-          )}
-          {!showLabels && (
-            <button
-              type="button"
-              title="Change password"
-              aria-label="Change password"
-              onClick={() => setShowAccount(true)}
-              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
-            >
-              <i className="ti ti-key text-[15px]" aria-hidden="true" />
-            </button>
-          )}
-          {!showLabels && (
-            <button
-              type="button"
-              title="Log out"
-              aria-label="Log out"
-              onClick={() => setShowLogout(true)}
-              className="focus-ring mt-1.5 flex h-8 w-full items-center justify-center rounded-sm border border-neutral-300 bg-surface text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] transition-colors hover:border-brand-300 hover:bg-brand-100 hover:text-brand-600"
-            >
-              <i className="ti ti-logout text-[15px]" aria-hidden="true" />
-            </button>
           )}
         </div>
       </aside>
-
-      <AnimatePresence>
-        {showLogout && (
-          <ConfirmDialog
-            icon="ti-logout"
-            danger={false}
-            title="Log out?"
-            message="You'll be returned to the login page. Any unsaved changes will be lost."
-            confirmLabel="Yes, log out"
-            cancelLabel="Stay"
-            onConfirm={handleLogout}
-            onCancel={() => setShowLogout(false)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {showAccount && (
-          <AccountSettingsModal user={currentUser} onClose={() => setShowAccount(false)} />
-        )}
-      </AnimatePresence>
     </>
   );
 }

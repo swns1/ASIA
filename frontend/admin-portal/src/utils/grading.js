@@ -37,6 +37,55 @@ export const PERIOD_LABEL = {
   "1st_semester": "1st Semester", "2nd_semester": "2nd Semester",
 };
 
+// ── The current grading period, from the Academic Calendar ────────────────
+//
+// The calendar holds one Grading Period event per quarter (its end date is
+// that quarter's grade due date). Senior High grades by semester, derived
+// from the quarters: Q1-Q2 are the 1st semester, Q3-Q4 the 2nd -- the same
+// rule as the backend's dashboard/teachers_today.py.
+
+// "2026-10-23" is a calendar date, not an instant; read it on this device's
+// calendar rather than as UTC midnight (the day before, east of UTC).
+function localDate(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+const dayOf = (now) => new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+/** The calendar's Grading Period events, earliest first. */
+function quarterEvents(events) {
+  return (events ?? [])
+    .filter((e) => e.event_type === "grading_period" && e.grading_period && e.start_date && e.end_date)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
+
+/** The Grading Period event `now` falls in (its last day included), or null. */
+export function quarterEventOn(events, now) {
+  const today = dayOf(now);
+  return quarterEvents(events).find((e) => localDate(e.start_date) <= today && today <= localDate(e.end_date)) ?? null;
+}
+
+/**
+ * The quarter a grade grid should open on: the one `now` falls in; between
+ * quarters, the one just ended (its grades are what's being finished); before
+ * the first, the first; after the last, the last. Null when the calendar has
+ * no quarter dates.
+ */
+export function currentQuarterKey(events, now) {
+  const list = quarterEvents(events);
+  if (!list.length) return null;
+  const today = dayOf(now);
+  const started = list.filter((e) => localDate(e.start_date) <= today);
+  return (started[started.length - 1] ?? list[0]).grading_period;
+}
+
+/** A quarter as the period a level grades by: Senior High's semester. */
+export function periodForLevel(schoolLevel, quarterKey) {
+  if (!quarterKey) return null;
+  if (levelConfig(schoolLevel).type !== "semester") return quarterKey;
+  return ["1st_quarter", "2nd_quarter"].includes(quarterKey) ? "1st_semester" : "2nd_semester";
+}
+
 export const GRADE_ORDER = [
   "Nursery", "Kindergarten",
   "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6",

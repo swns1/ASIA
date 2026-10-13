@@ -10,6 +10,7 @@ import { DocTitleRow } from "../../components/print/DocTitleRow";
 import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
 import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
 import { INVOICE_STATUS_META } from "../../components/print/statusMeta";
+import { splitItem } from "../../utils/invoice";
 
 const fmt = (v) =>
   `₱ ${parseFloat(v || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,16 +34,10 @@ const METHOD_LABEL = {
   others:        "Others",
 };
 
-// Item descriptions are stored as "[Category] Name" (see the billing
-// service's invoice generation). The category gets its own column here, and
-// tuition is listed first because it is the line the discounts apply to.
+// Item descriptions are stored as "[Category] Name" (utils/invoice splitItem).
+// The category gets its own column here, and tuition is listed first because
+// it is the line the discounts apply to.
 const CATEGORY_ORDER = { Tuition: 0, Miscellaneous: 1, Other: 2 };
-
-function splitItem(description) {
-  const m = /^\[(.*?)\]\s*(.*)$/.exec(description ?? "");
-  if (!m) return { category: "", name: description ?? "" };
-  return { category: m[1] === "Misc" ? "Miscellaneous" : m[1], name: m[2] };
-}
 
 // One ink throughout: the dark header bar and rules carry the structure, so
 // nothing on the page depends on colour to be read — it photocopies and

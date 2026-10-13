@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { setThemePreference, useAppTheme, useThemePreference } from "./useTheme";
 
-const signInAs = (role) =>
-  sessionStorage.setItem("current_user", JSON.stringify({ name: "Ana Reyes", role }));
+const signInAs = (role, id) =>
+  sessionStorage.setItem("current_user", JSON.stringify({ id, name: "Ana Reyes", role }));
 
 // jsdom has no matchMedia; stand in for the computer's light/dark setting.
 const computerIsDark = (matches) => {
@@ -26,7 +26,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("the developer switch", () => {
+describe("the theme switch", () => {
   it("is light until someone picks otherwise", () => {
     const { result } = renderHook(() => useThemePreference());
     expect(result.current).toBe("light");
@@ -40,12 +40,24 @@ describe("the developer switch", () => {
     expect(result.current).toBe("system");
     act(() => setThemePreference("light"));
     expect(result.current).toBe("light");
-    expect(localStorage.getItem("asia.dev.theme")).toBeNull();
+    expect(localStorage.getItem("asia.theme")).toBeNull();
   });
 
-  it("clears the status band's old switch", () => {
+  it("keeps each person's own choice on a shared computer", () => {
+    signInAs("teacher", 7);
+    setThemePreference("dark");
+    signInAs("registrar", 8);
+    expect(renderHook(() => useThemePreference()).result.current).toBe("light");
+    signInAs("teacher", 7);
+    expect(renderHook(() => useThemePreference()).result.current).toBe("dark");
+    expect(localStorage.getItem("asia.theme.7")).toBe("dark");
+  });
+
+  it("clears the switches it replaced", () => {
+    localStorage.setItem("asia.dev.theme", "dark");
     localStorage.setItem("asia.dev.statusBandTone", "dark");
     setThemePreference("dark");
+    expect(localStorage.getItem("asia.dev.theme")).toBeNull();
     expect(localStorage.getItem("asia.dev.statusBandTone")).toBeNull();
   });
 });
@@ -57,17 +69,28 @@ describe("the theme the signed-in user gets", () => {
     expect(result.current).toBe("dark");
   });
 
-  // Staff don't get dark mode yet (the user's call, 2026-10-11): every role
-  // outside super_admin/admin, and a guardian, stays light.
-  it.each(["registrar", "teacher", "accounting", "guardian"])(
-    "stays light for a %s, whatever the browser has stored",
-    (role) => {
-      signInAs(role);
-      setThemePreference("dark");
-      const { result } = renderHook(() => useAppTheme());
-      expect(result.current).toBe("light");
-    },
-  );
+  // Every staff role gets its choice (the user's call, 2026-10-11).
+  it.each(["registrar", "teacher", "accounting"])("is dark for a %s who chose dark", (role) => {
+    signInAs(role);
+    setThemePreference("dark");
+    const { result } = renderHook(() => useAppTheme());
+    expect(result.current).toBe("dark");
+  });
+
+  // Guardians choose on the portal's My settings (2026-10-13).
+  it("is dark for a guardian who chose dark", () => {
+    signInAs("guardian");
+    setThemePreference("dark");
+    const { result } = renderHook(() => useAppTheme());
+    expect(result.current).toBe("dark");
+  });
+
+  it("stays light when no one is signed in", () => {
+    setThemePreference("dark");
+    sessionStorage.clear();
+    const { result } = renderHook(() => useAppTheme());
+    expect(result.current).toBe("light");
+  });
 
   it("is dark for a super admin who chose dark", () => {
     signInAs("super_admin");
@@ -84,10 +107,10 @@ describe("the theme the signed-in user gets", () => {
     expect(renderHook(() => useAppTheme()).result.current).toBe("light");
   });
 
-  it("is always light in a production build", () => {
+  it("works in a production build too", () => {
     setThemePreference("dark");
     vi.stubEnv("DEV", false);
     const { result } = renderHook(() => useAppTheme());
-    expect(result.current).toBe("light");
+    expect(result.current).toBe("dark");
   });
 });

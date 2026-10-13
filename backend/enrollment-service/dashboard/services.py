@@ -134,6 +134,20 @@ def shape_risk_by_level(rows):
     ]
 
 
+def attendance_window_start(today, last_recorded, weeks):
+    """
+    The first day of the attendance chart's window: `weeks` back from the
+    year's last recorded day, or from today if that's earlier.
+
+    Counting back from today alone emptied the chart for any past year --
+    all its records are older than "the last 12 weeks" -- while every other
+    figure on the page followed the picked year. A year with no records yet
+    falls back to today; the chart is empty either way.
+    """
+    end = min(today, last_recorded) if last_recorded else today
+    return end - timedelta(weeks=weeks)
+
+
 def shape_attendance_series(rows):
     """
     rows: [{"week": date(2025, 1, 6), "status": "P", "n": 412}, ...]

@@ -177,7 +177,7 @@ export default function ChipGroup({
                 showing every count at rest would freeze that motion. */}
             {selected && opt.count != null && (
               <span
-                className="ml-0.5 inline-block shrink-0 whitespace-nowrap rounded-full px-[7px] py-px text-[10px] font-bold text-white"
+                className="ml-0.5 inline-block shrink-0 whitespace-nowrap rounded-full px-[7px] py-px text-[11px] font-bold text-white"
                 style={{ background: opt.dot ?? tone.badge }}
               >
                 {opt.count}

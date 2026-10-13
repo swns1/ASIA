@@ -73,7 +73,7 @@ function DocumentRow({ req, compact, ...actions }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{req.requirement_name}</span>
           {!req.is_submitted && (
             <span className={blocking ? "bg-brand-100" : "bg-[#f5f5f5] dark:bg-muted-50"} style={{
-              fontSize: 10, fontWeight: 700, borderRadius: 99, padding: "2px 8px",
+              fontSize: 11, fontWeight: 700, borderRadius: 99, padding: "2px 8px",
               textTransform: "uppercase", letterSpacing: "0.05em",
               color: blocking ? C.red : C.muted,
             }}>
@@ -108,7 +108,7 @@ function DocumentSection({ heading, tone, rows, ...rowProps }) {
   return (
     <div style={{ marginTop: 14 }}>
       <div style={{
-        fontSize: 10.5, fontWeight: 700, color: tone, textTransform: "uppercase",
+        fontSize: 11, fontWeight: 700, color: tone, textTransform: "uppercase",
         letterSpacing: "0.07em", marginBottom: 4,
       }}>
         {heading} ({rows.length})

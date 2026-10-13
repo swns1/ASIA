@@ -28,6 +28,22 @@ export const fmtDate = (d, fallback = "—") =>
       })
     : fallback;
 
+/** The day in words: "Monday, October 12". Defaults to today. */
+export const fmtLongDay = (d = new Date()) =>
+  new Date(d).toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" });
+
+/** Date and time: "Oct 12, 2026, 09:41 AM". `fallback` as for fmtDate. */
+export const fmtDateTime = (d, fallback = "—") =>
+  d
+    ? new Date(d).toLocaleString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : fallback;
+
 /**
  * A date as `YYYY-MM-DD` on this device's calendar.
  *

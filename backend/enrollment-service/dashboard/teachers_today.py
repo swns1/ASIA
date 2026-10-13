@@ -178,20 +178,25 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
     """
     sections:        {key: [enrollment_id, ...]} — enrolled students per section
     advisers:        {key: ["Teacher name", ...]}
-    attendance_rows: [{"key": key, "status": "P", "n": 30}] for today
+    attendance_rows: [{"key": key, "status": "P", "n": 30}] for today, enrolled
+                     learners only (one record per learner per day)
     subjects:        [{"subject_id", "school_level", "grade_level", "strand", "semester"}]
     graded:          {"2nd_quarter": {(enrollment_id, subject_id), ...}, "1st_semester": {...}}
     period:          current_grading_period(...)
     no_classes:      no_classes_today(...)
     """
-    taken = set()
+    marked = {}
     totals = {"P": 0, "A": 0, "L": 0, "E": 0}
     for row in attendance_rows:
         if row["key"] not in sections:
             continue
-        taken.add(row["key"])
+        marked[row["key"]] = marked.get(row["key"], 0) + row["n"]
         if row["status"] in totals:
             totals[row["status"]] += row["n"]
+    # Taken once every enrolled learner has a mark -- the teacher's own home
+    # (my_day.py) still lists a part-marked section as not done, so one
+    # learner marked mustn't turn the admin's tile green.
+    taken = {key for key, n in marked.items() if n >= len(sections[key])}
 
     out = []
     for key in sorted(sections, key=_section_sort_key):
@@ -229,6 +234,7 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
             "students":         len(students),
             "advisers":         advisers_for(key, advisers),
             "attendance_taken": key in taken,
+            "attendance_marked": marked.get(key, 0),
             "grades":           grades,
         })
 
@@ -239,6 +245,9 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
         "grading_period": period,
         "attendance": {
             "sections_taken": len(taken),
+            # Sections with any mark today: where `rate` comes from, part-
+            # marked ones included.
+            "sections_marked": len(marked),
             "sections_total": len(out),
             "present":        totals["P"],
             "late":           totals["L"],

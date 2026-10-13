@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AppLayout from "./AppLayout";
+import MySettingsPage from "../pages/MySettingsPage";
+import { setThemePreference } from "../hooks/useTheme";
 import { SchoolYearProvider } from "../context/SchoolYearContext";
 
 // The school-year default is resolved from the billing API on mount; stub it so
@@ -78,7 +80,7 @@ describe("AppLayout dark mode", () => {
     sessionStorage.setItem("current_user", JSON.stringify({ name: "Ana Reyes", role }));
 
   beforeEach(() => {
-    localStorage.setItem("asia.dev.theme", "dark");
+    setThemePreference("dark");
   });
 
   // One line per converted page: a path that must turn dark for an admin.
@@ -113,6 +115,7 @@ describe("AppLayout dark mode", () => {
     "/sections",
     "/academic-calendar",
     "/settings",
+    "/my-settings",
   ];
 
   // Paths that stay light beside the dark sidebar: a converted list page
@@ -139,9 +142,49 @@ describe("AppLayout dark mode", () => {
     expect(themeOf(screen.getByText("Page content"))).toBeNull();
   });
 
-  it("stays light for staff, whatever this browser has stored", () => {
-    // beforeEach signs in a registrar.
-    const { container } = renderShell();
-    expect(container.querySelector("[data-theme]")).toBeNull();
+  it.each(["registrar", "teacher", "accounting"])("darkens the shell for a %s who chose dark", (role) => {
+    signInAs(role);
+    renderShell(<p>Page content</p>, "/dashboard");
+    expect(themeOf(nav())).toBe("dark");
+    expect(themeOf(screen.getByText("Page content"))).toBe("dark");
+  });
+  // A guardian's theme is the portal's (GuardianLayout.test.jsx); they never
+  // reach this shell.
+});
+
+describe("My Settings", () => {
+  const themeOf = (el) => el.closest("[data-theme]")?.getAttribute("data-theme") ?? null;
+  const nav = () => screen.getByRole("navigation", { name: /main navigation/i });
+
+  it.each(["super_admin", "admin", "registrar", "teacher", "accounting"])(
+    "is linked from the foot of the sidebar for a %s",
+    (role) => {
+      sessionStorage.setItem("current_user", JSON.stringify({ name: "Ana Reyes", role }));
+      renderShell();
+      expect(screen.getByRole("link", { name: "My Settings" }).getAttribute("href")).toBe("/my-settings");
+      // The theme, Change password and Log out live on the page, not here.
+      expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Change password" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
+    },
+  );
+
+  it("marks its link as the current page", () => {
+    renderShell(<p>Page content</p>, "/my-settings");
+    expect(screen.getByRole("link", { current: "page" }).textContent).toContain("My Settings");
+  });
+
+  it("lets any staff member turn dark mode on, and off again", () => {
+    // beforeEach signs in a registrar, who hasn't chosen yet: light.
+    renderShell(<MySettingsPage />, "/my-settings");
+    expect(themeOf(nav())).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Dark/ }));
+    expect(themeOf(nav())).toBe("dark");
+    expect(themeOf(screen.getByRole("radiogroup", { name: "Theme" }))).toBe("dark");
+    expect(screen.getByRole("radio", { name: /^Dark/ }).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Light/ }));
+    expect(themeOf(nav())).toBeNull();
   });
 });

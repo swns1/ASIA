@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { ThemeContext } from "../../hooks/useTheme";
+import { ThemeContext, setThemePreference } from "../../hooks/useTheme";
 
 const api = {
   getStudent: vi.fn(),
@@ -204,7 +204,7 @@ describe("Student form in dark mode (ThemeArea)", { timeout: 20_000 }, () => {
       </MemoryRouter>,
     );
 
-  beforeEach(() => localStorage.setItem("asia.dev.theme", "dark"));
+  beforeEach(() => setThemePreference("dark"));
 
   it("goes dark on /students/new for an admin", async () => {
     signInAs("admin");
@@ -222,11 +222,11 @@ describe("Student form in dark mode (ThemeArea)", { timeout: 20_000 }, () => {
     expect(await screen.findByDisplayValue("123456789012")).toBeTruthy();
   });
 
-  it("stays light for a registrar", async () => {
+  it("goes dark for a registrar who chose dark too", async () => {
     signInAs("registrar");
     renderForm("/students/new");
     const title = await screen.findByRole("heading", { name: "New Student Registration" });
-    expect(themeOf(title)).toBeNull();
+    expect(themeOf(title)).toBe("dark");
   });
 });
 
