@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/", include("dashboard.urls")),
     path("api/send-enrollment-email/", send_enrollment_email, name="send_enrollment_email"),
     path("api/", include("attendance.urls")),
+    path("api/", include("school_forms.urls")),
 ]
 
 # No public static(MEDIA_URL, ...) route here on purpose. It used to serve

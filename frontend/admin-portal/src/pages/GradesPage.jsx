@@ -1041,7 +1041,7 @@ export default function GradesPage() {
               { id: "overview", icon: "ti-layout-list",    label: "Overview" },
               { id: "summary",  icon: "ti-table",          label: "Summary" },
               { id: "entry",    icon: "ti-pencil",         label: "Entry" },
-              { id: "observed", icon: "ti-clipboard-text", label: "Observed values" },
+              { id: "observed", icon: "ti-clipboard-text", label: "Class behavior" },
             ]}
           />
         }

@@ -1,5 +1,6 @@
 // The Report on Learner's Observed Values marks (DepEd Order 8, s. 2015) --
-// the ratings a teacher gives each behaviour area, and the marks SF9 prints.
+// the ratings a teacher gives each class-behavior area (attentiveness,
+// listening, participation, task completion), and the marks SF9 prints.
 //
 // The entry screens used to offer the app's original three words (Outstanding /
 // Satisfactory / Needs Improvement) while every rating the school actually

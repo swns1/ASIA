@@ -1,11 +1,11 @@
 /**
- * GradesPage — the Entry, Summary and Observed values tabs.
+ * GradesPage — the Entry, Summary and Class behavior tabs.
  *
  * Entry: scores save as they're typed, the grade is worked out by the server
  * after every change instead of on a Compute button, and Save is offered only
  * when there's a finished grade that differs from the one saved.
  * Summary: subjects pass or fail on their final rating, not per quarter grade.
- * Observed values: its own tab, driven by the selection card's period.
+ * Class behavior: its own tab, driven by the selection card's period.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
@@ -255,7 +255,7 @@ describe("Grades — Summary", () => {
   });
 });
 
-describe("Grades — Observed values", () => {
+describe("Grades — Class behavior", () => {
   const CATEGORIES = [
     { category_id: 1, name: "Upholds truth" },
     { category_id: 2, name: "Cares for the environment" },
@@ -331,7 +331,7 @@ describe("Grades — dark mode", () => {
     expect(screen.getByText("The AI service is unavailable.")).toBeTruthy();
   });
 
-  it("renders the observed values", async () => {
+  it("renders the class behavior ratings", async () => {
     api.getNarrativeCategories.mockResolvedValue({ results: [{ category_id: 1, name: "Upholds truth" }] });
     api.getNarrativeReports.mockResolvedValue({
       results: [{ report_id: 50, category: 1, grading_period: "1st_quarter", rating: "AO" }],

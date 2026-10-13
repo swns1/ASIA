@@ -29,6 +29,8 @@ class GuardianMirror(models.Model):
     # practice, which is why provisioning skips rather than fails on it.
     full_name          = models.CharField(max_length=150)
     email_address      = models.CharField(max_length=150, null=True, blank=True)
+    # Read by the DepEd SF1 export (school_forms) for the contact column.
+    mobile_number      = models.CharField(max_length=20, null=True, blank=True)
     relationship       = models.CharField(max_length=20)
     is_primary_contact = models.BooleanField(default=False)
 

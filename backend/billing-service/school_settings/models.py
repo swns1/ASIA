@@ -16,6 +16,13 @@ class SchoolSetting(models.Model):
     school_address       = models.TextField(null=True, blank=True)
     contact_email        = models.CharField(max_length=150, null=True, blank=True)
     contact_phone        = models.CharField(max_length=50, null=True, blank=True)
+    # The header of every DepEd school form (scripts/2026-10-school-identity.sql);
+    # read by enrollment-service's school_forms exports.
+    deped_school_id      = models.CharField(max_length=6, null=True, blank=True)
+    region               = models.CharField(max_length=100, null=True, blank=True)
+    division             = models.CharField(max_length=100, null=True, blank=True)
+    district             = models.CharField(max_length=100, null=True, blank=True)
+    school_head_name     = models.CharField(max_length=150, null=True, blank=True)
     updated_at           = models.DateTimeField(auto_now=True)
 
     class Meta:

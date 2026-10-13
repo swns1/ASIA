@@ -6,8 +6,8 @@ and the views under test chain filter/exclude/order_by/values_list across
 several queries. Scripting a MagicMock for each chain tests the mock, not the
 view; this evaluates the lookups for real over plain objects instead.
 
-Supports the lookups the enrollment views use: exact, iexact, in, lt, isnull,
-and one level of `__` traversal (e.g. `guardian_response__response`).
+Supports the lookups the enrollment views use: exact, iexact, in, lt, lte, gt,
+gte, isnull, and one level of `__` traversal (e.g. `guardian_response__response`).
 """
 
 
@@ -31,7 +31,7 @@ def _ids(values):
 def _matches(row, key, expected):
     parts = key.split("__")
     op = "exact"
-    if parts[-1] in ("exact", "iexact", "in", "lt", "isnull"):
+    if parts[-1] in ("exact", "iexact", "in", "lt", "lte", "gt", "gte", "isnull"):
         op = parts.pop()
     actual = _resolve(row, parts)
     if op == "exact":
@@ -46,6 +46,12 @@ def _matches(row, key, expected):
         return actual in _ids(expected)
     if op == "lt":
         return actual is not None and actual < expected
+    if op == "lte":
+        return actual is not None and actual <= expected
+    if op == "gt":
+        return actual is not None and actual > expected
+    if op == "gte":
+        return actual is not None and actual >= expected
     if op == "isnull":
         return (actual is None) == bool(expected)
     raise AssertionError(f"unsupported lookup {key}")

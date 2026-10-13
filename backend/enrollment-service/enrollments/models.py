@@ -23,6 +23,8 @@ class Student(models.Model):
 
     sex = models.CharField(max_length=10)
     birth_date = models.DateField()
+    # Read by the DepEd SF1 export (school_forms).
+    religion = models.CharField(max_length=50, null=True, blank=True)
 
     email = models.EmailField(max_length=150, null=True, blank=True)
     mobile_number = models.CharField(max_length=20, null=True, blank=True)

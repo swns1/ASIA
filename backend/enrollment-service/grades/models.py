@@ -70,9 +70,12 @@ class NarrativeCategory(models.Model):
 
 class NarrativeReport(models.Model):
     # DepEd Order No. 8, s. 2015 marks the Report on Learner's Observed Values
-    # with AO / SO / RO / NO. The three generic ratings below them are the
-    # original prototype vocabulary, kept so existing rows still render and
-    # still feed the risk model (ai.services.NARRATIVE_SCORE maps both sets).
+    # with AO / SO / RO / NO. The school uses the same marks for its class
+    # behavior categories (attentiveness, listening, participation, task
+    # completion), which replaced the four core values. The three generic
+    # ratings below them are the original prototype vocabulary, kept so
+    # existing rows still render and still feed the risk model
+    # (ai.services.NARRATIVE_SCORE maps both sets).
     RATING_CHOICES = [
         ("AO", "Always Observed"),
         ("SO", "Sometimes Observed"),

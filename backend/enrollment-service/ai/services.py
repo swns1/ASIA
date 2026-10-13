@@ -44,7 +44,8 @@ NARRATIVE_SCORE = {
     "outstanding":       3.0,
     "satisfactory":      2.0,
     "needs_improvement": 1.0,
-    # DepEd Order 8 s.2015 marks Observed Values AO/SO/RO/NO. They are mapped
+    # The class-behavior ratings use AO/SO/RO/NO, the marks of DepEd Order 8
+    # s.2015's Report on Learner's Observed Values. They are mapped
     # onto the same 1-3 scale rather than widening it to four points, so the
     # risk component's calibration (and its test suite) is unchanged: AO and NO
     # sit on the existing endpoints, and the two middle marks divide the range.
@@ -380,10 +381,13 @@ def build_student_features(school_year, grading_period, subject_id=None,
         "attendance_rate": non-absent / total over the period's window, or
                             np.nan if the student has no attendance rows,
         "absent_days", "total_school_days": the counts behind that rate,
+        "excused_days": how many of absent_days were excused,
         "avg_narrative": mean of NARRATIVE_SCORE over rated categories for the
                           selected grading_period (or all periods when
                           grading_period == "overall"), or np.nan if none,
         "narrative_ratings": raw rating strings behind avg_narrative,
+        "narrative_details": [{"category", "rating", "grading_period"}], the
+                              same ratings with the behavior area each was for,
     }
 
     subject_name: resolved Subject.subject_name, or "Overall" when subject_id
@@ -590,17 +594,26 @@ def build_student_features(school_year, grading_period, subject_id=None,
     # ── Fetch narrative reports ───────────────────────────────────────
     # Each level at its own period: senior high rates observed values per
     # semester, so a quarter check reads the semester's ratings for them.
-    narrative_qs = NarrativeReport.objects.filter(enrollment_id__in=enrollment_ids)
+    narrative_qs = NarrativeReport.objects.select_related("category").filter(
+        enrollment_id__in=enrollment_ids
+    )
     if not is_overall_period:
         narrative_qs = narrative_qs.filter(current_q if current_q is not None else no_rows)
 
     narrative_map = defaultdict(list)
     narrative_ratings_map = defaultdict(list)
+    narrative_details_map = defaultdict(list)
     for nr in narrative_qs:
         score = NARRATIVE_SCORE.get(nr.rating)
         if score is not None:
-            narrative_map[student_of[nr.enrollment_id]].append(score)
-            narrative_ratings_map[student_of[nr.enrollment_id]].append(nr.rating)
+            sid = student_of[nr.enrollment_id]
+            narrative_map[sid].append(score)
+            narrative_ratings_map[sid].append(nr.rating)
+            narrative_details_map[sid].append({
+                "category": nr.category.name,
+                "rating": nr.rating,
+                "grading_period": nr.grading_period,
+            })
 
     # ── Attach attendance, trend and narrative ─────────────────────────
     for sid, sd in student_data.items():
@@ -624,6 +637,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
             missed = att["absent"] + att["excused"]
             sd["attendance_rate"] = (att["total"] - missed) / att["total"]
             sd["absent_days"] = missed
+            sd["excused_days"] = att["excused"]
             sd["total_school_days"] = att["total"]
         else:
             # Too few records to read an absence rate off — see
@@ -648,6 +662,7 @@ def build_student_features(school_year, grading_period, subject_id=None,
         scores = narrative_map.get(sid, [])
         sd["avg_narrative"] = float(np.mean(scores)) if scores else np.nan
         sd["narrative_ratings"] = narrative_ratings_map.get(sid, [])
+        sd["narrative_details"] = narrative_details_map.get(sid, [])
 
     return student_data, subject_name
 
@@ -797,11 +812,38 @@ def _plural(n, singular, plural=None):
     return singular if n == 1 else (plural or singular + "s")
 
 
+def _and_list(items):
+    """"A", "A and B", "A, B and C"."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _lowest_subjects(sd, limit=3):
+    """
+    " — lowest: Mathematics 6 (75), Science 6 (76)" for an average just above the
+    passing mark: the subjects sitting closest to it, which are what a
+    teacher can act on. Left off when a subject is already failing (that
+    reason names it) or there is only the one subject to name.
+    """
+    grades = sd.get("grades") or {}
+    if sd.get("failing_subjects") or len(grades) < 2:
+        return ""
+    near = sorted(
+        ((subj, avg) for subj, avg in grades.items() if avg < PASSING_GRADE + 5),
+        key=lambda kv: kv[1],
+    )[:limit]
+    if not near:
+        return ""
+    return " — lowest: " + ", ".join(f"{subj} ({round(avg, 1):g})" for subj, avg in near)
+
+
 def _grade_reasons(sd):
     reasons = []
     failing = sd.get("failing_subjects") or []
     if failing:
-        named = ", ".join(f"{f['subject_name']} {f['grade']:g}" for f in failing[:3])
+        named = ", ".join(f"{f['subject_name']} ({f['grade']:g})" for f in failing[:3])
         more = len(failing) - 3
         if more > 0:
             named += f", +{more} more"
@@ -823,7 +865,8 @@ def _grade_reasons(sd):
         elif grade < PASSING_GRADE + 5:
             reasons.append({
                 "code": "borderline_average",
-                "text": f"Average of {grade:.1f} is only just above the {PASSING_GRADE:g} passing mark",
+                "text": f"Average of {grade:.1f} is only just above the {PASSING_GRADE:g} passing mark"
+                        f"{_lowest_subjects(sd)}",
                 "severity": "medium",
             })
     return reasons
@@ -836,7 +879,12 @@ def _attendance_reasons(sd):
     absence_pct = _absence_pct(rate)
     total = sd.get("total_school_days") or 0
     missed = sd.get("absent_days") or 0
-    counted = f" ({missed} of {total} days)" if total else ""
+    # Excused days count against the rate (see build_student_features), so
+    # say how many there were -- otherwise a learner whose absences were all
+    # excused reads as unexplained.
+    excused = sd.get("excused_days") or 0
+    excused_note = f", {excused} excused" if excused else ""
+    counted = f" ({missed} of {total} days{excused_note})" if total else ""
 
     if absence_pct >= 20.0:
         return [{
@@ -900,16 +948,57 @@ LEGACY_RATING_MARKS = {
 CONCERN_RATINGS = ("needs_improvement", "RO", "NO")
 
 
+def _period_label(period):
+    return (period or "").replace("_", " ")
+
+
+def _named_behavior_concerns(details):
+    """
+    "Behavior rated Not Observed in Listening and Participation, and Rarely
+    Observed in Attentiveness (3 of 4 areas)". A count alone ("4 of 4
+    areas") sent the adviser to the report card to find out which areas,
+    and which mark each one got. Worst mark first. A check spanning several
+    periods ("overall") names the period beside each area, since one area
+    can be Rarely Observed one quarter and Not Observed the next.
+    """
+    areas = list(dict.fromkeys(d["category"] for d in details))
+    several_periods = len({d["grading_period"] for d in details}) > 1
+    by_mark = defaultdict(lambda: defaultdict(list))  # mark -> area -> periods
+    for d in details:
+        if d["rating"] in CONCERN_RATINGS:
+            by_mark[d["rating"]][d["category"]].append(d["grading_period"])
+
+    groups = []
+    for mark in sorted(by_mark, key=lambda m: (NARRATIVE_SCORE[m], CONCERN_RATINGS.index(m))):
+        named = []
+        for area, periods in by_mark[mark].items():
+            if several_periods:
+                ordered = sorted(periods, key=lambda p: QUARTERS_OF_PERIOD.get(p, (9, 9)))
+                area += f" ({_and_list(_period_label(p) for p in ordered)})"
+            named.append(area)
+        groups.append(f"{RATING_LABELS[mark]} in {_and_list(named)}")
+
+    flagged = len({area for marked in by_mark.values() for area in marked})
+    joined = groups[0] if len(groups) == 1 else ", ".join(groups[:-1]) + ", and " + groups[-1]
+    return (f"Behavior rated {joined} "
+            f"({flagged} of {len(areas)} {_plural(len(areas), 'area')})")
+
+
 def _narrative_reasons(sd):
     ratings = sd.get("narrative_ratings") or []
     concerns = [r for r in ratings if r in CONCERN_RATINGS]
     if not concerns:
         return []
-    marks = " or ".join(RATING_LABELS[r] for r in CONCERN_RATINGS if r in concerns)
+    details = sd.get("narrative_details")
+    if details:
+        text = _named_behavior_concerns(details)
+    else:
+        marks = " or ".join(RATING_LABELS[r] for r in CONCERN_RATINGS if r in concerns)
+        text = (f"Behavior rated {marks} in {len(concerns)} of {len(ratings)} "
+                f"{_plural(len(ratings), 'area')}")
     return [{
         "code": "behavior_concern",
-        "text": f"Behavior rated {marks} in {len(concerns)} of {len(ratings)} "
-                f"{_plural(len(ratings), 'area')}",
+        "text": text,
         "severity": "high" if len(concerns) > 1 else "medium",
     }]
 

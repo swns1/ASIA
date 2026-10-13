@@ -1,4 +1,5 @@
 import { createApiClient } from "./apiClient";
+import { filenameFromDisposition, parseFormWarnings, readBlobError } from "../utils/download";
 
 const enrollmentClient = createApiClient({
   baseURL: import.meta.env.VITE_ENROLLMENT_API_URL || "http://localhost:8003/api",
@@ -77,6 +78,33 @@ export const carryOverSchoolYear = (label, data) =>
 // scholarships). Admin-only. Money comes from billing's financial summary.
 export const compareSchoolYears = (years) =>
   enrollmentClient.get("/school-years/compare/", { params: { years: years.join(",") } }).then((r) => r.data);
+
+// ── DepEd school forms (Excel) ──────────────────────────────────────────────
+/**
+ * One of DepEd's own Excel forms, filled in by the server:
+ *   downloadSchoolForm("sf1", { school_year, grade_level, section, semester? })
+ *   downloadSchoolForm("sf2", { school_year, grade_level, section, month, semester? })
+ *   downloadSchoolForm("sf10/12", { level })
+ * Resolves to { blob, filename, warnings }; `warnings` lists what the file
+ * could not fully say. A failure's message is read out of its JSON body.
+ */
+export async function downloadSchoolForm(path, params = {}, fallbackName = "school-form.xlsx") {
+  try {
+    const res = await enrollmentClient.get(`/school-forms/${path}/`, {
+      params,
+      responseType: "blob",
+      // A large section's form takes a few seconds to build.
+      timeout: 60000,
+    });
+    return {
+      blob: res.data,
+      filename: filenameFromDisposition(res.headers?.["content-disposition"], fallbackName),
+      warnings: parseFormWarnings(res.headers?.["x-form-warnings"]),
+    };
+  } catch (err) {
+    throw await readBlobError(err);
+  }
+}
 
 // ── Sections (per school year) ───────────────────────────────────────────────
 // Unpaginated. Filter with { school_year, grade_level?, school_level? }.

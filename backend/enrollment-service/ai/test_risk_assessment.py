@@ -40,7 +40,8 @@ from ai.services import (
 
 
 def _student(grade=None, failing=0, attendance_rate=None, grade_delta=None,
-             avg_narrative=None, narrative_ratings=None, total_days=180):
+             avg_narrative=None, narrative_ratings=None, total_days=180,
+             narrative_details=None, grades=None, excused_days=0):
     """
     One student_data entry shaped like build_student_features() emits.
     `failing` is a count; the subject names/grades only matter to the reason
@@ -58,6 +59,9 @@ def _student(grade=None, failing=0, attendance_rate=None, grade_delta=None,
         "previous_period": "1st_quarter",
         "avg_narrative": np.nan if avg_narrative is None else avg_narrative,
         "narrative_ratings": narrative_ratings or [],
+        "narrative_details": narrative_details or [],
+        "grades": grades or {},
+        "excused_days": excused_days,
     }
 
 
@@ -343,7 +347,7 @@ def test_reason_names_the_failing_subjects():
     reasons = _score_one(grade=79.0, failing=2, attendance_rate=0.98)["reasons"]
     failing = next(r for r in reasons if r["code"] == "failing_subjects")
     assert "Failing 2 subjects" in failing["text"]
-    assert "Subject 1 70" in failing["text"]
+    assert "Subject 1 (70)" in failing["text"]
     assert failing["severity"] == "high"
 
 
@@ -409,6 +413,79 @@ def test_deped_marks_raise_a_behavior_reason_too(ratings, marks):
         if r["code"] == "behavior_concern"
     )
     assert f"Behavior rated {marks}" in text
+
+
+def _rated(marks, period="1st_quarter"):
+    areas = ("Attentiveness", "Listening", "Participation", "Task completion")
+    return [
+        {"category": area, "rating": mark, "grading_period": period}
+        for area, mark in zip(areas, marks)
+    ]
+
+
+def _behavior_text(details):
+    ratings = [d["rating"] for d in details]
+    return next(
+        r["text"] for r in _score_one(
+            grade=90.0, attendance_rate=0.98, avg_narrative=1.5,
+            narrative_ratings=ratings, narrative_details=details,
+        )["reasons"]
+        if r["code"] == "behavior_concern"
+    )
+
+
+def test_behavior_reason_names_each_area_and_its_mark():
+    # "4 of 4 areas" left the adviser to open the report card to see which.
+    text = _behavior_text(_rated(["RO", "NO", "RO", "NO"]))
+    assert text == (
+        "Behavior rated Not Observed in Listening and Task completion, "
+        "and Rarely Observed in Attentiveness and Participation (4 of 4 areas)"
+    )
+
+
+def test_behavior_reason_leaves_out_the_areas_that_were_fine():
+    text = _behavior_text(_rated(["AO", "SO", "RO", "AO"]))
+    assert text == "Behavior rated Rarely Observed in Participation (1 of 4 areas)"
+
+
+def test_behavior_reason_names_the_period_when_a_check_spans_several():
+    details = _rated(["RO", "AO"], "1st_quarter") + _rated(["NO", "AO"], "2nd_quarter")
+    text = _behavior_text(details)
+    assert "Not Observed in Attentiveness (2nd quarter)" in text
+    assert "Rarely Observed in Attentiveness (1st quarter)" in text
+    # One area, counted once however many periods it was low in.
+    assert text.endswith("(1 of 2 areas)")
+
+
+def test_borderline_average_names_the_subjects_closest_to_the_line():
+    text = next(
+        r["text"] for r in _score_one(
+            grade=77.0, attendance_rate=0.98,
+            grades={"Mathematics": 75.0, "Science": 76.4, "English": 79.6, "Filipino": 85.0},
+        )["reasons"]
+        if r["code"] == "borderline_average"
+    )
+    assert text.endswith("— lowest: Mathematics (75), Science (76.4), English (79.6)")
+
+
+def test_borderline_average_does_not_repeat_a_failing_subject():
+    # The failing reason already names it.
+    text = next(
+        r["text"] for r in _score_one(
+            grade=77.0, failing=1, attendance_rate=0.98,
+            grades={"Subject 1": 70.0, "Science": 76.0},
+        )["reasons"]
+        if r["code"] == "borderline_average"
+    )
+    assert "lowest" not in text
+
+
+def test_absence_reason_says_how_many_days_were_excused():
+    text = next(
+        r["text"] for r in _score_one(grade=90.0, attendance_rate=0.88, excused_days=4)["reasons"]
+        if r["code"] == "chronic_absence"
+    )
+    assert "(22 of 180 days, 4 excused)" in text
 
 
 def test_a_student_above_on_track_is_never_left_without_a_reason():

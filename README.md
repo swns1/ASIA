@@ -567,6 +567,30 @@ Deploy the services. Each API service must pass its `/health/` check, and
 applicant invite, and scan the QR code from a phone **on mobile data**.
 On Railway that works from any network.
 
+**Database upgrades run before each deploy.** `backend.json` gives every API
+service a pre-deploy command, `sh /app/start-backend.sh predeploy`. It runs in
+its own container. If it fails, Railway keeps the running version and stops
+the deploy, so check that service's deploy logs. It migrates only the apps
+listed in `deploy/railway/start-backend.sh`:
+
+| Service | Migrates | Currently brings |
+|---|---|---|
+| `enrollment` | `grades` | the narrative categories renamed to class behavior (`0004`) |
+| `billing` | `school_settings` | the School ID / Region / Division / District / School Head columns for the DepEd forms (`0002`) |
+| `identity`, `student` | nothing | |
+
+Until step 3 has loaded the database, it does nothing: it checks for the
+service's table and skips. Railway deploys the services as soon as they are
+created, and a migration run against the empty database would leave tables
+in it that make `setup-db.ps1` refuse to load it.
+
+It deliberately never runs a plain `migrate`. `setup-db.ps1` faked every
+migration that existed when the database was loaded, so which of the
+migrations added since then have really run there can't be told from the
+deploy. To ship another upgrade the same way, make its migration safe on any
+copy of the database (`IF NOT EXISTS`, guarded `UPDATE`s), then add its app
+to that list.
+
 **Backups:** Railway keeps the database, but a copy you hold yourself is
 cheap:
 

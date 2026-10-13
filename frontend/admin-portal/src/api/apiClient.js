@@ -32,7 +32,7 @@ function flattenErrorMessages(value) {
   return [];
 }
 
-function extractValidationMessage(data) {
+export function extractValidationMessage(data) {
   if (!data || typeof data !== "object") return null;
   if (typeof data.detail === "string") return data.detail;
 

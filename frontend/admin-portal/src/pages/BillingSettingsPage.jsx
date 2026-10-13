@@ -336,6 +336,11 @@ function SYProgress({ startDate, endDate }) {
   );
 }
 
+// The header of every DepEd school form (SF1, SF2, SF10). Optional: a form
+// prints the box blank until it is filled in here.
+const DEPED_IDENTITY_FIELDS = ["deped_school_id", "region", "division", "district", "school_head_name"];
+const EMPTY_DEPED_IDENTITY = Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, ""]));
+
 function GeneralSettingsTab() {
   const dark = useTheme() === "dark";
   const [settings, setSettings] = useState(null);
@@ -350,6 +355,7 @@ function GeneralSettingsTab() {
     school_name: "",
     early_bird_days: 7,
     school_address: "", contact_email: "", contact_phone: "",
+    ...EMPTY_DEPED_IDENTITY,
   });
 
   useEffect(() => {
@@ -362,6 +368,7 @@ function GeneralSettingsTab() {
           school_address:      d.school_address      ?? "",
           contact_email:       d.contact_email       ?? "",
           contact_phone:       d.contact_phone       ?? "",
+          ...Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, d[k] ?? ""])),
         });
       })
       .catch(() => setError("Failed to load school settings."))
@@ -377,13 +384,17 @@ function GeneralSettingsTab() {
       String(form.early_bird_days) !== String(settings.early_bird_days ?? 7) ||
       form.school_address      !== (settings.school_address      ?? "") ||
       form.contact_email       !== (settings.contact_email       ?? "") ||
-      form.contact_phone       !== (settings.contact_phone       ?? "")
+      form.contact_phone       !== (settings.contact_phone       ?? "") ||
+      DEPED_IDENTITY_FIELDS.some(k => form[k] !== (settings[k] ?? ""))
     );
   }, [form, settings]);
 
   async function handleSave() {
     if (!form.school_name.trim())         { setError("School name is required."); return; }
     if (!form.early_bird_days || parseInt(form.early_bird_days) < 1) { setError("Early bird days must be at least 1."); return; }
+    if (form.deped_school_id.trim() && !/^\d{6}$/.test(form.deped_school_id.trim())) {
+      setError("The DepEd School ID is six digits, like 401234."); return;
+    }
 
     setSaving(true); setError("");
     try {
@@ -393,6 +404,7 @@ function GeneralSettingsTab() {
         school_address:      form.school_address.trim() || null,
         contact_email:       form.contact_email.trim()  || null,
         contact_phone:       form.contact_phone.trim()  || null,
+        ...Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, form[k].trim() || null])),
       });
       setSettings(updated);
       toast.success("Settings saved.");
@@ -522,6 +534,32 @@ function GeneralSettingsTab() {
                   )}
                 </div>
               </>
+            )}
+          </SectionCard>
+
+          <SectionCard title="DepEd School Forms" subtitle="Printed in the header of SF1, SF2 and SF10" icon="ti-forms" delay={0.07} span>
+            {loading ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                {[1, 2, 3, 4, 5].map(i => <Sk key={i} h={68} />)}
+              </div>
+            ) : (
+              <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                <Field label="DepEd School ID" hint="Six digits">
+                  <input className="settings-input" inputMode="numeric" maxLength={6} value={form.deped_school_id} onChange={e => setF("deped_school_id", e.target.value.replace(/\D/g, ""))} placeholder="401234" style={inputStyle} />
+                </Field>
+                <Field label="Region">
+                  <input className="settings-input" maxLength={100} value={form.region} onChange={e => setF("region", e.target.value)} placeholder="IV-A (CALABARZON)" style={inputStyle} />
+                </Field>
+                <Field label="Division">
+                  <input className="settings-input" maxLength={100} value={form.division} onChange={e => setF("division", e.target.value)} placeholder="Laguna" style={inputStyle} />
+                </Field>
+                <Field label="District">
+                  <input className="settings-input" maxLength={100} value={form.district} onChange={e => setF("district", e.target.value)} placeholder="Cabuyao I" style={inputStyle} />
+                </Field>
+                <Field label="School Head" hint="Printed over the signature line">
+                  <input className="settings-input" maxLength={150} value={form.school_head_name} onChange={e => setF("school_head_name", e.target.value)} placeholder="Full name" style={inputStyle} />
+                </Field>
+              </div>
             )}
           </SectionCard>
 

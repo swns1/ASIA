@@ -354,7 +354,7 @@ Each subsection lists the DB constraints (hard failures) and the app rules (what
   - SHS `strand` is NULL for core subjects (taken by every strand) or a strand code (STEM, ABM).
   - A grade or score's subject must belong to the **same year as the enrollment** (serializer). In SQL, always join subjects on `subject_code` **and** `school_year = enrollment.school_year`.
   - Carry-over has a `subjects` part, and the setup checklist counts subjects per grade.
-- **`narrative_categories`**: the DepEd core values, IDs 900-903: Maka-Diyos, Makatao, Makakalikasan, Makabansa.
+- **`narrative_categories`**: class behavior, IDs 900-903: Attentiveness, Listening, Participation, Task completion. These were the DepEd core values (Maka-Diyos, Makatao, Makakalikasan, Makabansa) until October 2026; enrollment-service migration `grades/0004_class_behavior_categories` renames them in an existing database (on Railway it runs before each deploy).
 
 ### 7.3 `requirement_types` (document catalogue)
 
@@ -790,7 +790,7 @@ Invoice numbers are `INV-2025-000300` to `INV-2025-000309`. The invoice date is 
 | Elementary/JHS | WW /20, /25, /30, /20 | PT /50, /50, /40 | QA /50 |
 | SHS (per semester) | 5 quizzes | 3 PTs | Midterm /50 + Final /60 |
 
-- **Observed values:** 4 core values per period (AO / SO / RO, driven by ability).
+- **Observed values:** 4 class-behavior areas per period (AO / SO / RO, driven by ability).
 
 **Attendance:** present on every school day in each enrollment's span, except a set number of absences / excused days / late days per learner. Remarks include "Fever", "Traffic", "Excused: medical appointment", and so on. Recorded by the section's adviser.
 

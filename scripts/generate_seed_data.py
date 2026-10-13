@@ -617,6 +617,7 @@ def build(hashes, media_dirs):
                     g = transmute(initial_grade(kept, components))
                     grade_rows.append((row["id"], code, period, D(g).quantize(D("0.01")), "dropped", at(cut, 16, 0)))
             if state == "complete":
+                # Class behavior: attentiveness, listening, participation, task completion.
                 for cat in (900, 901, 902, 903):
                     roll = E["ability"] + r.gauss(0, 3)
                     mark = "AO" if roll >= 90 else "SO" if roll >= 80 else "RO" if roll >= 74 else "NO"
@@ -826,8 +827,8 @@ DELETE FROM households h
 """)
 
     w(section("1. REFERENCE DATA",
-        "Requirement catalogue, DepEd grading templates and the four core values.\n"
-        "Must come before subjects, scores and observed values, which use them."))
+        "Requirement catalogue, DepEd grading templates and the four class-behavior areas.\n"
+        "Must come before subjects, scores and narrative ratings, which use them."))
     w("\\ir scripts/reference_data.sql\n")
 
     w(section("2. SCHOOL YEARS",

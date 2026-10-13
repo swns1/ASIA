@@ -12,7 +12,7 @@ Features used for clustering:
     data for (or the single subject's grade if subject_id is given) — one
     feature, not one column per subject; see "Design notes" below for why.
   - Attendance rate for the full school year  (non-absent / total days)
-  - Average narrative report score            (DepEd Observed Values: 1=NO, 1.5=RO, 2=SO, 3=AO)
+  - Average narrative report score            (class behavior, AO/SO/RO/NO: 1=NO, 1.5=RO, 2=SO, 3=AO)
     averaged across all rated categories for the selected grading period
     (or all periods when grading_period="overall")
 
@@ -178,7 +178,7 @@ Context:
 - Total Students: {total_students}
 - Passing grade: 75. Use each cluster's given DepEd descriptor as it is.
 - Attendance rate: proportion of school days attended (1.00 = perfect, 0.00 = never attended)
-- Narrative score: DepEd Observed Values, 3=Always Observed, 2=Sometimes Observed, 1.5=Rarely Observed, 1=Not Observed (averaged across all rated categories)
+- Narrative score: class behavior (attentiveness, listening, participation, task completion), 3=Always Observed, 2=Sometimes Observed, 1.5=Rarely Observed, 1=Not Observed (averaged across all rated areas)
 - Cluster separation quality (silhouette score, -1 to 1, higher = better separated): {silhouette_score}
 """
 

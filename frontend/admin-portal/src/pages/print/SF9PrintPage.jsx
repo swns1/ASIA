@@ -22,8 +22,10 @@ import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/p
 import { SectionBar } from "../../components/print/SectionBar";
 import { observedValueMeta } from "../../constants/observedValues";
 
-// DO 8 s.2015 marks the Report on Learner's Observed Values AO / SO / RO / NO,
-// and the legend printed under this table spells those four out. Rows saved in
+// Class behavior (attentiveness, listening, participation, task completion) is
+// marked AO / SO / RO / NO -- the scale of DO 8 s.2015's Report on Learner's
+// Observed Values, which these rows replaced -- and the legend printed under
+// this table spells those four out. Rows saved in
 // the app's older vocabulary (outstanding / satisfactory / needs_improvement)
 // print as their mark -- see constants/observedValues.js, which the entry
 // screens share so what a teacher picks is what prints.
@@ -114,8 +116,8 @@ export default function SF9PrintPage() {
           perRow((id) => getGrades({ enrollment: id, page_size: 200 })),
           soft(perRow((id) => getAttendance({ enrollment: id, page_size: 500 })), "attendance", []),
           getSchoolSettings().catch(() => null),
-          soft(getNarrativeCategories({ is_active: true, page_size: 100 }), "observed values", []),
-          soft(perRow((id) => getNarrativeReports({ enrollment: id, page_size: 200 })), "observed values", []),
+          soft(getNarrativeCategories({ is_active: true, page_size: 100 }), "class behavior", []),
+          soft(perRow((id) => getNarrativeReports({ enrollment: id, page_size: 200 })), "class behavior", []),
         ]);
 
         setStudent(stu);
@@ -135,9 +137,9 @@ export default function SF9PrintPage() {
 
         setAttRecs(Array.isArray(recs) ? recs : recs.results ?? []);
 
-        // Report on Learner's Observed Values (DepEd Order 8, s.2015). SF9
-        // never fetched these, so the mandated half of the report card was
-        // simply absent from the printed form.
+        // Class behavior, one row per narrative category. SF9 once never
+        // fetched these, so the ratings were simply absent from the printed
+        // form.
         const cats    = Array.isArray(valueCats) ? valueCats : valueCats.results ?? [];
         const reports = Array.isArray(valueReports) ? valueReports : valueReports.results ?? [];
         const byCategory = {};
@@ -431,13 +433,14 @@ export default function SF9PrintPage() {
           </tbody>
         </table>
 
-        {/* Report on Learner's Observed Values — DepEd Order No. 8, s. 2015.
-            Marked AO / SO / RO / NO, one column per grading period. */}
-        <SectionBar>Report on Learner&apos;s Observed Values</SectionBar>
+        {/* Class behavior, marked AO / SO / RO / NO, one column per grading
+            period. It replaced DO 8 s.2015's core values, a section the
+            DO 15 s.2026 report cards no longer have. */}
+        <SectionBar>Class Behavior</SectionBar>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
           <thead>
             <tr>
-              <th style={TH({ textAlign: "left", width: "40%" })}>Core Values</th>
+              <th style={TH({ textAlign: "left", width: "40%" })}>Behavior</th>
               {cfg.cols.map(c => <th key={c} style={TH({ textAlign: "center" })}>{c}</th>)}
             </tr>
           </thead>
@@ -445,7 +448,7 @@ export default function SF9PrintPage() {
             {observedValues.length === 0 ? (
               <tr>
                 <td colSpan={cfg.cols.length + 1} style={TD({ textAlign: "center", color: "#aaa" })}>
-                  No observed values recorded for this enrolment.
+                  No class behavior recorded for this enrolment.
                 </td>
               </tr>
             ) : observedValues.map((v, ri) => (

@@ -74,10 +74,7 @@ const ApplicantFormPage       = lazyRoute(() => import("./pages/apply/ApplicantF
 const CORPrintPage       = lazyRoute(() => import("./pages/print/CORPrintPage"));
 const ReceiptPrintPage   = lazyRoute(() => import("./pages/print/ReceiptPrintPage"));
 const InvoicePrintPage   = lazyRoute(() => import("./pages/print/InvoicePrintPage"));
-const SF1PrintPage       = lazyRoute(() => import("./pages/print/SF1PrintPage"));
-const SF2PrintPage       = lazyRoute(() => import("./pages/print/SF2PrintPage"));
 const SF9PrintPage       = lazyRoute(() => import("./pages/print/SF9PrintPage"));
-const SF10PrintPage      = lazyRoute(() => import("./pages/print/SF10PrintPage"));
 
 const P = ({ children, roles }) => <PrivateRoute allowedRoles={roles}>{children}</PrivateRoute>;
 
@@ -199,11 +196,9 @@ export default function App() {
         <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
-        <Route path="/print/sf1"             element={<P roles={STAFF_ALL}><SF1PrintPage /></P>} />
-        {/* Attendance and grades: the server refuses accounting both. */}
-        <Route path="/print/sf2"     element={<P roles={GRADE_ROLES}><SF2PrintPage /></P>} />
+        {/* Grades: the server refuses accounting. SF1, SF2 and SF10 are no
+            longer pages: they download as DepEd's Excel forms (School Forms). */}
         <Route path="/print/sf9/:enrollmentId" element={<P roles={GRADE_ROLES}><SF9PrintPage /></P>} />
-        <Route path="/print/sf10/:studentId" element={<P roles={GRADE_ROLES}><SF10PrintPage /></P>} />
 
         {/* ── Guardian (parent) portal ── */}
         <Route element={<GuardianShell />}>

@@ -63,8 +63,8 @@ DELETE FROM households h
 
 -- =====================================================
 -- 1. REFERENCE DATA
--- Requirement catalogue, DepEd grading templates and the four core values.
--- Must come before subjects, scores and observed values, which use them.
+-- Requirement catalogue, DepEd grading templates and the four class-behavior areas.
+-- Must come before subjects, scores and narrative ratings, which use them.
 -- =====================================================
 
 \ir scripts/reference_data.sql

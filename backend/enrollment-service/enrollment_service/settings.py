@@ -118,6 +118,7 @@ INSTALLED_APPS = [
     "academic_calendar",
     "attendance",
     "dashboard",
+    "school_forms",
 ]
 
 MIDDLEWARE = [
@@ -221,6 +222,10 @@ REST_FRAMEWORK = {
         # the short-lived signed token, not by this limit; the limit only
         # needs to stop a runaway loop.
         "document_download": "240/minute",
+        # DepEd school form downloads (school_forms/views.py). Each builds an
+        # Excel file from a template, a second or two of CPU; this stops a
+        # runaway loop, not a registrar printing a grade's sections.
+        "school_forms": "30/minute",
     },
     # ─────────────────────────────────────────────────────────────────────
     "DEFAULT_PAGINATION_CLASS": "enrollment_service.pagination.StandardPagination",
@@ -272,6 +277,10 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+# The school form downloads (school_forms/views.py) name their file in
+# Content-Disposition and report gaps in X-Form-Warnings; the browser hides
+# both from the page unless they are exposed.
+CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-Form-Warnings"]
 
 
 # ─── Misc ───────────────────────────────────────────────────────────────────

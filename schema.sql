@@ -1384,6 +1384,12 @@ CREATE TABLE public.school_settings (
     contact_email character varying(150),
     contact_phone character varying(50),
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    deped_school_id character varying(6),
+    region character varying(100),
+    division character varying(100),
+    district character varying(100),
+    school_head_name character varying(150),
+    CONSTRAINT ck_school_settings_deped_school_id CHECK (((deped_school_id IS NULL) OR ((deped_school_id)::text ~ '^[0-9]{6}$'::text))),
     CONSTRAINT ck_school_settings_school_year_format CHECK (((current_school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text))
 );
 

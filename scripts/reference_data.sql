@@ -172,16 +172,19 @@ SELECT setval('grading_components_grading_component_id_seq', GREATEST((SELECT MA
 -- NARRATIVE CATEGORIES  (IDs 900–903)
 -- IDs 900+ so they never collide with categories created in the portal.
 -- =====================================================
--- The four core values of the DepEd Order No. 8, s. 2015 Report on Learner's
--- Observed Values. These are mandated categories, not a starter set: the
--- previous seed invented 'Social Skills' / 'Work Habits' / 'Areas for Growth',
--- which a registrar would not recognise on a report card.
+-- How the learner behaves in class, rated each period AO / SO / RO / NO.
+-- These were the four DepEd core values (Maka-Diyos, Makatao, Makakalikasan,
+-- Makabansa) from DO 8 s.2015's Report on Learner's Observed Values. DO 15
+-- s.2026 repealed that order and its report cards drop the section, and the
+-- school wanted the rating to say how a learner studies rather than which
+-- values they show. Same IDs, so ratings already recorded stay attached.
+-- enrollment-service grades/migrations/0004 renames them in an existing database.
 INSERT INTO narrative_categories (category_id, name, description, sort_order, is_active)
 OVERRIDING SYSTEM VALUE VALUES
-  (900, 'Maka-Diyos',      'Expresses spiritual beliefs while respecting the beliefs of others.',      1, TRUE),
-  (901, 'Makatao',         'Is sensitive to individual, social and cultural differences.',             2, TRUE),
-  (902, 'Makakalikasan',   'Cares for the environment and utilises resources wisely and responsibly.', 3, TRUE),
-  (903, 'Makabansa',       'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen.', 4, TRUE)
+  (900, 'Attentiveness',   'Pays attention and stays focused during lessons.',                         1, TRUE),
+  (901, 'Listening',       'Listens to the teacher and classmates and follows instructions.',          2, TRUE),
+  (902, 'Participation',   'Answers questions, joins class discussions and takes part in group work.', 3, TRUE),
+  (903, 'Task completion', 'Finishes classwork and homework and hands them in on time.',               4, TRUE)
 ON CONFLICT DO NOTHING;
 
 SELECT setval(pg_get_serial_sequence('narrative_categories', 'category_id'),

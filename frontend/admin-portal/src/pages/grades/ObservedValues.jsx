@@ -3,9 +3,9 @@ import Skeleton from "../../components/ui/Skeleton";
 import { OBSERVED_VALUES, observedMark } from "../../constants/observedValues";
 import { PERIOD_LABELS } from "./gradeRules";
 
-// ObservedValues — the Report on Learner's Observed Values for one grading
-// period: every behaviour statement with the four DepEd marks in fixed
-// columns. It used to sit under grade entry with its own period chips, so the
+// ObservedValues — class behavior for one grading period: every behavior
+// area (attentiveness, listening, participation, task completion) with the
+// four AO / SO / RO / NO marks in fixed columns. It used to sit under grade entry with its own period chips, so the
 // page had two period pickers that could disagree; the selection card's
 // period now drives both tabs.
 
@@ -28,7 +28,7 @@ export default function ObservedValues({
     <Card padding="none" className="overflow-hidden">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-200 px-5 py-[18px]">
         <div className="flex flex-col gap-[3px]">
-          <h2 className="text-lg font-bold text-neutral-900">Observed values</h2>
+          <h2 className="text-lg font-bold text-neutral-900">Class behavior</h2>
           <span className="text-sm text-neutral-500">
             {PERIOD_LABELS[gradingPeriod]} · {rated} of {categories.length} rated
           </span>
