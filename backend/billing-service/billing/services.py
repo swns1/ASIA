@@ -1002,6 +1002,27 @@ def apply_payment(invoice_id: int, amount_paid: Decimal):
     return invoice
 
 
+# ── Void an invoice ───────────────────────────────────────────────────────────
+
+def void_invoice(invoice):
+    """
+    The one way an invoice becomes void; the caller holds the row lock.
+
+    A void invoice owes nothing, so its installments are voided with it.
+    Flipping only the invoice's status left them as they were -- pending, or
+    paid once a re-issue had moved the payments away -- and everything that
+    reads the schedule showed a cancelled bill as due: the parent portal
+    listed every month of it as Overdue. Voided rows keep their amounts for
+    the audit trail, as a transfer close-out's do.
+
+    test_void_invoice.py fails if any other code in billing sets "void".
+    """
+    invoice.status = "void"
+    invoice.save(update_fields=["status"])
+    invoice.installments.exclude(status="voided").update(status="voided")
+    return invoice
+
+
 # ── Close out an invoice on transfer-out ──────────────────────────────────────
 
 @transaction.atomic
@@ -1024,10 +1045,8 @@ def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
     Deliberately narrower than recalculate_invoices_for_schedule(): this
     never rebuilds line items, it only closes out the installment schedule
     going forward and records the resulting reduction as a discount. Not a
-    substitute for voidInvoice() either — that only flips the parent
-    invoice's status and never touches child InvoiceInstallment rows, which
-    would leave pending/overdue installments inconsistent with a "void"
-    parent in ledger views.
+    substitute for void_invoice() either — that cancels the whole invoice,
+    not just the periods after the transfer.
     """
     invoice = StudentInvoice.objects.select_for_update().filter(invoice_id=invoice_id).first()
     if not invoice:
@@ -1064,8 +1083,8 @@ def close_out_invoice_for_transfer(invoice_id: int, effective_date: date):
     total_amt  = sum((Decimal(i.amount) for i in active_installments), Decimal("0"))
     total_paid = sum((Decimal(i.amount_paid) for i in active_installments), Decimal("0"))
     if total_amt <= 0:
-        invoice.status = "void"
-    elif total_paid >= total_amt:
+        return void_invoice(invoice)
+    if total_paid >= total_amt:
         invoice.status = "paid"
     elif total_paid > 0:
         invoice.status = "partially_paid"
@@ -1118,8 +1137,7 @@ def reissue_invoice(invoice_id: int, payment_plan: str, effective_date: date = N
     _ensure_billable(enrollment)
     _lock_student_year(enrollment["student_id"])
 
-    old.status = "void"
-    old.save(update_fields=["status"])
+    void_invoice(old)
 
     new = _build_invoice_for_enrollment(
         enrollment, payment_plan, effective_date, early_bird_on=old.invoice_date,

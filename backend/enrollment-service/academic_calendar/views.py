@@ -20,7 +20,15 @@ class CalendarEventViewSet(ArchivedYearGuard, ModelViewSet):
     permission_classes = [IsAdminRegistrarOrReadOnly]
     pagination_class = CalendarPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["school_year", "event_type"]
+    # end_date__gte / start_date__lte: the events overlapping a window of
+    # days, whichever school year they're filed under -- the teacher's
+    # "Coming up" runs past the year's end into the next one's opening.
+    filterset_fields = {
+        "school_year": ["exact"],
+        "event_type":  ["exact"],
+        "end_date":    ["gte"],
+        "start_date":  ["lte"],
+    }
     search_fields = ["title", "description"]
     ordering_fields = ["start_date", "event_type", "school_year"]
     ordering = ["start_date"]

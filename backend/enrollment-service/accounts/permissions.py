@@ -1,6 +1,7 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 from shared.permissions import HasRole, IsAdminRegistrarOrReadOnly, WRITE_ROLES_DEFAULT
+from shared.school_year import is_valid as is_valid_school_year, normalize as normalize_school_year
 
 __all__ = [
     "HasRole",
@@ -33,23 +34,27 @@ STAFF_FULL_WRITE_ROLES = {"super_admin", "admin"}
 GRADE_READ_ROLES = {"super_admin", "admin", "registrar", "teacher"}
 
 
-def _teacher_roster(user):
+def _teacher_roster(user, school_year=None):
     """(enrollment_id, student_id) for every `enrolled` row in the teacher's
-    SectionAdvisory sections. Empty -- never raises -- for a teacher with no
-    advisory yet: fail closed."""
+    SectionAdvisory sections -- of one school year when `school_year` is
+    given (a value that isn't one, such as "all", narrows nothing). Empty --
+    never raises -- for a teacher with no advisory yet: fail closed."""
     from enrollments.models import SectionAdvisory, advisory_roster
 
     teacher_user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
     if not teacher_user_id:
         return set()
 
+    advisories = SectionAdvisory.objects.filter(teacher_user_id=teacher_user_id)
+    if school_year and is_valid_school_year(school_year):
+        advisories = advisories.filter(school_year=normalize_school_year(school_year))
     roster = set()
-    for advisory in SectionAdvisory.objects.filter(teacher_user_id=teacher_user_id):
+    for advisory in advisories:
         roster.update(advisory_roster(advisory).values_list("enrollment_id", "student_id"))
     return roster
 
 
-def teacher_student_ids(user):
+def teacher_student_ids(user, school_year=None):
     """
     Resolve a role=teacher user's `SectionAdvisory` assignment(s) into the set
     of student_ids they may READ. Only students currently `enrolled` count —
@@ -59,8 +64,14 @@ def teacher_student_ids(user):
     when the teacher has no advisory assignment yet — fail closed.
 
     Writes are narrower: see teacher_enrollment_ids().
+
+    `school_year`: only that year's advisories -- for reads of one year's
+    figures (the teacher's home, a year's risk check), so a past year counts
+    that year's sections rather than this year's learners' old rows, many of
+    them in colleagues' sections. Always a subset of the unscoped set: it can
+    only narrow what a teacher reads, never widen it.
     """
-    return {student_id for _enrollment_id, student_id in _teacher_roster(user)}
+    return {student_id for _enrollment_id, student_id in _teacher_roster(user, school_year)}
 
 
 def teacher_enrollment_ids(user):

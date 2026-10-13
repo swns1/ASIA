@@ -5,7 +5,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from accounts.permissions import IsAdminRegistrarOrReadOnly
+from accounts.permissions import IsAdminRegistrarOrReadOnly, teacher_student_ids
 from enrollment_service.deletes import InUseDeleteMixin
 from enrollments.archive import ArchivedYearGuard
 from .filters import EnrollmentScholarshipFilter
@@ -105,6 +105,23 @@ class EnrollmentScholarshipViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         "enrollment__grade_level",
     )
     ordering = ("-enrollment_scholarship_id",)
+
+    def get_queryset(self):
+        """
+        A teacher reads only their own learners' awards -- the learners of
+        their advisory, the same scope as their grades and attendance
+        (teacher_student_ids, which fails closed). Every staff read used to
+        see the whole school's, so a teacher's home counted 163 awards beside
+        their 13 learners, and the API listed every family's. The summary
+        below reads this queryset too, so its counts follow. A list of one
+        year reads that year's sections.
+        """
+        qs = super().get_queryset()
+        if getattr(self.request.user, "role", None) == "teacher":
+            qs = qs.filter(enrollment__student_id__in=teacher_student_ids(
+                self.request.user, self.request.query_params.get("school_year"),
+            ))
+        return qs
 
     # An invoice is priced from the scholarships on file when it is built;
     # awarding or revoking one afterwards leaves it as it was until it is

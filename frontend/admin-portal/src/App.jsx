@@ -61,8 +61,10 @@ const SchoolYearDetailPage  = lazyRoute(() => import("./pages/SchoolYearDetailPa
 const SchoolYearComparePage = lazyRoute(() => import("./pages/SchoolYearComparePage"));
 const TeacherSectionsPage   = lazyRoute(() => import("./pages/TeacherSectionsPage"));
 const SectionsPage          = lazyRoute(() => import("./pages/SectionsPage"));
+const MySettingsPage        = lazyRoute(() => import("./pages/MySettingsPage"));
 const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
 const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
+const GuardianSettingsPage  = lazyRoute(() => import("./pages/GuardianSettingsPage"));
 const StudentApplicationsPage = lazyRoute(() => import("./pages/StudentApplicationsPage"));
 const ApplicantFormPage       = lazyRoute(() => import("./pages/apply/ApplicantFormPage"));
 
@@ -164,6 +166,7 @@ export default function App() {
           <Route path="/my-sections"            element={<P roles={GRADE_ROLES}><TeacherSectionsPage /></P>} />
           <Route path="/sections"               element={<P roles={ACADEMIC_STAFF}><SectionsPage /></P>} />
           <Route path="/student-applications"   element={<P roles={ACADEMIC_STAFF}><StudentApplicationsPage /></P>} />
+          <Route path="/my-settings"            element={<P roles={STAFF_ALL}><MySettingsPage /></P>} />
         </Route>
 
         {/* ── Focused full-page forms ──
@@ -206,6 +209,7 @@ export default function App() {
         <Route element={<GuardianShell />}>
           <Route path="/guardian"                     element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
           <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
+          <Route path="/guardian/settings"            element={<P roles={GUARDIAN}><GuardianSettingsPage /></P>} />
         </Route>
 
         {/* Catch-all: must stay outside PrivateRoute so a bad URL always

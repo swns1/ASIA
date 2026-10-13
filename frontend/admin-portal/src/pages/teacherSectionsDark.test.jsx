@@ -51,6 +51,12 @@ vi.mock("../api/enrollmentApi", () => ({
   getSectionNarrativeReports: () =>
     Promise.resolve([{ student: STUDENT, ratings: { 2: "AO" } }]),
   saveSectionNarrativeReports: () => Promise.resolve({}),
+  // The quarter dates the grids open on; none here, so the 1st period.
+  getCalendarEvents: () => Promise.resolve([]),
+}));
+// My Sections shows one school year at a time (useYearFilter).
+vi.mock("../context/SchoolYearContext", () => ({
+  useSchoolYear: () => ({ currentYear: "2026-2027", yearStates: { "2026-2027": "current" }, options: ["2026-2027"], yearCounts: {} }),
 }));
 vi.mock("react-hot-toast", () => ({ default: { success: vi.fn(), error: vi.fn() } }));
 
@@ -79,6 +85,14 @@ describe("TeacherSectionsPage — dark mode", () => {
     expect(screen.getByText("Ana Cruz")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Quick view" }));
     expect(screen.getByText("Full Profile")).toBeTruthy();
+  });
+
+  it("marks the section's tiles with its level's icon", async () => {
+    renderDark();
+    // The list's tile and the open section's header: Grade 4 is elementary.
+    const labels = await screen.findAllByText("Grade 4 · Rosal");
+    const icons = labels.map((label) => label.parentElement.parentElement.querySelector("i").className);
+    expect(icons).toEqual(["ti ti-book", "ti ti-book"]);
   });
 
   it("marks attendance, Late in dark's warning pair", async () => {

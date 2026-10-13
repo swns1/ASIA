@@ -10,12 +10,11 @@ import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
 import { listVariants } from "../utils/motion";
-import { getCurrentUser, hasAnyRole, STAFF_ADMIN } from "../utils/auth";
+import { getCurrentUser, STAFF_ADMIN } from "../utils/auth";
 import useYearFilter from "../hooks/useYearFilter";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import CarryOverModal from "../components/schoolYears/CarryOverModal";
-import DeveloperTab from "./billingSettings/DeveloperTab";
 import useTheme from "../hooks/useTheme";
 import { CARD_DARK } from "../components/ui/darkSurfaces";
 import { CHIP_GLOW, LEVEL_GLOW } from "../constants/statusTones";
@@ -83,13 +82,6 @@ const TABS = [
   { id: "fees",    label: "Fee Schedules", icon: "ti-cash"     },
 ];
 
-// Developer switches (dark mode while it's being built): a dev build only,
-// and only for super admins and admins. Accounting can open Billing
-// Settings, but the switch isn't for staff yet.
-const DEVELOPER_TAB = { id: "developer", label: "Developer", icon: "ti-code" };
-const tabsFor = (user) =>
-  import.meta.env.DEV && hasAnyRole(user, STAFF_ADMIN) ? [...TABS, DEVELOPER_TAB] : TABS;
-
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
@@ -104,7 +96,6 @@ export default function BillingSettingsPage() {
   usePageTitle("Billing Settings");
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get("tab") === "fees" ? "fees" : "general");
-  const tabs = tabsFor(getCurrentUser());
 
   return (
     <>
@@ -113,7 +104,7 @@ export default function BillingSettingsPage() {
       <PageHeader
         title="Billing Settings"
         icon="ti-settings"
-        actions={<Tabs variant="pill" tabs={tabs} value={tab} onChange={setTab} />}
+        actions={<Tabs variant="pill" tabs={TABS} value={tab} onChange={setTab} />}
       />
 
       {/* Content */}
@@ -123,8 +114,6 @@ export default function BillingSettingsPage() {
             <GeneralSettingsTab key="general" />
           ) : tab === "fees" ? (
             <FeeSchedulesTab key="fees" />
-          ) : tabs.includes(DEVELOPER_TAB) ? (
-            <DeveloperTab key="developer" />
           ) : null}
         </AnimatePresence>
       </div>
@@ -182,7 +171,7 @@ function Field({ label, hint, children, required, grow = false }) {
       className="settings-field"
       style={{ marginBottom: 18, ...(grow ? { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 } : null) }}
     >
-      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: C.muted, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
+      <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
         {label}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
       </label>
       {children}
@@ -329,7 +318,7 @@ function SYProgress({ startDate, endDate }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.07em" }}>School Year Progress</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.07em" }}>School Year Progress</span>
         <span style={{ fontSize: 11, fontWeight: 600, color: barColor }}>{label}</span>
       </div>
       <div className="bg-[#f0e8e8] dark:bg-neutral-200" style={{ height: 7, borderRadius: 99, overflow: "hidden" }}>
@@ -339,7 +328,7 @@ function SYProgress({ startDate, endDate }) {
           style={{ height: "100%", borderRadius: 99, background: `linear-gradient(to right, ${barColor}, color-mix(in srgb, ${barColor} 80%, transparent))` }}
         />
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 10.5, color: C.micro }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 11, color: C.micro }}>
         <span>{startDate ? new Date(startDate).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
         <span>{endDate ? new Date(endDate).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
       </div>
@@ -684,7 +673,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
           </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {SCHOOL_LEVELS.map((lv) => {
                 const active = schoolLevel === lv.value;
@@ -707,7 +696,7 @@ function NewScheduleModal({ schoolYear, onClose, onSaved }) {
           </div>
 
           <div style={{ marginBottom: 6 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Grade Level</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Grade Level</label>
             <select value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} style={inp}>
               {lvl.grades.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -1115,7 +1104,7 @@ function FeeSchedulesTab() {
           style={{ borderRight: "1px solid var(--color-neutral-200)", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--color-surface)" }}
         >
           <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-neutral-200)", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 10, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
+            <div style={{ fontSize: 11, color: "var(--color-neutral-500)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>Filter by Level</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {[{ value: "all", label: "All", color: "var(--color-brand-600)", bg: "var(--color-brand-100)", icon: null }, ...SCHOOL_LEVELS].map((lv) => {
                 const active = levelFilter === lv.value;
@@ -1190,7 +1179,7 @@ function FeeSchedulesTab() {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <i className={`ti ${lv.icon}`} style={{ fontSize: 13, color: lv.color }} />
                             <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)" }}>{sch.grade_level}</span>
-                            <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 6px", borderRadius: 99, background: lv.bg, color: lv.color }}>{lv.label}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 6px", borderRadius: 99, background: lv.bg, color: lv.color }}>{lv.label}</span>
                           </div>
                           <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginBottom: 5 }}>{itemCount} item{itemCount !== 1 ? "s" : ""}</div>
                           {grandTotal > 0 && (

@@ -8,9 +8,11 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Skeleton from "../components/ui/Skeleton";
 import { StatusBadge } from "../components/ui/Badge";
+import { CARD_DARK } from "../components/ui/darkSurfaces";
 import { ENROLLMENT_STATUS_MAP, GUARDIAN_RESPONSE_MAP } from "../constants/statusMaps";
-import { LEVEL_LABELS } from "../constants/schoolLevels";
+import { LEVEL_ICONS, LEVEL_LABELS } from "../constants/schoolLevels";
 import { getAvatarPalette, initialsFrom } from "../utils/avatarPalette";
+import { fmtLongDay } from "../utils/format";
 import GuardianHero from "../components/GuardianHero";
 
 const newestFirst = (a, b) =>
@@ -74,7 +76,7 @@ function NextYearPrompt({ enrollment, childName, onAnswered }) {
   return (
     <section
       aria-label={`School year ${enrollment.school_year} for ${childName}`}
-      className="mt-2 rounded-xl border border-neutral-200 bg-white px-5 py-4 shadow-sm"
+      className={`mt-2 rounded-xl border border-neutral-200 bg-surface px-5 py-4 shadow-sm ${CARD_DARK}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
@@ -114,7 +116,7 @@ function NextYearPrompt({ enrollment, childName, onAnswered }) {
                 maxLength={500}
                 rows={2}
                 placeholder="e.g. Moving to another city"
-                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus-ring"
+                className="w-full rounded-lg border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm text-neutral-900 focus-ring"
               />
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button size="sm" variant="secondary" loading={saving} onClick={() => answer("not_returning")}>
@@ -215,7 +217,6 @@ export default function GuardianHomePage() {
   };
 
   const firstName = user?.name?.trim().split(/\s+/)[0];
-  const today = new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" });
 
   return (
     <>
@@ -223,7 +224,7 @@ export default function GuardianHomePage() {
         <GuardianHero className="mb-8">
           <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
             <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">{today}</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">{fmtLongDay()}</div>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
                 {greeting()}{firstName ? `, ${firstName}` : ""}
               </h1>
@@ -258,7 +259,7 @@ export default function GuardianHomePage() {
       {loading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+            <div key={i} className={`overflow-hidden rounded-xl border border-neutral-200 bg-surface ${CARD_DARK}`}>
               <div className="flex items-start gap-3.5 p-5">
                 <Skeleton width={48} height={48} radius={12} />
                 <div className="flex-1 space-y-2">
@@ -274,7 +275,7 @@ export default function GuardianHomePage() {
           ))}
         </div>
       ) : error ? null : children.length === 0 ? (
-        <div className="rounded-xl border border-neutral-200 bg-white px-4 py-14 text-center shadow-sm">
+        <div className={`rounded-xl border border-neutral-200 bg-surface px-4 py-14 text-center shadow-sm ${CARD_DARK}`}>
           <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100">
             <i className="ti ti-users text-2xl text-brand-600" aria-hidden="true" />
           </div>
@@ -325,8 +326,18 @@ export default function GuardianHomePage() {
                   </div>
 
                   <div className="flex items-center justify-between gap-3 border-t border-neutral-200 px-5 py-3">
-                    <span className="min-w-0 truncate text-xs text-neutral-500">
-                      {LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}
+                    <span className="flex min-w-0 items-center gap-2 text-xs text-neutral-500">
+                      {/* The level's icon, the same set as the staff
+                          Sections tiles. */}
+                      {LEVEL_ICONS[e.school_level] && (
+                        <span
+                          className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-600"
+                          aria-hidden="true"
+                        >
+                          <i className={`ti ${LEVEL_ICONS[e.school_level]} text-[13px]`} />
+                        </span>
+                      )}
+                      <span className="truncate">{LEVEL_LABELS[e.school_level] || e.school_level} · SY {e.school_year}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-600">
                       View records

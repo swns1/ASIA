@@ -8,11 +8,11 @@ const ITEMS = [
   { id: "pending_enr", icon: "ti-clock", tone: "warning", message: "5 enrollments pending approval", link: "/enrollments?enrollment_status=pending" },
 ];
 
-function renderBell(items) {
+function renderBell(items, failed = false) {
   return render(
     <MemoryRouter>
       <p>outside</p>
-      <NotificationBell items={items} />
+      <NotificationBell items={items} failed={failed} />
     </MemoryRouter>
   );
 }
@@ -66,5 +66,32 @@ describe("NotificationBell", () => {
     fireEvent.mouseDown(screen.getByText("outside"));
     expect(bell.getAttribute("aria-expanded")).toBe("false");
     await waitFor(() => expect(screen.queryByRole("link", { name: /unpaid invoices/ })).toBeNull());
+  });
+
+  // A count that never arrived isn't nothing to do.
+  it("keeps the dot and says so when nothing loaded, instead of all caught up", () => {
+    const { container } = renderBell([], true);
+    fireEvent.click(screen.getByRole("button", { name: "Notifications, some couldn't be checked" }));
+    expect(container.querySelector(".bg-brand-500")).not.toBeNull();
+    expect(screen.getByText("Couldn't check everything")).toBeTruthy();
+    expect(screen.getByText("Some notifications couldn't be checked")).toBeTruthy();
+    expect(screen.queryByText("You're all caught up")).toBeNull();
+  });
+
+  it("lists what did load above the notice", () => {
+    renderBell(ITEMS, true);
+    fireEvent.click(screen.getByRole("button", { name: "Notifications, 2 need your attention, some couldn't be checked" }));
+    expect(screen.getByRole("link", { name: /12 unpaid invoices/ })).toBeTruthy();
+    expect(screen.getByText("Some notifications couldn't be checked")).toBeTruthy();
+  });
+
+  // It sits beside the school-year picker on the admin home.
+  it("is drawn in the year picker's shape", () => {
+    renderBell([]);
+    const bell = screen.getByRole("button", { name: /Notifications/ });
+    expect(bell.className).toContain("h-[42px]");
+    expect(bell.className).toContain("rounded-lg");
+    expect(bell.className).toContain("border-[1.5px]");
+    expect(bell.className).not.toContain("rounded-full");
   });
 });

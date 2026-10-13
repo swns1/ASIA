@@ -124,7 +124,7 @@ export default function PairedColumnChart({
       {ticks.map((t) => (
         <g key={t}>
           <line x1={PAD_L} x2={width - PAD_R} y1={yOf(t)} y2={yOf(t)} stroke={ink.grid} />
-          <text x={PAD_L - 8} y={yOf(t) + 3.5} textAnchor="end" fontSize="10" fill={ink.axis}>
+          <text x={PAD_L - 8} y={yOf(t) + 3.5} textAnchor="end" fontSize="11" fill={ink.axis}>
             {formatTick(t)}
           </text>
         </g>

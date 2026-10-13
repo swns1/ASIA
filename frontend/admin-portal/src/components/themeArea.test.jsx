@@ -7,12 +7,12 @@ import toast from "react-hot-toast";
 import ThemeArea from "./ThemeArea";
 import AppToaster from "./AppToaster";
 import SessionTimeoutWarning from "./SessionTimeoutWarning";
-import useTheme from "../hooks/useTheme";
+import useTheme, { setThemePreference } from "../hooks/useTheme";
 import { toastOptions } from "../utils/toastConfig";
 
 // What floats over a page or stands in for the shell takes the theme of the
-// page it belongs to: dark only for an admin who chose dark, and only on a
-// route listed in constants/darkReady.js.
+// page it belongs to: dark only for someone who chose dark (staff or a
+// guardian), and only on a route listed in constants/darkReady.js.
 
 const CONVERTED = "/students";
 const NOT_CONVERTED = "/a-page-not-converted-yet";
@@ -33,7 +33,7 @@ function Probe() {
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
-  localStorage.setItem("asia.dev.theme", "dark");
+  setThemePreference("dark");
 });
 
 describe("ThemeArea (the full-page forms)", () => {
@@ -60,10 +60,17 @@ describe("ThemeArea (the full-page forms)", () => {
     expect(screen.getByText("theme: light")).not.toBeNull();
   });
 
-  it("stays light for staff, whatever this browser has stored", () => {
+  it("goes dark for any staff member who chose dark", () => {
     signInAs("registrar");
     renderAt(CONVERTED);
-    expect(themeOf(screen.getByText(/theme:/))).toBeNull();
+    expect(themeOf(screen.getByText(/theme:/))).toBe("dark");
+  });
+
+  // The guardian portal is wrapped in ThemeArea too (GuardianLayout).
+  it("goes dark in the guardian portal for a guardian who chose dark", () => {
+    signInAs("guardian");
+    renderAt("/guardian");
+    expect(themeOf(screen.getByText(/theme:/))).toBe("dark");
   });
 
   it("keeps the page's own root classes", () => {
@@ -142,9 +149,15 @@ describe("The session warning follows the page under it", () => {
     expect((await screen.findByRole("alert")).getAttribute("data-theme")).toBe("dark");
   });
 
-  it("is light for staff", async () => {
+  it("is dark for any staff member who chose dark", async () => {
     signInAs("registrar");
     renderWarning(CONVERTED);
-    expect(themeOf(await screen.findByRole("alert"))).toBeNull();
+    expect((await screen.findByRole("alert")).getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("is dark over the guardian portal for a guardian who chose dark", async () => {
+    signInAs("guardian");
+    renderWarning("/guardian/child/12");
+    expect((await screen.findByRole("alert")).getAttribute("data-theme")).toBe("dark");
   });
 });

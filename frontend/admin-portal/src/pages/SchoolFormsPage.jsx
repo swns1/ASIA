@@ -54,7 +54,7 @@ const inputStyle = {
 };
 
 const labelStyle = {
-  display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)",
+  display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)",
   textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6,
 };
 

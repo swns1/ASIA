@@ -175,7 +175,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
                   ].map((s) => (
                     <div key={s.label} className="rounded-md border border-neutral-200 bg-surface px-2 py-2.5 text-center">
                       <div className={`text-[14px] font-bold ${s.tone}`}>{s.val}</div>
-                      <div className="mt-[3px] text-[10.5px] uppercase tracking-[0.06em] text-neutral-500">{s.label}</div>
+                      <div className="mt-[3px] text-[11px] uppercase tracking-[0.06em] text-neutral-500">{s.label}</div>
                     </div>
                   ))}
                 </div>

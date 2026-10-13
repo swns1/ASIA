@@ -75,8 +75,10 @@ export default function PaymentsPage() {
 
   // Filters
   const [methodFilter, setMethodFilter] = useState("all");
-  const [dateFrom,     setDateFrom]     = useState("");
-  const [dateTo,       setDateTo]       = useState("");
+  // A link can open on a date range (?date_from=&date_to=), e.g. the
+  // accounting home's "payments today".
+  const [dateFrom,     setDateFrom]     = useState(() => searchParams.get("date_from") ?? "");
+  const [dateTo,       setDateTo]       = useState(() => searchParams.get("date_to") ?? "");
   const [amountMin,    setAmountMin]    = useState("");
   const [amountMax,    setAmountMax]    = useState("");
   const [sortField,    setSortField]    = useState(DEFAULT_SORT);

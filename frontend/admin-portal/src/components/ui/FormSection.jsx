@@ -125,7 +125,7 @@ export function Divider({ label, className = "" }) {
   return (
     <div className={`my-4 flex items-center gap-2.5 ${className}`}>
       <span className="h-px flex-1 bg-brand-border-soft" aria-hidden="true" />
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">
+      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500">
         {label}
       </span>
       <span className="h-px flex-1 bg-brand-border-soft" aria-hidden="true" />

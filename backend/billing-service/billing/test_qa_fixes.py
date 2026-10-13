@@ -92,8 +92,10 @@ def test_close_out_never_waives_an_already_voided_installment_again():
     invoice = MagicMock()
     invoice.installments.filter.return_value.exclude.return_value = []
     invoice.installments.exclude.return_value = []
+    # Nothing live is left, so this ends in void_invoice (test_void_invoice).
     with _no_atomic(), patch.object(services.StudentInvoice, "objects") as objects, \
-            patch.object(services.StudentInvoiceDiscount, "objects") as discounts:
+            patch.object(services.StudentInvoiceDiscount, "objects") as discounts, \
+            patch.object(services, "void_invoice"):
         objects.select_for_update.return_value.filter.return_value.first.return_value = invoice
         services.close_out_invoice_for_transfer.__wrapped__(1, date(2026, 10, 31))
     invoice.installments.filter.return_value.exclude.assert_called_once_with(status="voided")

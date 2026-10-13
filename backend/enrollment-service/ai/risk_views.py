@@ -85,15 +85,17 @@ def _student_name(student):
     )
 
 
-def _visible_student_ids(request):
+def _visible_student_ids(request, school_year=None):
     """
     None = no restriction (staff see every student in the run). A teacher
     gets the set of student_ids on their own SectionAdvisory roster, reusing
     the same helper that scopes grades and attendance — so a teacher can
-    never read a risk score for a student outside their section.
+    never read a risk score for a student outside their section. A run is
+    one school year's, so its scores are scoped to that year's sections
+    (`school_year`); a student's history across runs is not.
     """
     if getattr(request.user, "role", None) == "teacher":
-        return teacher_student_ids(request.user)
+        return teacher_student_ids(request.user, school_year)
     return None
 
 
@@ -338,7 +340,7 @@ class RiskAssessmentRunView(APIView):
 
         run.refresh_from_db()
         return Response(
-            _serialize_run(run, allowed_student_ids=_visible_student_ids(request)),
+            _serialize_run(run, allowed_student_ids=_visible_student_ids(request, run.school_year)),
             status=status.HTTP_201_CREATED,
         )
 
@@ -375,7 +377,7 @@ class RiskAssessmentLatestView(APIView):
         if not run:
             return Response({"detail": "No risk assessment runs found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(_serialize_run(run, allowed_student_ids=_visible_student_ids(request)))
+        return Response(_serialize_run(run, allowed_student_ids=_visible_student_ids(request, run.school_year)))
 
 
 def _trend_points(scores):

@@ -292,18 +292,18 @@ function TemplateModal({ template, onClose, onRefresh }) {
           </AnimatePresence>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Template Name *</label>
             <input value={form.template_name} onChange={(e) => setForm((f) => ({ ...f, template_name: e.target.value }))} placeholder="e.g. DepEd K-12 Standard" style={inp} />
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Description</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Description</label>
             <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional description…" rows={2}
               style={{ ...inp, resize: "vertical" }} />
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>School Level *</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {SCHOOL_LEVELS.map((lvl) => {
                 const active = form.school_level === lvl.value;

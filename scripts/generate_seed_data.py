@@ -316,6 +316,13 @@ def apply_payments(inv, payments):
         inv["status"] = "paid" if paid >= total else ("partially_paid" if paid > 0 else "unpaid")
 
 
+def void_invoice(inv):
+    """void_invoice(): a void invoice's installments are voided with it."""
+    inv["status"] = "void"
+    for s in inv["schedule"]:
+        s["status"] = "voided"
+
+
 def close_out(inv, eff):
     """close_out_invoice_for_transfer()."""
     waived = D("0")
@@ -335,7 +342,10 @@ def close_out(inv, eff):
     live = [s for s in inv["schedule"] if s["status"] != "voided"]
     total = sum((s["amount"] for s in live), D("0"))
     paid = sum((s["paid"] for s in live), D("0"))
-    inv["status"] = "void" if total <= 0 else ("paid" if paid >= total else ("partially_paid" if paid > 0 else "unpaid"))
+    if total <= 0:
+        void_invoice(inv)
+    else:
+        inv["status"] = "paid" if paid >= total else ("partially_paid" if paid > 0 else "unpaid")
 
 
 def flag_overdue(inv):
@@ -697,7 +707,7 @@ def build(hashes, media_dirs):
             for p in prows:
                 p["inv"] = inv["id"]
             apply_payments(inv, prows)
-            inv["status"] = "void"
+            void_invoice(inv)
             new = build_invoice(rs["inv"], eid, E["sy"], E["grade"], rs["plan"], codes, inv_date, d(rs["on"]),
                                 prorate, eb_on=inv_date)
             moved = []
@@ -727,7 +737,7 @@ def build(hashes, media_dirs):
             p["inv"] = inv["id"]
         if E.get("void_on"):
             assert not prows
-            inv["status"] = "void"
+            void_invoice(inv)
         else:
             apply_payments(inv, prows)
             if E.get("transfer_out"):
@@ -1220,20 +1230,22 @@ END $$;
     w("""DO $$
 DECLARE bad int;
 BEGIN
-  -- Items minus discounts equal the live installments on every invoice; on a
-  -- live invoice the payments also equal what the installments show as paid.
-  -- (A re-issued original keeps its installment marks while its payments
-  -- moved to the replacement -- exactly what reissue_invoice leaves behind.)
+  -- A void invoice owes nothing: every installment is voided with it
+  -- (void_invoice). On a live invoice, items minus discounts equal the live
+  -- installments, and the payments equal what the installments show as paid.
   SELECT count(*) INTO bad
     FROM student_invoices i
    WHERE i.enrollment_id IN (SELECT e.enrollment_id FROM enrollments e JOIN students s USING (student_id)
                               WHERE s.lrn LIKE '""" + LRN_LIKE + """')
-     AND (  (SELECT COALESCE(sum(amount), 0) FROM student_invoice_items x WHERE x.invoice_id = i.invoice_id)
-          - (SELECT COALESCE(sum(amount), 0) FROM student_invoice_discounts x WHERE x.invoice_id = i.invoice_id))
-         <> (SELECT COALESCE(sum(amount), 0) FROM invoice_installments x WHERE x.invoice_id = i.invoice_id AND x.status <> 'voided')
-      OR (i.status <> 'void' AND
-          (SELECT COALESCE(sum(amount_paid), 0) FROM student_payments x WHERE x.invoice_id = i.invoice_id)
-          <> (SELECT COALESCE(sum(amount_paid), 0) FROM invoice_installments x WHERE x.invoice_id = i.invoice_id));
+     AND CASE WHEN i.status = 'void' THEN
+              EXISTS (SELECT 1 FROM invoice_installments x WHERE x.invoice_id = i.invoice_id AND x.status <> 'voided')
+         ELSE
+              (  (SELECT COALESCE(sum(amount), 0) FROM student_invoice_items x WHERE x.invoice_id = i.invoice_id)
+               - (SELECT COALESCE(sum(amount), 0) FROM student_invoice_discounts x WHERE x.invoice_id = i.invoice_id))
+              <> (SELECT COALESCE(sum(amount), 0) FROM invoice_installments x WHERE x.invoice_id = i.invoice_id AND x.status <> 'voided')
+           OR (SELECT COALESCE(sum(amount_paid), 0) FROM student_payments x WHERE x.invoice_id = i.invoice_id)
+              <> (SELECT COALESCE(sum(amount_paid), 0) FROM invoice_installments x WHERE x.invoice_id = i.invoice_id)
+         END;
   IF bad > 0 THEN
     RAISE EXCEPTION '% seeded invoice(s) do not reconcile', bad;
   END IF;

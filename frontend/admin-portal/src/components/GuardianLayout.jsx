@@ -1,11 +1,7 @@
-import { useState } from "react";
-import { useNavigate, Link, useLocation } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
-import { clearAuthSession } from "../utils/auth";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import useCurrentUser from "../hooks/useCurrentUser";
-import AccountSettingsModal from "./AccountSettingsModal";
 import Button from "./ui/Button";
-import { ConfirmDialog } from "./ui/Modal";
+import ThemeArea from "./ThemeArea";
 import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
 
@@ -14,32 +10,24 @@ import logo from "../assets/logo.png";
 // than the full admin Sidebar — that stays true; only the styling is unified
 // with the staff portal, so both feel like one product.
 //
+// ThemeArea gives the portal the guardian's own theme (hooks/useTheme), as it
+// does the staff full-page forms. The account button opens My settings
+// (pages/GuardianSettingsPage), the one place for the theme, Change password
+// and Log out -- as staff My Settings is for staff.
+//
 // Its duplicated <Toaster> and @keyframes now live at the app root and in
 // index.css respectively.
 export default function GuardianLayout({ children }) {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const user = useCurrentUser();
-  // Gated behind a confirm the same way the staff Sidebar gates its own logout
-  // button. This one is an icon-only button sitting next to the account block
-  // in a top bar, so it is the easiest of the two to hit by accident, and
-  // clearAuthSession() ends the session server-side — there is no undo.
-  const [showLogout, setShowLogout] = useState(false);
-  // Parents are given a password by an admin; this is how they replace it.
-  const [showAccount, setShowAccount] = useState(false);
-
-  function handleLogout() {
-    clearAuthSession();
-    navigate("/login");
-  }
-
-  const onHome = location.pathname === "/guardian";
+  const name = user?.name || "Guardian";
+  const onHome = pathname === "/guardian";
 
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50">
+    <ThemeArea className="flex min-h-screen flex-col bg-neutral-50">
       {/* The bar's contents share main's width, so on a wide screen the crest
           and the account block line up with the page instead of the screen edges. */}
-      <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/90 shadow-xs backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-neutral-200 bg-surface/90 shadow-xs backdrop-blur dark:bg-[rgba(24,14,14,0.72)] dark:shadow-[inset_0_-1px_0_rgba(224,49,49,0.18)]">
         <div className="mx-auto flex h-15 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link
             to="/guardian"
@@ -56,43 +44,36 @@ export default function GuardianLayout({ children }) {
           <div className="flex items-center gap-2 sm:gap-3">
             {!onHome && (
               <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian">
-                <span className="hidden sm:inline">My Children</span>
+                <span className="hidden sm:inline">My children</span>
               </Button>
             )}
 
-            <div className="flex items-center gap-2.5 sm:border-l sm:border-neutral-200 sm:pl-3">
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-200 text-xs font-bold text-brand-700"
-                aria-hidden="true"
-              >
-                {initialsFrom(user?.name || "Guardian")}
-              </div>
-              <div className="hidden min-w-0 leading-tight sm:block">
-                <div className="max-w-[160px] truncate text-sm font-semibold text-neutral-900">
-                  {user?.name || "Guardian"}
-                </div>
-                <div className="truncate text-xs text-neutral-500">Guardian</div>
-              </div>
-            </div>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              iconOnly
-              icon="ti-key"
-              onClick={() => setShowAccount(true)}
-              title="Change password"
-              aria-label="Change password"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              iconOnly
-              icon="ti-logout"
-              onClick={() => setShowLogout(true)}
-              title="Log out"
-              aria-label="Log out"
-            />
+            <NavLink
+              to="/guardian/settings"
+              aria-label={`My settings for ${name}: theme, password and log out`}
+              className={({ isActive }) => [
+                "focus-ring flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-1 transition-colors sm:pr-3",
+                isActive
+                  ? "border-brand-300 bg-brand-100"
+                  : "border-neutral-300 bg-surface hover:border-brand-300",
+              ].join(" ")}
+            >
+              {({ isActive }) => (
+                <>
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-200),var(--color-brand-300))] text-xs font-bold text-brand-600 dark:bg-[linear-gradient(135deg,var(--color-action),var(--color-action-2))] dark:text-white"
+                    aria-hidden="true"
+                  >
+                    {initialsFrom(name)}
+                  </span>
+                  <span className="hidden min-w-0 leading-tight sm:block" aria-hidden="true">
+                    <span className="block max-w-[160px] truncate text-sm font-semibold text-neutral-900">{name}</span>
+                    <span className={`block truncate text-xs ${isActive ? "text-brand-600" : "text-neutral-500"}`}>My settings</span>
+                  </span>
+                  <i className="ti ti-adjustments-horizontal hidden text-lg text-neutral-600 sm:block" aria-hidden="true" />
+                </>
+              )}
+            </NavLink>
           </div>
         </div>
       </header>
@@ -102,26 +83,6 @@ export default function GuardianLayout({ children }) {
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-center text-xs text-neutral-500 sm:px-6">
         South Lakes Integrated School · Questions about a record? Contact the registrar's office.
       </footer>
-
-      <AnimatePresence>
-        {showLogout && (
-          <ConfirmDialog
-            icon="ti-logout"
-            danger={false}
-            title="Log out?"
-            message="You'll be returned to the login page and will need to sign in again to view your children's records."
-            confirmLabel="Yes, log out"
-            cancelLabel="Stay"
-            onConfirm={handleLogout}
-            onCancel={() => setShowLogout(false)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {showAccount && (
-          <AccountSettingsModal user={user} onClose={() => setShowAccount(false)} />
-        )}
-      </AnimatePresence>
-    </div>
+    </ThemeArea>
   );
 }

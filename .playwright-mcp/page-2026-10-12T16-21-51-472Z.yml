@@ -1,0 +1,41 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "SLIS" [ref=e8]
+        - generic [ref=e9]: South Lakes IS
+      - heading "Academic System for Integrated Administration" [level=1] [ref=e10]:
+        - generic [ref=e11]: Academic
+        - generic [ref=e12]: System for
+        - generic [ref=e13]: Integrated
+        - generic [ref=e14]: Administration
+      - paragraph [ref=e15]: Manage students, enrollments, billing, and academic records — all in one place.
+    - generic [ref=e16]:
+      - generic [ref=e17]: S.Y. 2026–2027 · Active
+      - paragraph [ref=e20]: v2.0 · South Lakes Integrated School
+  - generic [ref=e22]:
+    - generic [ref=e23]:
+      - heading "Welcome back" [level=2] [ref=e24]
+      - paragraph [ref=e25]: Sign in to your account to continue.
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - generic [ref=e28]: Email or full name
+        - textbox "Email or full name" [ref=e30]:
+          - /placeholder: e.g. admin@southlakes.edu.ph
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e33]: Password
+          - generic [ref=e34]: Forgot? Contact an admin.
+        - generic [ref=e35]:
+          - textbox "Password" [ref=e36]:
+            - /placeholder: ••••••••
+          - button "Show password" [ref=e37] [cursor=pointer]:
+            - generic [ref=e38]: 
+      - generic [ref=e39]:
+        - checkbox "Remember me for 1 week" [ref=e40] [cursor=pointer]
+        - generic [ref=e41] [cursor=pointer]: Remember me for 1 week
+      - button "Sign in to your account" [ref=e42] [cursor=pointer]
+    - paragraph [ref=e43]:
+      - text: Need help?
+      - link "Contact administrator" [ref=e44] [cursor=pointer]:
+        - /url: mailto:admin@southlakes.edu.ph

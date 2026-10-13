@@ -124,7 +124,7 @@ export default function StackedBar({
                 </text>
                 <text
                   x={seg.x + drawWidth / 2} y={barY + barH + 34}
-                  textAnchor="middle" fontSize="10" fill={ink.axis}
+                  textAnchor="middle" fontSize="11" fill={ink.axis}
                 >
                   {Math.round(seg.share * 100)}% of the group
                 </text>

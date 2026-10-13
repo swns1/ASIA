@@ -1,13 +1,15 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
 import { StatCard } from "../components/ui/Card";
 import Table, { TableRow, TableCell } from "../components/ui/Table";
 import Button from "../components/ui/Button";
 import { Select } from "../components/FormField";
+import ErrorState from "../components/ui/ErrorState";
+import SchoolYearPicker from "../components/ui/SchoolYearPicker";
 import {
   getMySections,
   getSectionGrades,
@@ -22,7 +24,14 @@ import {
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
 import { getCurrentUser } from "../utils/auth";
-import { GRADE_OUTSTANDING, GRADE_PASSING } from "../utils/grading";
+import { LEVEL_ICONS } from "../constants/schoolLevels";
+import {
+  GRADE_OUTSTANDING, GRADE_PASSING, PERIOD_LABEL, currentQuarterKey, levelConfig, periodForLevel,
+} from "../utils/grading";
+import useGradingCalendar from "../hooks/useGradingCalendar";
+import useYearFilter from "../hooks/useYearFilter";
+import useArchivedYears from "../hooks/useArchivedYears";
+import { useSchoolYear } from "../context/SchoolYearContext";
 import { localISODate, todayISO } from "../utils/format";
 import { OBSERVED_VALUES, observedMark, observedValueMeta } from "../constants/observedValues";
 import useLatestRequest from "../hooks/useLatestRequest";
@@ -45,7 +54,9 @@ const SCHOOL_LEVEL_LABELS = {
 // once green/red/blue for Elementary/JHS/SHS, from a design handoff; the red
 // JHS tile vanished into the red-tinted selected row.)
 // `glow` is the tile's dark-mode light (LEVEL_GLOW). The tiles set
-// backgroundColor, not background, so its gradient layers on top.
+// backgroundColor, not background, so its gradient layers on top. Each tile
+// also carries its level's icon (LEVEL_ICONS), so a level never rests on
+// colour alone.
 const SCHOOL_LEVEL_COLORS = {
   nursery:           { color: "var(--color-nursery-500)", bg: "var(--color-nursery-50)", glow: LEVEL_GLOW.nursery },
   kindergarten:      { color: "var(--color-kindergarten-500)", bg: "var(--color-kindergarten-50)", glow: LEVEL_GLOW.kindergarten },
@@ -54,22 +65,10 @@ const SCHOOL_LEVEL_COLORS = {
   senior_highschool: { color: "var(--color-seniorhigh-500)", bg: "var(--color-seniorhigh-50)", glow: LEVEL_GLOW.seniorhigh },
 };
 
-const GRADING_PERIODS_BY_LEVEL = {
-  nursery:           ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  kindergarten:      ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  elementary:        ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  junior_highschool: ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"],
-  senior_highschool: ["1st_semester", "2nd_semester"],
-};
+const levelIcon = (level) => LEVEL_ICONS[level] ?? "ti-users-group";
 
-const PERIOD_LABELS = {
-  "1st_quarter": "1st Quarter",
-  "2nd_quarter": "2nd Quarter",
-  "3rd_quarter": "3rd Quarter",
-  "4th_quarter": "4th Quarter",
-  "1st_semester": "1st Semester",
-  "2nd_semester": "2nd Semester",
-};
+// Grading periods per level, their labels and which one is current come from
+// utils/grading.js, shared with the Grades page, SF9/SF10 and the homes.
 
 const PASS_THRESHOLD = GRADE_PASSING;
 
@@ -120,6 +119,15 @@ function fullName(s) {
   if (!s) return "";
   if (s.full_name) return s.full_name;
   return [s.first_name, s.middle_name, s.last_name, s.suffix].filter(Boolean).join(" ");
+}
+
+// A section's saved marks for a day, by student: {status, remarks}, status
+// null where nothing was recorded. From a getSectionAttendance response.
+function savedMarks(list) {
+  return Object.fromEntries((list ?? []).map((r) => [
+    r.student.student_id,
+    { status: r.attendance?.status ?? null, remarks: r.attendance?.remarks ?? "" },
+  ]));
 }
 
 function sectionLabel(advisory) {
@@ -188,19 +196,19 @@ export function StudentsTab({ students, todayAttendanceByStudent }) {
                   <td colSpan={ROSTER_COLUMNS.length} className="border-b border-neutral-200 bg-neutral-50 p-0">
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 24, padding: "14px 26px" }}>
                       <div>
-                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
+                        <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>LRN</div>
                         <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.lrn}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
+                        <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Student No.</div>
                         <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.student_number}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
+                        <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Sex</div>
                         <div style={{ fontSize: 13, color: "var(--color-neutral-900)", fontWeight: 600, marginTop: 2 }}>{s.sex}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 10, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
+                        <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Attendance today</div>
                         {statusMeta ? (
                           <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: statusMeta.bg, color: statusMeta.color, marginTop: 2, display: "inline-block" }}>
                             {statusMeta.label}
@@ -271,20 +279,27 @@ const GRADE_ENTRY_COLUMNS = [
   { key: "link",    label: "", align: "right" },
 ];
 
-function GradesTab({ advisory, subjects, readOnly = false }) {
+// `defaultPeriod`: the period to open on (SectionDetail's current one, or a
+// link's); undefined while it is still being worked out, null for none.
+function GradesTab({ advisory, subjects, readOnly = false, defaultPeriod, initialSubjectId }) {
   const navigate = useNavigate();
-  const [subjectId, setSubjectId] = useState(subjects[0]?.subject_id ?? "");
+  const [subjectId, setSubjectId] = useState(
+    () => subjects.find((s) => String(s.subject_id) === String(initialSubjectId))?.subject_id ?? subjects[0]?.subject_id ?? "");
   const [period, setPeriod] = useState("");
+  const pickedPeriod = useRef(false);
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({}); // student_id -> string value
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const periods = GRADING_PERIODS_BY_LEVEL[advisory.school_level] ?? [];
+  const periods = levelConfig(advisory.school_level).periods;
 
+  // Opens on the current period, not always the 1st: once it's known, unless
+  // the teacher has already picked one.
   useEffect(() => {
-    setPeriod(periods[0] ?? "");
-  }, [advisory.school_level]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (defaultPeriod === undefined || pickedPeriod.current) return;
+    setPeriod(periods.includes(defaultPeriod) ? defaultPeriod : periods[0] ?? "");
+  }, [advisory.school_level, defaultPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Only the newest load fills the grid: an older subject's or period's grades
   // landing last would otherwise be saved under the one now selected.
@@ -384,11 +399,11 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
         </select>
         <select
           value={period}
-          onChange={(e) => setPeriod(e.target.value)}
+          onChange={(e) => { pickedPeriod.current = true; setPeriod(e.target.value); }}
           style={{ border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none" }}
         >
           {periods.map((p) => (
-            <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
+            <option key={p} value={p}>{PERIOD_LABEL[p]}</option>
           ))}
         </select>
         {!readOnly && (
@@ -478,8 +493,9 @@ function GradesTab({ advisory, subjects, readOnly = false }) {
 // Keeps its own <table>: this is a student x category cross-tab whose columns
 // are data, not a fixed record list, so ui/Table's `columns` prop has nothing
 // to describe. Same reasoning as the gradebook matrix in GradesPage.
-function NarrativeTab({ advisory, readOnly = false }) {
+function NarrativeTab({ advisory, readOnly = false, defaultPeriod }) {
   const [period, setPeriod] = useState("");
+  const pickedPeriod = useRef(false);
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [rows, setRows] = useState([]);
@@ -487,11 +503,13 @@ function NarrativeTab({ advisory, readOnly = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const periods = GRADING_PERIODS_BY_LEVEL[advisory.school_level] ?? [];
+  const periods = levelConfig(advisory.school_level).periods;
 
+  // Opens on the current period, as the grades tab does.
   useEffect(() => {
-    setPeriod(periods[0] ?? "");
-  }, [advisory.school_level]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (defaultPeriod === undefined || pickedPeriod.current) return;
+    setPeriod(periods.includes(defaultPeriod) ? defaultPeriod : periods[0] ?? "");
+  }, [advisory.school_level, defaultPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     getNarrativeCategories({ is_active: true })
@@ -599,9 +617,9 @@ function NarrativeTab({ advisory, readOnly = false }) {
     <div>
       {/* Selectors */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <select value={period} onChange={(e) => setPeriod(e.target.value)} style={selectStyle}>
+        <select value={period} onChange={(e) => { pickedPeriod.current = true; setPeriod(e.target.value); }} style={selectStyle}>
           {periods.map((p) => (
-            <option key={p} value={p}>{PERIOD_LABELS[p]}</option>
+            <option key={p} value={p}>{PERIOD_LABEL[p]}</option>
           ))}
         </select>
         {!readOnly && (
@@ -633,11 +651,11 @@ function NarrativeTab({ advisory, readOnly = false }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr className="bg-[#fdfafa] dark:bg-transparent">
-                <th style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 26px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                <th style={{ textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 26px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                   Name
                 </th>
                 {categories.map((c) => (
-                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 10.5, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 16px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+                  <th key={c.category_id} style={{ textAlign: "left", fontSize: 11, fontWeight: 600, color: "var(--color-neutral-500)", padding: "10px 16px", borderBottom: "1px solid var(--color-neutral-200)", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
                     {c.name}
                   </th>
                 ))}
@@ -733,7 +751,9 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
         };
       });
       setDrafts(nextDrafts);
-      if (date === todayISO() && onTodayChange) onTodayChange(nextDrafts);
+      // What was actually saved, not the pre-filled Presents: the header's
+      // "present today" and Quick view must not count marks nobody saved.
+      if (date === todayISO() && onTodayChange) onTodayChange(savedMarks(list));
     } catch (e) {
       if (!isCurrent()) return;
       toast.error(e.message || "Failed to load attendance.");
@@ -784,6 +804,11 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
     });
   };
 
+  // Learners with no saved mark for the day: the grid shows the pre-filled
+  // Present, but nothing is recorded until Save.
+  const unsaved = readOnly ? 0 : rows.filter((r) => !r.attendance).length;
+  const today = todayISO();
+
   const counts = useMemo(() => {
     const c = { P: 0, A: 0, L: 0, E: 0, none: 0 };
     rows.forEach((r) => {
@@ -817,13 +842,16 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
             <input
               type="date"
               value={date}
+              // The server takes no attendance for a day that hasn't come.
+              max={today}
               onChange={(e) => setDate(e.target.value)}
               style={{ border: "1.5px solid var(--color-neutral-300)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "var(--color-neutral-900)", background: "var(--color-surface)", fontFamily: "'DM Sans',sans-serif", cursor: "pointer", flexShrink: 0 }}
             />
             <button
               onClick={() => setDate((d) => shiftISODate(d, 1))}
               aria-label="Next day"
-              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              disabled={date >= today}
+              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: date >= today ? "not-allowed" : "pointer", opacity: date >= today ? 0.4 : 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
             >
               <i className="ti ti-chevron-right" style={{ fontSize: 14 }} />
             </button>
@@ -873,6 +901,11 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "var(--color-error-50)", color: "var(--color-error-500)" }}>{counts.A} absent</span>
           <span className="bg-[#fef3e2] text-[#b45309] dark:bg-warning-50 dark:text-warning-500" style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99 }}>{counts.L} late</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, background: "var(--color-info-50)", color: "var(--color-info-500)" }}>{counts.E} excused</span>
+          {unsaved > 0 && (
+            <span className="bg-warning-50 text-warning-500" style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99 }}>
+              {unsaved} not saved yet · press Save Attendance
+            </span>
+          )}
           {counts.none > 0 && (
             <span className="bg-[#f9f4f4] dark:bg-neutral-200" style={{ fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 99, color: "var(--color-neutral-700)" }}>{counts.none} not marked</span>
           )}
@@ -1049,7 +1082,7 @@ function DailyBarChart({ daily }) {
           );
         })}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "var(--color-neutral-500)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--color-neutral-500)" }}>
         <span>{formatShortDate(daily[0]?.date)}</span>
         {daily.length > 1 && <span>{formatShortDate(daily[daily.length - 1]?.date)}</span>}
       </div>
@@ -1167,7 +1200,7 @@ function StatsTab({ advisory }) {
       {/* Date range controls (attendance analytics only — grade metrics
           cover every recorded grade for the section, no range needed) */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-neutral-500)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Attendance range</span>
         <input
           type="date"
           value={dateFrom}
@@ -1277,23 +1310,56 @@ function StatsTab({ advisory }) {
 // Also rendered by the staff Sections page, which passes `adviserName` (a
 // teacher never needs to be told they advise their own section) and
 // `readOnly` for the registrar and archived years.
-export function SectionDetail({ entry, adviserName, readOnly = false }) {
+//
+// `initialTab`, `initialPeriod` and `initialSubjectId` come from a link
+// (My Sections' ?tab=&period=&subject=, e.g. from the teacher's home).
+const SECTION_TABS = ["students", "subjects", "grades", "narrative", "attendance", "stats"];
+
+export function SectionDetail({ entry, adviserName, readOnly = false, initialTab, initialPeriod, initialSubjectId }) {
   const dark = useTheme() === "dark";
   const { advisory, student_count, students, subjects } = entry;
   // Keyed by advisory_id at the call site, so a fresh mount (and a reset
   // to the Students tab) happens automatically when the section changes.
-  const [tab, setTab] = useState("students");
+  const [tab, setTab] = useState(SECTION_TABS.includes(initialTab) ? initialTab : "students");
+  // The day's SAVED marks by student (savedMarks), never the editor's drafts.
   const [todayAttendance, setTodayAttendance] = useState({});
 
   const levelColors = SCHOOL_LEVEL_COLORS[advisory.school_level] ?? SCHOOL_LEVEL_COLORS.elementary;
 
+  // The grade and narrative grids open on the current period: a link's, else
+  // the one today falls in on the year's Academic Calendar. Undefined while
+  // the calendar loads, so a grid doesn't load the 1st quarter first.
+  const quarterEvents = useGradingCalendar(advisory.school_year);
+  const periods = levelConfig(advisory.school_level).periods;
+  const defaultPeriod = periods.includes(initialPeriod)
+    ? initialPeriod
+    : quarterEvents === null ? undefined : periodForLevel(advisory.school_level, currentQuarterKey(quarterEvents, new Date()));
+
+  // Today's saved attendance, so the header and Quick view are right before
+  // the Attendance tab is ever opened. Only within the section's school year.
+  const today = todayISO();
+  const yearRange = schoolYearRange(advisory.school_year);
+  const inYear = Boolean(yearRange.from) && yearRange.from <= today && today <= yearRange.to;
+  useEffect(() => {
+    if (!inYear) return undefined;
+    let live = true;
+    getSectionAttendance({ advisory_id: advisory.advisory_id, date: today, teacher_user_id: advisory.teacher_user_id })
+      .then((list) => { if (live) setTodayAttendance(savedMarks(Array.isArray(list) ? list : [])); })
+      .catch(() => { /* the chip simply stays off */ });
+    return () => { live = false; };
+  }, [advisory.advisory_id, advisory.teacher_user_id, inYear, today]);
+
   const presentToday = useMemo(() => {
-    // Read-only attendance leaves unmarked learners null, so they don't count.
+    // Only saved marks count; unmarked learners are null.
     const values = Object.values(todayAttendance).filter((v) => v.status);
     if (values.length === 0) return null;
     const present = values.filter((v) => v.status === "P" || v.status === "L").length;
     return Math.round((present / values.length) * 100);
   }, [todayAttendance]);
+  // A weekday in the year with learners and nothing saved yet.
+  const weekday = ![0, 6].includes(new Date().getDay());
+  const notTakenToday = inYear && weekday && students.length > 0 && presentToday === null
+    && Object.keys(todayAttendance).length > 0;
 
   const tabs = [
     { key: "students", label: `Students (${students.length})`, icon: "ti-users" },
@@ -1310,12 +1376,12 @@ export function SectionDetail({ entry, adviserName, readOnly = false }) {
         {dark && <BrandBackdrop tone="dark" />}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div className={levelColors.glow} style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: levelColors.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-users-group" style={{ fontSize: 17, color: levelColors.color }} />
+            <i className={`ti ${levelIcon(advisory.school_level)}`} style={{ fontSize: 17, color: levelColors.color }} aria-hidden="true" />
           </div>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-neutral-900)" }}>{sectionLabel(advisory)}</div>
             <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 2 }}>
-              {SCHOOL_LEVEL_LABELS[advisory.school_level] || advisory.school_level} · SY {advisory.school_year}
+              {SCHOOL_LEVEL_LABELS[advisory.school_level] || advisory.school_level} · S.Y. {advisory.school_year}
             </div>
           </div>
         </div>
@@ -1336,6 +1402,11 @@ export function SectionDetail({ entry, adviserName, readOnly = false }) {
           {presentToday !== null && (
             <span style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "var(--color-success-50)", color: "var(--color-success-500)" }}>
               {presentToday}% present today
+            </span>
+          )}
+          {notTakenToday && (
+            <span className="bg-warning-50 text-warning-500" style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99 }}>
+              Attendance not taken today
             </span>
           )}
         </div>
@@ -1366,8 +1437,11 @@ export function SectionDetail({ entry, adviserName, readOnly = false }) {
       <div style={{ flex: 1, overflowY: "auto" }}>
         {tab === "students" && <StudentsTab students={students} todayAttendanceByStudent={todayAttendance} />}
         {tab === "subjects" && <SubjectsTab subjects={subjects} />}
-        {tab === "grades" && <GradesTab advisory={advisory} subjects={subjects} readOnly={readOnly} />}
-        {tab === "narrative" && <NarrativeTab advisory={advisory} readOnly={readOnly} />}
+        {tab === "grades" && (
+          <GradesTab advisory={advisory} subjects={subjects} readOnly={readOnly}
+            defaultPeriod={defaultPeriod} initialSubjectId={initialSubjectId} />
+        )}
+        {tab === "narrative" && <NarrativeTab advisory={advisory} readOnly={readOnly} defaultPeriod={defaultPeriod} />}
         {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} readOnly={readOnly} />}
         {tab === "stats" && <StatsTab advisory={advisory} />}
       </div>
@@ -1426,7 +1500,7 @@ function SectionRail({ sections, selectedKey, onSelect }) {
                 }}
               >
                 <div className={levelColors.glow} style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, backgroundColor: levelColors.bg }}>
-                  <i className="ti ti-users-group" style={{ fontSize: 15, color: levelColors.color }} />
+                  <i className={`ti ${levelIcon(a.school_level)}`} style={{ fontSize: 15, color: levelColors.color }} aria-hidden="true" />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "var(--color-brand-600)" : "var(--color-neutral-900)" }}>
@@ -1467,9 +1541,21 @@ function TeacherOptions({ teachers }) {
 export default function TeacherSectionsPage() {
   usePageTitle("My Sections");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // A link may open one section on one tab (?section=<advisory id>&tab=
+  // &period=&subject=), e.g. the teacher's home's "Take today's attendance".
+  const linkedSection = Number(searchParams.get("section")) || null;
 
   const currentUser = getCurrentUser();
   const isTeacher = currentUser?.role === "teacher";
+  // One school year at a time, as on every other page: the current one, or
+  // the link's. Earlier years are view only -- their learners have left the
+  // roster, and the server takes no grades or attendance for them.
+  const { currentYear } = useSchoolYear();
+  const [year, setYear, yearIsDefault] = useYearFilter({ allowAll: false });
+  const isArchived = useArchivedYears();
+  const pastYear = Boolean(year && currentYear && year < currentYear);
+  const [loadError, setLoadError] = useState(null);
 
   const [teachers, setTeachers] = useState([]);
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
@@ -1505,20 +1591,22 @@ export default function TeacherSectionsPage() {
     setLoading(true);
     try {
       const params = teacherUserId ? { teacher_user_id: teacherUserId } : {};
+      setLoadError(null);
       const data = await getMySections(params);
       if (!isCurrent()) return;
       const list = Array.isArray(data) ? data : [];
       setSections(list);
-      setSelectedKey(list[0]?.advisory?.advisory_id ?? null);
+      setSelectedKey(linkedSection ?? null);
     } catch (e) {
       if (!isCurrent()) return;
-      toast.error(e.message || "Failed to load sections.");
+      // Said as a failure with a retry, not as "no section assignments".
+      setLoadError(e);
       setSections([]);
       setSelectedKey(null);
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [beginFetch]);
+  }, [beginFetch]); // eslint-disable-line react-hooks/exhaustive-deps -- linkedSection is read once, on load
 
   useEffect(() => {
 
@@ -1534,9 +1622,30 @@ export default function TeacherSectionsPage() {
     }
   }, [isTeacher, selectedTeacherId, fetchSections, navigate, beginFetch]);
 
-  const selectedEntry = useMemo(
-    () => sections.find((e) => e.advisory.advisory_id === selectedKey) ?? null,
-    [sections, selectedKey]
+  // The picked year's sections; the selected one, else the year's first.
+  const yearSections = useMemo(
+    () => sections.filter((e) => e.advisory.school_year === year),
+    [sections, year]
+  );
+  const selectedEntry = yearSections.find((e) => e.advisory.advisory_id === selectedKey) ?? yearSections[0] ?? null;
+  const readOnly = currentUser?.role === "registrar" || pastYear || isArchived(year);
+  // The link's tab and period go to the section it names, or to the one the
+  // page opens on when it names none.
+  const linkTarget = linkedSection ?? yearSections[0]?.advisory.advisory_id;
+  const linkProps = selectedEntry && selectedEntry.advisory.advisory_id === linkTarget
+    ? { initialTab: searchParams.get("tab"), initialPeriod: searchParams.get("period"), initialSubjectId: searchParams.get("subject") }
+    : {};
+  const retry = () => (isTeacher ? fetchSections() : fetchSections(selectedTeacherId));
+  const yearPicker = (
+    <SchoolYearPicker
+      value={year}
+      onChange={setYear}
+      includeAllYears={false}
+      active={!yearIsDefault}
+      // Its counts are enrollments, which would mislead beside sections.
+      counts={{}}
+      align="end"
+    />
   );
 
   if (!isTeacher && !selectedTeacherId) {
@@ -1586,10 +1695,11 @@ export default function TeacherSectionsPage() {
       <PageHeader
         title="My Sections"
         icon="ti-users-group"
-        subtitle={loading ? "Loading…" : `${sections.length} section${sections.length === 1 ? "" : "s"}`}
+        subtitle={loading ? "Loading…" : `${yearSections.length} section${yearSections.length === 1 ? "" : "s"} · S.Y. ${year}`}
         actions={
           !isTeacher && teachers.length > 0 ? (
             <>
+              {yearPicker}
               <label htmlFor="teacher-picker-main" className="sr-only">Select a teacher</label>
               <Select
                 id="teacher-picker-main"
@@ -1601,7 +1711,7 @@ export default function TeacherSectionsPage() {
                 <TeacherOptions teachers={teachers} />
               </Select>
             </>
-          ) : undefined
+          ) : yearPicker
         }
       />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -1617,7 +1727,11 @@ export default function TeacherSectionsPage() {
               </div>
             ))}
           </div>
-        ) : sections.length === 0 ? (
+        ) : loadError ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <ErrorState error={loadError} subject="your sections" onRetry={retry} />
+          </div>
+        ) : yearSections.length === 0 ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", padding: "80px 16px" }}>
               <div className={`bg-brand-100 ${CHIP_GLOW.brand}`} style={{ width: 52, height: 52, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
@@ -1625,20 +1739,23 @@ export default function TeacherSectionsPage() {
               </div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-neutral-700)" }}>No section assignments found</div>
               <div style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 4 }}>
-                {isTeacher ? "You haven't been assigned as an adviser of any section yet." : "This teacher has no advisory assignments yet."}
+                {isTeacher
+                  ? `You're not an adviser of a section in S.Y. ${year}.`
+                  : `This teacher has no section in S.Y. ${year}.`}
               </div>
             </div>
           </div>
         ) : (
           <>
-            <SectionRail sections={sections} selectedKey={selectedKey} onSelect={setSelectedKey} />
-            {/* The registrar can open this by URL; the backend refuses their
-                writes, so don't offer the save buttons. */}
+            <SectionRail sections={yearSections} selectedKey={selectedEntry?.advisory.advisory_id} onSelect={setSelectedKey} />
+            {/* The registrar can open this by URL, and an earlier year takes
+                no writes; neither gets the save buttons. */}
             {selectedEntry && (
               <SectionDetail
                 key={selectedEntry.advisory.advisory_id}
                 entry={selectedEntry}
-                readOnly={currentUser?.role === "registrar"}
+                readOnly={readOnly}
+                {...linkProps}
               />
             )}
           </>

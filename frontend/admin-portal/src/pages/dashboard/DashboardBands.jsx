@@ -62,7 +62,7 @@ const PIPELINE_GEOMETRY = {
 
 export function PipelineBand({ pipeline, loading, schoolYear, compact = false, measured = false }) {
   const theme = useTheme();
-  if (loading) return <Panel title="Enrollment Pipeline"><ChartSkeleton height={measured ? 100 : 150} /></Panel>;
+  if (loading) return <Panel title="Enrollment pipeline"><ChartSkeleton height={measured ? 100 : 150} /></Panel>;
 
   const segments = PIPELINE_STEPS.map((step) => ({
     key: step.key,
@@ -77,7 +77,7 @@ export function PipelineBand({ pipeline, loading, schoolYear, compact = false, m
 
   return (
     <Panel
-      title="Enrollment Pipeline"
+      title="Enrollment pipeline"
       subtitle={`S.Y. ${schoolYear}`}
     >
       <StackedBar
@@ -125,7 +125,7 @@ function StepLegend({ steps, pipeline }) {
 // free channel repeating it.
 
 export function LevelBand({ levels, loading }) {
-  if (loading) return <Panel title="Students by Level"><ChartSkeleton /></Panel>;
+  if (loading) return <Panel title="Students by level"><ChartSkeleton /></Panel>;
 
   const rows = (levels ?? []).map((l) => ({
     key: l.level,
@@ -135,7 +135,7 @@ export function LevelBand({ levels, loading }) {
   const total = rows.reduce((sum, r) => sum + r.value, 0);
 
   return (
-    <Panel title="Students by Level" subtitle="Currently enrolled">
+    <Panel title="Students by level" subtitle="Currently enrolled">
       <BarChart
         title="Enrolled students by school level"
         rows={rows}
@@ -153,7 +153,7 @@ export function LevelBand({ levels, loading }) {
 // into two vocabularies for one number.
 
 export function RiskBand({ risk, loading, onOpen, compact = false }) {
-  if (loading) return <Panel title="Students Needing Attention"><ChartSkeleton height={150} /></Panel>;
+  if (loading) return <Panel title="Students needing attention"><ChartSkeleton height={150} /></Panel>;
 
   const bands = risk?.bands ?? {};
   // riskVocabulary orders these critical → low for its own tables; the chart
@@ -174,7 +174,7 @@ export function RiskBand({ risk, loading, onOpen, compact = false }) {
 
   return (
     <Panel
-      title="Students Needing Attention"
+      title="Students needing attention"
       subtitle={risk?.computed_at
         ? `Assessed ${new Date(risk.computed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}`
         : undefined}
@@ -364,9 +364,10 @@ export function AttendanceBand({ series, loading, compact = false }) {
 // type, how many weeks fell short, and each week that did marked where it
 // happened. Months name their weeks along the bottom, not one date per week.
 
-// About the width of one "88.4% · below target" note, so notes for weeks close
-// together don't pile up on each other. Every such week keeps its red point.
-const NOTE_W = 124;
+// About the width of one "88.4% · below target" note (11px), so notes for
+// weeks close together don't pile up on each other. Every such week keeps its
+// red point.
+const NOTE_W = 130;
 
 function AttendanceWeeks({ weeks, rates, measured }) {
   const theme = useTheme();
@@ -411,7 +412,7 @@ function AttendanceWeeks({ weeks, rates, measured }) {
             return (
               <div
                 key={weeks[i].week}
-                className="absolute inline-flex items-center gap-[3px] whitespace-nowrap rounded-[6px] border border-brand-300 bg-surface-raised px-1.5 py-0.5 text-[10.5px] font-semibold text-error-500"
+                className="absolute inline-flex items-center gap-[3px] whitespace-nowrap rounded-[6px] border border-brand-300 bg-surface-raised px-1.5 py-0.5 text-[11px] font-semibold text-error-500"
                 style={{
                   left: `${(x * 100) / geo.width}%`,
                   top: `${(y * 100) / geo.height}%`,
@@ -448,7 +449,7 @@ function AttendanceWeeks({ weeks, rates, measured }) {
             />
             <text
               x={geo.width} y={geo.y(GOOD_ATTENDANCE) - 5}
-              textAnchor="end" fontSize="10.5" fontWeight="600" fill={ink.threshold}
+              textAnchor="end" fontSize="11" fontWeight="600" fill={ink.threshold}
             >
               {GOOD_ATTENDANCE}% target
             </text>

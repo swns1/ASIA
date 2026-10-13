@@ -1,5 +1,3 @@
-import { motion, AnimatePresence } from "framer-motion";
-
 import Card from "./Card";
 import Button from "./Button";
 import Skeleton from "./Skeleton";
@@ -16,9 +14,11 @@ import { CHIP_GLOW } from "../../constants/statusTones";
 // sit in one row and the rate is drawn as the proportion of a single bar, so
 // the relationship is visible without a fourth tile asserting it.
 //
-// The amount-visibility toggle and the school-year filter live in the header
-// because they govern every figure in the block. As per-card controls they
-// were ambiguous — the eye sat on "Collection Rate" but blurred all four.
+// The amount-visibility toggle lives in the header because it governs every
+// figure in the block. As a per-card control it was ambiguous — the eye sat on
+// "Collection Rate" but blurred all four. The year is the page's: every home
+// has one school year picker, so the panel has no year control of its own
+// (two could disagree).
 
 const peso = (n) =>
   `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,13 +32,8 @@ export default function BillingPanel({
   summary,
   loading = false,
   schoolYear,
-  filterYear,
-  onFilterYearChange,
-  schoolYearOptions = [],
   showAmounts = true,
   onToggleAmounts,
-  showFilters = false,
-  onToggleFilters,
   onOpenInvoices,
   className = "",
 }) {
@@ -72,7 +67,9 @@ export default function BillingPanel({
       value: collected,
       dot: "bg-success-dot",
       tone: "text-success-500",
-      link: "/invoices?status=paid",
+      // Every invoice with a payment, partly paid ones too: a status
+      // (paid) would hold only part of this figure. Same for Outstanding.
+      link: "/invoices?money=payments",
       // Only collections have a real month-by-month history behind them
       // (Payment.payment_date). net_billed is a balance and outstanding is
       // derived from it, so neither has a series to draw.
@@ -84,7 +81,7 @@ export default function BillingPanel({
       value: outstanding,
       dot: "bg-error-dot",
       tone: "text-error-500",
-      link: "/invoices?status=unpaid",
+      link: "/invoices?money=balance",
     },
   ];
 
@@ -95,7 +92,7 @@ export default function BillingPanel({
           <i className="ti ti-receipt text-[14px] text-info-500" aria-hidden="true" />
         </div>
         <span className="flex-1 text-xs font-semibold uppercase tracking-[0.06em] text-neutral-500">
-          Billing · S.Y. {filterYear ?? schoolYear}
+          Billing · S.Y. {schoolYear}
         </span>
 
         {!loading && net > 0 && (
@@ -114,17 +111,6 @@ export default function BillingPanel({
         )}
 
         <div className="flex gap-1">
-          {filterYear && (
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              icon="ti-x"
-              title="Reset to current school year"
-              aria-label="Reset to current school year"
-              onClick={() => onFilterYearChange?.(null)}
-            />
-          )}
           {/* Only where the panel owns the toggle. On the admin home the
               comparison panel above it holds the one eye button for both. */}
           {onToggleAmounts && (
@@ -139,50 +125,8 @@ export default function BillingPanel({
               onClick={onToggleAmounts}
             />
           )}
-          {/* Only where the page wants the panel to pick its own year. The
-              admin home's year picker already scopes it, and a second year
-              control there could disagree with the first. */}
-          {onToggleFilters && (
-            <Button
-              variant={filterYear ? "secondary" : "ghost"}
-              size="sm"
-              iconOnly
-              icon="ti-adjustments-horizontal"
-              title="Filter by school year"
-              aria-label="Filter by school year"
-              aria-expanded={showFilters}
-              onClick={onToggleFilters}
-            />
-          )}
         </div>
       </div>
-
-      <AnimatePresence initial={false}>
-        {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeInOut" }}
-            className="overflow-hidden border-b border-neutral-200"
-          >
-            <div className="px-5 py-3">
-              <label className="sr-only" htmlFor="billing-year">School year</label>
-              <select
-                id="billing-year"
-                value={filterYear ?? ""}
-                onChange={(e) => onFilterYearChange?.(e.target.value || null)}
-                className="focus-ring w-full cursor-pointer rounded-sm border border-neutral-300 bg-surface px-2 py-1 text-xs text-neutral-700 outline-none sm:max-w-[220px]"
-              >
-                <option value="">Current ({schoolYear})</option>
-                {schoolYearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="grid grid-cols-1 sm:grid-cols-3">
         {cells.map((cell) => (

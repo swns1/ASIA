@@ -226,12 +226,15 @@ class SectionSerializer(serializers.ModelSerializer):
     )
     enrollment_count = serializers.SerializerMethodField()
     adviser_count = serializers.SerializerMethodField()
+    # Advisers who can still act (enrollments.models.with_active_teacher);
+    # `adviser_count` counts every advisory row, for "is it in use?".
+    active_adviser_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Section
         fields = (
             "section_id", "school_year", "school_level", "grade_level", "name", "strand",
-            "enrollment_count", "adviser_count", "created_at", "updated_at",
+            "enrollment_count", "adviser_count", "active_adviser_count", "created_at", "updated_at",
         )
         read_only_fields = ("section_id", "created_at", "updated_at")
         # DRF would add a case-sensitive UniqueTogetherValidator from the
@@ -247,6 +250,9 @@ class SectionSerializer(serializers.ModelSerializer):
 
     def get_adviser_count(self, obj):
         return self._count("adviser_counts", obj)
+
+    def get_active_adviser_count(self, obj):
+        return self._count("active_adviser_counts", obj)
 
     def validate_name(self, value):
         name = " ".join(value.split())

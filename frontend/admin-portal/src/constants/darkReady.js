@@ -8,8 +8,8 @@
 // `match` is tested against the whole path, so a list page doesn't bring
 // its detail and form pages along (/students yes, /students/12 no).
 export const DARK_READY_PAGES = [
-  // Admins get the admin home here, the only /dashboard dark mode reaches
-  // (hooks/useTheme: dark is for super admins and admins).
+  // Both homes: the admin home for super admins and admins, the shared
+  // staff dashboard for everyone else.
   { label: "Dashboard", match: /^\/dashboard\/?$/ },
   { label: "Students", match: /^\/students\/?$/ },
   { label: "Student detail", match: /^\/students\/\d+\/?$/ },
@@ -43,6 +43,13 @@ export const DARK_READY_PAGES = [
   { label: "My Sections", match: /^\/my-sections\/?$/ },
   // Renders My Sections' SectionDetail and StudentsTab, so it joins with it.
   { label: "Sections", match: /^\/sections\/?$/ },
+  // Built on the tokens from the start: each staff member's theme and password.
+  { label: "My Settings", match: /^\/my-settings\/?$/ },
+  // The guardian portal (GuardianLayout, through ThemeArea): home, one
+  // child's records, and the guardian's own settings.
+  { label: "Guardian home", match: /^\/guardian\/?$/ },
+  { label: "Guardian child records", match: /^\/guardian\/child\/\d+\/?$/ },
+  { label: "Guardian settings", match: /^\/guardian\/settings\/?$/ },
 ];
 
 export const isDarkReady = (pathname) => DARK_READY_PAGES.some((page) => page.match.test(pathname));

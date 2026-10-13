@@ -125,7 +125,7 @@ export default function LineChart({
             />
             <text
               x={PAD_L - 8} y={PAD_T + plotH - f * plotH + 4}
-              textAnchor="end" fontSize="10" fill={ink.axis}
+              textAnchor="end" fontSize="11" fill={ink.axis}
             >
               {formatValue(Math.round((yMin + f * span) * 100) / 100)}
             </text>
@@ -143,7 +143,7 @@ export default function LineChart({
             {threshold.label && (
               <text
                 x={width - PAD_R} y={yAt(threshold.value) - 5}
-                textAnchor="end" fontSize="10" fontWeight="600" fill={ink.threshold}
+                textAnchor="end" fontSize="11" fontWeight="600" fill={ink.threshold}
               >
                 {threshold.label}
               </text>
@@ -213,7 +213,7 @@ export default function LineChart({
             <text
               key={label}
               x={xAt(i)} y={PAD_T + plotH + 16}
-              textAnchor="middle" fontSize="10" fill={ink.axis}
+              textAnchor="middle" fontSize="11" fill={ink.axis}
             >
               {formatLabel(label)}
             </text>

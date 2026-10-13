@@ -123,7 +123,7 @@ export default function StudentFinder({ onOpen, onSeeAll, fieldClassName }) {
                   className={`flex cursor-pointer items-center gap-3 px-3.5 py-2 transition-colors ${i === active ? "bg-brand-100" : ""}`}
                 >
                   <div
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                     style={{ background: palette.bg, color: palette.color }}
                     aria-hidden="true"
                   >

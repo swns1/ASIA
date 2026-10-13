@@ -11,7 +11,7 @@ SimpleNamespace, matching accounts/test_permissions.py.
 """
 import pytest
 
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from rest_framework.request import Request
@@ -21,6 +21,7 @@ from accounts.permissions import HasRole
 from dashboard.services import (
     RISK_BANDS,
     SCHOOL_LEVELS,
+    attendance_window_start,
     shape_attendance_series,
     shape_level_distribution,
     shape_pipeline,
@@ -143,6 +144,28 @@ class TestShapeRiskByLevel:
     def test_a_score_with_no_known_level_is_left_out(self):
         result = shape_risk_by_level([{"school_level": None, "risk_level": "high", "n": 3}])
         assert sum(row["total"] for row in result) == 0
+
+
+# ── attendance_window_start ─────────────────────────────────────────────────
+class TestAttendanceWindowStart:
+    def test_current_year_counts_back_from_its_latest_record(self):
+        # Today's attendance isn't in yet: the window ends on yesterday's.
+        last = date(2026, 10, 12)
+        assert attendance_window_start(date(2026, 10, 13), last, 12) == last - timedelta(weeks=12)
+
+    def test_past_year_counts_back_from_its_last_record(self):
+        # Last year's records all end in April; counting back from today
+        # found none of them and the chart came up empty.
+        last = date(2026, 4, 10)
+        assert attendance_window_start(date(2026, 10, 13), last, 12) == last - timedelta(weeks=12)
+
+    def test_a_future_dated_record_doesnt_move_the_window_past_today(self):
+        today = date(2026, 10, 13)
+        assert attendance_window_start(today, date(2026, 12, 1), 12) == today - timedelta(weeks=12)
+
+    def test_no_records_yet_falls_back_to_today(self):
+        today = date(2026, 10, 13)
+        assert attendance_window_start(today, None, 4) == today - timedelta(weeks=4)
 
 
 # ── shape_attendance_series ─────────────────────────────────────────────────
@@ -325,3 +348,22 @@ class TestWeeksParam:
 
     def test_valid_value_passes_through(self):
         assert self._weeks(6) == 6
+
+
+# ── teacher scope follows the year ──────────────────────────────────────────
+class TestTeacherScopeFollowsTheYear:
+    def test_a_teacher_reads_the_picked_years_sections(self):
+        # A past year used to count this year's learners' old rows.
+        from unittest.mock import patch
+
+        request = Request(factory.get("/api/dashboard/summary/", {"school_year": "2025-2026"}))
+        request.user = _user("teacher", user_id=7)
+        view = DashboardSummaryView()
+        with patch("dashboard.views.teacher_student_ids", return_value={1}) as roster, \
+             patch.object(DashboardSummaryView, "_pipeline", return_value={}), \
+             patch.object(DashboardSummaryView, "_levels", return_value=[]), \
+             patch.object(DashboardSummaryView, "_attendance", return_value=[]), \
+             patch.object(DashboardSummaryView, "_risk", return_value={}) as risk:
+            view.get(request)
+        roster.assert_called_once_with(request.user, "2025-2026")
+        risk.assert_called_once_with("2025-2026", {1})

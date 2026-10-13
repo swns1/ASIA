@@ -1391,12 +1391,19 @@ SELECT count(*) FROM grades g JOIN enrollments e USING (enrollment_id)
 
 -- invoices reconcile. NOTE: only LIVE installments count -- a transfer-out
 -- close-out voids the remaining ones, so summing all of them reports a false
--- mismatch on every closed-out invoice (§7.13 states the invariant).
+-- mismatch on every closed-out invoice (§7.13 states the invariant). A void
+-- invoice owes nothing, so its installments are all voided and it is checked
+-- by the next query instead.
 SELECT i.invoice_no FROM student_invoices i
- WHERE (SELECT sum(amount) FROM student_invoice_items x WHERE x.invoice_id=i.invoice_id)
+ WHERE i.status <> 'void'
+   AND (SELECT sum(amount) FROM student_invoice_items x WHERE x.invoice_id=i.invoice_id)
      - (SELECT coalesce(sum(amount),0) FROM student_invoice_discounts x WHERE x.invoice_id=i.invoice_id)
     <> (SELECT coalesce(sum(amount),0) FROM invoice_installments x
           WHERE x.invoice_id=i.invoice_id AND x.status <> 'voided');   -- none
+
+-- a void invoice has no live installment (services.void_invoice)
+SELECT count(*) FROM invoice_installments x JOIN student_invoices i USING (invoice_id)
+ WHERE i.status = 'void' AND x.status <> 'voided';                                     -- 0
 
 -- no attendance on blocked days
 SELECT count(*) FROM attendance_records a JOIN enrollments e USING (enrollment_id)
