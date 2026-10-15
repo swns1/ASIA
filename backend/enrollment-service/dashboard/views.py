@@ -27,6 +27,8 @@ to return True for any authenticated user when a view forgot this line,
 guardians included, which is why every `HasRole` view in this codebase sets
 it explicitly rather than relying on the (now safe) default.
 """
+from datetime import date
+
 from django.db.models import Count, Max, OuterRef, Subquery
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
@@ -38,7 +40,7 @@ from accounts.models import User
 from accounts.permissions import HasRole, teacher_student_ids
 from ai.models import RiskAssessmentRun, StudentRiskScore, run_scope
 from attendance.models import AttendanceRecord
-from enrollments.models import Enrollment, SectionAdvisory, advisory_roster, with_active_teacher
+from enrollments.models import Enrollment, SchoolYear, SectionAdvisory, advisory_roster, with_active_teacher
 from grades.models import Grade, NarrativeCategory, NarrativeReport
 from shared.school_year import InvalidSchoolYear, normalize as normalize_school_year
 from subjects.models import Subject
@@ -51,6 +53,7 @@ from .services import (
     shape_risk_bands,
     shape_risk_by_level,
 )
+from .attendance_days import MAX_DAYS, days_between, shape_attendance_days, year_for_dates
 from .my_day import shape_my_day
 from .teachers_today import (
     NO_CLASS_EVENT_TYPES,
@@ -401,3 +404,148 @@ class MyDayView(APIView):
                 ),
             ),
         })
+
+
+# Who may read a day's attendance: everyone the attendance records are open
+# to among staff (accounts.permissions.GRADE_READ_ROLES). Accounting has no
+# access to attendance anywhere, so not here either.
+ATTENDANCE_DAY_ROLES = {"super_admin", "admin", "registrar", "teacher"}
+
+# The learners a day is counted against: those in class that year. A finished
+# year's rows read "completed", which "enrolled" alone would drop, leaving a
+# past year's calendar empty.
+IN_CLASS_STATUSES = ("enrolled", "completed")
+
+
+def _date_param(params, name):
+    value = params.get(name)
+    if not value:
+        raise ValueError(f"{name} is required (YYYY-MM-DD).")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"{name} must be a date (YYYY-MM-DD).")
+
+
+class AttendanceDaysView(APIView):
+    """
+    GET /api/dashboard/attendance-days/?school_year=2026-2027&date_from=2026-10-01&date_to=2026-10-31
+
+    Each day's saved attendance from date_from through date_to (none after
+    today, at most MAX_DAYS): present, late, absent, excused, how many
+    learners have no mark, and how many sections are taken. Asking for one
+    day (date_from == date_to) adds each section's marks.
+
+    Without school_year, the registered year the dates fall in is used
+    (year_for_dates); between years there is no one to count, so every day
+    reads zero. The answer's `school_year` says which year was counted.
+
+    Staff see the whole school. A teacher sees only the sections they advise
+    that year -- the caller is the teacher, never a parameter -- with the
+    same roster My Sections uses (advisory_roster), so a past year whose
+    learners have moved on is empty for them, as My Sections is.
+    All decisions live in attendance_days.py; this only gathers the rows.
+    """
+    permission_classes = [HasRole]
+    required_roles     = ATTENDANCE_DAY_ROLES
+
+    def get(self, request):
+        params = request.query_params
+        try:
+            date_from = _date_param(params, "date_from")
+            date_to = _date_param(params, "date_to")
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        if date_to < date_from:
+            return Response({"detail": "date_to must be on or after date_from."}, status=400)
+        if (date_to - date_from).days + 1 > MAX_DAYS:
+            return Response({"detail": f"Ask for at most {MAX_DAYS} days at a time."}, status=400)
+        if "school_year" in params:
+            try:
+                school_year = normalize_school_year(params.get("school_year"))
+            except InvalidSchoolYear as exc:
+                return Response({"detail": str(exc)}, status=400)
+        else:
+            school_year = year_for_dates(
+                date_from, date_to, SchoolYear.objects.values("label", "start_date", "end_date"),
+            )
+
+        dates = days_between(date_from, date_to, timezone.localdate())
+        answer = {"school_year": school_year, "date_from": date_from.isoformat(), "date_to": date_to.isoformat()}
+        if not dates:
+            return Response({**answer, "days": []})
+
+        if school_year is None:
+            sections, advisory_ids, rows = {}, {}, []
+        elif getattr(request.user, "role", None) == "teacher":
+            sections, advisory_ids, rows = self._own_sections(request.user, school_year, dates)
+        else:
+            sections, rows = self._school(school_year, dates)
+            advisory_ids = {}
+
+        return Response({
+            **answer,
+            "days": shape_attendance_days(
+                dates=dates,
+                sections=sections,
+                attendance_rows=rows,
+                no_class_events=list(CalendarEvent.objects.filter(
+                    start_date__lte=dates[-1], end_date__gte=dates[0],
+                    event_type__in=NO_CLASS_EVENT_TYPES,
+                ).values("event_type", "title", "start_date", "end_date")),
+                with_sections=date_from == date_to,
+                advisory_ids=advisory_ids,
+            ),
+        })
+
+    @staticmethod
+    def _school(school_year, dates):
+        in_class = Enrollment.objects.filter(school_year=school_year, enrollment_status__in=IN_CLASS_STATUSES)
+        sections = {}
+        for eid, level, grade, section, strand in in_class.values_list(
+            "enrollment_id", "school_level", "grade_level", "section", "strand",
+        ):
+            sections.setdefault(section_key(level, grade, section, strand), []).append(eid)
+
+        rows = (
+            AttendanceRecord.objects
+            .filter(date__range=(dates[0], dates[-1]), enrollment__school_year=school_year,
+                    enrollment__enrollment_status__in=IN_CLASS_STATUSES)
+            .values("date", "enrollment__school_level", "enrollment__grade_level",
+                    "enrollment__section", "enrollment__strand", "status")
+            .annotate(n=Count("attendance_id"))
+        )
+        return sections, [
+            {
+                "date": r["date"],
+                "key": section_key(r["enrollment__school_level"], r["enrollment__grade_level"],
+                                   r["enrollment__section"], r["enrollment__strand"]),
+                "status": r["status"],
+                "n": r["n"],
+            }
+            for r in rows
+        ]
+
+    @staticmethod
+    def _own_sections(user, school_year, dates):
+        teacher_id = getattr(user, "user_id", None) or getattr(user, "id", None)
+        sections, advisory_ids, key_of = {}, {}, {}
+        for a in SectionAdvisory.objects.filter(teacher_user_id=teacher_id, school_year=school_year):
+            key = section_key(a.school_level, a.grade_level, a.section, a.strand)
+            advisory_ids[key] = a.advisory_id
+            eids = list(advisory_roster(a).values_list("enrollment_id", flat=True))
+            sections[key] = eids
+            key_of.update(dict.fromkeys(eids, key))
+
+        # By learner, not by the enrollment's section fields: a whole-section
+        # advisory (no strand) covers every strand in it.
+        rows = (
+            AttendanceRecord.objects
+            .filter(date__range=(dates[0], dates[-1]), enrollment_id__in=list(key_of))
+            .values("date", "enrollment_id", "status")
+            .annotate(n=Count("attendance_id"))
+        )
+        return sections, advisory_ids, [
+            {"date": r["date"], "key": key_of[r["enrollment_id"]], "status": r["status"], "n": r["n"]}
+            for r in rows
+        ]

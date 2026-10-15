@@ -8,6 +8,7 @@ come from settings, an empty answer counts as a failure (so the next provider
 is actually tried), and `check_ai_providers` reports a retired id.
 """
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,6 +42,8 @@ def _interpret(*, gemini_text="from gemini", gemini_exc=None, groq_content="from
     post = MagicMock(return_value=_groq_reply(groq_content))
     request = Request(APIRequestFactory().post("/api/ai/interpret/", BODY, format="json"),
                       parsers=[JSONParser()])
+    # Called past the role gate, so it needs a role the summary allows.
+    request.user = SimpleNamespace(user_id=1, pk=1, role="registrar", is_authenticated=True)
     config = {"GEMINI_API_KEY": "gk", "GROQ_API_KEY": "gq", **settings}
     with override_settings(**config), \
          patch("ai.views._get_client", return_value=client), \

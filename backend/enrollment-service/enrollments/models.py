@@ -315,20 +315,24 @@ class GuardianResponse(models.Model):
 # ─── Email delivery failure record ───────────────────────────────────────────
 class EmailDeliveryFailure(models.Model):
     """
-    Written whenever an outbound email exhausts its retries (see
-    email_views.py). There's only one outbound mail path (SMTP) in this
-    codebase and no task queue to retry through later, so this is the
-    fallback for "the send failed": instead of the error vanishing into an
-    HTTP response nobody reads, it's durable in this table so a failed
-    enrollment confirmation can be noticed and resent by hand. The registrar
-    also sees the failure at the moment it happens (the form reports it).
+    Written whenever an outbound email exhausts its retries. Every message
+    goes through shared.mail.send_email and there's no task queue to retry
+    through later, so this is the fallback for "the send failed": instead of
+    the error vanishing into an HTTP response nobody reads, it's durable in
+    this table so a failed email can be noticed and resent by hand. The
+    sender also sees the failure at the moment it happens.
+
+    Two writers, told apart by `context`: enrollment confirmations
+    (email_views.py, {"enrollment_id": ...}) and payment receipts
+    (billing-service billing/email_views.py, {"payment_id": ...}, through a
+    managed=False mirror).
     """
 
     email_delivery_failure_id = models.BigAutoField(primary_key=True)
 
     to_email = models.EmailField(max_length=150)
     subject = models.CharField(max_length=200)
-    # e.g. {"enrollment_id": 123} — enough to identify what triggered the
+    # e.g. {"enrollment_id": 123} or {"payment_id": 45} — enough to identify what triggered the
     # send without a hard FK, since the trigger type may vary later.
     context = models.JSONField(default=dict, blank=True)
     error_message = models.TextField()

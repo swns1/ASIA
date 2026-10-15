@@ -22,7 +22,10 @@ import { CARD_DARK } from "../components/ui/darkSurfaces";
 import SegmentedControl from "../components/ui/SegmentedControl";
 import { ToggleCard, TogglePill } from "../components/ui/ToggleCard";
 import { CHIP_GLOW } from "../constants/statusTones";
-import { ACADEMIC_STAFF } from "../utils/auth";
+import { ACADEMIC_STAFF, GRADE_ROLES } from "../utils/auth";
+import { localISODate, todayISO } from "../utils/format";
+import useAttendanceDays from "../hooks/useAttendanceDays";
+import { AttendanceDayNote, AttendanceDayPanel } from "./calendar/AttendanceDay";
 import MonthGrid from "./calendar/MonthGrid";
 import { MONTHS, buildEventMap, calendarItems, formatDateRange, parseLocalDate } from "./calendar/calendarDates";
 import {
@@ -66,14 +69,15 @@ const getMine = (sy) => {
 // personal-events: `mine` (calendarItems) says which.
 const removeEvent = (ev) => (ev.mine ? deletePersonalEvent : deleteEvent)(ev.event_id);
 
-// "My events" on or off, kept per person in this browser.
-const showMineKey = (user) => `asia.calendar.showMine.${user?.id ?? "anon"}`;
-function readShowMine(user) {
-  try { return localStorage.getItem(showMineKey(user)) !== "0"; }
+// "My events" and "Attendance" on or off, kept per person in this browser.
+// Both start on.
+const toggleKey = (name, user) => `asia.calendar.${name}.${user?.id ?? "anon"}`;
+function readToggle(name, user) {
+  try { return localStorage.getItem(toggleKey(name, user)) !== "0"; }
   catch { return true; }
 }
-function writeShowMine(user, on) {
-  try { localStorage.setItem(showMineKey(user), on ? "1" : "0"); }
+function writeToggle(name, user, on) {
+  try { localStorage.setItem(toggleKey(name, user), on ? "1" : "0"); }
   catch { /* the choice lasts this visit only */ }
 }
 
@@ -1222,7 +1226,11 @@ export default function AcademicCalendarPage() {
   const canChange = (ev) => ev.mine || schoolEditable;
   const [events,      setEvents]      = useState([]);
   const [mine,        setMine]        = useState([]);
-  const [showMine,    setShowMineState] = useState(() => readShowMine(user));
+  const [showMine,    setShowMineState] = useState(() => readToggle("showMine", user));
+  // Each day's attendance on the grid and in the day panel, for whoever may
+  // read attendance (accounting may not); a teacher's is their own sections.
+  const canSeeAttendance = GRADE_ROLES.includes(user?.role);
+  const [showAttendance, setShowAttendanceState] = useState(() => readToggle("showAttendance", user));
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");
   const [selectedDay, setSelectedDay] = useState(null);
@@ -1245,8 +1253,25 @@ export default function AcademicCalendarPage() {
 
   function setShowMine(on) {
     setShowMineState(on);
-    writeShowMine(user, on);
+    writeToggle("showMine", user, on);
   }
+  function setShowAttendance(on) {
+    setShowAttendanceState(on);
+    writeToggle("showAttendance", user, on);
+  }
+
+  // Asked by date, not by the page's year: see AttendanceDay.jsx. A month or
+  // day still to come has no attendance, so it isn't asked for.
+  const today = todayISO();
+  const attendanceOn = canSeeAttendance && showAttendance;
+  const monthFrom = localISODate(new Date(activeMonthYear, activeMonth, 1));
+  const monthTo = localISODate(new Date(activeMonthYear, activeMonth + 1, 0));
+  const monthAttendance = useAttendanceDays({ from: monthFrom, to: monthTo, enabled: attendanceOn && monthFrom <= today });
+  const dayAttendanceOn = attendanceOn && Boolean(selectedDay) && selectedDay <= today;
+  const dayAttendance = useAttendanceDays({ from: selectedDay, to: selectedDay, enabled: dayAttendanceOn });
+  const attendanceNotes = Object.fromEntries(
+    monthAttendance.days.filter((d) => d.marked).map((d) => [d.date, <AttendanceDayNote key={d.date} day={d} />]),
+  );
 
   const fetchEvents = useCallback(async (sy) => {
     setLoading(true); setError("");
@@ -1348,6 +1373,16 @@ export default function AcademicCalendarPage() {
               labelOn="My events"
               labelOff="My events"
             />
+            {canSeeAttendance && (
+              <TogglePill
+                checked={showAttendance}
+                onChange={setShowAttendance}
+                iconOn="ti-clipboard-check"
+                iconOff="ti-clipboard-off"
+                labelOn="Attendance"
+                labelOff="Attendance"
+              />
+            )}
             {schoolEditable && (
               <Button variant="secondary" icon="ti-flag" onClick={() => setShowImport(true)}>
                 PH Holidays
@@ -1462,6 +1497,7 @@ export default function AcademicCalendarPage() {
                   eventMap={eventMap}
                   selectedDay={selectedDay}
                   onSelectDay={setSelectedDay}
+                  dayNotes={attendanceOn ? attendanceNotes : undefined}
                 />
               </motion.div>
             </AnimatePresence>
@@ -1479,6 +1515,19 @@ export default function AcademicCalendarPage() {
                 <span style={{ fontSize: 11, color: "var(--color-neutral-600)", fontWeight: 500 }}>{t.label}</span>
               </div>
             ))}
+            {attendanceOn && (
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-600">
+                <i className="ti ti-user-check text-success-500" aria-hidden="true" />
+                {monthAttendance.failed ? (
+                  <>
+                    Attendance didn&apos;t load
+                    <button type="button" onClick={monthAttendance.reload} className="focus-ring rounded-sm font-semibold text-brand-600 hover:underline">Try again</button>
+                  </>
+                ) : user?.role === "teacher"
+                  ? "Your learners present (late included) · amber: not every learner marked"
+                  : "Learners present (late included) · amber: a section hasn't taken it"}
+              </div>
+            )}
           </motion.div>
 
           {/* Print toolbar */}
@@ -1557,6 +1606,18 @@ export default function AcademicCalendarPage() {
                     <i className="ti ti-x" style={{ fontSize: 15 }} />
                   </motion.button>
                 </div>
+                {dayAttendanceOn && (
+                  <AttendanceDayPanel
+                    day={dayAttendance.byDate[selectedDay]}
+                    date={selectedDay}
+                    loading={dayAttendance.loading}
+                    failed={dayAttendance.failed}
+                    onRetry={dayAttendance.reload}
+                    isTeacher={user?.role === "teacher"}
+                    schoolYear={dayAttendance.schoolYear}
+                    onGo={navigate}
+                  />
+                )}
                 <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7, maxHeight: 280, overflowY: "auto" }}>
                   {uniqueForDay.length === 0
                     ? <div style={{ fontSize: 12, color: "var(--color-neutral-500)", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
@@ -1580,7 +1641,7 @@ export default function AcademicCalendarPage() {
                   <i className="ti ti-calendar-search" style={{ fontSize: 22, color: "var(--color-neutral-500)" }} />
                 </div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-neutral-500)" }}>No date selected</div>
-                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textAlign: "center", lineHeight: 1.6 }}>Click any date on the calendar to view its events</div>
+                <div style={{ fontSize: 11, color: "var(--color-neutral-500)", textAlign: "center", lineHeight: 1.6 }}>{attendanceOn ? "Click any date on the calendar to view its events and attendance" : "Click any date on the calendar to view its events"}</div>
               </motion.div>
             )}
           </AnimatePresence>

@@ -23,7 +23,7 @@ import {
   saveSectionNarrativeReports,
 } from "../api/enrollmentApi";
 import { getUsers } from "../api/identityApi";
-import { getCurrentUser } from "../utils/auth";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import { LEVEL_ICONS } from "../constants/schoolLevels";
 import {
   GRADE_OUTSTANDING, GRADE_PASSING, PERIOD_LABEL, currentQuarterKey, levelConfig, periodForLevel,
@@ -32,7 +32,8 @@ import useGradingCalendar from "../hooks/useGradingCalendar";
 import useYearFilter from "../hooks/useYearFilter";
 import useArchivedYears from "../hooks/useArchivedYears";
 import { useSchoolYear } from "../context/SchoolYearContext";
-import { localISODate, todayISO } from "../utils/format";
+import { fmtShortDay, todayISO } from "../utils/format";
+import DayStepper from "../components/ui/DayStepper";
 import { OBSERVED_VALUES, observedMark, observedValueMeta } from "../constants/observedValues";
 import useLatestRequest from "../hooks/useLatestRequest";
 import useTheme from "../hooks/useTheme";
@@ -90,12 +91,6 @@ const ATTENDANCE_STATUSES = [
 const DARK_ATTENDANCE_STATUSES = ATTENDANCE_STATUSES.map((s) =>
   s.value === "L" ? { ...s, color: "var(--color-warning-500)", bg: "var(--color-warning-50)" } : s
 );
-
-function shiftISODate(iso, delta) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + delta);
-  return localISODate(d);
-}
 
 // School year strings look like "2026-2027" → academic year runs Jun 1–May 31.
 function schoolYearRange(schoolYear) {
@@ -608,7 +603,10 @@ function NarrativeTab({ advisory, readOnly = false, defaultPeriod }) {
     return (
       <div style={{ padding: "28px 26px", textAlign: "center", fontSize: 12.5, color: "var(--color-neutral-500)" }}>
         No narrative categories configured yet.{" "}
-        <a href="/grading-templates?tab=narrative" style={{ color: "var(--color-brand-600)", fontWeight: 600 }}>Ask an admin to add some</a>.
+        {/* Grading Setup opens only for the roles that may add them. */}
+        {hasAnyRole(getCurrentUser(), ACADEMIC_STAFF)
+          ? <a href="/grading-templates?tab=narrative" style={{ color: "var(--color-brand-600)", fontWeight: 600 }}>Add some on Grading Setup</a>
+          : "Ask an admin or the registrar to add some"}.
       </div>
     );
   }
@@ -720,8 +718,11 @@ const ATTENDANCE_ENTRY_COLUMNS = [
   { key: "remarks", label: "Remarks" },
 ];
 
-function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
-  const [date, setDate] = useState(todayISO());
+// `initialDate` comes from a link (?date=, from a home or the calendar);
+// a day that hasn't come, or anything not a date, opens on today.
+function AttendanceTab({ advisory, onTodayChange, readOnly = false, initialDate }) {
+  const [date, setDate] = useState(() =>
+    /^\d{4}-\d{2}-\d{2}$/.test(initialDate ?? "") && initialDate <= todayISO() ? initialDate : todayISO());
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({}); // student_id -> { status, remarks }
   const [loading, setLoading] = useState(false);
@@ -807,7 +808,6 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
   // Learners with no saved mark for the day: the grid shows the pre-filled
   // Present, but nothing is recorded until Save.
   const unsaved = readOnly ? 0 : rows.filter((r) => !r.attendance).length;
-  const today = todayISO();
 
   const counts = useMemo(() => {
     const c = { P: 0, A: 0, L: 0, E: 0, none: 0 };
@@ -819,10 +819,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
     return c;
   }, [rows, drafts]);
 
-  const dateLabel = useMemo(() => {
-    const d = new Date(`${date}T00:00:00`);
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  }, [date]);
+  const dateLabel = fmtShortDay(date);
 
   return (
     <div>
@@ -832,35 +829,7 @@ function AttendanceTab({ advisory, onTodayChange, readOnly = false }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 26px", borderBottom: "1px solid var(--color-neutral-200)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <button
-              onClick={() => setDate((d) => shiftISODate(d, -1))}
-              aria-label="Previous day"
-              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-            >
-              <i className="ti ti-chevron-left" style={{ fontSize: 14 }} />
-            </button>
-            <input
-              type="date"
-              value={date}
-              // The server takes no attendance for a day that hasn't come.
-              max={today}
-              onChange={(e) => setDate(e.target.value)}
-              style={{ border: "1.5px solid var(--color-neutral-300)", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "var(--color-neutral-900)", background: "var(--color-surface)", fontFamily: "'DM Sans',sans-serif", cursor: "pointer", flexShrink: 0 }}
-            />
-            <button
-              onClick={() => setDate((d) => shiftISODate(d, 1))}
-              aria-label="Next day"
-              disabled={date >= today}
-              style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-700)", cursor: date >= today ? "not-allowed" : "pointer", opacity: date >= today ? 0.4 : 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-            >
-              <i className="ti ti-chevron-right" style={{ fontSize: 14 }} />
-            </button>
-            <button
-              onClick={() => setDate(todayISO())}
-              style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px solid var(--color-neutral-300)", background: "var(--color-surface)", color: "var(--color-neutral-600)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
-            >
-              Today
-            </button>
+            <DayStepper value={date} onChange={setDate} picker todayButton />
             <span style={{ fontSize: 12, color: "var(--color-neutral-500)", marginLeft: 4, flexShrink: 0 }}>{dateLabel}</span>
           </div>
           {!readOnly && (
@@ -1311,11 +1280,12 @@ function StatsTab({ advisory }) {
 // teacher never needs to be told they advise their own section) and
 // `readOnly` for the registrar and archived years.
 //
-// `initialTab`, `initialPeriod` and `initialSubjectId` come from a link
-// (My Sections' ?tab=&period=&subject=, e.g. from the teacher's home).
+// `initialTab`, `initialPeriod`, `initialSubjectId` and `initialDate` come
+// from a link (My Sections' ?tab=&period=&subject=&date=, e.g. from the
+// teacher's home or the calendar).
 const SECTION_TABS = ["students", "subjects", "grades", "narrative", "attendance", "stats"];
 
-export function SectionDetail({ entry, adviserName, readOnly = false, initialTab, initialPeriod, initialSubjectId }) {
+export function SectionDetail({ entry, adviserName, readOnly = false, initialTab, initialPeriod, initialSubjectId, initialDate }) {
   const dark = useTheme() === "dark";
   const { advisory, student_count, students, subjects } = entry;
   // Keyed by advisory_id at the call site, so a fresh mount (and a reset
@@ -1442,7 +1412,7 @@ export function SectionDetail({ entry, adviserName, readOnly = false, initialTab
             defaultPeriod={defaultPeriod} initialSubjectId={initialSubjectId} />
         )}
         {tab === "narrative" && <NarrativeTab advisory={advisory} readOnly={readOnly} defaultPeriod={defaultPeriod} />}
-        {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} readOnly={readOnly} />}
+        {tab === "attendance" && <AttendanceTab advisory={advisory} onTodayChange={setTodayAttendance} readOnly={readOnly} initialDate={initialDate} />}
         {tab === "stats" && <StatsTab advisory={advisory} />}
       </div>
     </div>
@@ -1633,7 +1603,7 @@ export default function TeacherSectionsPage() {
   // page opens on when it names none.
   const linkTarget = linkedSection ?? yearSections[0]?.advisory.advisory_id;
   const linkProps = selectedEntry && selectedEntry.advisory.advisory_id === linkTarget
-    ? { initialTab: searchParams.get("tab"), initialPeriod: searchParams.get("period"), initialSubjectId: searchParams.get("subject") }
+    ? { initialTab: searchParams.get("tab"), initialPeriod: searchParams.get("period"), initialSubjectId: searchParams.get("subject"), initialDate: searchParams.get("date") }
     : {};
   const retry = () => (isTeacher ? fetchSections() : fetchSections(selectedTeacherId));
   const yearPicker = (

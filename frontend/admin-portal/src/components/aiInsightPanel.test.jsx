@@ -26,7 +26,7 @@ const TEXT = "**SUMMARY**\n* Strong in **Math**";
 const summary = (over = {}) => ({
   id: 3, context_type: "grade_report", text: TEXT, ai_text: TEXT, edited: false, provider: "gemini",
   generated_at: "2026-10-14T07:20:00Z", edited_at: null, stale: false,
-  shared: false, shared_at: null, shared_is_current: false, ...over,
+  shared: false, shared_at: null, shared_is_current: false, can_share: true, ...over,
 });
 
 function renderPanel(lookup = { mine: null, shared: [] }) {
@@ -100,7 +100,14 @@ describe("AIInsightPanel", () => {
     api.callGemini.mockResolvedValue({ interpretation: TEXT, provider: "gemini", summary: null });
     fireEvent.click(await screen.findByRole("button", { name: /Analyze/ }));
     expect(await screen.findByText(/couldn.t be saved/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Share with staff/ }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /Edit/ }).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /Share with staff/ })).toBeNull();
+  });
+
+  it("offers no sharing to someone the server says keeps theirs private", async () => {
+    renderPanel({ mine: summary({ can_share: false }), shared: [] });
+    expect(await screen.findByRole("button", { name: /Word file/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Share with staff/ })).toBeNull();
   });
 
   it("copies plain text, without the markup", async () => {

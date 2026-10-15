@@ -1091,6 +1091,12 @@ class StudentPaymentViewSet(
         qs = StudentPayment.objects.all().order_by("-payment_id")
         return self._apply_filters(qs, self.request.query_params)
 
+    def get_serializer_context(self):
+        # GET /api/payments/{id}/ is what the receipt page reads.
+        context = super().get_serializer_context()
+        context["with_receipt"] = self.action == "retrieve"
+        return context
+
     def get_serializer(self, *args, **kwargs):
         # One lookup for the page's student names, not one per payment.
         if kwargs.get("many") and args:

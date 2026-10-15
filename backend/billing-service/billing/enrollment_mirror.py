@@ -12,6 +12,8 @@ class StudentMirror(models.Model):
     middle_name = models.CharField(max_length=100, blank=True, null=True)
     last_name   = models.CharField(max_length=100)
     lrn         = models.CharField(max_length=30, blank=True, null=True)
+    # A payment receipt also goes to the learner's own address, if any.
+    email       = models.CharField(max_length=150, blank=True, null=True)
 
     class Meta:
         managed  = False
@@ -71,3 +73,20 @@ class SchoolYearMirror(models.Model):
     class Meta:
         managed  = False
         db_table = "school_years"
+
+
+class EmailDeliveryFailureMirror(models.Model):
+    """enrollment-service's EmailDeliveryFailure, which documents the table.
+    A payment receipt that exhausts its retries is logged here with
+    context {"payment_id": ...}; a later successful send resolves it."""
+    email_delivery_failure_id = models.BigAutoField(primary_key=True)
+    to_email      = models.CharField(max_length=150)
+    subject       = models.CharField(max_length=200)
+    context       = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField()
+    created_at    = models.DateTimeField(auto_now_add=True)
+    resolved_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed  = False
+        db_table = "email_delivery_failures"

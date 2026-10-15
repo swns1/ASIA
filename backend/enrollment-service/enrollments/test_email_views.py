@@ -1,6 +1,6 @@
 """
 Tests for send_enrollment_email() -- the enrollment confirmation, sent over
-SMTP through django.core.mail.
+SMTP through django.core.mail (via shared.mail.send_email).
 
 Enrollment and EmailDeliveryFailure are mocked rather than hitting a real
 database, same convention as the rest of this service's tests; mail goes to
@@ -16,7 +16,8 @@ from django.core import mail
 from django.test import override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from enrollments.email_views import is_transient_smtp_error, send_enrollment_email
+from enrollments.email_views import send_enrollment_email
+from shared.mail import is_transient_smtp_error
 
 factory = APIRequestFactory()
 
@@ -155,10 +156,11 @@ def test_a_non_numeric_id_is_a_400():
 @override_settings(EMAIL_BACKEND=SMTP, EMAIL_HOST_USER="")
 def test_unconfigured_mailbox_answers_503_and_logs_nothing():
     with _setup(_enrollment()) as failures, \
-         patch("enrollments.email_views.EmailMultiAlternatives.send") as send:
+         patch("shared.mail.EmailMultiAlternatives.send") as send:
         response = _post()
 
     assert response.status_code == 503
+    assert response.data["code"] == "email_not_configured"
     send.assert_not_called()
     failures.create.assert_not_called()
 
@@ -167,7 +169,7 @@ def test_unconfigured_mailbox_answers_503_and_logs_nothing():
 def test_temporary_smtp_failure_is_retried_then_logged():
     busy = smtplib.SMTPResponseException(421, b"Service not available, try again later")
     with _setup(_enrollment()) as failures, \
-         patch("enrollments.email_views.EmailMultiAlternatives.send", side_effect=busy) as send:
+         patch("shared.mail.EmailMultiAlternatives.send", side_effect=busy) as send:
         response = _post()
 
     assert response.status_code == 502
@@ -180,7 +182,7 @@ def test_temporary_smtp_failure_is_retried_then_logged():
 def test_rejected_login_is_not_retried():
     bad_login = smtplib.SMTPAuthenticationError(535, b"Username and Password not accepted")
     with _setup(_enrollment()) as failures, \
-         patch("enrollments.email_views.EmailMultiAlternatives.send", side_effect=bad_login) as send:
+         patch("shared.mail.EmailMultiAlternatives.send", side_effect=bad_login) as send:
         response = _post()
 
     assert response.status_code == 502
@@ -191,7 +193,7 @@ def test_rejected_login_is_not_retried():
 @override_settings(EMAIL_BACKEND=SMTP, EMAIL_HOST_USER="school@example.com")
 def test_a_retry_that_succeeds_sends_once():
     with _setup(_enrollment()) as failures, \
-         patch("enrollments.email_views.EmailMultiAlternatives.send",
+         patch("shared.mail.EmailMultiAlternatives.send",
                side_effect=[smtplib.SMTPServerDisconnected("dropped"), 1]) as send:
         response = _post()
 
@@ -285,3 +287,47 @@ def test_a_send_that_goes_through_settles_earlier_failures():
     assert response.status_code == 200
     failures.filter.assert_called_once_with(context__enrollment_id=5, resolved_at__isnull=True)
     assert "resolved_at" in failures.filter.return_value.update.call_args.kwargs
+
+
+@override_settings(EMAIL_BACKEND=LOCMEM, EMAIL_HOST_USER="school@example.com",
+                   EMAIL_REDIRECT_TO="tester@example.com")
+def test_redirect_sends_everything_to_the_test_inbox():
+    """The local database holds seeded guardian addresses at real mail
+    domains; with the redirect set, none of them is written to."""
+    with _setup(_enrollment(email="Juan@Example.com"),
+                guardian=("Maria Dela Cruz", "maria@example.com")):
+        response = _post()
+
+    assert response.status_code == 200
+    message = mail.outbox[0]
+    assert message.to == ["tester@example.com"]
+    assert "maria@example.com, Juan@Example.com" in message.subject
+    assert response.data["sent_to"] == ["tester@example.com"]
+
+
+# -- One outbound path -------------------------------------------------------
+
+def test_nothing_outside_shared_mail_sends_email():
+    """Every message goes through shared.mail.send_email, so the retry policy
+    and EMAIL_REDIRECT_TO apply to all of them. A view that built its own
+    EmailMultiAlternatives (as this one used to) would bypass the redirect
+    and write to real addresses from a test machine. Scans every service."""
+    import re
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parents[2]
+    allowed = {backend / "shared" / "mail.py", backend / "shared" / "email_backends.py"}
+    # Imports and calls, not mentions -- a comment may name mail_admins.
+    sending = re.compile(
+        r"from django\.core\.mail import"
+        r"|\b(EmailMultiAlternatives|EmailMessage|send_mail|send_mass_mail|mail_admins|mail_managers)\s*\("
+    )
+    skip = {"venv", ".venv", "site-packages", "node_modules", "migrations", "__pycache__"}
+
+    offenders = []
+    for path in backend.rglob("*.py"):
+        if path in allowed or path.name.startswith("test_") or skip & set(path.parts):
+            continue
+        if sending.search(path.read_text(encoding="utf-8", errors="ignore")):
+            offenders.append(str(path.relative_to(backend)))
+    assert offenders == [], f"Send email through shared.mail.send_email instead: {offenders}"

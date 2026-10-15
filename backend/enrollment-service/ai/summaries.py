@@ -9,6 +9,8 @@ the view tests patch.
     resolve_subject   what a summary is about, built by the server
     fingerprint       a hash of the data the AI was given, for "has it changed?"
     save_generated    latest only: one live row per person per subject
+    may_use           whether this person may make or read a summary of this
+                      kind about this subject (role, and a teacher's roster)
     visible_summaries the viewer's own summary plus what others published
     summary_for_viewer one summary, if this viewer may read it
 """
@@ -19,13 +21,34 @@ import re
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.permissions import GRADE_READ_ROLES, teacher_student_ids
 from enrollments.models import Enrollment
 
+from .analytics_views import CLUSTER_ROLES
 from .models import AiSummary
 
-# Who may make, keep and read AI summaries: the interpret endpoint's roles.
-# "Share with staff" publishes to exactly this set.
-AI_SUMMARY_ROLES = {"super_admin", "admin", "registrar"}
+# Who may make, keep and read each kind of summary: the roles that can see
+# the data it reads. A grade report follows the Grades page -- a teacher only
+# for the learners in their own sections (may_use) -- and a grouping follows
+# the clustering endpoint. These are the same objects, not copies, so the
+# page and its summary cannot drift apart again: the Grades page showed the
+# panel to teachers for months while this was a hand-written set without them.
+CONTEXT_ROLES = {
+    "grade_report": GRADE_READ_ROLES,
+    "clustering_insights": CLUSTER_ROLES,
+}
+
+# Who reaches the summary endpoints at all. Every request is then checked
+# against its own kind and subject with may_use.
+AI_SUMMARY_ROLES = frozenset().union(*CONTEXT_ROLES.values())
+
+# Who may publish a summary and read what others published. "Share with
+# staff" publishes to exactly this set. Teachers keep theirs private.
+SHARE_ROLES = frozenset({"super_admin", "admin", "registrar"})
+
+# A role that reaches the endpoints asking about a kind or a learner it may
+# not see (may_use). Worded as HasRole's own refusal.
+NOT_ALLOWED = {"detail": "Your role does not have access to this action."}
 
 # The heading each kind of summary carries on screen and in the Word file.
 CONTEXT_TITLES = {
@@ -51,6 +74,32 @@ _XML_INVALID = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
 
 def user_id_of(user):
     return getattr(user, "user_id", None) or getattr(user, "pk", None)
+
+
+def may_share(user):
+    return getattr(user, "role", None) in SHARE_ROLES
+
+
+def enrollment_student_id(enrollment_id):
+    return Enrollment.objects.filter(pk=enrollment_id).values_list("student_id", flat=True).first()
+
+
+def may_use(user, context_type, subject_meta):
+    """
+    Whether this person may make or read a summary of this kind about this
+    subject. Checked on every request, not only when one is made: a teacher
+    whose learner leaves their sections stops seeing that learner's summary,
+    as they stop seeing the learner's grades (teacher_student_ids).
+    """
+    role = getattr(user, "role", None)
+    if role not in CONTEXT_ROLES.get(context_type, ()):
+        return False
+    if role != "teacher":
+        return True
+    enrollment_id = (subject_meta or {}).get("enrollment_id")
+    if enrollment_id is None:
+        return False
+    return enrollment_student_id(enrollment_id) in teacher_student_ids(user)
 
 
 def clean_text(value):
@@ -144,8 +193,9 @@ def is_shared(summary):
     return bool(summary.shared_text)
 
 
-def serialize_own(summary, *, current_fingerprint):
-    """The owner's view of their summary."""
+def serialize_own(summary, *, current_fingerprint, can_share=False):
+    """The owner's view of their summary. `can_share` is may_share(owner):
+    the page offers "Share with staff" only when it is true."""
     current = summary.current_text
     return {
         "id": summary.summary_id,
@@ -162,6 +212,7 @@ def serialize_own(summary, *, current_fingerprint):
         # False once the owner edits or regenerates after publishing: the
         # page then offers to update the published copy.
         "shared_is_current": is_shared(summary) and summary.shared_text == current,
+        "can_share": can_share,
     }
 
 
@@ -194,23 +245,25 @@ def _live(context_type=None, subject_key=None):
     return qs
 
 
-def visible_summaries(viewer_id, context_type, subject_key, current_fingerprint):
-    """{"mine": own summary or None, "shared": others' published copies}."""
+def visible_summaries(viewer_id, context_type, subject_key, current_fingerprint, *, can_share):
+    """{"mine": own summary or None, "shared": others' published copies}.
+    Only a viewer who may share (may_share) reads what others published."""
     live = _live(context_type, subject_key)
     mine = live.filter(owner_user_id=viewer_id).first()
     others = list(
         live.exclude(owner_user_id=viewer_id).exclude(shared_text="").order_by("-shared_at")[:MAX_SHARED]
-    )
+    ) if can_share else []
     return assemble_visible(
         mine, others, active_owner_names({s.owner_user_id for s in others}), current_fingerprint,
+        can_share=can_share,
     )
 
 
-def assemble_visible(mine, others, names, current_fingerprint):
+def assemble_visible(mine, others, names, current_fingerprint, *, can_share=False):
     """visible_summaries' answer from rows already read. `names` holds only
     active owners, so a deactivated owner's published copy drops out here."""
     return {
-        "mine": serialize_own(mine, current_fingerprint=current_fingerprint) if mine else None,
+        "mine": serialize_own(mine, current_fingerprint=current_fingerprint, can_share=can_share) if mine else None,
         "shared": [
             serialize_shared(s, owner_name=names[s.owner_user_id], current_fingerprint=current_fingerprint)
             for s in others if s.owner_user_id in names and is_shared(s)
@@ -228,18 +281,21 @@ def subject_exists(summary):
     return eid is None or enrollment_exists(eid)
 
 
-def summary_for_viewer(summary_id, viewer_id):
+def summary_for_viewer(summary_id, viewer_id, *, may_read_shared):
     """
     (summary, is_owner) when this viewer may read it, else None. Someone
-    else's summary is readable only while it is published, live, its owner
-    active and its enrollment still there; anything else is a plain "not
-    found", so an id reveals nothing about whose summary it was.
+    else's summary is readable only by a viewer who may share, while it is
+    published, live, its owner active and its enrollment still there;
+    anything else is a plain "not found", so an id reveals nothing about
+    whose summary it was. The caller still checks may_use.
     """
     summary = _live().filter(pk=summary_id).first()
     if summary is None:
         return None
     if summary.owner_user_id == viewer_id:
         return summary, True
+    if not may_read_shared:
+        return None
     if not is_shared(summary) or summary.owner_user_id not in active_owner_names({summary.owner_user_id}):
         return None
     if not subject_exists(summary):

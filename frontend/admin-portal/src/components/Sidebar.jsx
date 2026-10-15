@@ -2,10 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 
-import {
-  hasAnyRole, portalLabelFor,
-  STAFF_ADMIN, ACADEMIC_STAFF, GRADE_ROLES, BILLING_ROLES,
-} from "../utils/auth";
+import { hasAnyRole, portalLabelFor } from "../utils/auth";
+import { NAV } from "../constants/sidebarNav";
 import useCurrentUser from "../hooks/useCurrentUser";
 import useTheme from "../hooks/useTheme";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -13,58 +11,6 @@ import BrandBackdrop from "./ui/BrandBackdrop";
 import { springTransition } from "../utils/motion";
 import { initialsFrom } from "../utils/avatarPalette";
 import logo from "../assets/logo.png";
-
-// Sections are ordered by how often a typical staff user reaches for them,
-// not by domain area — "Frequently used" pulls the four highest-traffic
-// destinations out of what used to be one flat 11-item "Main" section.
-const NAV = [
-  {
-    section: "Frequently used",
-    items: [
-      { label: "Dashboard",   icon: "ti-layout-dashboard", path: "/dashboard"   },
-      { label: "Students",    icon: "ti-users",            path: "/students"    },
-      { label: "Enrollments", icon: "ti-clipboard-list",   path: "/enrollments" },
-      { label: "Grades",      icon: "ti-chart-bar",        path: "/grades",      allowedRoles: GRADE_ROLES },
-    ],
-  },
-  {
-    section: "Academics",
-    items: [
-      { label: "Applications",      icon: "ti-user-plus",         path: "/student-applications", allowedRoles: ACADEMIC_STAFF },
-      // Staff see every section on /sections; My Sections is the teacher's
-      // own list (the route still takes staff, for old links).
-      { label: "Sections",          icon: "ti-layout-grid",       path: "/sections",           allowedRoles: ACADEMIC_STAFF },
-      { label: "My Sections",       icon: "ti-users-group",       path: "/my-sections",        allowedRoles: ["teacher"] },
-      { label: "Subjects",          icon: "ti-book",              path: "/subjects"            },
-      { label: "Requirements",      icon: "ti-file-check",        path: "/requirements",        allowedRoles: ACADEMIC_STAFF },
-      { label: "Academic Calendar", icon: "ti-calendar-event",    path: "/academic-calendar"   },
-      { label: "School Forms",      icon: "ti-forms",             path: "/school-forms"        },
-      { label: "Analytics",         icon: "ti-chart-dots-3",      path: "/analytics",           allowedRoles: GRADE_ROLES },
-    ],
-  },
-  {
-    section: "Finance",
-    items: [
-      { label: "Invoices",          icon: "ti-receipt",  path: "/invoices",          allowedRoles: BILLING_ROLES },
-      { label: "Payments",          icon: "ti-cash",     path: "/payments",          allowedRoles: BILLING_ROLES },
-      { label: "Scholarships",      icon: "ti-discount", path: "/scholarships",      allowedRoles: ACADEMIC_STAFF },
-      { label: "Scholarship Types", icon: "ti-discount", path: "/scholarship-types", allowedRoles: ACADEMIC_STAFF },
-    ],
-  },
-  {
-    section: "Admin",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: [
-      { label: "School Years",       icon: "ti-calendar-stats",   path: "/school-years",       allowedRoles: STAFF_ADMIN },
-      { label: "Users",              icon: "ti-user-cog",         path: "/users",             allowedRoles: STAFF_ADMIN },
-      { label: "Audit Trail",        icon: "ti-shield-check",     path: "/audit-trail",        allowedRoles: STAFF_ADMIN },
-      { label: "Billing Settings",   icon: "ti-settings",         path: "/settings",           allowedRoles: BILLING_ROLES },
-      { label: "Grading Setup",      icon: "ti-report-analytics", path: "/grading-templates",  allowedRoles: GRADE_ROLES },
-      { label: "Teacher Advisories", icon: "ti-user-check",       path: "/teacher-advisories", allowedRoles: ACADEMIC_STAFF },
-    ],
-  },
-];
 
 // Every staff member's own page (their theme and password, and logging out),
 // at the foot of the sidebar beside their account card rather than among the

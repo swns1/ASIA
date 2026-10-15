@@ -58,7 +58,7 @@ function assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap) {
   return slotMap;
 }
 
-export default function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
+export default function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay, dayNotes = {} }) {
   const firstDay    = new Date(year, monthIndex, 1).getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const todayKey    = dateKey(new Date());
@@ -112,7 +112,8 @@ export default function MonthGrid({ year, monthIndex, eventMap, selectedDay, onS
               const isToday      = k === todayKey;
               const isFirstOfMonth = day === 1;
               const isLastOfMonth  = day === daysInMonth;
-              const hasAny       = pairs.length > 0;
+              const note         = dayNotes[k];
+              const hasAny       = pairs.length > 0 || Boolean(note);
 
               // Count events beyond MAX_SLOTS for this day
               const overflowIds  = new Set(
@@ -156,6 +157,7 @@ export default function MonthGrid({ year, monthIndex, eventMap, selectedDay, onS
                     }}>
                       {day}
                     </span>
+                    {note}
                   </div>
 
                   {/* Event strips — rendered slot by slot so alignment is stable.

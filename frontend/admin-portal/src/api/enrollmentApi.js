@@ -35,6 +35,13 @@ export const getMyDay = (params = {}) =>
 export const getTeachersToday = (params = {}) =>
   enrollmentClient.get("/dashboard/teachers-today/", { params }).then((r) => r.data);
 
+// Each day's saved attendance, ?school_year=&date_from=&date_to= (at most 62
+// days, none after today): present, late, absent, excused, unmarked and
+// sections taken. One day (from == to) adds each section's marks. Staff see
+// the school, a teacher their own sections; accounting is refused.
+export const getAttendanceDays = (params = {}) =>
+  enrollmentClient.get("/dashboard/attendance-days/", { params }).then((r) => r.data);
+
 // ── School years (the registry) ─────────────────────────────────────────────
 // Which years exist, each one's dates and state, and which is current. Reads
 // are open to staff; writes are super_admin/admin. `label` ("2026-2027") is
@@ -398,9 +405,11 @@ export const runRiskAssessment = (payload) =>
 export const getRiskAssessmentLatest = (params = {}) =>
   enrollmentClient.get("/ai/risk-assessment/latest/", { params }).then((r) => r.data);
 
-export const getRiskAssessmentTrend = (studentId) =>
+// The school year is required of a teacher, whose history of a learner covers
+// that year only; staff get every year's checks.
+export const getRiskAssessmentTrend = (studentId, schoolYear) =>
   enrollmentClient
-    .get("/ai/risk-assessment/trend/", { params: { student_id: studentId } })
+    .get("/ai/risk-assessment/trend/", { params: { student_id: studentId, school_year: schoolYear || undefined } })
     .then((r) => r.data);
 
 // Requirement types and submissions used to be reachable from here too, which

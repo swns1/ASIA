@@ -353,6 +353,8 @@ MEDIA_ROOT = BASE_DIR / os.environ.get("MEDIA_ROOT", "media")
 
 
 # ─── Outbound email ──────────────────────────────────────────────────────────
+# Sent only through shared.mail.send_email. billing-service has the same block
+# for payment receipts; give both .env files the same values.
 # Plain SMTP through Django's own mail module (a wrapper over Python's
 # smtplib), so any mailbox can send — a school Gmail/Workspace account with an
 # App Password by default. This replaced Resend, whose shared test sender only
@@ -376,6 +378,9 @@ DEFAULT_FROM_EMAIL  = env(
     "DEFAULT_FROM_EMAIL",
     f"South Lakes Integrated School <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "webmaster@localhost",
 )
+# Testing safety valve: while set, every message goes to this one inbox
+# instead of its real recipients (see shared/mail.py).
+EMAIL_REDIRECT_TO   = env("EMAIL_REDIRECT_TO")
 
 # ─── External APIs ───────────────────────────────────────────────────────────
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")

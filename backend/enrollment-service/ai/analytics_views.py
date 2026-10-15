@@ -179,6 +179,12 @@ Context:
 """
 
 
+# The grouping covers every learner in its filters, not one teacher's
+# sections, so teachers are left out. Its saved AI summary uses the same set
+# (ai/summaries.py CONTEXT_ROLES).
+CLUSTER_ROLES = frozenset({"super_admin", "admin", "registrar"})
+
+
 class ClusterRateThrottle(UserRateThrottle):
     scope = "cluster"
 
@@ -362,7 +368,7 @@ class ClusterAnalyticsView(APIView):
     """
 
     permission_classes = [HasRole]
-    required_roles     = {"super_admin", "admin", "registrar"}
+    required_roles     = CLUSTER_ROLES
     throttle_classes   = [ClusterRateThrottle]
 
     def get(self, request):

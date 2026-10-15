@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { getPayment, getInvoice, getSchoolSettings } from "../../api/billingApi";
+import toast from "react-hot-toast";
+import { getPayment, getInvoice, getSchoolSettings, sendPaymentReceipt } from "../../api/billingApi";
 import { downloadAsPDF } from "../../utils/pdfExport";
 import { PRINT_COLORS as C } from "../../components/print/theme";
 import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
@@ -26,35 +27,6 @@ const fmt = (v) =>
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—";
 
-// Whole centavos, so sums of several payments can't drift by a float error.
-const toCents = (v) => Math.round(parseFloat(v || 0) * 100);
-
-function amountInWords(amount) {
-  const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine",
-    "Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
-  const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
-
-  function cvt(n) {
-    if (n === 0) return "";
-    if (n < 20)  return ones[n];
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? "-" + ones[n % 10] : "");
-    return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + cvt(n % 100) : "");
-  }
-
-  // Split the fixed-point string rather than subtracting floats: 0.29 * 100
-  // is 28.999…, which is one rounding away from printing the wrong centavos.
-  const [wholeStr, centsStr] = parseFloat(amount || 0).toFixed(2).split(".");
-  const whole = parseInt(wholeStr, 10);
-  const cents = parseInt(centsStr, 10);
-  let result  = "";
-  if (whole >= 1000000) { result += cvt(Math.floor(whole / 1000000)) + " Million "; }
-  const rem = whole % 1000000;
-  if (rem >= 1000) { result += cvt(Math.floor(rem / 1000)) + " Thousand "; }
-  result += cvt(whole % 1000);
-  if (!result.trim()) result = "Zero";
-  return result.trim() + " Peso" + (whole !== 1 ? "s" : "") + (cents ? ` and ${centsStr}/100` : "") + " Only";
-}
-
 export default function ReceiptPrintPage() {
   const { paymentId } = useParams();
   const [payment,        setPayment]        = useState(null);
@@ -64,6 +36,7 @@ export default function ReceiptPrintPage() {
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
   const [downloading,    setDownloading]    = useState(false);
+  const [emailing,       setEmailing]       = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -104,24 +77,30 @@ export default function ReceiptPrintPage() {
     }
   };
 
+  // A resend, or the first send when the automatic one after recording the
+  // payment didn't go out. The server picks the addresses.
+  const handleEmail = async () => {
+    setEmailing(true);
+    try {
+      const { sent_to: sentTo = [] } = await sendPaymentReceipt(payment.payment_id);
+      toast.success(`Receipt emailed to ${sentTo.join(", ")}.`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e?.message || "The receipt email could not be sent.");
+    } finally {
+      setEmailing(false);
+    }
+  };
+
   if (loading) return <PrintLoading label="Loading…" />;
   if (error || !payment || !invoice) return <PrintError message={error || "Payment not found."} />;
 
   const en          = invoice.enrollment_detail ?? {};
   const studentName = en.student_name ?? en.full_name ?? "—";
-  const orNo        = `PAY-${String(paymentId).padStart(6, "0")}`;
-
-  // The account as it stood when THIS payment was made. invoice.total_paid
-  // and invoice.balance are today's figures, so reprinting an early receipt
-  // used to count every later payment as "previously paid".
-  const ordered = [...(invoice.payments ?? [])].sort((a, b) =>
-    a.payment_date === b.payment_date ? a.payment_id - b.payment_id : (a.payment_date < b.payment_date ? -1 : 1));
-  const idx           = ordered.findIndex((p) => p.payment_id === payment.payment_id);
-  const thisCents     = toCents(payment.amount_paid);
-  const prevCents     = idx >= 0
-    ? ordered.slice(0, idx).reduce((s, p) => s + toCents(p.amount_paid), 0)
-    : toCents(invoice.total_paid) - thisCents;
-  const balanceCents  = Math.max(0, toCents(invoice.net_amount) - prevCents - thisCents);
+  // Receipt no., the account as it stood when THIS payment was made, and the
+  // amount in words all come from the server (billing/receipts.py), which
+  // the emailed receipt is rendered from too.
+  const r    = payment.receipt ?? {};
+  const orNo = r.receipt_no ?? `PAY-${String(paymentId).padStart(6, "0")}`;
 
   const gradeSection = [
     [en.grade_level, en.strand].filter(Boolean).join(" · "),
@@ -135,6 +114,9 @@ export default function ReceiptPrintPage() {
         title={`Official Receipt — ${orNo} · ${studentName}`}
         actions={
           <>
+            <ToolbarButton onClick={handleEmail} disabled={emailing} icon="mail">
+              {emailing ? "Sending…" : "Email receipt"}
+            </ToolbarButton>
             <ToolbarButton onClick={handleDownload} disabled={downloading} icon="download">
               {downloading ? "Generating…" : "Download PDF"}
             </ToolbarButton>
@@ -161,7 +143,7 @@ export default function ReceiptPrintPage() {
               Amount Received
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.dark, marginTop: 3, lineHeight: 1.4 }}>
-              {amountInWords(payment.amount_paid)}
+              {r.amount_in_words}
             </div>
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: C.dark, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
@@ -190,11 +172,11 @@ export default function ReceiptPrintPage() {
           <div>
             <SectionLabel>Account Summary</SectionLabel>
             <div style={{ border: `1px solid ${C.dark}`, borderRadius: 6, padding: "10px 14px" }}>
-              <TotRow label="Total Amount Due" value={fmt(invoice.net_amount)} />
-              <TotRow label="Previously Paid"  value={`− ${fmt(prevCents / 100)}`} />
-              <TotRow label="This Payment"     value={`− ${fmt(thisCents / 100)}`} />
+              <TotRow label="Total Amount Due" value={fmt(r.net_amount)} />
+              <TotRow label="Previously Paid"  value={`− ${fmt(r.previously_paid)}`} />
+              <TotRow label="This Payment"     value={`− ${fmt(r.this_payment)}`} />
               <div style={{ borderTop: `1px solid ${C.dark}`, margin: "6px 0" }} />
-              <TotRow label="Remaining Balance" value={fmt(balanceCents / 100)} bold />
+              <TotRow label="Remaining Balance" value={fmt(r.balance_after)} bold />
             </div>
           </div>
         </div>

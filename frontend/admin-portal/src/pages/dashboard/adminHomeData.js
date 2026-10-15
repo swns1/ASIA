@@ -72,11 +72,14 @@ export function sectionName(s) {
 }
 
 // My Sections opened on one section's tab (TeacherSectionsPage reads
-// ?school_year=&section=&tab=&period=&subject=), for the teacher's home.
-export function mySectionsLink(year, advisoryId, tab, { period, subject } = {}) {
+// ?school_year=&section=&tab=&period=&subject=&date=), for the teacher's home
+// and the calendar.
+export function mySectionsLink(year, advisoryId, tab, { period, subject, date } = {}) {
   const q = new URLSearchParams({ school_year: year, section: String(advisoryId), tab });
   if (period) q.set("period", period);
   if (subject) q.set("subject", String(subject));
+  // The attendance tab's day (YYYY-MM-DD); without it, today.
+  if (date) q.set("date", date);
   return `/my-sections?${q.toString()}`;
 }
 

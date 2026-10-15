@@ -716,3 +716,173 @@ def test_history_shows_one_check_once():
         _trend_score(4, next_week),                     # a later check: kept
     ])
     assert [p["run_id"] for p in points] == [2, 3, 4]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# A teacher reads their own sections, one school year at a time.
+# ─────────────────────────────────────────────────────────────────────────
+
+class _RecordingQueryset(_RecordingRuns):
+    """_RecordingRuns that also keeps the Q objects a filter is given."""
+
+    def __init__(self, rows=()):
+        super().__init__()
+        self.q = []
+        self.rows = list(rows)
+
+    def filter(self, *args, **kwargs):
+        self.q.extend(args)
+        return super().filter(**kwargs)
+
+    def select_related(self, *args):
+        return self
+
+    def order_by(self, *args):
+        return self
+
+    def values_list(self, *fields, flat=False):
+        return self.rows
+
+    def first(self):
+        return self.rows[0] if self.rows else None
+
+    def __iter__(self):
+        return iter(self.rows)
+
+
+TEACHER = SimpleNamespace(role="teacher", user_id=7, pk=7, is_authenticated=True)
+RIZAL = SimpleNamespace(advisory_id=12, school_year="2026-2027", school_level="junior_highschool",
+                        grade_level="Grade 7", section="Rizal")
+
+
+def _get(view_cls, params, user=TEACHER):
+    from rest_framework.test import force_authenticate
+
+    request = factory.get("/", params)
+    force_authenticate(request, user=user)
+    return view_cls.as_view()(request)
+
+
+@pytest.mark.parametrize("view_cls,params", [
+    (RiskAssessmentLatestView, {"grading_period": "1st_quarter"}),
+    (RiskAssessmentTrendView, {"student_id": 5}),
+])
+def test_a_teacher_must_name_the_school_year(view_cls, params):
+    assert _get(view_cls, params).status_code == 400
+
+
+def test_a_teacher_with_no_section_that_year_is_told_so():
+    from unittest.mock import patch
+    from enrollments.models import SectionAdvisory
+
+    advisories = _RecordingQueryset(rows=[])
+    with patch.object(RiskAssessmentRun, "objects", _RecordingQueryset()), \
+         patch.object(SectionAdvisory, "objects", advisories):
+        response = _get(RiskAssessmentLatestView, {"school_year": "2026-2027", "grading_period": "1st_quarter"})
+
+    assert response.status_code == 404
+    assert response.data["detail"] == "You advise no section in 2026-2027."
+    assert advisories.filters == {"teacher_user_id": 7, "school_year": "2026-2027"}
+
+
+def test_a_teacher_reads_the_newest_check_that_covered_their_section():
+    # Whatever level or grade is sent: their own section's check -- the whole
+    # school's, their level's or their grade's -- never another grade's.
+    from unittest.mock import patch
+    from django.db.models import Q
+    from enrollments.models import SectionAdvisory
+
+    runs = _RecordingQueryset()
+    advisories = _RecordingQueryset(rows=[RIZAL])
+    with patch.object(RiskAssessmentRun, "objects", runs), \
+         patch.object(SectionAdvisory, "objects", advisories):
+        _get(RiskAssessmentLatestView, {
+            "school_year": "2026-2027", "grading_period": "1st_quarter",
+            "school_level": "senior_highschool", "grade_level": "Grade 11",
+        })
+
+    assert runs.filters == {"school_year": "2026-2027", "grading_period": "1st_quarter"}
+    assert "advisory_id" not in advisories.filters
+    assert runs.q == [
+        Q(school_level=None, grade_level=None)
+        | Q(school_level="junior_highschool", grade_level=None)
+        | Q(grade_level="Grade 7")
+    ]
+
+
+def test_staff_still_read_exactly_the_scope_they_pick():
+    from unittest.mock import patch
+
+    runs = _RecordingQueryset()
+    registrar = SimpleNamespace(role="registrar", user_id=1, pk=1, is_authenticated=True)
+    with patch.object(RiskAssessmentRun, "objects", runs):
+        _get(RiskAssessmentLatestView, {"school_year": "2026-2027", "grade_level": "Grade 11",
+                                        "school_level": "senior_highschool"}, user=registrar)
+
+    assert runs.q == []
+    assert runs.filters["grade_level"] == "Grade 11"
+
+
+def test_a_teacher_cannot_read_a_learner_outside_that_years_sections():
+    from unittest.mock import patch
+
+    with patch("ai.risk_views.teacher_student_ids", return_value={9}) as roster:
+        response = _get(RiskAssessmentTrendView, {"student_id": 5, "school_year": "2025-2026"})
+
+    assert response.status_code == 403
+    roster.assert_called_once_with(TEACHER, "2025-2026")
+
+
+def test_a_teachers_history_of_a_learner_covers_that_year_only():
+    from unittest.mock import patch
+
+    scores = _RecordingQueryset()
+    with patch("ai.risk_views.teacher_student_ids", return_value={5}), \
+         patch.object(StudentRiskScore, "objects", scores), \
+         patch("ai.risk_views.Student.objects", _RecordingQueryset()):
+        response = _get(RiskAssessmentTrendView, {"student_id": 5, "school_year": "2026-2027"})
+
+    assert response.status_code == 200
+    assert scores.filters == {"student_id": 5, "run__school_year": "2026-2027"}
+
+
+def test_a_teacher_cannot_pick_a_section_that_isnt_theirs():
+    from unittest.mock import patch
+    from enrollments.models import SectionAdvisory
+
+    advisories = _RecordingQueryset(rows=[])
+    with patch.object(RiskAssessmentRun, "objects", _RecordingQueryset()), \
+         patch.object(SectionAdvisory, "objects", advisories):
+        response = _get(RiskAssessmentLatestView, {"school_year": "2026-2027", "advisory_id": 99})
+
+    assert response.status_code == 403
+    assert advisories.filters["advisory_id"] == 99
+
+
+def test_a_teacher_picking_one_section_reads_its_learners_alone():
+    # The counts and charts (_summarize) are built from the rows left, so
+    # they cover the picked section too.
+    from unittest.mock import patch
+    from django.db.models import Q
+    from enrollments.models import SectionAdvisory
+
+    run = SimpleNamespace(school_year="2026-2027")
+    runs = _RecordingQueryset(rows=[run])
+    with patch.object(RiskAssessmentRun, "objects", runs), \
+         patch.object(SectionAdvisory, "objects", _RecordingQueryset(rows=[RIZAL])), \
+         patch("ai.risk_views.advisory_roster", return_value=_RecordingQueryset(rows=[5, 6])) as roster, \
+         patch("ai.risk_views._serialize_run", return_value={}) as serialize:
+        response = _get(RiskAssessmentLatestView, {"school_year": "2026-2027", "advisory_id": 12})
+
+    assert response.status_code == 200
+    roster.assert_called_once_with(RIZAL)
+    serialize.assert_called_once_with(run, allowed_student_ids={5, 6})
+    assert runs.q == [
+        Q(school_level=None, grade_level=None)
+        | Q(school_level="junior_highschool", grade_level=None)
+        | Q(grade_level="Grade 7")
+    ]
+
+
+def test_a_teacher_sends_a_whole_number_for_the_section():
+    assert _get(RiskAssessmentLatestView, {"school_year": "2026-2027", "advisory_id": "x"}).status_code == 400

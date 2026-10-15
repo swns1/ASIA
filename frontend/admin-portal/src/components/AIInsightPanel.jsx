@@ -424,10 +424,14 @@ function SavedSummaryPanel({ title = "AI Interpretation", description, request, 
                       onClick={() => saveDocx(mine.id)}>
                       Word file
                     </Button>
-                    <Button size="sm" variant="secondary" icon={mine.shared ? "ti-users-minus" : "ti-users"}
-                      disabled={!saved} loading={busy === "share"} onClick={() => setSharing(!mine.shared)}>
-                      {mine.shared ? "Stop sharing" : "Share with staff"}
-                    </Button>
+                    {/* The server says who may share (teachers keep theirs
+                        private); a copy already shared can still be withdrawn. */}
+                    {(mine.can_share || mine.shared) && (
+                      <Button size="sm" variant="secondary" icon={mine.shared ? "ti-users-minus" : "ti-users"}
+                        disabled={!saved} loading={busy === "share"} onClick={() => setSharing(!mine.shared)}>
+                        {mine.shared ? "Stop sharing" : "Share with staff"}
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" icon="ti-archive" disabled={!saved}
                       onClick={() => setConfirm("archive")}>
                       Archive

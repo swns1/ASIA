@@ -141,7 +141,10 @@ export default function App() {
           <Route path="/enrollments"            element={<P roles={STAFF_ALL}><EnrollmentsPage /></P>} />
           <Route path="/enrollments/:id"        element={<P roles={STAFF_ALL}><EnrollmentDetailPage /></P>} />
           <Route path="/subjects"               element={<P roles={STAFF_ALL}><SubjectsPage /></P>} />
-          <Route path="/grading-templates"      element={<P roles={GRADE_ROLES}><GradingSettingsPage /></P>} />
+          {/* Only the roles the server lets change the grading rules: a
+              teacher reads them where grades are entered, and here met only
+              forms that failed on save. */}
+          <Route path="/grading-templates"      element={<P roles={ACADEMIC_STAFF}><GradingSettingsPage /></P>} />
           <Route path="/grades"                 element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
           <Route path="/grades/entry"           element={<P roles={GRADE_ROLES}><GradesPage /></P>} />
           <Route path="/grades/summary"         element={<P roles={GRADE_ROLES}><GradesPage /></P>} />

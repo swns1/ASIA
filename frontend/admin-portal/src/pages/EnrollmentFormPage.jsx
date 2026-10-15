@@ -1115,7 +1115,9 @@ export default function EnrollmentFormPage() {
       // The server picks the address (the guardian's and/or the learner's) and
       // derives the content itself; we only pass the id.
       sendEnrollmentEmail({ enrollment_id: enrollmentId }).catch((e) => {
-        if (e?.response?.data?.code === "no_recipient") return; // nobody to write to
+        const code = e?.response?.data?.code;
+        if (code === "no_recipient") return;         // nobody to write to
+        if (code === "email_not_configured") return; // email not set up yet, not a failure
         console.warn("Enrollment email failed (non-critical):", e);
         toast.error("Enrollment saved, but the confirmation email could not be sent.");
       });

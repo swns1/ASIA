@@ -1,4 +1,7 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
+
+from .email_views import SendPaymentReceiptView
 from .views import (
     FeeScheduleViewSet, FeeScheduleItemViewSet, DiscountTypeViewSet,
     StudentInvoiceViewSet, StudentPaymentViewSet, InvoiceInstallmentViewSet,
@@ -12,4 +15,6 @@ router.register(r"invoices",           StudentInvoiceViewSet,     basename="invo
 router.register(r"payments",           StudentPaymentViewSet,     basename="payment")
 router.register(r"installments",       InvoiceInstallmentViewSet, basename="installment")
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("send-payment-receipt/", SendPaymentReceiptView.as_view(), name="send-payment-receipt"),
+]

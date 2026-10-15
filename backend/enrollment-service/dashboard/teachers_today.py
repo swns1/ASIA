@@ -153,10 +153,68 @@ def _grade_sort_value(grade_level):
     return int(digits) if digits else 0
 
 
-def _section_sort_key(key):
+def section_sort_key(key):
     level, grade, section, strand = key
     level_rank = SCHOOL_LEVEL_ORDER.index(level) if level in SCHOOL_LEVEL_ORDER else len(SCHOOL_LEVEL_ORDER)
     return (level_rank, _grade_sort_value(grade), strand.lower(), section.lower())
+
+
+ATTENDANCE_STATUSES = ("P", "A", "L", "E")
+
+
+def tally_marks(sections, attendance_rows):
+    """
+    One day's saved marks per section.
+
+    sections:        {key: [enrollment_id, ...]}
+    attendance_rows: [{"key": key, "status": "P", "n": 30}] for that day
+
+    Returns {key: {"P": n, "A": n, "L": n, "E": n}}, only for sections with a
+    mark. A row for a section not in `sections` is ignored: its learners
+    aren't counted, so their marks can't be either.
+    """
+    counts = {}
+    for row in attendance_rows:
+        if row["key"] not in sections or row["status"] not in ATTENDANCE_STATUSES:
+            continue
+        section_counts = counts.setdefault(row["key"], dict.fromkeys(ATTENDANCE_STATUSES, 0))
+        section_counts[row["status"]] += row["n"]
+    return counts
+
+
+def section_taken(key, sections, counts):
+    """Taken once every learner has a mark -- the teacher's own home
+    (my_day.py) still lists a part-marked section as not done, so one learner
+    marked mustn't turn the admin's tile green. A section with no mark at all
+    is never taken, even one with no learners."""
+    return key in counts and sum(counts[key].values()) >= len(sections[key])
+
+
+def attendance_rate(present, late, absent):
+    """Same definition as shape_attendance_series: late attended, excused
+    leaves the denominator. None, not 0, when nothing countable was saved."""
+    countable = present + late + absent
+    return round((present + late) / countable, 4) if countable else None
+
+
+def summarize_attendance(sections, counts):
+    """One day's attendance across `sections`, from tally_marks()."""
+    totals = dict.fromkeys(ATTENDANCE_STATUSES, 0)
+    for section_counts in counts.values():
+        for status, n in section_counts.items():
+            totals[status] += n
+    return {
+        "sections_taken":  sum(1 for key in counts if section_taken(key, sections, counts)),
+        # Sections with any mark: where `rate` comes from, part-marked ones
+        # included.
+        "sections_marked": len(counts),
+        "sections_total":  len(sections),
+        "present":         totals["P"],
+        "late":            totals["L"],
+        "absent":          totals["A"],
+        "excused":         totals["E"],
+        "rate":            attendance_rate(totals["P"], totals["L"], totals["A"]),
+    }
 
 
 def advisers_for(key, advisers):
@@ -185,21 +243,10 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
     period:          current_grading_period(...)
     no_classes:      no_classes_today(...)
     """
-    marked = {}
-    totals = {"P": 0, "A": 0, "L": 0, "E": 0}
-    for row in attendance_rows:
-        if row["key"] not in sections:
-            continue
-        marked[row["key"]] = marked.get(row["key"], 0) + row["n"]
-        if row["status"] in totals:
-            totals[row["status"]] += row["n"]
-    # Taken once every enrolled learner has a mark -- the teacher's own home
-    # (my_day.py) still lists a part-marked section as not done, so one
-    # learner marked mustn't turn the admin's tile green.
-    taken = {key for key, n in marked.items() if n >= len(sections[key])}
+    counts = tally_marks(sections, attendance_rows)
 
     out = []
-    for key in sorted(sections, key=_section_sort_key):
+    for key in sorted(sections, key=section_sort_key):
         level, grade, section, strand = key
         students = sections[key]
         if level == SHS:
@@ -233,30 +280,16 @@ def shape_teachers_today(sections, advisers, attendance_rows, subjects, graded, 
             "strand":           strand or None,
             "students":         len(students),
             "advisers":         advisers_for(key, advisers),
-            "attendance_taken": key in taken,
-            "attendance_marked": marked.get(key, 0),
+            "attendance_taken": section_taken(key, sections, counts),
+            "attendance_marked": sum(counts.get(key, {}).values()),
             "grades":           grades,
         })
 
-    countable = totals["P"] + totals["A"] + totals["L"]
     graded_sections = [s for s in out if s["grades"]]
     return {
         "no_classes":     no_classes,
         "grading_period": period,
-        "attendance": {
-            "sections_taken": len(taken),
-            # Sections with any mark today: where `rate` comes from, part-
-            # marked ones included.
-            "sections_marked": len(marked),
-            "sections_total": len(out),
-            "present":        totals["P"],
-            "late":           totals["L"],
-            "absent":         totals["A"],
-            "excused":        totals["E"],
-            # Same definition as shape_attendance_series: late attended,
-            # excused leaves the denominator.
-            "rate": round((totals["P"] + totals["L"]) / countable, 4) if countable else None,
-        },
+        "attendance":     summarize_attendance(sections, counts),
         "grades": {
             "sections_complete": sum(1 for s in graded_sections if s["grades"]["complete"]),
             "sections_total":    len(graded_sections),

@@ -278,6 +278,9 @@ def invoice_details_for(invoice_ids):
 
 class StudentPaymentSerializer(serializers.ModelSerializer):
     invoice_detail = serializers.SerializerMethodField(read_only=True)
+    # The receipt's figures (billing/receipts.py), on the detail route only:
+    # it reads the whole invoice, which a list page doesn't need per row.
+    receipt = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = StudentPayment
@@ -291,8 +294,15 @@ class StudentPaymentSerializer(serializers.ModelSerializer):
             "reference_number",
             "notes",
             "created_at",
+            "receipt",
         )
-        read_only_fields = ("payment_id", "created_at", "invoice_detail")
+        read_only_fields = ("payment_id", "created_at", "invoice_detail", "receipt")
+
+    def get_receipt(self, obj):
+        if not self.context.get("with_receipt"):
+            return None
+        from .receipts import receipt_figures
+        return receipt_figures(obj)
 
     def validate_amount_paid(self, value):
         # student_payments CHECK (amount_paid > 0) made these a 500.

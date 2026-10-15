@@ -284,3 +284,24 @@ CACHES = {
 # structured as JSON outside local dev, every record tagged with the request
 # ID shared.request_id.RequestIDMiddleware assigns.
 LOGGING = build_logging(BASE_DIR, "billing-service", DEBUG)
+
+
+# Outbound email — payment receipts (billing/email_views.py). Same settings,
+# same meaning, as enrollment-service's block, which documents each one; give
+# both .env files the same values. Sent only through shared.mail.send_email.
+# Leaving EMAIL_HOST_USER blank switches receipts off (the endpoint answers
+# 503 "email_not_configured" and recording a payment is unaffected).
+EMAIL_BACKEND       = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST          = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT          = _env_int("EMAIL_PORT", 587)
+EMAIL_USE_TLS       = _env_bool("EMAIL_USE_TLS", True)
+EMAIL_USE_SSL       = _env_bool("EMAIL_USE_SSL", False)
+EMAIL_HOST_USER     = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT       = _env_int("EMAIL_TIMEOUT", 10)
+BREVO_API_KEY       = os.environ.get("BREVO_API_KEY", "")
+DEFAULT_FROM_EMAIL  = os.environ.get(
+    "DEFAULT_FROM_EMAIL",
+    f"South Lakes Integrated School <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "webmaster@localhost",
+)
+EMAIL_REDIRECT_TO   = os.environ.get("EMAIL_REDIRECT_TO", "")

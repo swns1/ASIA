@@ -15,10 +15,27 @@ import {
   getInvoice as _getInvoice,
   getInvoices as _getInvoices,
   createPayment as _createPayment,
+  sendPaymentReceipt as _sendPaymentReceipt,
 } from "../api/billingApi";
-const getInvoice    = (id)  => _getInvoice(id);
-const getInvoices   = (p={})=> _getInvoices(p);
-const createPayment = (p)   => _createPayment(p);
+const getInvoice         = (id)  => _getInvoice(id);
+const getInvoices        = (p={})=> _getInvoices(p);
+const createPayment      = (p)   => _createPayment(p);
+const sendPaymentReceipt = (id)  => _sendPaymentReceipt(id);
+
+// The receipt goes to the family in the background: recording the payment
+// never waits on it. Quiet when there's nobody to write to or the school
+// hasn't set up email yet; "Email receipt" on the receipt page resends.
+function emailReceipt(paymentId) {
+  if (!paymentId) return;
+  Promise.resolve()
+    .then(() => sendPaymentReceipt(paymentId))
+    .catch((e) => {
+      const code = e?.response?.data?.code;
+      if (code === "no_recipient" || code === "email_not_configured") return;
+      console.warn("Receipt email failed (non-critical):", e);
+      toast.error("Payment recorded, but the receipt email could not be sent.");
+    });
+}
 
 // The chosen payment method's colours, from its tone (constants/paymentMethods):
 // token classes, so they follow the theme. Complete strings, as Tailwind needs.
@@ -97,7 +114,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
     }
     setSaving(true); setError("");
     try {
-      await createPayment({
+      const payment = await createPayment({
         invoice:          invoice.invoice_id,
         amount_paid:      parseFloat(form.amount_paid),
         payment_method:   form.payment_method,
@@ -106,6 +123,7 @@ export default function RecordPaymentModal({ preloadedInvoiceId, onClose, onSave
         notes:            form.notes.trim() || null,
       });
       toast.success("Payment recorded.");
+      emailReceipt(payment?.payment_id);
       onSaved();
       onClose();
     } catch (e) {

@@ -2,6 +2,7 @@ import Card from "../../components/ui/Card";
 import Skeleton from "../../components/ui/Skeleton";
 import { OBSERVED_VALUES, observedMark } from "../../constants/observedValues";
 import { PERIOD_LABELS } from "./gradeRules";
+import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../../utils/auth";
 
 // ObservedValues — class behavior for one grading period: every behavior
 // area (attentiveness, listening, participation, task completion) with the
@@ -50,10 +51,14 @@ export default function ObservedValues({
       ) : categories.length === 0 ? (
         <div className="px-5 py-8 text-center text-[13px] text-neutral-500">
           No narrative categories configured.{" "}
-          <a href="/grading-templates?tab=narrative" className="font-semibold text-brand-600 hover:underline">
-            Go to Settings → Narrative Categories
-          </a>{" "}
-          to add some.
+          {/* Grading Setup opens only for the roles that may add them. */}
+          {hasAnyRole(getCurrentUser(), ACADEMIC_STAFF) ? (
+            <>
+              <a href="/grading-templates?tab=narrative" className="font-semibold text-brand-600 hover:underline">
+                Add some on Grading Setup
+              </a>.
+            </>
+          ) : "Ask an admin or the registrar to add some."}
         </div>
       ) : (
         <>

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import toast from "react-hot-toast";
 import RecordPaymentModal from "./RecordPaymentModal";
+import { sendPaymentReceipt } from "../api/billingApi";
+
+vi.mock("react-hot-toast", () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
 // The window's controls, after its styling moved onto the design tokens.
 vi.mock("../api/billingApi", () => ({
@@ -22,7 +26,8 @@ vi.mock("../api/billingApi", () => ({
     })
   ),
   getInvoices: vi.fn(() => Promise.resolve({ results: [] })),
-  createPayment: vi.fn(() => Promise.resolve({})),
+  createPayment: vi.fn(() => Promise.resolve({ payment_id: 45 })),
+  sendPaymentReceipt: vi.fn(() => Promise.resolve({ sent_to: ["maria@example.com"] })),
 }));
 
 const noop = () => {};
@@ -46,5 +51,39 @@ describe("RecordPaymentModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Full balance/ }));
     expect(screen.getByPlaceholderText("0.00").value).toBe("6000");
+  });
+
+  async function recordFullBalance() {
+    render(<RecordPaymentModal preloadedInvoiceId={7} onClose={noop} onSaved={noop} />);
+    await screen.findByText("INV-2026-000007");
+    fireEvent.click(screen.getByRole("button", { name: /Full balance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Record Payment/ }));
+  }
+
+  it("emails the receipt for the payment it just recorded", async () => {
+    sendPaymentReceipt.mockClear();
+    await recordFullBalance();
+    await waitFor(() => expect(sendPaymentReceipt).toHaveBeenCalledWith(45));
+  });
+
+  it("stays quiet while email isn't set up", async () => {
+    toast.error.mockClear();
+    sendPaymentReceipt.mockImplementationOnce(() =>
+      Promise.reject({ response: { status: 503, data: { code: "email_not_configured" } } }));
+    await recordFullBalance();
+    await waitFor(() => expect(sendPaymentReceipt).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("says so when the receipt email fails, without undoing the payment", async () => {
+    toast.error.mockClear();
+    toast.success.mockClear();
+    sendPaymentReceipt.mockImplementationOnce(() =>
+      Promise.reject({ response: { status: 502, data: {} } }));
+    await recordFullBalance();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      "Payment recorded, but the receipt email could not be sent."));
+    expect(toast.success).toHaveBeenCalledWith("Payment recorded.");
   });
 });

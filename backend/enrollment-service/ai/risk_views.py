@@ -11,7 +11,8 @@ POST /api/ai/risk-assessment/run/
     }
 GET /api/ai/risk-assessment/latest/
     ?school_year=2024-2025&grading_period=1st_quarter&school_level=...&grade_level=...   (all optional filters)
-GET /api/ai/risk-assessment/trend/?student_id=123
+    [&advisory_id=12]   (a teacher: one of their sections that year)
+GET /api/ai/risk-assessment/trend/?student_id=123[&school_year=2024-2025]   (school_year required of a teacher)
 
 Unlike the K-Means clustering in ai/analytics_views.py — recomputed and
 discarded on every request — a "run" here is persisted (RiskAssessmentRun +
@@ -31,13 +32,16 @@ outcome data exists — see ai/services.py.
 Teachers are included in RISK_ROLES but see only their own advisory roster
 (see `_visible_student_ids`) — the early-warning list is only useful to an
 adviser if they can actually see their own class in it, and the existing
-`teacher_student_ids()` scoping makes that safe.
+`teacher_student_ids()` scoping makes that safe. A teacher reads one school
+year at a time: their sections in it (`_teacher_sections`), and a learner's
+history over that year's checks.
 """
 
 import math
 from collections import Counter, defaultdict
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -45,7 +49,8 @@ from rest_framework.views import APIView
 
 from accounts.permissions import HasRole, teacher_student_ids
 from enrollments.archive import ensure_open
-from enrollments.models import Enrollment, Student
+from enrollments.models import Enrollment, SectionAdvisory, Student, advisory_roster
+from shared.school_year import normalize as normalize_school_year
 
 from .models import RiskAssessmentRun, StudentRiskScore, run_scope
 from .services import (
@@ -97,6 +102,37 @@ def _visible_student_ids(request, school_year=None):
     if getattr(request.user, "role", None) == "teacher":
         return teacher_student_ids(request.user, school_year)
     return None
+
+
+def _is_teacher(request):
+    return getattr(request.user, "role", None) == "teacher"
+
+
+def _teacher_sections(user, school_year, advisory_id=None):
+    """The SectionAdvisory rows a teacher holds in `school_year`, or only the
+    one `advisory_id` names (empty when it isn't theirs that year)."""
+    teacher_user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
+    advisories = SectionAdvisory.objects.filter(
+        teacher_user_id=teacher_user_id, school_year=normalize_school_year(school_year),
+    )
+    if advisory_id is not None:
+        advisories = advisories.filter(advisory_id=advisory_id)
+    return list(advisories)
+
+
+def _runs_covering(runs, advisories):
+    """
+    The runs that covered one of these sections: the whole school's, their
+    level's or their grade's.
+
+    A teacher's Analytics is their own sections, not a level or grade they
+    pick. Picking another grade only ever showed an empty list, and picking
+    their own found nothing when the registrar had checked the whole school.
+    """
+    covering = Q(**run_scope())
+    for advisory in advisories:
+        covering |= Q(**run_scope(advisory.school_level)) | Q(grade_level=advisory.grade_level)
+    return runs.filter(covering)
 
 
 def _summarize(score_list):
@@ -353,6 +389,10 @@ class RiskAssessmentLatestView(APIView):
     school_year/grading_period) over exactly the given school_level and
     grade_level -- none given means a whole-school run -- with its
     per-student scores. Read-only — does not recompute anything.
+
+    A teacher must name the school_year, and gets the newest run that covered
+    one of their sections that year whatever level or grade is sent; with
+    advisory_id, one of those sections and its learners alone.
     """
 
     permission_classes = [HasRole]
@@ -366,18 +406,48 @@ class RiskAssessmentLatestView(APIView):
         school_level   = request.query_params.get("school_level")
         grade_level    = request.query_params.get("grade_level")
 
+        if _is_teacher(request) and not school_year:
+            return Response({"detail": "school_year is required."}, status=status.HTTP_400_BAD_REQUEST)
+
         if school_year:
             runs = runs.filter(school_year=school_year)
         if grading_period:
             runs = runs.filter(grading_period=grading_period)
-        # Always applied: no school_level means a whole-school run, not any run.
-        runs = runs.filter(**run_scope(school_level, grade_level))
+
+        allowed = None
+        if _is_teacher(request):
+            advisory_id = request.query_params.get("advisory_id")
+            if advisory_id is not None:
+                try:
+                    advisory_id = int(advisory_id)
+                except (TypeError, ValueError):
+                    return Response({"detail": "advisory_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+            sections = _teacher_sections(request.user, school_year, advisory_id)
+            if advisory_id is not None and not sections:
+                return Response(
+                    {"detail": f"That isn't one of your sections in {school_year}."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not sections:
+                return Response(
+                    {"detail": f"You advise no section in {school_year}."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            runs = _runs_covering(runs, sections)
+            # One section picked: its learners alone, counts and charts included.
+            if advisory_id is not None:
+                allowed = set(advisory_roster(sections[0]).values_list("student_id", flat=True))
+        else:
+            # Always applied: no school_level means a whole-school run, not any run.
+            runs = runs.filter(**run_scope(school_level, grade_level))
 
         run = runs.first()  # Meta.ordering = ["-created_at"]
         if not run:
             return Response({"detail": "No risk assessment runs found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(_serialize_run(run, allowed_student_ids=_visible_student_ids(request, run.school_year)))
+        if allowed is None:
+            allowed = _visible_student_ids(request, run.school_year)
+        return Response(_serialize_run(run, allowed_student_ids=allowed))
 
 
 def _trend_points(scores):
@@ -419,6 +489,10 @@ class RiskAssessmentTrendView(APIView):
 
     A single student's risk_score across every historical run, ordered
     oldest → newest, so the frontend can plot risk over time.
+
+    A teacher must name the school_year: the learner must be in one of their
+    sections that year, and the history covers that year's runs only. The
+    learner's other years were with other advisers.
     """
 
     permission_classes = [HasRole]
@@ -434,9 +508,13 @@ class RiskAssessmentTrendView(APIView):
         except (TypeError, ValueError):
             return Response({"detail": "student_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
 
+        school_year = request.query_params.get("school_year")
+        if _is_teacher(request) and not school_year:
+            return Response({"detail": "school_year is required."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Same advisory scoping as the list views — a teacher must not be
         # able to pull an arbitrary student's history by guessing an id.
-        allowed = _visible_student_ids(request)
+        allowed = _visible_student_ids(request, school_year)
         if allowed is not None and student_id not in allowed:
             return Response(
                 {"detail": "You do not have access to this student."},
@@ -449,6 +527,8 @@ class RiskAssessmentTrendView(APIView):
             .select_related("run")
             .order_by("run__created_at")
         )
+        if _is_teacher(request):
+            scores = scores.filter(run__school_year=school_year)
 
         points = _trend_points(scores)
 

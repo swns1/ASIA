@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { getEnrollments, getSections, downloadSchoolForm } from "../api/enrollmentApi";
+import useMyAdvisories, { advisoriesIn } from "../hooks/useMyAdvisories";
 import { getStudents } from "../api/studentApi";
 import { motion } from "framer-motion";
 import PageHeader from "../components/ui/PageHeader";
@@ -108,24 +109,50 @@ function SearchHint({ form }) {
   );
 }
 
+const uniqueSorted = (values) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+
+// The grades a picker offers in a school year: all of them, or a teacher's own.
+// A teacher downloads SF1 and SF2 only for the sections they advise that year
+// (the server refuses any other), so their pickers offer only those; every
+// other section only led to "You can download forms only for sections you
+// advise."
+function gradeOptionsFor(advised, schoolYear) {
+  if (!advised) return GRADE_LEVELS;
+  const advisedGrades = new Set(advisoriesIn(advised, schoolYear).map((a) => a.grade_level));
+  return GRADE_LEVELS.filter((g) => advisedGrades.has(g));
+}
+
+// The picked value while it is still on offer; the only option when there is
+// just one, so a teacher with one advisory has nothing to pick.
+function pickedOrOnly(value, options) {
+  if (options.includes(value)) return value;
+  return options.length === 1 ? options[0] : "";
+}
+
 // The sections of one grade in one school year, for the SF1/SF2 pickers. A
 // picked name always matches the section learners are filed under, which a
 // typed one did not ("rizal" printed an empty register).
-function useSectionNames(schoolYear, gradeLevel) {
+function useSectionNames(schoolYear, gradeLevel, advised) {
   const [state, setState] = useState({ key: "", names: [], failed: false });
-  const key = schoolYear && gradeLevel ? `${schoolYear}|${gradeLevel}` : "";
+  // A teacher's own sections are already here; only other staff fetch.
+  const key = schoolYear && gradeLevel && !advised ? `${schoolYear}|${gradeLevel}` : "";
   useEffect(() => {
     if (!key) return undefined;
     let live = true;
     getSections({ school_year: schoolYear, grade_level: gradeLevel })
       .then((data) => {
         const rows = Array.isArray(data) ? data : data?.results ?? [];
-        const names = [...new Set(rows.map((r) => r.name))].sort((a, b) => a.localeCompare(b));
-        if (live) setState({ key, names, failed: false });
+        if (live) setState({ key, names: uniqueSorted(rows.map((r) => r.name)), failed: false });
       })
       .catch(() => { if (live) setState({ key, names: [], failed: true }); });
     return () => { live = false; };
   }, [key, schoolYear, gradeLevel]);
+  if (advised && schoolYear && gradeLevel) {
+    const names = uniqueSorted(advisoriesIn(advised, schoolYear)
+      .filter((a) => a.grade_level === gradeLevel)
+      .map((a) => a.section));
+    return { names, loading: advised.loading, failed: advised.failed };
+  }
   if (!key) return { names: [], loading: false, failed: false };
   return state.key === key ? { ...state, loading: false } : { names: [], loading: true, failed: false };
 }
@@ -178,6 +205,26 @@ function SectionSelect({ value, onChange, sections, gradeLevel, label }) {
     >
       <option value="">{placeholder}</option>
       {sections.names.map((n) => <option key={n} value={n}>{n}</option>)}
+    </select>
+  );
+}
+
+function GradeSelect({ value, onChange, options, advised, schoolYear, label }) {
+  const dark = useTheme() === "dark";
+  const placeholder = advised?.loading ? "Loading your sections…"
+    : advised?.failed ? "Couldn't load your sections"
+    : options.length ? "Select grade level…"
+    : `You advise no section in ${schoolYear}`;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
+      disabled={options.length === 0}
+      style={{ ...inputStyle, color: value ? "var(--color-neutral-900)" : dark ? "var(--color-neutral-500)" : "#aaa", cursor: "pointer" }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((g) => <option key={g} value={g}>{g}</option>)}
     </select>
   );
 }
@@ -281,28 +328,34 @@ export default function SchoolFormsPage() {
   // The forms' header (School ID, Region, ...) is set on Settings, which
   // only these roles can open.
   const canEditSettings = hasAnyRole(getCurrentUser(), BILLING_ROLES);
+  const advised = useMyAdvisories(hasAnyRole(getCurrentUser(), ["teacher"]));
   const dark = useTheme() === "dark";
 
   // Shared. Forms print for any registered year, archived ones included.
   const { currentYear, options: registeredYears } = useSchoolYear();
   const [schoolYear, setSchoolYear] = useState(currentYear || "");
+  const gradeOptions = gradeOptionsFor(advised, schoolYear);
 
-  // SF1
-  const [gradeLevel,  setGradeLevel]  = useState("");
-  const [section,     setSection]     = useState("");
+  // SF1 and SF2: what was picked, and what the form is for -- the pick while
+  // it is still on offer (a year or grade change can take it away).
+  const [sf1GradePick,   setSf1GradePick]   = useState("");
+  const [sf1SectionPick, setSf1SectionPick] = useState("");
   const [sf1Semester, setSf1Semester] = useState("1st");
   const [sf1Error,    setSf1Error]    = useState("");
   const [sf1Busy,     setSf1Busy]     = useState(false);
-  const sf1Sections = useSectionNames(schoolYear, gradeLevel);
+  const gradeLevel  = pickedOrOnly(sf1GradePick, gradeOptions);
+  const sf1Sections = useSectionNames(schoolYear, gradeLevel, advised);
+  const section     = pickedOrOnly(sf1SectionPick, sf1Sections.names);
 
-  // SF2
-  const [sf2GradeLevel, setSf2GradeLevel] = useState("");
-  const [sf2Section,    setSf2Section]    = useState("");
+  const [sf2GradePick,   setSf2GradePick]   = useState("");
+  const [sf2SectionPick, setSf2SectionPick] = useState("");
   const [sf2Month,      setSf2Month]      = useState(() => localISODate(new Date()).slice(0, 7));
   const [sf2Semester,   setSf2Semester]   = useState("1st");
   const [sf2Error,      setSf2Error]      = useState("");
   const [sf2Busy,       setSf2Busy]       = useState(false);
-  const sf2Sections = useSectionNames(schoolYear, sf2GradeLevel);
+  const sf2GradeLevel = pickedOrOnly(sf2GradePick, gradeOptions);
+  const sf2Sections   = useSectionNames(schoolYear, sf2GradeLevel, advised);
+  const sf2Section    = pickedOrOnly(sf2SectionPick, sf2Sections.names);
 
   // SF9
   const [sf9Student,     setSf9Student]     = useState(null);
@@ -400,8 +453,8 @@ export default function SchoolFormsPage() {
   }
 
   // A new grade leaves the old section meaningless.
-  function chooseSf1Grade(value) { setGradeLevel(value); setSection(""); setSf1Error(""); }
-  function chooseSf2Grade(value) { setSf2GradeLevel(value); setSf2Section(""); setSf2Error(""); }
+  function chooseSf1Grade(value) { setSf1GradePick(value); setSf1SectionPick(""); setSf1Error(""); }
+  function chooseSf2Grade(value) { setSf2GradePick(value); setSf2SectionPick(""); setSf2Error(""); }
 
   return (
     <>
@@ -461,13 +514,10 @@ export default function SchoolFormsPage() {
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
-                <select value={gradeLevel} onChange={(e) => chooseSf1Grade(e.target.value)} aria-label="SF1 grade level" style={{ ...inputStyle, color: gradeLevel ? "var(--color-neutral-900)" : dark ? "var(--color-neutral-500)" : "#aaa", cursor: "pointer" }}>
-                  <option value="">Select grade level…</option>
-                  {GRADE_LEVELS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
+                <GradeSelect value={gradeLevel} onChange={chooseSf1Grade} options={gradeOptions} advised={advised} schoolYear={schoolYear} label="SF1 grade level" />
               } />
               <Field label="Section *" el={
-                <SectionSelect value={section} onChange={(v) => { setSection(v); setSf1Error(""); }} sections={sf1Sections} gradeLevel={gradeLevel} label="SF1 section" />
+                <SectionSelect value={section} onChange={(v) => { setSf1SectionPick(v); setSf1Error(""); }} sections={sf1Sections} gradeLevel={gradeLevel} label="SF1 section" />
               } />
               {SENIOR_HIGH.has(gradeLevel) && (
                 <Field label="Semester *" el={<SemesterSelect value={sf1Semester} onChange={setSf1Semester} label="SF1 semester" />} />
@@ -514,13 +564,10 @@ export default function SchoolFormsPage() {
           <div style={{ padding: "20px 24px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px 20px", marginBottom: 16 }}>
               <Field label="Grade Level *" el={
-                <select value={sf2GradeLevel} onChange={(e) => chooseSf2Grade(e.target.value)} aria-label="SF2 grade level" style={{ ...inputStyle, color: sf2GradeLevel ? "var(--color-neutral-900)" : dark ? "var(--color-neutral-500)" : "#aaa", cursor: "pointer" }}>
-                  <option value="">Select grade level…</option>
-                  {GRADE_LEVELS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
+                <GradeSelect value={sf2GradeLevel} onChange={chooseSf2Grade} options={gradeOptions} advised={advised} schoolYear={schoolYear} label="SF2 grade level" />
               } />
               <Field label="Section *" el={
-                <SectionSelect value={sf2Section} onChange={(v) => { setSf2Section(v); setSf2Error(""); }} sections={sf2Sections} gradeLevel={sf2GradeLevel} label="SF2 section" />
+                <SectionSelect value={sf2Section} onChange={(v) => { setSf2SectionPick(v); setSf2Error(""); }} sections={sf2Sections} gradeLevel={sf2GradeLevel} label="SF2 section" />
               } />
               <Field label="Month *" el={
                 <input type="month" value={sf2Month} onChange={(e) => { setSf2Month(e.target.value); setSf2Error(""); }} aria-label="SF2 month" style={inputStyle} />

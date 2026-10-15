@@ -46,6 +46,8 @@ import {
 } from "../api/enrollmentApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
 import { ACADEMIC_STAFF, getCurrentUser, hasAnyRole } from "../utils/auth";
+import useMyAdvisories, { advisoriesIn } from "../hooks/useMyAdvisories";
+import SectionTiles from "./analytics/SectionTiles";
 
 // AnalyticsPage — early warning for students who need following up, plus a
 // descriptive grouping of how the cohort is performing.
@@ -399,6 +401,11 @@ export default function AnalyticsPage() {
 
   const { options: globalYearOptions } = useSchoolYear();
   const canRun = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
+  // A teacher's Analytics is their own sections in the picked year, which
+  // the server picks the check for: no level or grade to choose, since any
+  // other grade only ever showed them an empty list. With several sections
+  // they can narrow it to one (SectionTiles).
+  const advised = useMyAdvisories(hasAnyRole(getCurrentUser(), ["teacher"]));
 
   // One specific year: the year select has no "All years", and the risk,
   // trend and grouping requests are all per-year.
@@ -409,6 +416,11 @@ export default function AnalyticsPage() {
   const [subjectId, setSubjectId] = useState("");
   const [groupCount, setGroupCount] = useState("auto");
   const [subjects, setSubjects] = useState([]);
+  const mySections = advisoriesIn(advised, schoolYear);
+  const noSectionThisYear = advised && !advised.loading && !advised.failed && mySections.length === 0;
+  // The picked section, while it is one of this year's ("" = all of them).
+  const [sectionPick, setSectionPick] = useState("");
+  const advisoryId = mySections.some((a) => String(a.advisory_id) === sectionPick) ? sectionPick : "";
 
   const [chartView, setChartView] = useState(DEFAULT_CHART_VIEW);
 
@@ -502,6 +514,11 @@ export default function AnalyticsPage() {
     setSubjectId("");
   }
 
+  function changeSection(value) {
+    startNewSelection();
+    setSectionPick(value);
+  }
+
   function changeSubject(value) {
     clearGroups();
     setSubjectId(value);
@@ -520,13 +537,15 @@ export default function AnalyticsPage() {
       grading_period: gradingPeriod,
       school_level: schoolLevel || undefined,
       grade_level: gradeLevel || undefined,
+      advisory_id: advisoryId || undefined,
     }),
-    [schoolYear, gradingPeriod, schoolLevel, gradeLevel]
+    [schoolYear, gradingPeriod, schoolLevel, gradeLevel, advisoryId]
   );
 
   // The picked year's subjects: each year has its own. A subject picked
   // before the year changed isn't one of them, so the pick is cleared.
   useEffect(() => {
+    if (!canRun) return; // only the staff-only Performance groups tab uses them
     _getSubjects({
       page_size: 500,
       school_year: schoolYear || undefined,
@@ -539,7 +558,7 @@ export default function AnalyticsPage() {
         setSubjectId((id) => (list.some((s) => String(s.subject_id) === String(id)) ? id : ""));
       })
       .catch(() => setSubjects([]));
-  }, [schoolYear, schoolLevel, gradeLevel]);
+  }, [canRun, schoolYear, schoolLevel, gradeLevel]);
 
   // Show the last saved assessment on arrival so the page is never blank for
   // someone who only reads it (a teacher can't trigger a run at all).
@@ -616,7 +635,7 @@ export default function AnalyticsPage() {
     setSelectedStudent(row);
     setTrend(null);
     setTrendLoading(true);
-    _getRiskAssessmentTrend(row.student_id)
+    _getRiskAssessmentTrend(row.student_id, schoolYear)
       .then((d) => {
         if (request === trendRequest.current) setTrend(d);
       })
@@ -626,7 +645,7 @@ export default function AnalyticsPage() {
       .finally(() => {
         if (request === trendRequest.current) setTrendLoading(false);
       });
-  }, []);
+  }, [schoolYear]);
 
   function openStudentFromChart(row) {
     revealStudent.current = true;
@@ -647,7 +666,9 @@ export default function AnalyticsPage() {
     <>
       <PageHeader
         title="Analytics"
-        subtitle="Spot students who need help early, and see how the school is doing overall"
+        subtitle={advised
+          ? `Spot learners in your ${mySections.length > 1 ? "sections" : "section"} who need help early`
+          : "Spot students who need help early, and see how the school is doing overall"}
         icon="ti-chart-dots-3"
         actions={
           canRun ? (
@@ -687,29 +708,48 @@ export default function AnalyticsPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="School level" htmlFor="an-level">
-                <Select id="an-level" value={schoolLevel} onChange={(e) => changeSchoolLevel(e.target.value)}>
-                  {SCHOOL_LEVELS.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {l.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Grade level" htmlFor="an-grade">
-                <Select
-                  id="an-grade"
-                  value={gradeLevel}
-                  onChange={(e) => changeGradeLevel(e.target.value === "All grades" ? "" : e.target.value)}
-                >
-                  {gradeOptions.map((g) => (
-                    <option key={g} value={g === "All grades" ? "" : g}>
-                      {g}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              {!advised && (
+                <>
+                  <Field label="School level" htmlFor="an-level">
+                    <Select id="an-level" value={schoolLevel} onChange={(e) => changeSchoolLevel(e.target.value)}>
+                      {SCHOOL_LEVELS.map((l) => (
+                        <option key={l.value} value={l.value}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Grade level" htmlFor="an-grade">
+                    <Select
+                      id="an-grade"
+                      value={gradeLevel}
+                      onChange={(e) => changeGradeLevel(e.target.value === "All grades" ? "" : e.target.value)}
+                    >
+                      {gradeOptions.map((g) => (
+                        <option key={g} value={g === "All grades" ? "" : g}>
+                          {g}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </>
+              )}
             </div>
+
+            {advised && !noSectionThisYear && (
+              <div className="mt-4 border-t border-neutral-200 pt-3.5">
+                <div id="an-sections" className="mb-2.5 text-xs font-bold uppercase tracking-[0.07em] text-neutral-700">
+                  Show
+                </div>
+                {advised.loading ? (
+                  <p className="text-sm text-neutral-500">Loading your sections…</p>
+                ) : advised.failed ? (
+                  <p role="alert" className="text-sm text-brand-600">Couldn&apos;t load your sections.</p>
+                ) : (
+                  <SectionTiles sections={mySections} value={advisoryId} onChange={changeSection} labelledBy="an-sections" />
+                )}
+              </div>
+            )}
 
             {risk && (
               <p className="mt-3 border-t border-neutral-200 pt-3 text-xs text-neutral-500">
@@ -739,7 +779,17 @@ export default function AnalyticsPage() {
           <Tabs tabs={TABS} value={active} onChange={setActive} />
         </motion.div>
 
-        {!risk && !riskLoading && !riskError ? (
+        {noSectionThisYear ? (
+          <motion.div variants={pageVariants.item}>
+            <Card>
+              <EmptyState
+                icon="ti-users-group"
+                title={`You advise no section in ${schoolYear}`}
+                subtitle="Analytics shows the learners in your own sections. Pick a school year you advised a section in."
+              />
+            </Card>
+          </motion.div>
+        ) : !risk && !riskLoading && !riskError ? (
           <motion.div variants={pageVariants.item}>
             <Card>
               <EmptyState

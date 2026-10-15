@@ -9,7 +9,8 @@
 //
 //   1. Start a task: find a learner, take today's attendance, enter grades,
 //      print a school form.
-//   2. Today: each section's attendance, saved marks only.
+//   2. Today: each section's attendance, saved marks only; ‹ › steps back
+//      to an earlier day.
 //   3. Needs your attention, on the page and in the bell: attendance not
 //      done, grades and narrative reports still to enter this period,
 //      learners to follow up (./attention.js).
@@ -25,7 +26,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 
+import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
+import DayStepper from "../../components/ui/DayStepper";
+import Skeleton from "../../components/ui/Skeleton";
 import {
   AttentionPanel, EnrollmentTiles, HomeHeader, PartialLoadAlert, QuickActions, RecentEnrollmentsPanel,
   TrendsSection,
@@ -36,7 +40,9 @@ import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import { CHIP_GLOW } from "../../constants/statusTones";
 import { pageVariants } from "../../utils/motion";
 import { bellItems, myDayRequest } from "./attention";
-import { TWO_UP, mySectionsLink, quarterOn } from "./adminHomeData";
+import { TWO_UP, mySectionsLink, quarterOn, sectionName } from "./adminHomeData";
+import useAttendanceDays from "../../hooks/useAttendanceDays";
+import { fmtLongDay, todayISO } from "../../utils/format";
 import { comingUpRequests, enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
 import useHomeData from "./useHomeData";
 
@@ -48,6 +54,52 @@ const requests = (year, currentYear, ctx) => ({
   ...enrollmentGlanceRequests(year),
   ...trendRequests(year),
 });
+
+// Today's cards, or an earlier day's: today comes with the my-day answer; a
+// day stepped back to asks GET /dashboard/attendance-days/ for the teacher's
+// own sections, the same counts the Academic Calendar shows.
+function TodaySection({ sections, noClasses, year, onGo }) {
+  const today = todayISO();
+  const [date, setDate] = useState(today);
+  const past = date !== today;
+  const att = useAttendanceDays({ year, from: date, to: date, enabled: past });
+  const d = att.byDate[date];
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="teacher-today-heading" className="text-sm font-bold text-neutral-900">
+          {past ? fmtLongDay(`${date}T00:00:00`) : "Today"}
+        </h2>
+        <DayStepper value={date} onChange={setDate} max={today} todayButton />
+      </div>
+      {!past ? (
+        <div className={TWO_UP}>
+          {sections.map((s) => (
+            <TodayCard key={s.advisory_id} section={s} noClasses={noClasses} year={year} onGo={onGo} />
+          ))}
+        </div>
+      ) : att.loading ? (
+        <Card><Skeleton height={14} variant="pulse" /></Card>
+      ) : att.failed || !d ? (
+        <Card className="flex items-center justify-between gap-3">
+          <p className="text-sm text-neutral-600">Couldn&apos;t load that day&apos;s attendance.</p>
+          <Button variant="secondary" size="sm" icon="ti-refresh" onClick={att.reload}>Try again</Button>
+        </Card>
+      ) : (
+        <div className={TWO_UP}>
+          {/* The day's sections carry the my-day attendance fields at the top
+              level, so each is its own attendance. */}
+          {d.sections.map((s) => (
+            <TodayCard
+              key={s.advisory_id ?? sectionName(s)} section={{ ...s, attendance: s }}
+              noClasses={d.no_classes} year={year} date={date} onGo={onGo}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function TeacherHome() {
   const navigate = useNavigate();
@@ -135,12 +187,7 @@ export default function TeacherHome() {
             aria-labelledby="teacher-today-heading"
             className="flex shrink-0 flex-col gap-4"
           >
-            <h2 id="teacher-today-heading" className="text-sm font-bold text-neutral-900">Today</h2>
-            <div className={TWO_UP}>
-              {sections.map((s) => (
-                <TodayCard key={s.advisory_id} section={s} noClasses={day.no_classes} year={year} onGo={navigate} />
-              ))}
-            </div>
+            <TodaySection sections={sections} noClasses={day.no_classes} year={year} onGo={navigate} />
           </motion.section>
         )}
 

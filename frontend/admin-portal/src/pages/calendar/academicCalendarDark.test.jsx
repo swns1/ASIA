@@ -23,6 +23,8 @@ vi.mock("../../api/enrollmentApi", () => ({
   createPersonalEvent: vi.fn(),
   updatePersonalEvent: vi.fn(),
   deletePersonalEvent: vi.fn(),
+  // The attendance layer (AttendanceDay.jsx) has its own tests.
+  getAttendanceDays: () => Promise.resolve({ days: [] }),
 }));
 vi.mock("../../api/billingApi", () => ({
   getSchoolSettings: () => Promise.resolve({ school_name: "Test School" }),

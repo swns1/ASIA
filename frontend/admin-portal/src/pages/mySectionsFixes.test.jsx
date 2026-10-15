@@ -167,6 +167,18 @@ describe("My Sections — loading, years and links", () => {
     expect(await screen.findByRole("button", { name: /Save Attendance/ })).toBeTruthy();
   });
 
+  it("opens attendance on the day a link names (from a home or the calendar)", async () => {
+    renderPage("/my-sections?section=62&tab=attendance&date=2026-10-09");
+    expect((await screen.findByLabelText("Day")).value).toBe("2026-10-09");
+    await waitFor(() => expect(getSectionAttendance).toHaveBeenCalledWith(expect.objectContaining({ date: "2026-10-09" })));
+    expect(screen.getByRole("button", { name: "Next day" }).disabled).toBe(false);
+  });
+
+  it.each(["2026-10-20", "yesterday"])("opens on today for a link's day %s, not one to come or not a date", async (date) => {
+    renderPage(`/my-sections?section=62&tab=attendance&date=${date}`);
+    expect((await screen.findByLabelText("Day")).value).toBe("2026-10-12");
+  });
+
   it("tells a teacher with no section that year, plainly", async () => {
     getMySections.mockResolvedValue([]);
     renderPage();

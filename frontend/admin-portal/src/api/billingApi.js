@@ -108,6 +108,14 @@ export const getPaymentSummary = (params = {}) =>
 export const createPayment = (payload) =>
   billingClient.post("/payments/", payload).then((r) => r.data);
 
+// Emails the official receipt for one payment to the family
+// (billing/email_views.py). Only the id is sent; the server picks the
+// addresses and builds the content. Error codes worth telling apart:
+// "no_recipient" (no address on file) and "email_not_configured" (the school
+// hasn't set up a mailbox yet).
+export const sendPaymentReceipt = (paymentId) =>
+  billingClient.post("/send-payment-receipt/", { payment_id: paymentId }).then((r) => r.data);
+
 // No updatePayment: payments are append-only server-side (see
 // StudentPaymentViewSet). This existed, was never called by any page, and
 // would now 405 — a correction is a reversing payment or a void-and-reissue,

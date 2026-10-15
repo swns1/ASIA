@@ -20,7 +20,6 @@ import EmptyState from "../components/EmptyState";
 import { StatusDot } from "../components/ui/Badge";
 import { LEVEL_DOTS, LEVEL_FILTER_OPTIONS, LEVEL_LABELS } from "../constants/schoolLevels";
 import { COMPONENT_COLORS } from "./grades/gradeRules";
-import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF } from "../utils/auth";
 import useTheme from "../hooks/useTheme";
 
 import {
@@ -419,7 +418,6 @@ function DeleteTemplateModal({ template, onConfirm, onCancel, deleting, deleteEr
 }
 
 function GradingTemplatesTab({ header }) {
-  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const isFirstRender = useIsFirstRender();
 
   const [templates,    setTemplates]    = useState([]);
@@ -664,14 +662,12 @@ function GradingTemplatesTab({ header }) {
                           aria-label={`Edit ${tpl.template_name}`}
                           onClick={() => setModal({ mode: "edit", template: tpl })}
                         />
-                        {canManage && (
-                          <Button
-                            variant="ghost" size="sm" icon="ti-trash"
-                            aria-label={`Delete ${tpl.template_name}`}
-                            className="hover:bg-error-50 hover:text-error-500"
-                            onClick={() => { setToDelete(tpl); setDeleteError(""); }}
-                          />
-                        )}
+                        <Button
+                          variant="ghost" size="sm" icon="ti-trash"
+                          aria-label={`Delete ${tpl.template_name}`}
+                          className="hover:bg-error-50 hover:text-error-500"
+                          onClick={() => { setToDelete(tpl); setDeleteError(""); }}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -716,7 +712,7 @@ function GradingTemplatesTab({ header }) {
 const textInput =
   "h-9 rounded-sm border-[1.5px] border-neutral-300 bg-surface px-2.5 text-[13px] text-neutral-900 outline-none focus:border-brand-500";
 
-function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
+function CategoryRow({ cat, onUpdated, onDeleted }) {
   const [editing,  setEditing]  = useState(false);
   const [name,     setName]     = useState(cat.name);
   const [desc,     setDesc]     = useState(cat.description ?? "");
@@ -801,7 +797,7 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
           {active ? "Deactivate" : "Activate"}
         </Button>
         <Button variant="ghost" size="sm" icon="ti-pencil" aria-label={`Edit ${cat.name}`} onClick={() => setEditing(true)} />
-        {canManage && (confirm ? (
+        {confirm ? (
           <>
             <Button size="sm" loading={deleting} onClick={handleDelete}>Confirm</Button>
             <Button variant="ghost" size="sm" onClick={() => setConfirm(false)}>Cancel</Button>
@@ -813,7 +809,7 @@ function CategoryRow({ cat, onUpdated, onDeleted, canManage }) {
             className="hover:bg-error-50 hover:text-error-500"
             onClick={() => setConfirm(true)}
           />
-        ))}
+        )}
       </div>
     </div>
   );
@@ -826,7 +822,6 @@ const CATEGORY_FILTERS = [
 ];
 
 function NarrativeCategoriesTab({ header }) {
-  const canManage = hasAnyRole(getCurrentUser(), ACADEMIC_STAFF);
   const [categories, setCategories] = useState([]);
   const [loading,    setLoading]    = useState(true);
   // A failed load used to read as "No categories yet".
@@ -984,7 +979,6 @@ function NarrativeCategoriesTab({ header }) {
                 <CategoryRow key={cat.category_id} cat={cat}
                   onUpdated={(updated) => setCategories((prev) => prev.map((c) => c.category_id === updated.category_id ? updated : c))}
                   onDeleted={(id) => setCategories((prev) => prev.filter((c) => c.category_id !== id))}
-                  canManage={canManage}
                 />
               ))}
             </div>

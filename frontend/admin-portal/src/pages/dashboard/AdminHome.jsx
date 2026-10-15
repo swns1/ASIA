@@ -57,7 +57,9 @@ import { getDashboardSummary, getTeachersToday } from "../../api/enrollmentApi";
 import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import useTheme from "../../hooks/useTheme";
 import { pageVariants } from "../../utils/motion";
-import { fmtLongDay } from "../../utils/format";
+import { fmtLongDay, fmtShortDay, todayISO } from "../../utils/format";
+import DayStepper from "../../components/ui/DayStepper";
+import useAttendanceDays from "../../hooks/useAttendanceDays";
 import { bellItems } from "./attention";
 import {
   TWO_UP, gradesDue, plural, sectionName, sectionShortName, sectionsByLevel, withYear,
@@ -152,7 +154,7 @@ export default function AdminHome() {
           className="flex shrink-0 flex-col gap-4"
         >
           <h2 id="glance-heading" className="text-sm font-bold text-neutral-900">School at a glance</h2>
-          <Glance data={data} loading={loading} year={year} todayYear={todayYear} onGo={navigate} />
+          <Glance data={data} loading={loading} year={year} currentYear={currentYear} todayYear={todayYear} onGo={navigate} />
           {/* Both follow the page's year picker, so neither gets a year
               filter of its own; two year controls could disagree. Their links
               carry the year for the same reason every other link here does. */}
@@ -535,12 +537,43 @@ function TeachersTodayModal({ teachers, now, onOpenCalendar, onClose }) {
 
 // ── School at a glance ───────────────────────────────────────────────────────
 
+// Learners present on one day, today unless stepped back: the same answer
+// the Academic Calendar's day counts read (GET /dashboard/attendance-days/),
+// so the two never disagree. Always the current year, as Teachers today is.
+// "Present" counts late learners too; excused ones leave the rate.
+function PresentTile({ loading, currentYear, todayYear }) {
+  const today = todayISO();
+  const [day, setDay] = useState(today);
+  const att = useAttendanceDays({ year: currentYear, from: day, to: day, enabled: Boolean(currentYear) });
+  const d = att.byDate[day];
+  const isToday = day === today;
+  // The registry names the current year a moment after the page opens.
+  const waiting = att.loading || !currentYear;
+
+  const hint = waiting ? "Loading…"
+    : att.failed || !d ? "Attendance didn't load"
+    : d.no_classes ? `No classes · ${d.no_classes.label}`
+    : !d.marked ? (isToday ? "No attendance taken yet today" : "No attendance was taken")
+    // The sections the rate comes from: any marked, part-marked too.
+    : `${d.attended.toLocaleString()} of ${d.enrolled.toLocaleString()} present · from ${d.sections_marked} of ${plural(d.sections_total, "section")}`;
+
+  return (
+    <StatCard
+      label={isToday ? "Present today" : `Present · ${fmtShortDay(day)}`}
+      icon="ti-calendar-check"
+      iconTone="brand"
+      loading={loading}
+      value={!waiting && d?.rate != null ? `${Math.round(d.rate * 100)}%` : "—"}
+      hint={todayYear ? `S.Y. ${todayYear} · ${hint}` : hint}
+      trailing={<DayStepper value={day} onChange={setDay} max={today} />}
+    />
+  );
+}
+
 // No enrollees tile: the Enrollees panel (YearOverYear.jsx) leads with that
 // number, counted the same way for both years it compares.
-function Glance({ data, loading, year, todayYear, onGo }) {
+function Glance({ data, loading, year, currentYear, todayYear, onGo }) {
   const risk = data.summary?.risk;
-  const att = data.teachers?.attendance;
-  const noClasses = data.teachers?.no_classes;
 
   const riskDate = risk?.computed_at
     ? new Date(risk.computed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
@@ -548,21 +581,7 @@ function Glance({ data, loading, year, todayYear, onGo }) {
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <StatCard
-        label="Present today"
-        icon="ti-calendar-check"
-        iconTone="brand"
-        loading={loading}
-        value={att?.rate != null ? `${Math.round(att.rate * 100)}%` : "—"}
-        hint={
-          noClasses ? `No classes · ${noClasses.label}`
-            : !att ? "Attendance didn't load"
-            : todayYear ? `Today · S.Y. ${todayYear}`
-            // The sections the rate comes from: any marked, part-marked too.
-            : att.sections_marked ? `From ${att.sections_marked} of ${plural(att.sections_total, "section")}`
-            : "No attendance taken yet today"
-        }
-      />
+      <PresentTile loading={loading} currentYear={currentYear} todayYear={todayYear} />
       <StatCard
         label="Need follow-up"
         icon="ti-alert-triangle"

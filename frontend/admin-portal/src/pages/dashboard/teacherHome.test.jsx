@@ -16,6 +16,7 @@ const getRiskAssessmentLatest = vi.fn();
 const getCalendarEvents = vi.fn();
 const getPersonalEvents = vi.fn(() => Promise.resolve({ results: [] }));
 const getEnrollments = vi.fn();
+const getAttendanceDays = vi.fn();
 
 vi.mock("../../utils/auth", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -31,6 +32,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getCalendarEvents: (...a) => getCalendarEvents(...a),
   getPersonalEvents: (...a) => getPersonalEvents(...a),
   getMyDay: (...a) => getMyDay(...a),
+  getAttendanceDays: (...a) => getAttendanceDays(...a),
   getRiskAssessmentLatest: (...a) => getRiskAssessmentLatest(...a),
 }));
 vi.mock("../../api/billingApi", () => ({ getInvoices: vi.fn(), getFinancialSummary: vi.fn() }));
@@ -86,6 +88,19 @@ beforeEach(() => {
         { event_id: 4, event_type: "event", title: "Christmas Program", start_date: "2026-12-18", end_date: "2026-12-18" },
       ]));
   getEnrollments.mockResolvedValue({ count: 0, results: [] });
+  // An earlier day: the teacher's own section, every learner marked.
+  getAttendanceDays.mockImplementation(({ date_from }) => Promise.resolve({
+    school_year: "2026-2027",
+    days: [{
+      date: date_from, no_classes: null, enrolled: 13, marked: 13, unmarked: 0, attended: 12,
+      present: 11, late: 1, absent: 1, excused: 0, sections_taken: 1, sections_marked: 1, sections_total: 1, rate: 0.9231,
+      sections: [{
+        advisory_id: 62, school_level: "elementary", level_label: "Elementary", grade_level: "Grade 5",
+        section: "Silang", strand: null, students: 13, marked: 13, unmarked: 0, taken: true,
+        present: 11, late: 1, absent: 1, excused: 0,
+      }],
+    }],
+  }));
 });
 afterEach(() => vi.useRealTimers());
 
@@ -284,5 +299,63 @@ describe("TeacherHome — no section, and another year", () => {
     await screen.findByRole("button", { name: /^School year: 2026-2027/ });
     expect(screen.queryByText("Today")).toBeNull();
     expect(screen.queryByRole("button", { name: "Take today's attendance" })).toBeNull();
+  });
+});
+
+describe("TeacherHome — an earlier day's attendance", () => {
+  // Monday the 12th, back to Friday the 9th.
+  async function backToFriday() {
+    renderHome();
+    await screen.findByRole("heading", { name: "Today" });
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: "Previous day" }));
+    return screen.findByRole("heading", { name: /October 9/ });
+  }
+
+  it("shows that day's saved marks for the teacher's own sections", async () => {
+    await backToFriday();
+    expect(await screen.findByText("11 present")).toBeTruthy();
+    expect(screen.getByText("1 late")).toBeTruthy();
+    expect(getAttendanceDays).toHaveBeenLastCalledWith({ school_year: "2026-2027", date_from: "2026-10-09", date_to: "2026-10-09" });
+    // Today's my-day isn't asked again for it.
+    expect(getMyDay).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens My Sections on that day", async () => {
+    await backToFriday();
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+    expect(location()).toBe("/my-sections?school_year=2026-2027&section=62&tab=attendance&date=2026-10-09");
+  });
+
+  it("says when a day's attendance wasn't taken", async () => {
+    getAttendanceDays.mockImplementation(({ date_from }) => Promise.resolve({ days: [{
+      date: date_from, no_classes: null, enrolled: 13, marked: 0, unmarked: 13, attended: 0,
+      present: 0, late: 0, absent: 0, excused: 0, sections_taken: 0, sections_marked: 0, sections_total: 1, rate: null,
+      sections: [{ ...SILANG, marked: 0, unmarked: 13, taken: false, present: 0, late: 0, absent: 0, excused: 0 }],
+    }] }));
+    await backToFriday();
+    expect(await screen.findByText("Attendance wasn't taken")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take attendance" })).toBeTruthy();
+  });
+
+  it("goes back to today's cards", async () => {
+    await backToFriday();
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next day" }).disabled).toBe(true);
+  });
+
+  it("says so when the day fails to load, with a retry", async () => {
+    const fine = getAttendanceDays.getMockImplementation();
+    let failed = false;
+    getAttendanceDays.mockImplementation((params) => {
+      if (params.date_from === "2026-10-09" && !failed) {
+        failed = true;
+        return Promise.reject(new Error("down"));
+      }
+      return fine(params);
+    });
+    await backToFriday();
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("11 present")).toBeTruthy();
   });
 });

@@ -9,6 +9,7 @@ report card uses), and the prompts tell the model to copy it.
 import json
 import os
 import random
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,6 +29,8 @@ def _interpret(context_type, payload):
         "/api/ai/interpret/", {"context_type": context_type, "payload": payload, "enrollment_id": 1}, format="json",
     )
     request = Request(django_request, parsers=[JSONParser()])
+    # Called past the role gate, so it needs a role the summary allows.
+    request.user = SimpleNamespace(user_id=1, pk=1, role="registrar", is_authenticated=True)
     client = MagicMock()
     client.models.generate_content.return_value.text = "ok"
     with override_settings(GEMINI_API_KEY="key", GROQ_API_KEY=""), \

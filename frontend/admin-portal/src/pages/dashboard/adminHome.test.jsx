@@ -9,9 +9,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 
+import { fmtShortDay, shiftISODate, todayISO } from "../../utils/format";
+
 let currentUser;
 const getEnrollments = vi.fn();
 const getTeachersToday = vi.fn();
+const getAttendanceDays = vi.fn();
 const getDashboardSummary = vi.fn();
 const getInvoices = vi.fn();
 const getFinancialSummary = vi.fn();
@@ -37,6 +40,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getEnrollmentScholarships: () => Promise.resolve({ count: 0, results: [] }),
   getDashboardSummary: (...a) => getDashboardSummary(...a),
   getTeachersToday: (...a) => getTeachersToday(...a),
+  getAttendanceDays: (...a) => getAttendanceDays(...a),
   compareSchoolYears: (...a) => compareSchoolYears(...a),
   getDocumentStatus: (...a) => getDocumentStatus(...a),
   getSections: (...a) => getSections(...a),
@@ -131,6 +135,16 @@ function teachersToday(overrides = {}) {
   };
 }
 
+// One day's answer from GET /dashboard/attendance-days/, for the Present tile.
+function attendanceDay(overrides = {}) {
+  return {
+    date: todayISO(), no_classes: null, enrolled: 89, marked: 31, unmarked: 58, attended: 30,
+    present: 29, late: 1, absent: 1, excused: 0,
+    sections_taken: 1, sections_marked: 1, sections_total: 3, rate: 0.9677,
+    ...overrides,
+  };
+}
+
 async function pickYearFrom(year) {
   fireEvent.click(await screen.findByRole("button", { name: /^School year: 2026-2027/ }));
   fireEvent.click(screen.getByRole("option", { name: new RegExp(year) }));
@@ -161,6 +175,8 @@ beforeEach(() => {
     attendance_series: [],
   });
   getTeachersToday.mockResolvedValue(teachersToday());
+  getAttendanceDays.mockImplementation(({ date_from }) =>
+    Promise.resolve({ school_year: "2026-2027", days: [attendanceDay({ date: date_from })] }));
   yearStates = { "2025-2026": "open", "2026-2027": "current", "2027-2028": "upcoming" };
   compareSchoolYears.mockImplementation((years) =>
     Promise.resolve({ years: years.map((label) => ({ label, enrollment: ENROLLMENT[label] })) }));
@@ -287,8 +303,6 @@ describe("AdminHome — teachers today", () => {
     renderAs("admin");
     const card = within(await screen.findByRole("button", { name: "Teachers today: open details" }));
     expect(card.getByTitle("Grade 3 · Rizal · attendance 12 of 30 marked")).toBeTruthy();
-    // Present today's rate counts the part-marked section's marks, and says so.
-    expect(screen.getByText("From 2 of 3 sections")).toBeTruthy();
     await openDetails();
     expect(within(screen.getByRole("dialog")).getByText("12 of 30 marked")).toBeTruthy();
   });
@@ -419,6 +433,57 @@ describe("AdminHome — start a task", () => {
     await new Promise((r) => setTimeout(r, 400));
     await waitFor(() => expect(getStudents).not.toHaveBeenCalledWith(expect.objectContaining({ search: "D" })));
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+});
+
+describe("AdminHome — Present tile, any day", () => {
+  it("says how many learners were present today, late included", async () => {
+    renderAs("admin");
+    expect(await screen.findByText("30 of 89 present · from 1 of 3 sections")).toBeTruthy();
+    expect(screen.getByText("97%")).toBeTruthy();
+    expect(getAttendanceDays).toHaveBeenCalledWith({ school_year: "2026-2027", date_from: todayISO(), date_to: todayISO() });
+    // No day after today: no attendance is saved for it.
+    expect(screen.getByRole("button", { name: "Next day" }).disabled).toBe(true);
+  });
+
+  it("steps back to an earlier day, and forward again", async () => {
+    const yesterday = shiftISODate(todayISO(), -1);
+    getAttendanceDays.mockImplementation(({ date_from }) => Promise.resolve({
+      school_year: "2026-2027",
+      days: [date_from === yesterday
+        ? attendanceDay({ date: yesterday, attended: 80, marked: 85, sections_taken: 3, sections_marked: 3, rate: 0.9412 })
+        : attendanceDay({ date: date_from })],
+    }));
+    renderAs("admin");
+    await screen.findByText("Present today");
+    fireEvent.click(screen.getByRole("button", { name: "Previous day" }));
+    expect(await screen.findByText(`Present · ${fmtShortDay(yesterday)}`)).toBeTruthy();
+    expect(await screen.findByText("80 of 89 present · from 3 of 3 sections")).toBeTruthy();
+    expect(getAttendanceDays).toHaveBeenLastCalledWith({ school_year: "2026-2027", date_from: yesterday, date_to: yesterday });
+    fireEvent.click(screen.getByRole("button", { name: "Next day" }));
+    expect(await screen.findByText("Present today")).toBeTruthy();
+  });
+
+  it("names the holiday instead of a rate", async () => {
+    getAttendanceDays.mockImplementation(({ date_from }) => Promise.resolve({
+      days: [attendanceDay({ date: date_from, marked: 0, attended: 0, rate: null, no_classes: { label: "National Heroes Day" } })],
+    }));
+    renderAs("admin");
+    expect(await screen.findByText("No classes · National Heroes Day")).toBeTruthy();
+  });
+
+  it("says when a day had no attendance taken", async () => {
+    getAttendanceDays.mockImplementation(({ date_from }) => Promise.resolve({
+      days: [attendanceDay({ date: date_from, marked: 0, attended: 0, rate: null, sections_marked: 0, sections_taken: 0 })],
+    }));
+    renderAs("admin");
+    expect(await screen.findByText("No attendance taken yet today")).toBeTruthy();
+  });
+
+  it("says so when the day's attendance fails to load", async () => {
+    getAttendanceDays.mockRejectedValue(new Error("down"));
+    renderAs("admin");
+    expect(await screen.findByText("Attendance didn't load")).toBeTruthy();
   });
 });
 
@@ -757,7 +822,9 @@ describe("AdminHome — school year", () => {
     await screen.findByRole("button", { name: /Back to 2026-2027/ });
     expect(getTeachersToday).toHaveBeenLastCalledWith({ school_year: "2026-2027" });
     // The card's subtitle and the Present today tile both name today's year.
-    expect(await screen.findAllByText("Today · S.Y. 2026-2027")).toHaveLength(2);
+    expect(await screen.findByText("Today · S.Y. 2026-2027")).toBeTruthy();
+    expect(await screen.findByText(/^S\.Y\. 2026-2027 · 30 of 89 present/)).toBeTruthy();
+    expect(getAttendanceDays).toHaveBeenLastCalledWith(expect.objectContaining({ school_year: "2026-2027" }));
   });
 
   it("goes back to the current year", async () => {

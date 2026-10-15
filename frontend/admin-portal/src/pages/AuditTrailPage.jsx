@@ -103,6 +103,7 @@ function actionFromTechnicalInfo(info) {
   if (info.key === "payments" && info.method === "POST") return "Recorded payment";
   if (info.key === "score-entries" && info.method === "POST") return "Added score entry";
   if (info.key === "send-enrollment-email" && info.method === "POST") return "Sent enrollment email";
+  if (info.key === "send-payment-receipt" && info.method === "POST") return "Sent payment receipt";
   if (info.key === "enrollment-scholarships" && info.method === "POST") return "Awarded scholarship";
   if (info.key === "invoices" && info.path.includes("/generate")) return "Generated invoice";
   if (info.key === "students" && info.path.includes("/bulk-create")) return "Saved student information";
@@ -115,6 +116,7 @@ function detailsFromTechnicalInfo(info) {
   if (info.key === "payments" && info.method === "POST") return info.success ? "Payment was recorded successfully." : "Payment could not be recorded. Please review the payment details.";
   if (info.key === "score-entries" && info.method === "POST") return info.success ? "Score entry was added successfully." : "Score entry could not be added. Please review the grade details.";
   if (info.key === "send-enrollment-email" && info.method === "POST") return info.success ? "Enrollment email was sent successfully." : "Enrollment email could not be sent. Please review the student's email address.";
+  if (info.key === "send-payment-receipt" && info.method === "POST") return info.success ? "Payment receipt email was sent successfully." : "Payment receipt email could not be sent. Please review the guardian's email address.";
   if (info.key === "enrollment-scholarships" && info.method === "POST") return info.success ? "Scholarship was awarded successfully." : "Scholarship could not be awarded. Please review the scholarship details.";
   if (info.key === "invoices" && info.path.includes("/generate")) return info.success ? "Invoice was generated successfully." : "Invoice could not be generated. Please review the enrollment and payment plan.";
   if (info.key === "students" && info.path.includes("/bulk-create")) return info.success ? "Student information was saved successfully." : "Student information could not be saved. Please review the student details.";

@@ -7,6 +7,7 @@ one it sends the quarter-grade counts under their own names -- which the
 allowlist must let through, or they'd be dropped without a word. Anything
 not listed, such as a student's name, still never reaches the AI provider.
 """
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,6 +27,8 @@ def _prompt_for(payload):
         "/api/ai/interpret/", {"context_type": "grade_report", "payload": payload, "enrollment_id": 1}, format="json",
     )
     request = Request(django_request, parsers=[JSONParser()])
+    # Called past the role gate, so it needs a role the summary allows.
+    request.user = SimpleNamespace(user_id=1, pk=1, role="registrar", is_authenticated=True)
     client = MagicMock()
     client.models.generate_content.return_value.text = "ok"
     with override_settings(GEMINI_API_KEY="key", GROQ_API_KEY=""), \

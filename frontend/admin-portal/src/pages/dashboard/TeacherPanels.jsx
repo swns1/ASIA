@@ -33,37 +33,44 @@ const MARKS = [
   ["excused", "excused", "info"],
 ];
 
-/** One section's attendance today: saved marks only. */
-export function TodayCard({ section, noClasses, year, onGo }) {
+/**
+ * One section's attendance on a day, saved marks only: today from the my-day
+ * answer, an earlier day (`date`) from GET /dashboard/attendance-days/. Both
+ * carry marked/unmarked and the four counts; it reads only those, since
+ * "taken" means any mark in one and every mark in the other.
+ */
+export function TodayCard({ section, noClasses, year, date = null, onGo }) {
   const a = section.attendance;
-  const done = a.taken && a.unmarked === 0;
+  const started = a.marked > 0;
+  const done = started && a.unmarked === 0;
+  const dayWord = date ? "" : " today";
   return (
     <Panel
       title={sectionName(section)}
       subtitle={`${section.level_label} · ${plural(section.students, "learner")}`}
       icon="ti-calendar-check"
       className="min-w-0"
-      action={!noClasses && section.students > 0 && (
+      action={!noClasses && section.students > 0 && section.advisory_id && (
         <Button
           size="sm"
           variant={done ? "secondary" : "primary"}
           icon={done ? "ti-eye" : "ti-calendar-check"}
-          onClick={() => onGo(mySectionsLink(year, section.advisory_id, "attendance"))}
+          onClick={() => onGo(mySectionsLink(year, section.advisory_id, "attendance", { date }))}
         >
-          {done ? "Review" : a.taken ? "Finish attendance" : "Take attendance"}
+          {done ? "Review" : started ? "Finish attendance" : "Take attendance"}
         </Button>
       )}
     >
       {noClasses ? (
         <p className="text-sm text-neutral-700">
-          <span className="font-semibold text-neutral-900">No classes today</span> · {noClasses.label}
+          <span className="font-semibold text-neutral-900">No classes{dayWord}</span> · {noClasses.label}
         </p>
       ) : section.students === 0 ? (
         <p className="text-sm text-neutral-600">No learners are enrolled in this section yet.</p>
-      ) : !a.taken ? (
+      ) : !started ? (
         <p className="flex items-center gap-2 text-sm font-semibold text-warning-500">
           <i className="ti ti-alert-triangle" aria-hidden="true" />
-          Not taken yet today
+          {date ? "Attendance wasn't taken" : "Not taken yet today"}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -74,7 +81,7 @@ export function TodayCard({ section, noClasses, year, onGo }) {
           </div>
           {a.unmarked > 0 && (
             <p className="text-xs font-semibold text-warning-500">
-              {a.unmarked.toLocaleString()} of {plural(section.students, "learner")} not marked yet
+              {a.unmarked.toLocaleString()} of {plural(section.students, "learner")} not marked{date ? "" : " yet"}
             </p>
           )}
         </div>

@@ -12,12 +12,15 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.cache import cache
 from django.db import DatabaseError
 from django.test import override_settings
 from docx import Document
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounts.permissions import GRADE_READ_ROLES
 from ai import summaries
+from ai.analytics_views import ClusterAnalyticsView
 from ai.models import AiSummary
 from ai.summary_docx import _when, build_docx, byline_for, file_stem, parse_blocks, parse_inline
 from ai.summary_views import (
@@ -166,18 +169,19 @@ def test_a_deactivated_owner_or_an_unpublished_row_is_not_listed():
     assert [s["id"] for s in out["shared"]] == [2]
 
 
-def _found(row, *, active=True, exists=True):
+def _found(row, *, active=True, exists=True, may_read_shared=True):
     live = MagicMock()
     live.filter.return_value.first.return_value = row
     with patch("ai.summaries._live", return_value=live), \
          patch("ai.summaries.active_owner_names", return_value={row.owner_user_id: "Ana"} if active else {}), \
          patch("ai.summaries.enrollment_exists", return_value=exists):
-        return summaries.summary_for_viewer(row.summary_id, OTHER)
+        return summaries.summary_for_viewer(row.summary_id, OTHER, may_read_shared=may_read_shared)
 
 
 def test_someone_elses_summary_is_readable_only_while_published_active_and_on_file():
     published = dict(shared_text="hi", shared_at=T0)
     assert _found(_row(**published)) is not None
+    assert _found(_row(**published), may_read_shared=False) is None  # a teacher
     assert _found(_row()) is None                               # never published
     assert _found(_row(**published), active=False) is None      # owner deactivated
     assert _found(_row(**published), exists=False) is None      # enrollment gone
@@ -185,12 +189,15 @@ def test_someone_elses_summary_is_readable_only_while_published_active_and_on_fi
 
 # ── Making one ────────────────────────────────────────────────────────────────
 
-def _interpret(body, *, gemini_text="**SUMMARY**\nok"):
+def _interpret(body, *, gemini_text="**SUMMARY**\nok", user=None):
+    # Through the real view, so through its tight per-user rate as well: each
+    # call starts with an empty count (test_interpret_throttle.py covers it).
+    cache.clear()
     client = MagicMock()
     client.models.generate_content.return_value.text = gemini_text
     with override_settings(GEMINI_API_KEY="key", GROQ_API_KEY=""), \
          patch("ai.views._get_client", return_value=client):
-        response = _call(GeminiInterpretView, "post", "/api/ai/interpret/", data=body)
+        response = _call(GeminiInterpretView, "post", "/api/ai/interpret/", data=body, user=user)
     return response, client
 
 
@@ -234,7 +241,7 @@ def test_a_failed_save_still_returns_the_paid_for_text(stub_summary_store):
 
 # ── Who may use the endpoints ─────────────────────────────────────────────────
 
-@pytest.mark.parametrize("role", ["teacher", "accounting", "guardian"])
+@pytest.mark.parametrize("role", ["accounting", "guardian"])
 @pytest.mark.parametrize("view_cls,method,kwargs", [
     (SummaryLookupView, "post", {}),
     (SummaryDetailView, "patch", {"summary_id": 1}),
@@ -256,6 +263,121 @@ def test_only_the_owner_may_change_a_summary(view_cls, method):
                          data={"text": "x", "shared": True}, summary_id=1)
     assert response.status_code == 404
     own.assert_called_once_with(1, OTHER)
+
+
+# ── Teachers: their own learners' grade reports, kept private ─────────────────
+
+LEARNER, OTHER_LEARNER = 50, 51
+
+
+def _teacher(user_id=OWNER):
+    return _user(user_id, role="teacher")
+
+
+@pytest.fixture
+def roster():
+    """The teacher's sections hold LEARNER; enrollment 5 is LEARNER's and
+    enrollment 6 is OTHER_LEARNER's (anything else is not on file)."""
+    with patch("ai.summaries.teacher_student_ids", return_value={LEARNER}), \
+         patch("ai.summaries.enrollment_student_id",
+               side_effect=lambda eid: {5: LEARNER, 6: OTHER_LEARNER}.get(eid)):
+        yield
+
+
+def test_each_kind_of_summary_follows_the_page_it_is_made_on():
+    # The same objects, so the Grades page and its summary cannot drift apart
+    # again -- teachers saw the panel for months and were refused by it.
+    assert summaries.CONTEXT_ROLES["grade_report"] is GRADE_READ_ROLES
+    assert summaries.CONTEXT_ROLES["clustering_insights"] is ClusterAnalyticsView.required_roles
+    assert set(summaries.CONTEXT_ROLES) == set(summaries.CONTEXT_TITLES)
+    assert summaries.AI_SUMMARY_ROLES == GRADE_READ_ROLES | ClusterAnalyticsView.required_roles
+    assert "teacher" not in summaries.SHARE_ROLES
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_may_use_grade_reports_of_their_own_learners_only():
+    teacher = _teacher()
+    assert summaries.may_use(teacher, "grade_report", {"enrollment_id": 5}) is True
+    assert summaries.may_use(teacher, "grade_report", {"enrollment_id": 6}) is False
+    assert summaries.may_use(teacher, "grade_report", {"enrollment_id": 99}) is False  # gone
+    assert summaries.may_use(teacher, "grade_report", {}) is False
+    assert summaries.may_use(teacher, "clustering_insights", {"school_year": "2025-2026"}) is False
+
+
+def test_other_staff_are_not_held_to_a_roster():
+    with patch("ai.summaries.teacher_student_ids") as roster_read:
+        assert summaries.may_use(_user(role="registrar"), "grade_report", {"enrollment_id": 6}) is True
+        assert summaries.may_use(_user(role="admin"), "clustering_insights", {}) is True
+    roster_read.assert_not_called()
+    assert summaries.may_use(_user(role="accounting"), "grade_report", {"enrollment_id": 6}) is False
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_can_analyze_their_own_learner(stub_summary_store):
+    response, client = _interpret(
+        {"context_type": "grade_report", "enrollment_id": 5, "payload": {"grade_level": "Grade 4"}},
+        user=_teacher(),
+    )
+    assert response.status_code == 200
+    assert response.data["summary"]["can_share"] is False
+    client.models.generate_content.assert_called_once()
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_is_refused_another_learner_before_any_ai_call(stub_summary_store):
+    response, client = _interpret(
+        {"context_type": "grade_report", "enrollment_id": 6, "payload": {"grade_level": "Grade 4"}},
+        user=_teacher(),
+    )
+    assert response.status_code == 403
+    client.models.generate_content.assert_not_called()
+    stub_summary_store.assert_not_called()
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_looks_up_only_their_own_summary_of_their_own_learner():
+    body = {"context_type": "grade_report", "payload": {"grade_level": "Grade 4"}}
+    with patch("ai.summaries.enrollment_exists", return_value=True), \
+         patch("ai.summaries.visible_summaries", return_value={"mine": None, "shared": []}) as visible:
+        mine = _call(SummaryLookupView, "post", "/x/", user=_teacher(), data={**body, "enrollment_id": 5})
+        theirs = _call(SummaryLookupView, "post", "/x/", user=_teacher(), data={**body, "enrollment_id": 6})
+    assert mine.status_code == 200
+    assert visible.call_args.kwargs["can_share"] is False
+    assert theirs.status_code == 403
+    visible.assert_called_once()
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_may_withdraw_but_not_publish():
+    row = _row(shared_text="published before", shared_fingerprint="fp-1", shared_at=T0)
+    with patch("ai.summaries.own_summary", return_value=row):
+        publish = _call(SummaryShareView, "post", "/x/", user=_teacher(), data={"shared": True}, summary_id=1)
+        assert publish.status_code == 403
+        assert row.shared_text == "published before"
+        withdraw = _call(SummaryShareView, "post", "/x/", user=_teacher(), data={"shared": False}, summary_id=1)
+    assert withdraw.status_code == 200
+    assert row.shared_text == ""
+
+
+@pytest.mark.usefixtures("roster")
+@pytest.mark.parametrize("view_cls,method", [
+    (SummaryDetailView, "patch"), (SummaryShareView, "post"), (SummaryArchiveView, "post"),
+])
+def test_a_teacher_loses_their_summary_when_the_learner_leaves_their_sections(view_cls, method):
+    row = _row(subject_key="enrollment:6", subject_meta={"enrollment_id": 6})
+    with patch("ai.summaries.own_summary", return_value=row):
+        response = _call(view_cls, method, "/x/", user=_teacher(),
+                         data={"text": "x", "shared": False}, summary_id=1)
+    assert response.status_code == 404
+    row.save.assert_not_called()
+
+
+@pytest.mark.usefixtures("roster")
+def test_a_teacher_downloads_only_their_own_summary():
+    with patch("ai.summaries.summary_for_viewer", return_value=None) as found:
+        response = _call(SummaryDocxView, "get", "/x/", user=_teacher(), summary_id=1)
+    assert response.status_code == 404
+    assert found.call_args.kwargs["may_read_shared"] is False
 
 
 # ── Editing, sharing, archiving ───────────────────────────────────────────────

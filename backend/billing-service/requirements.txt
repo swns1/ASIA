@@ -21,6 +21,10 @@ django-filter==25.2
 # ── Auth & Security ───────────────────────────────────────────────────────────
 PyJWT==2.15.1
 
+# ── Outbound HTTP ─────────────────────────────────────────────────────────────
+# shared.resilience (email retries) and shared.email_backends (Brevo) use it.
+requests==2.33.1
+
 # ── Environment ───────────────────────────────────────────────────────────────
 python-dotenv==1.2.2
 

@@ -280,6 +280,9 @@ class GeminiInterpretView(APIView):
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        # Before the AI call: a refusal costs nothing.
+        if not summaries.may_use(request.user, context_type, subject_meta):
+            return Response(summaries.NOT_ALLOWED, status=status.HTTP_403_FORBIDDEN)
 
         prompt     = PROMPTS[context_type].format(payload=payload)
         gemini_key = getattr(settings, "GEMINI_API_KEY", "")
@@ -347,7 +350,10 @@ class GeminiInterpretView(APIView):
                 provider=provider,
                 fingerprint=summaries.fingerprint(filtered),
             )
-            saved = summaries.serialize_own(summary, current_fingerprint=summary.data_fingerprint)
+            saved = summaries.serialize_own(
+                summary, current_fingerprint=summary.data_fingerprint,
+                can_share=summaries.may_share(request.user),
+            )
         except DatabaseError:
             logger.exception("AI interpretation: could not save the summary")
             saved = None

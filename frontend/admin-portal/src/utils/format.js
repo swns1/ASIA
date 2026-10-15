@@ -57,3 +57,14 @@ export const localISODate = (d) =>
 
 /** Today as `YYYY-MM-DD`, for comparing against date-only API fields. */
 export const todayISO = () => localISODate(new Date());
+
+/** A `YYYY-MM-DD` day moved by `delta` days, on this device's calendar. */
+export const shiftISODate = (iso, delta) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return localISODate(d);
+};
+
+/** A `YYYY-MM-DD` day, short: "Mon, Oct 12". Read as a local date, not UTC. */
+export const fmtShortDay = (iso) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });

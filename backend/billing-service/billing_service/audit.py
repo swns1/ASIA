@@ -24,6 +24,7 @@ MODULE_LABELS = {
     "discount-types": "Discount Types",
     "invoices": "Invoices",
     "payments": "Payments",
+    "send-payment-receipt": "Payment Receipt Email",
     "installments": "Installments",
 }
 
@@ -54,6 +55,7 @@ RECORD_LABELS = {
 
 SPECIAL_ACTIONS = {
     ("payments", "POST"): ("Recorded payment", "Payment was recorded successfully.", "Payment could not be recorded. Please review the payment details."),
+    ("send-payment-receipt", "POST"): ("Sent payment receipt", "Payment receipt email was sent successfully.", "Payment receipt email could not be sent. Please review the guardian's email address."),
     ("send-enrollment-email", "POST"): ("Sent enrollment email", "Enrollment email was sent successfully.", "Enrollment email could not be sent. Please review the student's email address."),
     ("enrollment-scholarships", "POST"): ("Awarded scholarship", "Scholarship was awarded successfully.", "Scholarship could not be awarded. Please review the scholarship details."),
     ("score-entries", "POST"): ("Added score entry", "Score entry was added successfully.", "Score entry could not be added. Please review the grade details."),

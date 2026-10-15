@@ -1,68 +1,24 @@
 import logging
-import smtplib
 
-from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 from django.utils.html import escape
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminRegistrarOrReadOnly
-from shared.resilience import is_transient_error, retry_with_backoff
+from shared.mail import email_configured, guardian_contact, send_email, unique_addresses
 
 from .models import EmailDeliveryFailure, Enrollment
 
 logger = logging.getLogger(__name__)
 
 
-def is_transient_smtp_error(exc: Exception) -> bool:
-    """
-    True for SMTP failures worth another attempt: a dropped or refused
-    connection, a timeout, or a 4xx reply (the server's own "try again
-    later"). A 5xx reply — a rejected login (535) or a refused recipient —
-    fails the same way on every attempt, so it is raised immediately.
-    """
-    if isinstance(exc, (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError)):
-        return True
-    if isinstance(exc, smtplib.SMTPResponseException):
-        return 400 <= exc.smtp_code < 500
-    if isinstance(exc, smtplib.SMTPException):
-        return False
-    # socket timeouts and connection resets surface as OSError subclasses.
-    return isinstance(exc, (TimeoutError, ConnectionError))
-
-
-def is_transient_send_error(exc: Exception) -> bool:
-    """SMTP rules for the SMTP backend, shared.resilience's HTTP rules
-    (timeouts, connection errors, 429/5xx) for the HTTPS backend."""
-    return is_transient_smtp_error(exc) or is_transient_error(exc)
-
-
-def email_configured() -> bool:
-    """False when the chosen backend has no credentials, so nothing would
-    be sent. Backends that don't deliver anywhere (console, locmem) count
-    as configured."""
-    backend = settings.EMAIL_BACKEND
-    if backend.endswith("smtp.EmailBackend"):
-        return bool(settings.EMAIL_HOST_USER)
-    if backend.endswith("BrevoEmailBackend"):
-        return bool(getattr(settings, "BREVO_API_KEY", ""))
-    return True
-
-
 def _guardian_contact(student_id):
-    """(name, email) of the guardian to write to -- the primary contact first,
-    else any guardian with an address -- or None."""
+    """(name, email) of the guardian to write to, or None (see
+    shared.mail.guardian_contact)."""
     from accounts.guardian_mirror import GuardianMirror
 
-    for g in GuardianMirror.objects.filter(student_id=student_id).order_by(
-        "-is_primary_contact", "guardian_id",
-    ):
-        email = (g.email_address or "").strip()
-        if email:
-            return g.full_name, email
-    return None
+    return guardian_contact(GuardianMirror.objects.filter(student_id=student_id))
 
 
 def _render(student_name, school_level, grade_level, section, school_year, guardian_name=None):
@@ -180,10 +136,7 @@ def send_enrollment_email(request):
     # went nowhere even when a guardian's email was on file.
     student = enrollment.student
     guardian = _guardian_contact(enrollment.student_id)
-    recipients = []
-    for address in ([guardian[1]] if guardian else []) + [(student.email or "").strip()]:
-        if address and address.lower() not in (r.lower() for r in recipients):
-            recipients.append(address)
+    recipients = unique_addresses(guardian[1] if guardian else None, student.email)
     if not recipients:
         return Response(
             {"detail": "No email address on file for this learner or their guardian.",
@@ -195,7 +148,8 @@ def send_enrollment_email(request):
     # follow-up. The school simply hasn't set up a mailbox (see .env.example).
     if not email_configured():
         return Response(
-            {"detail": "Email is not configured on the server, so no confirmation was sent."},
+            {"detail": "Email is not configured on the server, so no confirmation was sent.",
+             "code": "email_not_configured"},
             status=503,
         )
 
@@ -213,26 +167,13 @@ def send_enrollment_email(request):
         guardian_name=guardian[0] if guardian else None,
     )
 
-    message = EmailMultiAlternatives(
-        subject=subject,
-        body=text,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=recipients,
-    )
-    message.attach_alternative(html, "text/html")
-
     try:
-        retry_with_backoff(
-            message.send,
-            attempts=3,
-            is_transient=is_transient_send_error,
-            label="email",
-        )
+        sent_to = send_email(subject=subject, text=text, html=html, to=recipients)
         # Earlier failures for this enrollment are settled by this send.
         EmailDeliveryFailure.objects.filter(
             context__enrollment_id=enrollment_id, resolved_at__isnull=True,
         ).update(resolved_at=timezone.now())
-        return Response({"success": True, "sent_to": recipients})
+        return Response({"success": True, "sent_to": sent_to})
     except Exception as e:
         logger.exception("Enrollment email to %s failed after retries", ", ".join(recipients))
         EmailDeliveryFailure.objects.create(
