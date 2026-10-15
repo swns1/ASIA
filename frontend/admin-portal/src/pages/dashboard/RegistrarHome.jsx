@@ -12,7 +12,8 @@
 //   2. Needs your attention, on the page as well as in the bell, since these
 //      queues are the registrar's day: pending approvals with how many still
 //      owe documents, applications (opened ones too), learners with no class
-//      in the year, sections with no adviser (./attention.js).
+//      in the year, sections with no adviser (./attention.js). Beside it,
+//      Coming up: the calendar and the registrar's own events (./ComingUp.jsx).
 //   3. At a glance: the four enrollment tiles, on the page's year.
 //   4. Trends: as on the admin home.
 //   5. Recent enrollments in the year.
@@ -32,8 +33,9 @@ import {
 import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import { pageVariants } from "../../utils/motion";
 import { bellItems } from "./attention";
-import { quarterOn } from "./adminHomeData";
-import { enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
+import ComingUp from "./ComingUp";
+import { TWO_UP, quarterOn } from "./adminHomeData";
+import { comingUpRequests, enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
 import useHomeData from "./useHomeData";
 
 // The pending tile reads the pending queue's count, so it isn't asked twice.
@@ -41,6 +43,7 @@ const requests = (year, currentYear) => ({
   ...quarterRequests(currentYear),
   ...trendRequests(year),
   ...enrollmentGlanceRequests(year, { pending: false }),
+  ...comingUpRequests(),
 });
 
 export default function RegistrarHome() {
@@ -92,8 +95,14 @@ export default function RegistrarHome() {
           />
         </motion.div>
 
-        <motion.div variants={pageVariants.item} className="shrink-0">
+        <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
           <AttentionPanel rows={rows} loading={loading} failed={home.attentionFailed} onGo={navigate} />
+          <ComingUp
+            events={data.calendar?.results ?? data.calendar}
+            personal={data.personal?.results ?? data.personal}
+            loading={loading}
+            onGo={navigate}
+          />
         </motion.div>
 
         <motion.div variants={pageVariants.item} className="shrink-0">

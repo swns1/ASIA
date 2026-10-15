@@ -101,7 +101,7 @@ export function sectionsByLevel(sections) {
     .filter((group) => group.sections.length);
 }
 
-// The teacher's "Coming up": today and the next COMING_UP_DAYS days, as local
+// Every home's "Coming up" (./ComingUp.jsx): today and the next COMING_UP_DAYS days, as local
 // calendar dates. One window for the request and the list, so the list can't
 // ask for days it wasn't sent. Asked for by date, not by school year: near a
 // year's end the window runs into the next one's opening days.

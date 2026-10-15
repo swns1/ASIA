@@ -46,8 +46,9 @@ export const DARK_READY_PAGES = [
   // Built on the tokens from the start: each staff member's theme and password.
   { label: "My Settings", match: /^\/my-settings\/?$/ },
   // The guardian portal (GuardianLayout, through ThemeArea): home, one
-  // child's records, and the guardian's own settings.
+  // child's records, the school calendar, and the guardian's own settings.
   { label: "Guardian home", match: /^\/guardian\/?$/ },
+  { label: "Guardian school calendar", match: /^\/guardian\/calendar\/?$/ },
   { label: "Guardian child records", match: /^\/guardian\/child\/\d+\/?$/ },
   { label: "Guardian settings", match: /^\/guardian\/settings\/?$/ },
 ];

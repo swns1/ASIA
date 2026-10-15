@@ -77,7 +77,6 @@ Returns:
       ]
     }, ...
   ],
-  "interpretation": "AI-generated narrative ...",
   "meta": {
     ...,
     "silhouette_score": 0.42,
@@ -140,7 +139,11 @@ GROUP_BANDS = {
 }
 BAND_COLORS = {"low": "#a32d2d", "middle": "#fab219", "high": "#0ca30c"}
 
-CLUSTER_INTERPRETATION_PROMPT = """
+# Names only. The prompt also asked for a 3-5 sentence narrative, which the
+# endpoint returned and no page ever showed -- paid for on every run. The
+# written summary of the groups is the separate, saved one the Analytics page
+# asks for on a click (ai/views.py "clustering_insights", ai/summaries.py).
+CLUSTER_NAMING_PROMPT = """
 You are an academic analytics assistant for a Philippine basic education school (DepEd K–12 system).
 You are given the results of a K-Means clustering analysis on student performance data that includes
 grades, attendance rates, and behavioral narrative ratings.
@@ -155,18 +158,11 @@ grade; never work one out from the average yourself. A cluster whose descriptor 
 Expectations" is below the passing grade of 75: never give it a name that suggests achievement,
 passing or good performance, however close to 75 its average is.
 
-Your tasks:
-1. Give each cluster a SHORT, descriptive name (2-4 words max).
-   Example names: "High Achievers", "At-Risk Learners", "Steady Performers", "Needs Intervention"
-2. Write a concise narrative interpretation (3-5 sentences) covering:
-   - Overall patterns and what the clustering reveals across grades, attendance, and behavior
-   - Actionable recommendations for teachers
+Your task: give each cluster a SHORT, descriptive name (2-4 words max), one per cluster, in order.
+Example names: "High Achievers", "At-Risk Learners", "Steady Performers", "Needs Intervention"
 
 Return ONLY valid JSON — no markdown, no code fences:
-{{
-  "cluster_names": ["Name for Cluster 0", "Name for Cluster 1", "Name for Cluster 2"],
-  "interpretation": "Your 3-5 sentence narrative here."
-}}
+{{"cluster_names": ["Name for Cluster 0", "Name for Cluster 1", "Name for Cluster 2"]}}
 
 Cluster Data:
 {cluster_summary}
@@ -196,31 +192,42 @@ class ClusterRateThrottle(UserRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": uid}
 
 
-def _parse_interpretation_json(raw: str) -> dict:
+# Longest group name shown. The page lays names out as chips and legend
+# entries; the prompt asks for 2-4 words, and this holds it to that.
+MAX_CLUSTER_NAME_CHARS = 40
+
+
+def _parse_names_json(raw: str) -> list:
+    """
+    The names in a model's answer: a list of short strings, each a single
+    line. Raises (moving the chain to the next provider) on anything that
+    isn't JSON with a cluster_names list.
+    """
     raw = (raw or "").strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
         raw = raw.strip()
-    return json.loads(raw)
+    names = json.loads(raw)["cluster_names"]
+    if not isinstance(names, list):
+        raise ValueError("cluster_names is not a list")
+    return [" ".join(str(n).split())[:MAX_CLUSTER_NAME_CHARS] if isinstance(n, str) else "" for n in names]
 
 
-def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
+def _ai_cluster_names(cluster_summary: str, meta: dict) -> list:
     """
-    Groq first, Gemini second (both keys are optional independently) — a
-    canned degrade message if neither is configured or both fail. Never
-    raises: this endpoint's UI treats "interpretation" as best-effort.
+    A name per cluster, weakest first, from Groq then Gemini (both keys are
+    optional independently). [] when neither is configured or both fail:
+    never raises, since the groups are complete without AI names -- the
+    caller keeps FALLBACK_CLUSTER_NAMES for any cluster left unnamed.
     """
     groq_key = os.environ.get("GROQ_API_KEY", "")
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if not groq_key and not gemini_key:
-        return {
-            "cluster_names": [],
-            "interpretation": "AI interpretation unavailable — no AI provider is configured.",
-        }
+        return []
 
-    prompt = CLUSTER_INTERPRETATION_PROMPT.format(
+    prompt = CLUSTER_NAMING_PROMPT.format(
         cluster_summary=cluster_summary,
         school_year=meta["school_year"],
         grading_period=meta["grading_period"],
@@ -229,7 +236,7 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         silhouette_score=meta.get("silhouette_score", "N/A"),
     )
 
-    def _call_groq() -> dict:
+    def _call_groq() -> list:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json={
@@ -245,13 +252,13 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
         )
         response.raise_for_status()
         content = response.json()["choices"][0]["message"].get("content")
-        return _parse_interpretation_json(require_text(content, "groq"))
+        return _parse_names_json(require_text(content, "groq"))
 
-    def _call_gemini() -> dict:
+    def _call_gemini() -> list:
         from google import genai
         client = genai.Client(api_key=gemini_key)
         response = client.models.generate_content(model=settings.GEMINI_TEXT_MODEL, contents=prompt)
-        return _parse_interpretation_json(require_text(response.text, "gemini"))
+        return _parse_names_json(require_text(response.text, "gemini"))
 
     providers = []
     if groq_key:
@@ -262,15 +269,12 @@ def _call_groq_for_interpretation(cluster_summary: str, meta: dict) -> dict:
     try:
         return call_with_provider_fallback(providers, attempts_per_provider=2)
     except AllProvidersFailedError as exc:
-        logger.warning("Cluster interpretation: all providers failed: %s", exc)
-        return {
-            "cluster_names": [],
-            "interpretation": "AI interpretation temporarily unavailable.",
-        }
+        logger.warning("Cluster naming: all providers failed: %s", exc)
+        return []
 
 
-# Fallback cluster names used whenever Groq/GROQ_API_KEY is unavailable
-# (_call_groq_for_interpretation returns cluster_names: [] in that case —
+# Fallback cluster names used whenever no AI provider names the groups
+# (_ai_cluster_names returns [] in that case —
 # both the "unset key" branch above and the "exception" branch above). Keyed
 # by n_clusters (2-7, matching the clamp `n_clusters = max(2, min(n_clusters,
 # 7))` below), each list is exactly n_clusters long, ascending worst->best to
@@ -521,7 +525,7 @@ class ClusterAnalyticsView(APIView):
             key=lambda kv: (standing[kv[0]], np.mean([s["grade"] for s in kv[1]])),
         )
 
-        # ── AI interpretation ─────────────────────────────────────────────
+        # ── Group summaries, named by the AI ──────────────────────────────
         cluster_summary_lines = []
         clusters_response     = []
 
@@ -590,15 +594,12 @@ class ClusterAnalyticsView(APIView):
             "suggested_n_clusters": suggested_k,
         }
 
-        ai_result = _call_groq_for_interpretation("\n".join(cluster_summary_lines), meta)
-
-        names = ai_result.get("cluster_names", [])
+        names = _ai_cluster_names("\n".join(cluster_summary_lines), meta)
         for i, c in enumerate(clusters_response):
             if i < len(names) and names[i]:
                 c["label"] = names[i]
 
         return Response({
-            "clusters":       clusters_response,
-            "interpretation": ai_result.get("interpretation", ""),
-            "meta":           meta,
+            "clusters": clusters_response,
+            "meta":     meta,
         })

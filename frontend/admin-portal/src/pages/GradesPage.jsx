@@ -52,7 +52,6 @@ import {
   createNarrativeReport as _createNarrativeReport,
   updateNarrativeReport as _updateNarrativeReport,
   deleteNarrativeReport as _deleteNarrativeReport,
-  callGemini,
 } from "../api/enrollmentApi";
 import { getStudent as _getStudent } from "../api/studentApi";
 import useYearFilter from "../hooks/useYearFilter";
@@ -910,9 +909,9 @@ export default function GradesPage() {
       {!loadingSum && sumGrades.length > 0 && (
         <AIInsightPanel
           title="AI Grade Interpretation"
-          description="Gemini-powered analysis of this student's academic performance"
+          description="An AI reading of this student's grades, saved to your account"
           disabled={sumGrades.length === 0}
-          onFetch={() => {
+          request={(() => {
             const report = summarizeGrades(sumSubjects, sumGrades, periodsFor(enrollment));
             const subjectMap = {};
             sumSubjects.forEach((s) => { subjectMap[s.subject_id] = s.subject_name; });
@@ -935,17 +934,22 @@ export default function GradesPage() {
                   passed_period_grades: recorded.filter((n) => n >= GRADE_PASSING).length,
                   failed_period_grades: recorded.filter((n) => n < GRADE_PASSING).length,
                 };
-            return callGemini("grade_report", {
-              grade_level:     enrollment.grade_level,
-              school_level:    enrollment.school_level,
-              section:         enrollment.section,
-              school_year:     enrollment.school_year,
-              overall_average: (report.generalAverage ?? recordedAverage)?.toFixed(2),
-              ...counts,
-              total_grades:    recorded.length,
-              grades_by_subject: gradesBySubject,
-            });
-          }}
+            return {
+              contextType: "grade_report",
+              // Names whose summary this is; kept out of what the AI sees.
+              enrollmentId: enrollment.enrollment_id,
+              payload: {
+                grade_level:     enrollment.grade_level,
+                school_level:    enrollment.school_level,
+                section:         enrollment.section,
+                school_year:     enrollment.school_year,
+                overall_average: (report.generalAverage ?? recordedAverage)?.toFixed(2),
+                ...counts,
+                total_grades:    recorded.length,
+                grades_by_subject: gradesBySubject,
+              },
+            };
+          })()}
         />
       )}
     </div>

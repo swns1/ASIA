@@ -34,6 +34,10 @@ class CalendarEvent(models.Model):
     description = models.TextField(null=True, blank=True)
     # Set only on grading_period events, which quarter the dates belong to.
     grading_period = models.CharField(max_length=20, choices=GRADING_QUARTERS, null=True, blank=True)
+    # Whether the guardian portal shows it. The registrar decides per event;
+    # a grading period is the teachers' grade deadline and is never shown
+    # (the serializer forces it off).
+    visible_to_guardians = models.BooleanField(default=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
 
@@ -53,3 +57,40 @@ class CalendarEvent(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.school_year})"
+
+
+class PersonalEvent(models.Model):
+    """
+    One staff member's own calendar entry, shown on their Academic Calendar
+    (with "My events" on) and on their home's Coming up. Private: only its
+    owner reads or changes it -- no role, admins included, sees anyone
+    else's (views.PersonalEventViewSet scopes every query to the caller).
+
+    Not filed under a school year: a person's plans don't stop at a year's
+    end, and an archived year doesn't lock them.
+    """
+
+    event_id      = models.BigAutoField(primary_key=True)
+    # user_id from the identity-service JWT, as SectionAdvisory.teacher_user_id.
+    owner_user_id = models.BigIntegerField()
+    title         = models.CharField(max_length=150)
+    start_date    = models.DateField()
+    end_date      = models.DateField()
+    description   = models.TextField(null=True, blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "personal_calendar_events"
+        ordering = ["start_date"]
+        indexes = [models.Index(fields=["owner_user_id", "start_date"], name="personal_event_owner_start")]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(start_date__lte=models.F("end_date")),
+                name="personal_event_starts_before_it_ends",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.title} (user #{self.owner_user_id})"

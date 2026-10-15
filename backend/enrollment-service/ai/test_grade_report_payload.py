@@ -9,6 +9,8 @@ not listed, such as a student's name, still never reaches the AI provider.
 """
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from django.test import override_settings
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
@@ -16,10 +18,12 @@ from rest_framework.test import APIRequestFactory
 
 from ai.views import GeminiInterpretView
 
+pytestmark = pytest.mark.usefixtures("stub_summary_store")
+
 
 def _prompt_for(payload):
     django_request = APIRequestFactory().post(
-        "/api/ai/interpret/", {"context_type": "grade_report", "payload": payload}, format="json",
+        "/api/ai/interpret/", {"context_type": "grade_report", "payload": payload, "enrollment_id": 1}, format="json",
     )
     request = Request(django_request, parsers=[JSONParser()])
     client = MagicMock()

@@ -13,7 +13,8 @@
 //   3. Needs your attention, on the page and in the bell: attendance not
 //      done, grades and narrative reports still to enter this period,
 //      learners to follow up (./attention.js).
-//   4. Grades to finish (a bar per subject) beside Coming up (the calendar).
+//   4. Grades to finish (a bar per subject) beside Coming up (the calendar
+//      and the teacher's own events; Coming up alone with no section).
 //   5. Kept from the shared dashboard for now: the enrollment tiles (scoped
 //      to their learners by the server), Trends and recent enrollments.
 //
@@ -29,28 +30,21 @@ import {
   AttentionPanel, EnrollmentTiles, HomeHeader, PartialLoadAlert, QuickActions, RecentEnrollmentsPanel,
   TrendsSection,
 } from "./HomeParts";
-import { ComingUp, GradesToFinish, TodayCard } from "./TeacherPanels";
-import { getCalendarEvents } from "../../api/enrollmentApi";
+import { GradesToFinish, TodayCard } from "./TeacherPanels";
+import ComingUp from "./ComingUp";
 import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import { CHIP_GLOW } from "../../constants/statusTones";
 import { pageVariants } from "../../utils/motion";
 import { bellItems, myDayRequest } from "./attention";
-import { TWO_UP, comingUpWindow, mySectionsLink, quarterOn } from "./adminHomeData";
-import { enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
+import { TWO_UP, mySectionsLink, quarterOn } from "./adminHomeData";
+import { comingUpRequests, enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
 import useHomeData from "./useHomeData";
-
-const calendarRequest = () => {
-  const { from, to } = comingUpWindow();
-  return getCalendarEvents({ end_date__gte: from, start_date__lte: to, page_size: 500 });
-};
 
 const requests = (year, currentYear, ctx) => ({
   ...quarterRequests(currentYear),
   // The same answer the attention queues read: one request.
   myDay:    myDayRequest(year, ctx),
-  // Coming up is about the days ahead: asked for by date, so near a year's
-  // end it shows the next one's opening days too.
-  calendar: calendarRequest(),
+  ...comingUpRequests(),
   ...enrollmentGlanceRequests(year),
   ...trendRequests(year),
 });
@@ -154,21 +148,24 @@ export default function TeacherHome() {
           <AttentionPanel rows={rows} loading={loading} failed={home.attentionFailed} onGo={navigate} />
         </motion.div>
 
-        {!noSection && (
-          <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
+        <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
+          {!noSection && (
             <GradesToFinish
               sections={sections} loading={loading} failed={home.failed.includes("myDay")}
               year={year} onGo={navigate}
             />
-            <ComingUp
-              events={data.calendar?.results ?? data.calendar}
-              loading={loading}
-              dueDate={firstGraded?.grades?.due_date ?? null}
-              periodLabel={firstGraded?.grades?.label ?? ""}
-              onGo={navigate}
-            />
-          </motion.div>
-        )}
+          )}
+          {/* Shown with no section too: the calendar and their own events
+              are still theirs. */}
+          <ComingUp
+            events={data.calendar?.results ?? data.calendar}
+            personal={data.personal?.results ?? data.personal}
+            loading={loading}
+            dueDate={firstGraded?.grades?.due_date ?? null}
+            periodLabel={firstGraded?.grades?.label ?? ""}
+            onGo={navigate}
+          />
+        </motion.div>
 
         <motion.div variants={pageVariants.item} className="shrink-0">
           {/* Scholarships is academic staff's page; the count is the teacher's own learners'. */}

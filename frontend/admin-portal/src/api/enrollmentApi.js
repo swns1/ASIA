@@ -325,13 +325,70 @@ export const updateCalendarEvent = (id, payload) =>
 export const deleteCalendarEvent = (id) =>
   enrollmentClient.delete(`/calendar-events/${id}/`).then((r) => r.data);
 
+// The school calendar as guardians see it: only events left visible to them.
+export const getGuardianCalendarEvents = (params = {}) =>
+  enrollmentClient.get("/guardian/calendar-events/", { params }).then((r) => r.data);
+
+// The signed-in staff member's own events. Private: the server answers only
+// the caller's, to everyone, admins included.
+export const getPersonalEvents = (params = {}) =>
+  enrollmentClient.get("/personal-events/", { params }).then((r) => r.data);
+
+export const createPersonalEvent = (payload) =>
+  enrollmentClient.post("/personal-events/", payload).then((r) => r.data);
+
+export const updatePersonalEvent = (id, payload) =>
+  enrollmentClient.patch(`/personal-events/${id}/`, payload).then((r) => r.data);
+
+export const deletePersonalEvent = (id) =>
+  enrollmentClient.delete(`/personal-events/${id}/`).then((r) => r.data);
+
 // ── AI / analytics ────────────────────────────────────────────────────────────
 export const getAiCluster = (params = {}) =>
   enrollmentClient.get("/ai/cluster/", { params }).then((r) => r.data);
 
-export async function callGemini(context_type, payload) {
-  const res = await enrollmentClient.post("/ai/interpret/", { context_type, payload });
-  return res.data; // { interpretation: string }
+// A summary request is { contextType, payload, enrollmentId? }. The payload
+// goes to the AI provider (filtered server-side); enrollmentId names what a
+// grade report is about and never leaves our server.
+const summaryBody = ({ contextType, payload, enrollmentId }) => ({
+  context_type: contextType,
+  payload,
+  ...(enrollmentId != null && { enrollment_id: enrollmentId }),
+});
+
+/** Ask the AI and save the answer as the caller's summary.
+ *  Resolves to { interpretation, provider, summary }. */
+export const callGemini = (request) =>
+  enrollmentClient.post("/ai/interpret/", summaryBody(request)).then((r) => r.data);
+
+// ── Saved AI summaries (private per person, shareable) ─────────────────────
+/** { mine: summary|null, shared: [published copies from other staff] },
+ *  each flagged `stale` when today's data differs from what the AI saw. */
+export const lookupAiSummary = (request) =>
+  enrollmentClient.post("/ai/summaries/lookup/", summaryBody(request)).then((r) => r.data);
+
+/** Save the owner's own version; "" puts the AI's text back. */
+export const editAiSummary = (id, text) =>
+  enrollmentClient.patch(`/ai/summaries/${id}/`, { text }).then((r) => r.data);
+
+/** true publishes the current version to staff; false withdraws it. */
+export const shareAiSummary = (id, shared) =>
+  enrollmentClient.post(`/ai/summaries/${id}/share/`, { shared }).then((r) => r.data);
+
+export const archiveAiSummary = (id) =>
+  enrollmentClient.post(`/ai/summaries/${id}/archive/`).then((r) => r.data);
+
+/** The summary as a Word file: { blob, filename }. */
+export async function downloadAiSummaryDocx(id) {
+  try {
+    const res = await enrollmentClient.get(`/ai/summaries/${id}/docx/`, { responseType: "blob" });
+    return {
+      blob: res.data,
+      filename: filenameFromDisposition(res.headers?.["content-disposition"], "AI-Summary.docx"),
+    };
+  } catch (err) {
+    throw await readBlobError(err);
+  }
 }
 
 // ── At-risk student prediction (persisted risk scoring) ───────────────────────

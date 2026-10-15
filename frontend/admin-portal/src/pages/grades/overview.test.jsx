@@ -28,6 +28,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   deleteScoreEntry: none(), computeGrade: none(), saveGrade: none(), updateGrade: none(),
   getNarrativeCategories: none(), getNarrativeReports: none(), createNarrativeReport: none(),
   updateNarrativeReport: none(), deleteNarrativeReport: none(), callGemini: none(),
+  lookupAiSummary: none(),
 }));
 vi.mock("../../api/studentApi", () => ({
   getStudents: vi.fn(() => Promise.resolve({ results: [] })),

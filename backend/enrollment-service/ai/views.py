@@ -2,6 +2,7 @@ import logging
 
 import requests
 from django.conf import settings
+from django.db import DatabaseError
 from google import genai
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -11,8 +12,10 @@ from accounts.permissions import HasRole
 from grading.deped import descriptor
 from shared.resilience import AllProvidersFailedError, call_with_provider_fallback
 
+from . import summaries
 from .analytics_views import ClusterRateThrottle
 from .providers import require_text
+from .summaries import AI_SUMMARY_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -231,49 +234,52 @@ def _cluster_details(clusters):
     return "\n".join(lines)
 
 
+def prepare_payload(context_type, payload):
+    """
+    (filtered, prompt_payload) for a request body's context_type and payload,
+    or ValueError with a message safe to return.
+
+    `filtered` is the payload cut down to ALLOWED_PAYLOAD_FIELDS: what a saved
+    summary's data fingerprint is taken over, so the lookup that asks "has
+    the data changed?" and the call that made the summary filter alike.
+    `prompt_payload` is that, decorated for the prompt.
+    """
+    if context_type not in PROMPTS:
+        raise ValueError(f"Unknown context_type '{context_type}'. Valid: {list(PROMPTS.keys())}")
+
+    allowed = ALLOWED_PAYLOAD_FIELDS.get(context_type)
+    if allowed is None:
+        raise ValueError(f"context_type '{context_type}' declares no payload fields.")
+
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be an object.")
+
+    filtered = {k: v for k, v in payload.items() if k in allowed}
+    if not filtered:
+        raise ValueError("payload is required")
+
+    described = dict(filtered)
+    if context_type == "grade_report":
+        described = _describe_grade_report(described)
+    elif context_type == "clustering_insights" and "clusters" in described:
+        described["cluster_details"] = _cluster_details(described.pop("clusters"))
+    return filtered, described
+
+
 class GeminiInterpretView(APIView):
     permission_classes = [HasRole]
-    required_roles = {"super_admin", "admin", "registrar"}
+    required_roles = AI_SUMMARY_ROLES
     throttle_classes = [InterpretRateThrottle]
 
     def post(self, request):
         context_type = request.data.get("context_type", "")
-        payload      = request.data.get("payload", {})
-
-        if context_type not in PROMPTS:
-            return Response(
-                {"detail": f"Unknown context_type '{context_type}'. Valid: {list(PROMPTS.keys())}"},
-                status=status.HTTP_400_BAD_REQUEST,
+        try:
+            filtered, payload = prepare_payload(context_type, request.data.get("payload", {}))
+            subject_key, subject_meta = summaries.resolve_subject(
+                context_type, filtered, request.data.get("enrollment_id"),
             )
-
-        allowed = ALLOWED_PAYLOAD_FIELDS.get(context_type)
-        if allowed is None:
-            return Response(
-                {"detail": f"context_type '{context_type}' declares no payload fields."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not isinstance(payload, dict):
-            return Response(
-                {"detail": "payload must be an object."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        payload = {k: v for k, v in payload.items() if k in allowed}
-
-        if not payload:
-            return Response(
-                {"detail": "payload is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if context_type == "grade_report":
-            payload = _describe_grade_report(payload)
-        elif context_type == "clustering_insights" and "clusters" in payload:
-            try:
-                payload["cluster_details"] = _cluster_details(payload.pop("clusters"))
-            except ValueError as exc:
-                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         prompt     = PROMPTS[context_type].format(payload=payload)
         gemini_key = getattr(settings, "GEMINI_API_KEY", "")
@@ -306,11 +312,13 @@ class GeminiInterpretView(APIView):
 
         # Gemini first — these prompts are tuned against it — Groq as the
         # fallback when Gemini is unavailable or exhausted.
+        # Each entry answers with its own name, so the summary records which
+        # provider actually wrote it rather than which was tried first.
         providers = []
         if gemini_key:
-            providers.append(("gemini", _call_gemini))
+            providers.append(("gemini", lambda: ("gemini", _call_gemini())))
         if groq_key:
-            providers.append(("groq", _call_groq))
+            providers.append(("groq", lambda: ("groq", _call_groq())))
 
         if not providers:
             return Response(
@@ -319,11 +327,28 @@ class GeminiInterpretView(APIView):
             )
 
         try:
-            interpretation = call_with_provider_fallback(providers, attempts_per_provider=2)
-            return Response({"interpretation": interpretation})
+            provider, interpretation = call_with_provider_fallback(providers, attempts_per_provider=2)
         except AllProvidersFailedError as exc:
             logger.warning("AI interpretation: all providers failed: %s", exc)
             return Response(
                 {"detail": "AI interpretation is temporarily unavailable. Please try again in a moment."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+        # The text was paid for: a failed save still hands it back, unsaved,
+        # rather than throwing it away behind a 500.
+        try:
+            summary = summaries.save_generated(
+                owner_user_id=summaries.user_id_of(request.user),
+                context_type=context_type,
+                subject_key=subject_key,
+                subject_meta=subject_meta,
+                text=interpretation,
+                provider=provider,
+                fingerprint=summaries.fingerprint(filtered),
+            )
+            saved = summaries.serialize_own(summary, current_fingerprint=summary.data_fingerprint)
+        except DatabaseError:
+            logger.exception("AI interpretation: could not save the summary")
+            saved = None
+        return Response({"interpretation": interpretation, "provider": provider, "summary": saved})

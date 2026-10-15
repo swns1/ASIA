@@ -10,6 +10,8 @@
 //      staff dashboard (the queues are shared: ./attention.js).
 //   3. Teachers today: one tile per section (attendance taken or not, no
 //      adviser) and grades in. Clicking it opens every section with filters.
+//      Beside it, Coming up: the calendar and the admin's own events
+//      (./ComingUp.jsx).
 //   4. School at a glance: two headline numbers (present today, need
 //      follow-up), then this year against last for enrollees and for
 //      collection pace (YearOverYear.jsx), with the year's Billing panel
@@ -47,6 +49,8 @@ import RecordPaymentModal from "../../components/RecordPaymentModal";
 import { CollectionPacePanel, EnrolleesPanel } from "./YearOverYear";
 import useYearComparison from "./useYearComparison";
 import { HomeHeader, MiniMeter, PartialLoadAlert, QuickActions, TrendsSection } from "./HomeParts";
+import ComingUp from "./ComingUp";
+import { comingUpRequests } from "./homeRequests";
 import useHomeData from "./useHomeData";
 
 import { getDashboardSummary, getTeachersToday } from "../../api/enrollmentApi";
@@ -66,6 +70,7 @@ import {
 const requests = (year, currentYear) => ({
   summary:  getDashboardSummary({ school_year: year }),
   teachers: getTeachersToday({ school_year: currentYear }),
+  ...comingUpRequests(),
 });
 
 export default function AdminHome() {
@@ -125,13 +130,19 @@ export default function AdminHome() {
         </motion.div>
 
         {/* Needs your attention used to sit beside this; it's in the header's
-            bell now, so Teachers today has the row to itself. */}
+            bell now, and Coming up has its place. */}
         <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
           <TeachersTodayPreview
             teachers={teachers}
             loading={loading}
             now={now}
             onOpen={() => setShowTeachers(true)}
+          />
+          <ComingUp
+            events={data.calendar?.results ?? data.calendar}
+            personal={data.personal?.results ?? data.personal}
+            loading={loading}
+            onGo={navigate}
           />
         </motion.div>
 

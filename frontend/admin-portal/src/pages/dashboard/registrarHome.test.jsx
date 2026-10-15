@@ -16,6 +16,7 @@ const getDocumentStatus = vi.fn();
 const getSections = vi.fn();
 const getUnplacedStudents = vi.fn();
 const getCalendarEvents = vi.fn();
+const getPersonalEvents = vi.fn(() => Promise.resolve({ results: [] }));
 const getStudentApplications = vi.fn();
 const getStudents = vi.fn();
 const getInvoices = vi.fn();
@@ -36,6 +37,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getSections: (...a) => getSections(...a),
   getUnplacedStudents: (...a) => getUnplacedStudents(...a),
   getCalendarEvents: (...a) => getCalendarEvents(...a),
+  getPersonalEvents: (...a) => getPersonalEvents(...a),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: (...a) => getInvoices(...a),
@@ -183,6 +185,22 @@ describe("RegistrarHome — needs your attention", () => {
     renderHome();
     await screen.findByText("36 enrollments waiting for your approval");
     expect(getInvoices).not.toHaveBeenCalled();
+  });
+});
+
+describe("RegistrarHome — coming up", () => {
+  it("puts the calendar and the registrar's own events beside the queues", async () => {
+    getCalendarEvents.mockImplementation((params) => Promise.resolve({ results: params.event_type ? [] : [
+      { event_id: 5, event_type: "holiday", title: "All Saints' Day", start_date: "2026-11-01", end_date: "2026-11-01" },
+    ] }));
+    getPersonalEvents.mockResolvedValue({ results: [
+      { event_id: 5, title: "Records audit prep", start_date: "2026-10-20", end_date: "2026-10-20" },
+    ] });
+    renderHome();
+    expect(await screen.findByText("Coming up")).toBeTruthy();
+    expect(await screen.findByText("All Saints' Day")).toBeTruthy();
+    expect(screen.getByText("Records audit prep")).toBeTruthy();
+    expect(screen.getByText("Yours")).toBeTruthy();
   });
 });
 

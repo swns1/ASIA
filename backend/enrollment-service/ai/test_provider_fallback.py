@@ -21,7 +21,9 @@ from rest_framework.test import APIRequestFactory
 from ai import analytics_views
 from ai.views import GeminiInterpretView
 
-BODY = {"context_type": "grade_report", "payload": {"grade_level": "Grade 4"}}
+BODY = {"context_type": "grade_report", "payload": {"grade_level": "Grade 4"}, "enrollment_id": 1}
+
+pytestmark = pytest.mark.usefixtures("stub_summary_store")
 
 
 def _groq_reply(content):
@@ -60,7 +62,8 @@ def test_models_come_from_settings():
 def test_an_empty_gemini_answer_falls_back_to_groq(empty):
     response, client, post = _interpret(gemini_text=empty)
     assert response.status_code == 200
-    assert response.data == {"interpretation": "from groq"}
+    assert response.data["interpretation"] == "from groq"
+    assert response.data["provider"] == "groq"  # the one that answered, not the one tried first
     assert client.models.generate_content.call_count == 1  # not retried: empty isn't transient
 
 
@@ -72,15 +75,15 @@ def test_an_empty_answer_from_every_provider_is_a_503_not_a_blank():
 def test_cluster_naming_falls_back_when_groq_answers_empty():
     post = MagicMock(return_value=_groq_reply(""))
     gemini = MagicMock()
-    gemini.models.generate_content.return_value.text = '{"cluster_names": ["A", "B"], "interpretation": "ok"}'
+    gemini.models.generate_content.return_value.text = '{"cluster_names": ["A", "B"]}'
     meta = {"school_year": "2025-2026", "grading_period": "1st_quarter", "subject": "Overall",
             "total_students": 10}
     with patch.dict(os.environ, {"GROQ_API_KEY": "gq", "GEMINI_API_KEY": "gk"}), \
          patch("ai.analytics_views.requests.post", post), \
          patch("google.genai.Client", return_value=gemini), \
          patch("shared.resilience.time.sleep"):
-        result = analytics_views._call_groq_for_interpretation("Cluster 0: ...", meta)
-    assert result["cluster_names"] == ["A", "B"]
+        names = analytics_views._ai_cluster_names("Cluster 0: ...", meta)
+    assert names == ["A", "B"]
 
 
 # ── check_ai_providers ────────────────────────────────────────────────────

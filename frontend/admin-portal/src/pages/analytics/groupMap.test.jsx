@@ -30,7 +30,6 @@ function student(id, grade, attendance, overrides = {}) {
 }
 
 const RESULT = {
-  interpretation: "",
   meta: { school_year: "2026-2027", grading_period: "1st_quarter", subject: "Overall", n_clusters: 3, total_students: 5 },
   clusters: [
     {

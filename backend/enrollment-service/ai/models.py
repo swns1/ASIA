@@ -109,3 +109,75 @@ class StudentRiskScore(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"Student #{self.student_id} · run #{self.run_id} · {self.risk_level} ({self.risk_score})"
+
+
+class AiSummary(models.Model):
+    """
+    One person's saved AI summary of one thing: a student's grade report (an
+    enrollment) or one Analytics grouping (its filters). Latest only: making it
+    again replaces the text in place, so there is one live row per person per
+    subject. The interpret endpoint used to hand the text back and forget it,
+    so leaving the page lost it and every revisit paid for another AI call.
+
+    Private to its owner until they publish it: `shared_text` is a snapshot of
+    the version they chose to share, so later private edits never leak into
+    what others read until it is published again.
+
+    Never deleted. Archiving sets `archived_at`; a summary whose owner was
+    deactivated or whose enrollment no longer exists is treated as archived
+    when read (see ai/summaries.py), so identity-service never has to write
+    here. The live-row uniqueness is partial, which lets an archived row stay
+    beside a newer live one.
+    """
+
+    summary_id = models.BigAutoField(primary_key=True)
+
+    owner_user_id = models.BigIntegerField()  # user_id from identity-service JWT
+    context_type  = models.CharField(max_length=40)   # a key of ai.views.PROMPTS
+    # What the summary is about, built by the server, never taken from the
+    # client as-is: "enrollment:42" or "cluster:<year>|<period>|<grade>|<subject>".
+    subject_key   = models.CharField(max_length=200)
+    subject_meta  = models.JSONField(default=dict)
+
+    ai_text          = models.TextField()
+    provider         = models.CharField(max_length=20, blank=True, default="")
+    # sha256 of the data the AI was given. A different hash for today's data
+    # means the grades moved on since: shown with a warning, not hidden.
+    data_fingerprint = models.CharField(max_length=64)
+    generated_at     = models.DateTimeField()
+
+    # The owner's own version of the text. Empty = they kept the AI's.
+    edited_text = models.TextField(blank=True, default="")
+    edited_at   = models.DateTimeField(null=True, blank=True)
+
+    # The published copy other staff read. Empty = not shared.
+    shared_text        = models.TextField(blank=True, default="")
+    shared_fingerprint = models.CharField(max_length=64, blank=True, default="")
+    shared_at          = models.DateTimeField(null=True, blank=True)
+
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_summaries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner_user_id", "context_type", "subject_key"],
+                condition=models.Q(archived_at__isnull=True),
+                name="ai_summary_one_live_per_owner_subject",
+            ),
+        ]
+        indexes = [
+            # The shared-with-me lookup: everyone's live summaries of one subject.
+            models.Index(fields=["context_type", "subject_key"], name="ai_summary_subject_idx"),
+        ]
+
+    def __str__(self):  # pragma: no cover
+        return f"Summary #{self.summary_id} · {self.subject_key} · user {self.owner_user_id}"
+
+    @property
+    def current_text(self):
+        """What the owner sees: their edit if they made one, else the AI's."""
+        return self.edited_text or self.ai_text

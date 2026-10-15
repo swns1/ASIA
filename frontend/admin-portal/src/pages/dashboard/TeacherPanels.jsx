@@ -1,8 +1,9 @@
 // TeacherPanels — the teacher's home's own cards, from the my-day answer
 // (GET /dashboard/my-day/, one entry per section the teacher advises):
-// today's attendance per section, this period's grades per subject, and
-// what's coming up on the Academic Calendar. Links open My Sections on the
-// section and tab (TeacherSectionsPage reads ?section=&tab=&period=&subject=).
+// today's attendance per section and this period's grades per subject.
+// Coming up, the calendar, is every home's (./ComingUp.jsx). Links open My
+// Sections on the section and tab (TeacherSectionsPage reads
+// ?section=&tab=&period=&subject=).
 
 import { Panel } from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -10,10 +11,8 @@ import Skeleton from "../../components/ui/Skeleton";
 import Badge from "../../components/ui/Badge";
 import { token } from "../../components/charts/tokens";
 import useTheme from "../../hooks/useTheme";
-import { CHIP_GLOW } from "../../constants/statusTones";
-import { fmtDate } from "../../utils/format";
 import { MiniMeter } from "./HomeParts";
-import { COMING_UP_DAYS, comingUpWindow, dueLine, mySectionsLink, plural, sectionName } from "./adminHomeData";
+import { dueLine, mySectionsLink, plural, sectionName } from "./adminHomeData";
 
 
 function LoadingRows() {
@@ -147,73 +146,6 @@ export function GradesToFinish({ sections, loading, failed = false, year, onGo }
             );
           })}
         </div>
-      )}
-    </Panel>
-  );
-}
-
-// ── Coming up ────────────────────────────────────────────────────────────────
-
-const NO_CLASS_TYPES = new Set(["holiday", "school_day_off", "quarter_break"]);
-const TYPE_BADGES = {
-  exam: ["Exam", "info"],
-  enrollment: ["Enrollment", "accent"],
-  event: ["Event", "muted"],
-  other: ["Event", "muted"],
-};
-const SHOWN = 6;
-
-/**
- * The calendar's next few weeks (no-class days marked), with this period's
- * grade due date among them. `events`: the calendar events overlapping
- * comingUpWindow(), whatever school year they're filed under.
- */
-export function ComingUp({ events, loading, dueDate, periodLabel, onGo }) {
-  const { from: today, to: horizon } = comingUpWindow();
-
-  const items = (events ?? [])
-    .filter((e) => e.event_type !== "grading_period" && e.end_date >= today && e.start_date <= horizon)
-    .map((e) => ({ key: `e${e.event_id ?? e.title}${e.start_date}`, date: e.start_date < today ? today : e.start_date, end: e.end_date, title: e.title, type: e.event_type }));
-  if (dueDate && dueDate >= today && dueDate <= horizon) {
-    items.push({ key: "due", date: dueDate, end: dueDate, title: `${periodLabel} grades due`, type: "due" });
-  }
-  items.sort((a, b) => a.date.localeCompare(b.date));
-
-  return (
-    <Panel
-      title="Coming up"
-      subtitle={`The next ${COMING_UP_DAYS} days`}
-      icon="ti-calendar-event"
-      className="min-w-0"
-      padding="none"
-      action={
-        <Button variant="ghost" size="sm" iconRight icon="ti-arrow-right" onClick={() => onGo("/academic-calendar")}>
-          Calendar
-        </Button>
-      }
-    >
-      {loading ? <div className="p-5"><LoadingRows /></div> : items.length === 0 ? (
-        <p className="p-5 text-sm text-neutral-600">Nothing on the calendar in the next {COMING_UP_DAYS} days.</p>
-      ) : (
-        <ul className="divide-y divide-neutral-200">
-          {items.slice(0, SHOWN).map((it) => {
-            const [label, tone] = it.type === "due" ? ["Grades due", "warning"]
-              : NO_CLASS_TYPES.has(it.type) ? ["No classes", "error"]
-                : TYPE_BADGES[it.type] ?? TYPE_BADGES.other;
-            return (
-              <li key={it.key} className="flex items-center gap-3 px-5 py-3">
-                <span className={`flex h-9 w-12 shrink-0 flex-col items-center justify-center rounded-md bg-brand-100 text-brand-600 ${CHIP_GLOW.brand}`}>
-                  <span className="text-xs font-bold leading-none">{fmtDate(it.date).split(",")[0]}</span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-neutral-900">{it.title}</span>
-                  {it.end !== it.date && <span className="block text-xs text-neutral-500">Until {fmtDate(it.end)}</span>}
-                </span>
-                <Badge variant={tone}>{label}</Badge>
-              </li>
-            );
-          })}
-        </ul>
       )}
     </Panel>
   );

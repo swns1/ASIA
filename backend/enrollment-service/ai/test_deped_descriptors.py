@@ -20,10 +20,12 @@ from rest_framework.test import APIRequestFactory
 from ai import analytics_views
 from ai.views import GeminiInterpretView, _with_descriptor
 
+pytestmark = pytest.mark.usefixtures("stub_summary_store")
+
 
 def _interpret(context_type, payload):
     django_request = APIRequestFactory().post(
-        "/api/ai/interpret/", {"context_type": context_type, "payload": payload}, format="json",
+        "/api/ai/interpret/", {"context_type": context_type, "payload": payload, "enrollment_id": 1}, format="json",
     )
     request = Request(django_request, parsers=[JSONParser()])
     client = MagicMock()
@@ -140,7 +142,7 @@ def test_cluster_naming_prompt_carries_descriptors():
                      "avg_narrative": base[2], "narrative_ratings": ["SO"]}
     post = MagicMock()
     post.return_value.json.return_value = {"choices": [{"message": {"content": json.dumps(
-        {"cluster_names": ["A", "B", "C"], "interpretation": "ok"})}}]}
+        {"cluster_names": ["A", "B", "C"]})}}]}
     request = Request(APIRequestFactory().get(
         "/api/ai/cluster/", {"school_year": "2025-2026", "grading_period": "1st_quarter", "n_clusters": "3"}))
     with patch.object(analytics_views, "build_student_features", return_value=(data, "Overall")), \
@@ -151,3 +153,4 @@ def test_cluster_naming_prompt_carries_descriptors():
     prompt = post.call_args.kwargs["json"]["messages"][0]["content"]
     assert "deped_descriptor=Did Not Meet Expectations" in prompt
     assert "deped_descriptor=Outstanding" in prompt
+    assert [c["label"] for c in response.data["clusters"]] == ["A", "B", "C"]

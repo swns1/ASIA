@@ -17,8 +17,18 @@ import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { listVariants } from "../utils/motion";
 import useTheme from "../hooks/useTheme";
+import useCurrentUser from "../hooks/useCurrentUser";
 import { CARD_DARK } from "../components/ui/darkSurfaces";
+import SegmentedControl from "../components/ui/SegmentedControl";
+import { ToggleCard, TogglePill } from "../components/ui/ToggleCard";
 import { CHIP_GLOW } from "../constants/statusTones";
+import { ACADEMIC_STAFF } from "../utils/auth";
+import MonthGrid from "./calendar/MonthGrid";
+import { MONTHS, buildEventMap, calendarItems, formatDateRange, parseLocalDate } from "./calendar/calendarDates";
+import {
+  DARK_EVENT_BG, DARK_EVENT_LIGHT, DARK_EVENT_TEXT, EVENT_TYPES, PERSONAL_TYPE, applyColorOverrides,
+  buildEventTypes, eventMeta, loadColorOverrides, schoolEventTypes,
+} from "./calendar/eventTypes";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -26,6 +36,10 @@ import {
   createCalendarEvent as _createEvent,
   updateCalendarEvent as _updateEvent,
   deleteCalendarEvent as _deleteEvent,
+  getPersonalEvents as _getMine,
+  createPersonalEvent,
+  updatePersonalEvent,
+  deletePersonalEvent,
 } from "../api/enrollmentApi";
 import { getSchoolSettings as _getSchoolSettings } from "../api/billingApi";
 import { useSchoolYear } from "../context/SchoolYearContext";
@@ -35,6 +49,33 @@ const createEvent       = (p)     => _createEvent(p);
 const updateEvent       = (id, p) => _updateEvent(id, p);
 const deleteEvent       = (id)    => _deleteEvent(id);
 const getSchoolSettings = ()      => _getSchoolSettings();
+
+// The school year's days, July to June, as the event form bounds them.
+function yearBounds(sy) {
+  const [y1, y2] = sy.split("-").map(Number);
+  return { min: `${y1}-07-01`, max: `${y2}-06-30` };
+}
+
+// Your own events overlapping the year's days: they aren't filed under a year.
+const getMine = (sy) => {
+  const { min, max } = yearBounds(sy);
+  return _getMine({ end_date__gte: min, start_date__lte: max, page_size: 500 });
+};
+
+// A school event goes through the calendar-events API, your own through
+// personal-events: `mine` (calendarItems) says which.
+const removeEvent = (ev) => (ev.mine ? deletePersonalEvent : deleteEvent)(ev.event_id);
+
+// "My events" on or off, kept per person in this browser.
+const showMineKey = (user) => `asia.calendar.showMine.${user?.id ?? "anon"}`;
+function readShowMine(user) {
+  try { return localStorage.getItem(showMineKey(user)) !== "0"; }
+  catch { return true; }
+}
+function writeShowMine(user, on) {
+  try { localStorage.setItem(showMineKey(user), on ? "1" : "0"); }
+  catch { /* the choice lasts this visit only */ }
+}
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
@@ -68,17 +109,6 @@ function exportCSV(events, schoolYear) {
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
-const EVENT_TYPE_DEFAULTS = [
-  { value: "holiday",        label: "Holiday",       color: "#c92a2a", icon: "ti-flag" },
-  { value: "exam",           label: "Exam",          color: "#1455a0", icon: "ti-writing" },
-  { value: "enrollment",     label: "Enrollment",    color: "#2e6b0d", icon: "ti-clipboard-list" },
-  { value: "quarter_break",  label: "Quarter Break", color: "#7c3aed", icon: "ti-calendar-pause" },
-  { value: "school_day_off", label: "No Classes",    color: "#854f0b", icon: "ti-school-off" },
-  { value: "event",          label: "Event",         color: "#a3266b", icon: "ti-star" },
-  { value: "grading_period", label: "Grading Period", color: "#0b6e63", icon: "ti-report-analytics" },
-  { value: "other",          label: "Other",         color: "#855c5c", icon: "ti-calendar" },
-];
-
 // A Grading Period event marks one quarter. Its end date is when that
 // quarter's grades are due; the admin home reads these to know the current
 // quarter. Senior High semesters are derived from them (Q1–Q2, Q3–Q4).
@@ -90,55 +120,10 @@ const GRADING_QUARTERS = [
 ];
 const QUARTER_LABELS = new Set(GRADING_QUARTERS.map((q) => q.label));
 
-const COLOR_STORAGE_KEY = "cal_event_colors";
-
-function loadColorOverrides() {
-  try { return JSON.parse(localStorage.getItem(COLOR_STORAGE_KEY) ?? "{}"); }
-  catch { return {}; }
-}
-
-function saveColorOverrides(overrides) {
-  localStorage.setItem(COLOR_STORAGE_KEY, JSON.stringify(overrides));
-}
-
-// Derive bg/light from a hex color (lightened tints)
-function hexToTints(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  const mix = (v, t) => Math.round(v + (255 - v) * t).toString(16).padStart(2,"0");
-  const bg    = `#${mix(r,0.82)}${mix(g,0.82)}${mix(b,0.82)}`;
-  const light = `#${mix(r,0.93)}${mix(g,0.93)}${mix(b,0.93)}`;
-  return { bg, light };
-}
-
-// Dark mode. The tints above are mixed toward white, pastels that would glare
-// on the dark planes, so in dark an event colour is mixed toward transparent
-// instead. The colour stays on the marks (edges, dots, bars). As text or an
-// icon it can't be trusted: it's user-chosen, and even the defaults measure
-// 2.2–3.6:1 on the dark surface, so in dark its labels and icons take a token.
-const DARK_EVENT_BG    = (c) => `color-mix(in srgb, ${c} 18.8%, transparent)`;
-const DARK_EVENT_LIGHT = (c) => `color-mix(in srgb, ${c} 13.3%, transparent)`;
-const DARK_EVENT_TEXT  = "var(--color-neutral-800)";
 // framer-motion tweens these hovers and can't tween var(): dark gets the dark
 // values of the same tokens (brand-100, brand-300, brand-600; brand-50 for
 // the CSV button's near-miss #fff8f8).
 const DARK_HOVER = { bg: "#2f1a1a", border: "#7d3535", text: "#ff8f8f", soft: "#221616" };
-
-function buildEventTypes(overrides) {
-  return EVENT_TYPE_DEFAULTS.map((t) => {
-    const color = overrides[t.value] ?? t.color;
-    const { bg, light } = hexToTints(color);
-    return { ...t, color, bg, light };
-  });
-}
-
-// Module-level reactive event types — updated when colors change
-let EVENT_TYPES = buildEventTypes(loadColorOverrides());
-
-function eventMeta(type) {
-  return EVENT_TYPES.find((t) => t.value === type) ?? EVENT_TYPES[EVENT_TYPES.length - 1];
-}
 
 // ── Philippine Public Holidays ────────────────────────────────────────────────
 // Regular + special non-working holidays per Proclamation. Add future years here.
@@ -284,289 +269,27 @@ function getHolidaysForSY(sy) {
   ];
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-function parseLocalDate(str) {
-  const [y, m, d] = str.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function dateKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-}
-
-function buildEventMap(events) {
-  const map = {};
-  for (const ev of events) {
-    const start = parseLocalDate(ev.start_date);
-    const end   = parseLocalDate(ev.end_date);
-    const cur   = new Date(start);
-    while (cur <= end) {
-      const k = dateKey(cur);
-      if (!map[k]) map[k] = [];
-      map[k].push(ev);
-      cur.setDate(cur.getDate() + 1);
-    }
-  }
-  return map;
-}
-
-// For a given grid month (year + monthIndex), return all events that are
-// active on each day, even when the event's calendar year differs from `year`
-// (happens at the school-year Jul/Jun boundary where Jul uses syYear but an
-// event that started in Jun syYear2 bleeds into Jul syYear).
-function getDayEvents(eventMap, year, monthIndex, day) {
-  const primary = `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-  // Also check the other calendar year for the same month/day so cross-year
-  // spanning events (e.g. Jun 2026 → Jul 2026 stored under SY 2025-2026 where
-  // the July grid renders as year=2025) are still found.
-  const altYear = year + 1;
-  const alt     = `${altYear}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-  const seen    = new Set();
-  const result  = [];
-  for (const ev of (eventMap[primary] ?? [])) {
-    if (!seen.has(ev.event_id)) { seen.add(ev.event_id); result.push({ ev, k: primary }); }
-  }
-  for (const ev of (eventMap[alt] ?? [])) {
-    if (!seen.has(ev.event_id)) { seen.add(ev.event_id); result.push({ ev, k: alt }); }
-  }
-  return result;
-}
-
-function formatDateRange(start, end) {
-  if (start === end) return start;
-  const s = parseLocalDate(start);
-  const e = parseLocalDate(end);
-  if (s.getMonth() === e.getMonth()) return `${MONTHS[s.getMonth()].slice(0,3)} ${s.getDate()}–${e.getDate()}`;
-  return `${MONTHS[s.getMonth()].slice(0,3)} ${s.getDate()} – ${MONTHS[e.getMonth()].slice(0,3)} ${e.getDate()}`;
-}
-
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 const Sk = ({ w = "100%", h = 14, r = 6 }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: "linear-gradient(90deg,var(--skeleton) 25%,var(--skeleton-shine) 50%,var(--skeleton) 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.6s ease-in-out infinite" }} />
 );
 
-// ── Month Calendar Grid ───────────────────────────────────────────────────────
-//
-// Renders week-by-week so multi-day event strips stay in the same slot (row)
-// across all cells in a week — e.g. "Exam" on Wed–Sat stays on row 2 for every
-// cell in that week even if Wed has two events above it.
+// ── Event Card (right panel) ──────────────────────────────────────────────────
 
-const MAX_SLOTS = 3; // strips visible before "+N more"
-
-function assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap) {
-  // weekDays: array of day numbers or null (for empty cells)
-  // Returns: Map<event_id, slot> for this week
-  const slotMap  = {}; // event_id → slot index
-  const occupied = []; // occupied[slot] = event_id currently filling it
-
-  for (const day of weekDays) {
-    if (!day) continue;
-    const pairs = getDayEvents(eventMap, year, monthIndex, day);
-    for (const { ev } of pairs) {
-      if (slotMap[ev.event_id] !== undefined) continue; // already assigned
-      // Find the lowest free slot
-      let slot = 0;
-      while (occupied[slot] !== undefined) slot++;
-      occupied[slot] = ev.event_id;
-      slotMap[ev.event_id] = slot;
-    }
-    // Free slots whose event ends on this day
-    const isLastOfMonth = day === daysInMonth;
-    for (const { ev, k: evKey } of pairs) {
-      const isEnd = ev.end_date === evKey || isLastOfMonth;
-      if (isEnd) {
-        const slot = slotMap[ev.event_id];
-        if (slot !== undefined && occupied[slot] === ev.event_id) {
-          delete occupied[slot];
-        }
-      }
-    }
-  }
-  return slotMap;
-}
-
-function MonthGrid({ year, monthIndex, eventMap, selectedDay, onSelectDay }) {
-  const firstDay    = new Date(year, monthIndex, 1).getDay();
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const todayKey    = dateKey(new Date());
-  const dark        = useTheme() === "dark";
-
-  // Build week rows: each is an array of 7 day-numbers-or-null
-  const weeks = [];
-  let week = Array(firstDay).fill(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    week.push(d);
-    if (week.length === 7) { weeks.push(week); week = []; }
-  }
-  if (week.length > 0) {
-    while (week.length < 7) week.push(null);
-    weeks.push(week);
-  }
-
+// Who else sees an event, when it isn't the whole school and its families:
+// your own is yours alone; a school event can be kept from guardians.
+function EventAudience({ event }) {
+  const [icon, text] = event.mine
+    ? ["ti-lock", "Only you"]
+    : event.visible_to_guardians === false ? ["ti-eye-off", "Staff only"] : [null, null];
+  if (!text) return null;
   return (
-    <div className={`border border-[#f0e6e6] bg-surface shadow-[0_4px_24px_rgba(224,49,49,0.07)] dark:border-neutral-200 ${CARD_DARK}`} style={{ borderRadius: 18, overflow: "hidden" }}>
-      {/* Day-of-week header */}
-      <div className="bg-[linear-gradient(135deg,#fff5f5,#fff)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid var(--color-neutral-200)" }}>
-        {DAYS_SHORT.map((d, i) => (
-          <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: i === 0 || i === 6 ? "var(--color-brand-700)" : "var(--color-neutral-500)", textTransform: "uppercase" }}>{d}</div>
-        ))}
-      </div>
-
-      {/* Week rows */}
-      {weeks.map((weekDays, wi) => {
-        // Assign stable slots for every event visible this week
-        const slotMap = assignWeekSlots(weekDays, year, monthIndex, daysInMonth, eventMap);
-
-        // How many slots are actually used this week (caps at MAX_SLOTS)
-        const usedSlots = Math.min(MAX_SLOTS, Object.values(slotMap).length > 0 ? Math.max(...Object.values(slotMap)) + 1 : 0);
-
-        return (
-          <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
-            {weekDays.map((day, ci) => {
-              const isWeekend = ci === 0 || ci === 6;
-              if (!day) return (
-                <div key={`empty-${wi}-${ci}`} style={{
-                  minHeight: 88,
-                  background: isWeekend ? (dark ? "var(--color-neutral-100)" : "#fdfafa") : "transparent",
-                  borderRight: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0", borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
-                }} />
-              );
-
-              const k            = `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-              const pairs        = getDayEvents(eventMap, year, monthIndex, day);
-              const isSelected   = selectedDay === k;
-              const isToday      = k === todayKey;
-              const isFirstOfMonth = day === 1;
-              const isLastOfMonth  = day === daysInMonth;
-              const hasAny       = pairs.length > 0;
-
-              // Count events beyond MAX_SLOTS for this day
-              const overflowIds  = new Set(
-                pairs.filter(({ ev }) => (slotMap[ev.event_id] ?? MAX_SLOTS) >= MAX_SLOTS).map(({ ev }) => ev.event_id)
-              );
-              const overflow = overflowIds.size;
-
-              // Build slot→pair lookup for this day
-              const slotPairs = {};
-              for (const pair of pairs) {
-                const slot = slotMap[pair.ev.event_id];
-                if (slot !== undefined && slot < MAX_SLOTS) slotPairs[slot] = pair;
-              }
-
-              return (
-                <div
-                  key={k}
-                  className={hasAny && !isSelected ? "cal-day" : ""}
-                  onClick={() => onSelectDay(isSelected ? null : k)}
-                  style={{
-                    minHeight: 88,
-                    padding: "6px 0 4px",
-                    transition: "background-color 0.15s ease",
-                    borderRight: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
-                    borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf0f0",
-                    background: isSelected ? "var(--color-brand-100)" : isToday ? "var(--color-neutral-100)" : isWeekend ? (dark ? "var(--color-neutral-100)" : "#fdfafa") : "var(--color-surface)",
-                    cursor: hasAny ? "pointer" : "default",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  {/* Day number */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "0 6px" }}>
-                    <span className={isToday ? undefined : "cal-day-num"} style={{
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      width: 24, height: 24, borderRadius: "50%",
-                      fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400,
-                      background: isToday ? "var(--color-action)" : isSelected ? "var(--color-brand-100)" : "transparent",
-                      color: isToday ? "white" : isSelected ? "var(--color-brand-600)" : isWeekend ? "var(--color-neutral-500)" : dark ? "var(--color-neutral-900)" : "#2a1a1a",
-                      transition: "background-color 0.15s ease, color 0.15s ease",
-                    }}>
-                      {day}
-                    </span>
-                  </div>
-
-                  {/* Event strips — rendered slot by slot so alignment is stable.
-                      All strips (and placeholders) share a fixed height so
-                      continuation strips on adjacent days are pixel-aligned. */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {Array.from({ length: usedSlots }, (_, slot) => {
-                      const pair = slotPairs[slot];
-                      if (!pair) {
-                        return <div key={slot} style={{ height: 18, flexShrink: 0 }} />;
-                      }
-                      const { ev, k: evKey } = pair;
-                      const meta     = eventMeta(ev.event_type);
-                      const isSingle = ev.start_date === ev.end_date;
-                      const isStart  = ev.start_date === evKey;
-                      const isEnd    = ev.end_date   === evKey;
-                      const isContinuationStart = !isStart && isFirstOfMonth;
-                      const isContinuationEnd   = !isEnd   && isLastOfMonth;
-                      const showTitle = isStart || isSingle || isContinuationStart;
-
-                      const borderRadius = isSingle
-                        ? 4
-                        : (isStart || isContinuationStart) && (isEnd || isContinuationEnd) ? 4
-                        : isStart || isContinuationStart ? "4px 0 0 4px"
-                        : isEnd   || isContinuationEnd   ? "0 4px 4px 0"
-                        : 0;
-
-                      const marginLeft  = (isStart || isContinuationStart || isSingle) ? 0 : -7;
-                      const marginRight = (isEnd   || isContinuationEnd   || isSingle) ? 0 : -7;
-
-                      return (
-                        <div key={ev.event_id} style={{
-                          fontSize: 11, fontWeight: 600,
-                          height: 18, flexShrink: 0, boxSizing: "border-box",
-                          color: showTitle ? (dark ? DARK_EVENT_TEXT : meta.color) : "transparent",
-                          background: dark ? DARK_EVENT_BG(meta.color) : meta.bg,
-                          borderLeft: isStart || isSingle
-                            ? `2.5px solid ${meta.color}`
-                            : isContinuationStart
-                              ? `1.5px dashed ${meta.color}`
-                              : `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
-                          borderTop:    `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
-                          borderBottom: `1px solid color-mix(in srgb, ${meta.color} 13.3%, transparent)`,
-                          borderRight: "none",
-                          borderRadius,
-                          // 1px, not 2px: the strip's height is fixed (18px,
-                          // so strips line up across days), and 11px text
-                          // needs the room.
-                          padding: "1px 4px",
-                          marginLeft,
-                          marginRight,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          display: "flex", alignItems: "center", gap: 3,
-                        }}>
-                          {isContinuationStart && (
-                            <i className="ti ti-arrow-right" style={{ fontSize: 8, opacity: 0.6, flexShrink: 0, transform: "scaleX(-1)" }} />
-                          )}
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
-                            {showTitle ? ev.title : " "}
-                          </span>
-                          {isContinuationEnd && (
-                            <i className="ti ti-arrow-right" style={{ fontSize: 8, opacity: 0.6, flexShrink: 0 }} />
-                          )}
-                        </div>
-                      );
-                    })}
-                    {overflow > 0 && (
-                      <div style={{ fontSize: 11, color: "var(--color-neutral-500)", paddingLeft: 2 }}>+{overflow} more</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-    </div>
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-600">
+      <i className={`ti ${icon}`} aria-hidden="true" />{text}
+    </span>
   );
 }
-// ── Event Card (right panel) ──────────────────────────────────────────────────
 
 function EventCard({ event, onEdit, onDelete }) {
   const meta = eventMeta(event.event_type);
@@ -586,6 +309,7 @@ function EventCard({ event, onEdit, onDelete }) {
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: dark ? DARK_EVENT_TEXT : meta.color, background: dark ? DARK_EVENT_BG(meta.color) : meta.bg, padding: "2px 7px", borderRadius: 99, letterSpacing: "0.04em" }}>
                   <i className={`ti ${meta.icon}`} style={{ fontSize: 10 }} />{meta.label}
                 </span>
+                <EventAudience event={event} />
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-neutral-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
               <div style={{ fontSize: 11, color: "var(--color-neutral-600)", marginTop: 2 }}>
@@ -621,19 +345,29 @@ function EventCard({ event, onEdit, onDelete }) {
 
 // ── Add / Edit Modal ──────────────────────────────────────────────────────────
 
-const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "", grading_period: "" };
+const EMPTY_FORM = { title: "", event_type: "holiday", start_date: "", end_date: "", description: "", grading_period: "", visible_to_guardians: true };
 const LBL = { display: "block", fontSize: 11, fontWeight: 700, color: "var(--color-neutral-700)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 };
 const INP = { width: "100%", border: "1.5px solid var(--color-brand-border-soft)", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontFamily: "'DM Sans',sans-serif", color: "var(--color-neutral-900)", background: "var(--color-neutral-100)", outline: "none", boxSizing: "border-box" };
 
-function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
+const KIND_OPTIONS = [
+  { value: "school", label: "School calendar", icon: "ti-school" },
+  { value: "mine",   label: "Just me",         icon: "ti-lock" },
+];
+
+// Adds or edits a school event or one of your own. `canSchool`: whether this
+// person may write the school calendar this year (an admin or the registrar,
+// and the year not archived); everyone else adds their own events only.
+function EventModal({ mode, initial, schoolYear, canSchool, onClose, onSaved }) {
+  const [kind, setKind] = useState(mode === "edit" ? (initial.mine ? "mine" : "school") : (canSchool ? "school" : "mine"));
   const [form, setForm] = useState(mode === "edit"
-    ? { title: initial.title, event_type: initial.event_type, start_date: initial.start_date, end_date: initial.end_date, description: initial.description ?? "", grading_period: initial.grading_period ?? "" }
+    ? { title: initial.title, event_type: initial.mine ? EMPTY_FORM.event_type : initial.event_type, start_date: initial.start_date, end_date: initial.end_date, description: initial.description ?? "", grading_period: initial.grading_period ?? "", visible_to_guardians: initial.visible_to_guardians ?? true }
     : { ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const selectedMeta = eventMeta(form.event_type);
-  const isGradingPeriod = form.event_type === "grading_period";
+  const mine = kind === "mine";
+  const selectedMeta = eventMeta(mine ? PERSONAL_TYPE : form.event_type);
+  const isGradingPeriod = !mine && form.event_type === "grading_period";
   const dark = useTheme() === "dark";
 
   // Picking a quarter names the event after it, unless the title was typed by
@@ -647,9 +381,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
     }));
   }
 
-  const [syYear, syYear2] = schoolYear.split("-").map(Number);
-  const syMin = `${syYear}-07-01`;
-  const syMax = `${syYear2}-06-30`;
+  const { min: syMin, max: syMax } = yearBounds(schoolYear);
 
   async function handleSave() {
     if (isGradingPeriod && !form.grading_period) { setError("Choose which quarter this is."); return; }
@@ -663,10 +395,19 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
     }
     setSaving(true); setError("");
     try {
-      const payload = { school_year: schoolYear, title: form.title.trim(), event_type: form.event_type, start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null, grading_period: isGradingPeriod ? form.grading_period : null };
-      mode === "edit" ? await updateEvent(initial.event_id, payload) : await createEvent(payload);
+      const common = { title: form.title.trim(), start_date: form.start_date, end_date: form.end_date, description: form.description.trim() || null };
+      if (mine) {
+        mode === "edit" ? await updatePersonalEvent(initial.event_id, common) : await createPersonalEvent(common);
+      } else {
+        const payload = {
+          ...common, school_year: schoolYear, event_type: form.event_type,
+          grading_period: isGradingPeriod ? form.grading_period : null,
+          visible_to_guardians: !isGradingPeriod && form.visible_to_guardians,
+        };
+        mode === "edit" ? await updateEvent(initial.event_id, payload) : await createEvent(payload);
+      }
       toast.success(mode === "edit" ? "Event updated." : "Event created.");
-      onSaved();
+      onSaved(kind);
     } catch (e) {
       const msg = e.message || "Failed to save event.";
       setError(msg);
@@ -698,8 +439,8 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
           hex from localStorage — a value, so it can't be a class. */}
       <ModalHeader
         icon={selectedMeta.icon}
-        title={mode === "edit" ? "Edit Event" : "Add New Event"}
-        subtitle={`S.Y. ${schoolYear}`}
+        title={mode === "edit" ? (mine ? "Edit My Event" : "Edit Event") : (mine ? "Add My Event" : "Add New Event")}
+        subtitle={mine ? "Only you can see this" : `S.Y. ${schoolYear}`}
         tint={{ background: dark ? DARK_EVENT_BG(selectedMeta.color) : selectedMeta.bg, color: dark ? DARK_EVENT_TEXT : selectedMeta.color, borderColor: `color-mix(in srgb, ${selectedMeta.color} 18.8%, transparent)` }}
       />
 
@@ -708,13 +449,22 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
             {error && <Alert key="event-error" variant="error">{error}</Alert>}
           </AnimatePresence>
 
-          <div><label style={LBL}>Title *</label><input value={form.title} onChange={(e) => setF("title", e.target.value)} placeholder="e.g. Independence Day" style={INP} /></div>
+          {/* Which calendar: only someone who may write the school's is
+              asked, and only when adding -- an event stays where it is. */}
+          {mode === "create" && canSchool && (
+            <div>
+              <span style={LBL}>Add to</span>
+              <SegmentedControl label="Add to" options={KIND_OPTIONS} value={kind} onChange={setKind} />
+            </div>
+          )}
+
+          <div><label style={LBL}>Title *</label><input value={form.title} onChange={(e) => setF("title", e.target.value)} placeholder={mine ? "e.g. Dentist appointment" : "e.g. Independence Day"} style={INP} /></div>
 
           {/* Event type as visual pills */}
-          <div>
+          {!mine && <div>
             <label style={LBL}>Event Type *</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-              {EVENT_TYPES.map((t) => {
+              {schoolEventTypes().map((t) => {
                 const active = form.event_type === t.value;
                 return (
                   <button key={t.value} type="button" onClick={() => setF("event_type", t.value)}
@@ -733,7 +483,7 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           {isGradingPeriod && (
             <div>
@@ -754,6 +504,24 @@ function EventModal({ mode, initial, schoolYear, onClose, onSaved }) {
           </div>
 
           <div><label style={LBL}>Description</label><textarea value={form.description} onChange={(e) => setF("description", e.target.value)} placeholder="Optional notes…" rows={3} style={{ ...INP, resize: "vertical" }} /></div>
+
+          {/* Who sees a school event besides staff. A grading period is the
+              teachers' grade deadline: never the families' (the server
+              holds to that too). */}
+          {!mine && (isGradingPeriod ? (
+            <p className="flex items-center gap-2 text-xs text-neutral-600">
+              <i className="ti ti-eye-off" aria-hidden="true" />
+              Grading periods are for staff only. Guardians don&apos;t see them.
+            </p>
+          ) : (
+            <ToggleCard
+              icon="ti-users"
+              title="Show on the guardian portal"
+              description={form.visible_to_guardians ? "Guardians see this event." : "Staff only. Guardians won't see it."}
+              checked={form.visible_to_guardians}
+              onChange={(on) => setF("visible_to_guardians", on)}
+            />
+          ))}
         </div>
 
     </Modal>
@@ -770,8 +538,7 @@ function ColorSettingsModal({ onClose, onSaved }) {
   const resetAll = () => setOverrides({});
 
   function handleSave() {
-    saveColorOverrides(overrides);
-    EVENT_TYPES = buildEventTypes(overrides);
+    applyColorOverrides(overrides);
     onSaved();
     onClose();
   }
@@ -1024,7 +791,8 @@ function DeleteModal({ event, onConfirm, onCancel }) {
 
 // ── Events List (grouped, filtered) ──────────────────────────────────────────
 
-function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete, onJumpMonth }) { // eslint-disable-line no-unused-vars
+// `canChange(ev)`: whether this person may edit or delete that event.
+function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete, canChange, onJumpMonth }) { // eslint-disable-line no-unused-vars
   const [search,      setSearch]      = useState("");
   const [filterType,  setFilterType]  = useState("all");
   const [collapsed,   setCollapsed]   = useState({});
@@ -1062,7 +830,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
   }
 
   return (
-    <div className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`} style={{ borderRadius: 14, overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+    <section aria-label="All events" className={`border border-[#f0e6e6] bg-surface shadow-[0_2px_10px_rgba(224,49,49,0.05)] dark:border-neutral-200 ${CARD_DARK}`} style={{ borderRadius: 14, overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
 
       {/* Header */}
       <div className="bg-[linear-gradient(135deg,#fff5f5,white)] dark:bg-[linear-gradient(135deg,var(--color-brand-50),var(--color-surface))]" style={{ padding: "13px 14px 10px", borderBottom: "1px solid var(--color-neutral-200)", flexShrink: 0 }}>
@@ -1166,7 +934,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                       {monthEvs.map((ev) => {
                         const meta = eventMeta(ev.event_type);
                         return (
-                          <div key={ev.event_id}
+                          <div key={ev.uid}
                             style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: dark ? "1px solid var(--color-neutral-200)" : "1px solid #faf5f5", transition: "background-color 0.12s ease" }}
                             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--color-brand-50)"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ""; }}>
@@ -1178,7 +946,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
                                 <span style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>{formatDateRange(ev.start_date, ev.end_date)}</span>
                               </div>
                             </div>
-                            {onEdit && <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
+                            {onEdit && canChange(ev) && <div style={{ display: "flex", gap: 3, padding: "0 8px", flexShrink: 0 }}>
                               <button onClick={() => onEdit(ev)} title="Edit"
                                 onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-brand-100)"; e.currentTarget.style.color = "var(--color-brand-600)"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.color = "var(--color-neutral-600)"; }}
@@ -1203,7 +971,7 @@ function EventsList({ events, loading, schoolYear: _schoolYear, onEdit, onDelete
           })
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1278,7 +1046,7 @@ function YearListPrint({ events, schoolYear, schoolName }) {
       })}
       {/* Legend */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", borderTop: "1px solid #f0e4e4", paddingTop: 8, marginTop: 4 }}>
-        {EVENT_TYPES.map((t) => (
+        {schoolEventTypes().map((t) => (
           <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
             <span style={{ fontSize: 9.5, color: "#855c5c" }}>{t.label}</span>
@@ -1376,7 +1144,7 @@ function MonthGridPrint({ events, schoolYear, schoolName }) {
             {/* Legend on last month */}
             {mi === 11 && (
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", borderTop: "1px solid #f0e4e4", paddingTop: 8, marginTop: 10 }}>
-                {EVENT_TYPES.map((t) => (
+                {schoolEventTypes().map((t) => (
                   <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <div style={{ width: 9, height: 9, borderRadius: 2, background: t.bg, border: `1.5px solid ${t.color}` }} />
                     <span style={{ fontSize: 9, color: "#855c5c" }}>{t.label}</span>
@@ -1447,7 +1215,14 @@ export default function AcademicCalendarPage() {
   // An archived year's calendar can be read, not changed.
   const isArchived = useArchivedYears();
   const readOnly = isArchived(schoolYear);
+  // The school's events are an admin's or the registrar's to change (the
+  // server says the same); everyone keeps their own, archived year or not.
+  const user = useCurrentUser();
+  const schoolEditable = ACADEMIC_STAFF.includes(user?.role) && !readOnly;
+  const canChange = (ev) => ev.mine || schoolEditable;
   const [events,      setEvents]      = useState([]);
+  const [mine,        setMine]        = useState([]);
+  const [showMine,    setShowMineState] = useState(() => readShowMine(user));
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");
   const [selectedDay, setSelectedDay] = useState(null);
@@ -1468,12 +1243,23 @@ export default function AcademicCalendarPage() {
   // PH school year: Jul–Dec belong to Y1, Jan–Jun belong to Y2
   const activeMonthYear = activeMonth >= 6 ? syYear : syYear2;
 
+  function setShowMine(on) {
+    setShowMineState(on);
+    writeShowMine(user, on);
+  }
+
   const fetchEvents = useCallback(async (sy) => {
     setLoading(true); setError("");
+    const rows = (data) => (Array.isArray(data) ? data : (data?.results ?? []));
+    // Your own events load beside the school's; one failing doesn't hide
+    // the other.
+    getMine(sy).then((data) => setMine(rows(data))).catch(() => {
+      setMine([]);
+      setError((e) => e || "Your own events couldn't be loaded.");
+    });
     try {
       const data = await getEvents(sy);
-      const fetched = Array.isArray(data) ? data : (data.results ?? []);
-      setEvents(fetched);
+      setEvents(rows(data));
 
       // Reading the calendar does not write to it.
       //
@@ -1497,13 +1283,22 @@ export default function AcademicCalendarPage() {
     getSchoolSettings().then(setSchoolSettings).catch(() => {});
   }, [schoolYear, fetchEvents, navigate]);
 
-  const eventMap      = buildEventMap(events);
+  // What the grid, the day panel and the list show: the school's events and,
+  // with My events on, your own. Print, CSV and the holiday import stay on
+  // `events`, the school's alone.
+  const items         = calendarItems(events, showMine ? mine : []);
+  const eventMap      = buildEventMap(items);
   const uniqueForDay  = selectedDay
-    ? (eventMap[selectedDay] ?? []).filter((ev, i, arr) => arr.findIndex((x) => x.event_id === ev.event_id) === i)
+    ? (eventMap[selectedDay] ?? []).filter((ev, i, arr) => arr.findIndex((x) => x.uid === ev.uid) === i)
     : [];
 
-  function handleSaved() { setModal(null); fetchEvents(schoolYear); }
-  async function handleDeleteConfirm() { await deleteEvent(toDelete.event_id); toast.success("Event deleted."); setToDelete(null); setSelectedDay(null); fetchEvents(schoolYear); }
+  function handleSaved(kind) {
+    setModal(null);
+    // A new event of your own shouldn't vanish into a hidden layer.
+    if (kind === "mine" && !showMine) setShowMine(true);
+    fetchEvents(schoolYear);
+  }
+  async function handleDeleteConfirm() { await removeEvent(toDelete); toast.success("Event deleted."); setToDelete(null); setSelectedDay(null); fetchEvents(schoolYear); }
 
   function handlePrint() {
     window.print();
@@ -1516,21 +1311,12 @@ export default function AcademicCalendarPage() {
   }
 
   // Count events per type for stats bar
-  const typeCounts = EVENT_TYPES.map((t) => ({ ...t, count: events.filter((e) => e.event_type === t.value).length })).filter((t) => t.count > 0);
+  const typeCounts = EVENT_TYPES.map((t) => ({ ...t, count: items.filter((e) => e.event_type === t.value).length })).filter((t) => t.count > 0);
 
   return (
     <>
     <>
       <style>{`
-        /* A day with events tints on hover, and its number turns red in a
-           circle, a preview of the selected day (a weekend's grey number
-           would be 4.1:1 on the circle; brand-600 is 4.65:1, 6.7:1 dark).
-           !important because the cell and the number set their colours
-           inline. The selected day (already tinted) and today's red circle
-           don't take the classes, so the hover leaves them alone. */
-        .cal-day:hover { background: #fff4f4 !important; }
-        [data-theme="dark"] .cal-day:hover { background: var(--color-brand-50) !important; }
-        .cal-day:hover .cal-day-num { background: var(--color-brand-200) !important; color: var(--color-brand-600) !important; }
         #cal-print-portal { display: none; }
         @media print {
           @page { margin: 14mm 12mm; size: A4 portrait; }
@@ -1543,7 +1329,7 @@ export default function AcademicCalendarPage() {
       <PageHeader
         title="Academic Calendar"
         icon="ti-calendar-event"
-        subtitle={`S.Y. ${schoolYear} · ${events.length} events`}
+        subtitle={`S.Y. ${schoolYear} · ${events.length} events${showMine && mine.length ? ` · ${mine.length} of yours` : ""}`}
         actions={
           <>
             <ChipGroup
@@ -1554,7 +1340,15 @@ export default function AcademicCalendarPage() {
               onChange={(sy) => { setSchoolYear(sy); setSelectedDay(null); }}
             />
             <span className="h-5 w-px bg-neutral-300" aria-hidden="true" />
-            {!readOnly && (
+            <TogglePill
+              checked={showMine}
+              onChange={setShowMine}
+              iconOn="ti-user-check"
+              iconOff="ti-user-off"
+              labelOn="My events"
+              labelOff="My events"
+            />
+            {schoolEditable && (
               <Button variant="secondary" icon="ti-flag" onClick={() => setShowImport(true)}>
                 PH Holidays
               </Button>
@@ -1564,9 +1358,9 @@ export default function AcademicCalendarPage() {
               title="Customize event colors" aria-label="Customize event colors"
               onClick={() => setShowColors(true)}
             />
-            <Button icon={readOnly ? "ti-lock" : "ti-plus"} disabled={readOnly}
-              title={readOnly ? `S.Y. ${schoolYear} is archived` : undefined}
-              onClick={() => setModal({ mode: "create" })}>
+            {/* Open to everyone: who may only keep their own events adds those
+                (EventModal asks the rest which calendar). */}
+            <Button icon="ti-plus" onClick={() => setModal({ mode: "create" })}>
               Add Event
             </Button>
           </>
@@ -1679,7 +1473,7 @@ export default function AcademicCalendarPage() {
             transition={{ duration: 0.3, delay: ifr ? 0.15 : 0 }}
             style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "2px 0" }}
           >
-            {EVENT_TYPES.map((t) => (
+            {(showMine ? EVENT_TYPES : schoolEventTypes()).map((t) => (
               <div key={t.value} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 3, background: dark ? DARK_EVENT_BG(t.color) : t.bg, border: `1.5px solid color-mix(in srgb, ${t.color} 37.6%, transparent)` }} />
                 <span style={{ fontSize: 11, color: "var(--color-neutral-600)", fontWeight: 500 }}>{t.label}</span>
@@ -1726,7 +1520,7 @@ export default function AcademicCalendarPage() {
                         <div style={{ height: 4, borderRadius: 99, background: "var(--color-neutral-200)", overflow: "hidden" }}>
                           <motion.div
                             initial={ifr ? { width: 0 } : false}
-                            animate={{ width: `${Math.min(100, (t.count / events.length) * 100)}%` }}
+                            animate={{ width: `${Math.min(100, (t.count / items.length) * 100)}%` }}
                             transition={{ duration: 0.6, ease: "easeOut", delay: ifr ? 0.1 : 0 }}
                             style={{ height: "100%", background: t.color, borderRadius: 99 }}
                           />
@@ -1767,9 +1561,9 @@ export default function AcademicCalendarPage() {
                   {uniqueForDay.length === 0
                     ? <div style={{ fontSize: 12, color: "var(--color-neutral-500)", textAlign: "center", padding: "16px 0" }}>No events on this day.</div>
                     : uniqueForDay.map((ev) => (
-                      <EventCard key={ev.event_id} event={ev}
-                        onEdit={readOnly ? null : (e) => setModal({ mode: "edit", event: e })}
-                        onDelete={readOnly ? null : setToDelete} />
+                      <EventCard key={ev.uid} event={ev}
+                        onEdit={canChange(ev) ? (e) => setModal({ mode: "edit", event: e }) : null}
+                        onDelete={canChange(ev) ? setToDelete : null} />
                     ))
                   }
                 </div>
@@ -1793,18 +1587,19 @@ export default function AcademicCalendarPage() {
 
           {/* All events list */}
           <EventsList
-            events={events}
+            events={items}
             loading={loading}
             schoolYear={schoolYear}
-            onEdit={readOnly ? null : (e) => setModal({ mode: "edit", event: e })}
-            onDelete={readOnly ? null : setToDelete}
+            onEdit={(e) => setModal({ mode: "edit", event: e })}
+            onDelete={setToDelete}
+            canChange={canChange}
             onJumpMonth={(m) => setActiveMonth(m)}
           />
         </div>
       </div>
 
       <AnimatePresence>
-        {modal && <EventModal key="event-modal" mode={modal.mode} initial={modal.event ?? null} schoolYear={schoolYear} onClose={() => setModal(null)} onSaved={handleSaved} />}
+        {modal && <EventModal key="event-modal" mode={modal.mode} initial={modal.event ?? null} schoolYear={schoolYear} canSchool={schoolEditable} onClose={() => setModal(null)} onSaved={handleSaved} />}
       </AnimatePresence>
       <AnimatePresence>
         {toDelete && <DeleteModal key="delete-modal" event={toDelete} onConfirm={handleDeleteConfirm} onCancel={() => setToDelete(null)} />}

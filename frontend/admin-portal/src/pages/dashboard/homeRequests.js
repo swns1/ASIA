@@ -3,13 +3,25 @@
 // promises for settleAll (./adminHomeData.js).
 
 import {
-  getCalendarEvents, getDashboardSummary, getEnrollments, getEnrollmentScholarships,
+  getCalendarEvents, getDashboardSummary, getEnrollments, getEnrollmentScholarships, getPersonalEvents,
 } from "../../api/enrollmentApi";
 import { getStudents } from "../../api/studentApi";
+import { comingUpWindow } from "./adminHomeData";
 
 /** Today's quarter, for the header (quarterOn): always the current year's. */
 export function quarterRequests(currentYear) {
   return { quarters: getCalendarEvents({ school_year: currentYear, event_type: "grading_period", page_size: 20 }) };
+}
+
+/**
+ * Coming up (./ComingUp.jsx): the school calendar and the person's own
+ * events over the days ahead. Asked for by date, so near a year's end it
+ * shows the next one's opening days too.
+ */
+export function comingUpRequests() {
+  const { from, to } = comingUpWindow();
+  const days = { end_date__gte: from, start_date__lte: to, page_size: 500 };
+  return { calendar: getCalendarEvents(days), personal: getPersonalEvents(days) };
 }
 
 /** The Trends section: the pipeline, risk and attendance of the year. */

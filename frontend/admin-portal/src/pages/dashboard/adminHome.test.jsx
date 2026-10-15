@@ -42,6 +42,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getSections: (...a) => getSections(...a),
   getUnplacedStudents: (...a) => getUnplacedStudents(...a),
   getCalendarEvents: () => Promise.resolve({ results: [] }),
+  getPersonalEvents: () => Promise.resolve({ results: [] }),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: (...a) => getInvoices(...a),

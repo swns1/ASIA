@@ -40,7 +40,6 @@ import {
 import {
   getSubjects as _getSubjects,
   getAiCluster as _getAiCluster,
-  callGemini,
   runRiskAssessment as _runRiskAssessment,
   getRiskAssessmentLatest as _getRiskAssessmentLatest,
   getRiskAssessmentTrend as _getRiskAssessmentTrend,
@@ -357,8 +356,14 @@ function ClusterInsightPanel({ result }) {
   // every average with its DepEd descriptor before the AI sees it, because
   // the AI, left to place averages on the scale itself, called a group
   // averaging 73.8 "Fairly Satisfactory".
-  const onFetch = () =>
-    callGemini("clustering_insights", {
+  // The panel finds a saved summary of these same filters on open. Making a
+  // new one stays on a click: with no AI provider configured the interpret
+  // endpoint returns 503, and firing it unasked painted a red "Analysis
+  // failed" box the moment the groups rendered. The groups are complete
+  // without it -- the cluster endpoint falls back to rank-based names.
+  const request = {
+    contextType: "clustering_insights",
+    payload: {
       school_year: result.meta.school_year,
       grading_period: result.meta.grading_period,
       grade_level: result.meta.grade_level || "All Grade Levels",
@@ -375,18 +380,14 @@ function ClusterInsightPanel({ result }) {
         avg_narrative: c.avg_narrative,
       })),
       include_recommendations: true,
-    });
+    },
+  };
 
   return (
-    // Deliberately NOT autoFetch. With no AI provider configured the interpret
-    // endpoint returns 503, so auto-firing on mount painted a red "Analysis
-    // failed" box the moment the groups rendered, with nobody having asked for
-    // it. The groups themselves are complete without this panel -- the cluster
-    // endpoint falls back to rank-based names -- so this stays on a click.
     <AIInsightPanel
       title="What this means, and what to do"
       description="An AI summary of the groups above, with suggested next steps"
-      onFetch={onFetch}
+      request={request}
     />
   );
 }

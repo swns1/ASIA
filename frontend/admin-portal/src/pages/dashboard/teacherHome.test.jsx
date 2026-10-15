@@ -14,6 +14,7 @@ let currentUser;
 const getMyDay = vi.fn();
 const getRiskAssessmentLatest = vi.fn();
 const getCalendarEvents = vi.fn();
+const getPersonalEvents = vi.fn(() => Promise.resolve({ results: [] }));
 const getEnrollments = vi.fn();
 
 vi.mock("../../utils/auth", async (importOriginal) => ({
@@ -28,6 +29,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getEnrollmentScholarships: () => Promise.resolve({ count: 4, results: [] }),
   getDashboardSummary: () => Promise.resolve({ pipeline: null, risk: null, attendance_series: [] }),
   getCalendarEvents: (...a) => getCalendarEvents(...a),
+  getPersonalEvents: (...a) => getPersonalEvents(...a),
   getMyDay: (...a) => getMyDay(...a),
   getRiskAssessmentLatest: (...a) => getRiskAssessmentLatest(...a),
 }));
@@ -192,6 +194,22 @@ describe("TeacherHome — today and what's due", () => {
     });
   });
 
+  it("puts the teacher's own events among them, marked as theirs", async () => {
+    // The same event_id as a school event: they still both show.
+    getPersonalEvents.mockResolvedValue({ results: [
+      { event_id: 1, title: "Dentist", start_date: "2026-10-14", end_date: "2026-10-14" },
+      { event_id: 2, title: "Conference in Cebu", start_date: "2027-01-10", end_date: "2027-01-12" },
+    ] });
+    renderHome();
+    expect(await screen.findByText("Dentist")).toBeTruthy();
+    expect(screen.getByText("Yours")).toBeTruthy();
+    expect(screen.getByText("Teachers' In-Service Training")).toBeTruthy();
+    expect(screen.queryByText("Conference in Cebu")).toBeNull();
+    expect(getPersonalEvents).toHaveBeenCalledWith({
+      end_date__gte: "2026-10-12", start_date__lte: "2026-11-26", page_size: 500,
+    });
+  });
+
   it("says when the sections didn't load, instead of no subjects set up", async () => {
     getMyDay.mockRejectedValue(new Error("down"));
     renderHome();
@@ -207,6 +225,13 @@ describe("TeacherHome — no section, and another year", () => {
     expect(await screen.findByText("You're not an adviser of a section in S.Y. 2026-2027.")).toBeTruthy();
     expect(screen.queryByText("Today")).toBeNull();
     expect(screen.queryByRole("button", { name: "Take today's attendance" })).toBeNull();
+  });
+
+  it("still shows what's coming up with no section", async () => {
+    getMyDay.mockResolvedValue(myDay([]));
+    renderHome();
+    expect(await screen.findByText("Coming up")).toBeTruthy();
+    expect(await screen.findByText("Teachers' In-Service Training")).toBeTruthy();
   });
 
   it("keeps names written last-name-first apart", async () => {

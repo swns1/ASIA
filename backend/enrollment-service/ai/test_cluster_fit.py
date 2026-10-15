@@ -37,7 +37,7 @@ def _call_view(monkeypatch, students, **params):
         analytics_views, "build_student_features",
         lambda *args, **kwargs: ({s["student_id"]: s for s in students}, "Math"),
     )
-    monkeypatch.setattr(analytics_views, "_call_groq_for_interpretation", lambda *a, **k: {})
+    monkeypatch.setattr(analytics_views, "_ai_cluster_names", lambda *a, **k: [])
     monkeypatch.setattr(ClusterAnalyticsView, "throttle_classes", [])
 
     query = {"school_year": "2026-2027", "grading_period": "1st_quarter", **params}

@@ -1,7 +1,14 @@
 from rest_framework import serializers
 
 from enrollments.serializers import SchoolYearField
-from .models import CalendarEvent
+from .models import CalendarEvent, PersonalEvent
+
+
+def _check_dates(data, instance):
+    start = data.get("start_date") or getattr(instance, "start_date", None)
+    end   = data.get("end_date")   or getattr(instance, "end_date",   None)
+    if start and end and start > end:
+        raise serializers.ValidationError("start_date must be on or before end_date.")
 
 
 class CalendarEventSerializer(serializers.ModelSerializer):
@@ -20,6 +27,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
             "end_date",
             "description",
             "grading_period",
+            "visible_to_guardians",
             "created_at",
             "updated_at",
         )
@@ -29,10 +37,7 @@ class CalendarEventSerializer(serializers.ModelSerializer):
         validators = []
 
     def validate(self, data):
-        start = data.get("start_date") or getattr(self.instance, "start_date", None)
-        end   = data.get("end_date")   or getattr(self.instance, "end_date",   None)
-        if start and end and start > end:
-            raise serializers.ValidationError("start_date must be on or before end_date.")
+        _check_dates(data, self.instance)
 
         event_type = data.get("event_type", getattr(self.instance, "event_type", None))
         if event_type != "grading_period":
@@ -56,4 +61,31 @@ class CalendarEventSerializer(serializers.ModelSerializer):
                 {"grading_period": f"S.Y. {school_year} already has a {label}. Edit that one instead."}
             )
         data["grading_period"] = period
+        # The teachers' grade deadline, not the families' business -- and
+        # turning it on here would be overruled by the guardian list anyway.
+        data["visible_to_guardians"] = False
+        return data
+
+
+class GuardianCalendarEventSerializer(serializers.ModelSerializer):
+    """What a guardian sees of an event: no grading period, no visibility
+    flag, no edit timestamps."""
+
+    class Meta:
+        model = CalendarEvent
+        fields = ("event_id", "school_year", "title", "event_type", "start_date", "end_date", "description")
+        read_only_fields = fields
+
+
+class PersonalEventSerializer(serializers.ModelSerializer):
+    # The owner is the caller, set by the view; never read from the request
+    # body, and never sent back.
+
+    class Meta:
+        model = PersonalEvent
+        fields = ("event_id", "title", "start_date", "end_date", "description", "created_at", "updated_at")
+        read_only_fields = ("event_id", "created_at", "updated_at")
+
+    def validate(self, data):
+        _check_dates(data, self.instance)
         return data

@@ -32,6 +32,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getEnrollmentScholarships: () => Promise.resolve({ count: 163, results: [] }),
   getDashboardSummary: () => Promise.resolve({ pipeline: null, risk: null, attendance_series: [] }),
   getCalendarEvents: () => Promise.resolve({ results: [] }),
+  getPersonalEvents: () => Promise.resolve({ results: [] }),
 }));
 vi.mock("../../api/billingApi", () => ({
   getInvoices: (...a) => getInvoices(...a),

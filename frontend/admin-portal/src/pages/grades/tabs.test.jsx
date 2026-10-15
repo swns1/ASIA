@@ -18,6 +18,7 @@ const api = {
   saveGrade: vi.fn(), updateGrade: vi.fn(), getNarrativeCategories: vi.fn(), getNarrativeReports: vi.fn(),
   createNarrativeReport: vi.fn(), updateNarrativeReport: vi.fn(), deleteNarrativeReport: vi.fn(),
   callGemini: vi.fn(), getGradeAverages: vi.fn(), getStudent: vi.fn(),
+  lookupAiSummary: vi.fn(() => Promise.resolve({ mine: null, shared: [] })),
 };
 const pass = (name) => (...a) => api[name](...a);
 
@@ -29,7 +30,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getNarrativeCategories: pass("getNarrativeCategories"), getNarrativeReports: pass("getNarrativeReports"),
   createNarrativeReport: pass("createNarrativeReport"), updateNarrativeReport: pass("updateNarrativeReport"),
   deleteNarrativeReport: pass("deleteNarrativeReport"), callGemini: pass("callGemini"),
-  getGradeAverages: pass("getGradeAverages"),
+  getGradeAverages: pass("getGradeAverages"), lookupAiSummary: pass("lookupAiSummary"),
 }));
 vi.mock("../../api/studentApi", () => ({
   getStudent: pass("getStudent"),
@@ -235,7 +236,10 @@ describe("Grades — Summary", () => {
     fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
 
     await waitFor(() => expect(api.callGemini).toHaveBeenCalled());
-    const [, payload] = api.callGemini.mock.lastCall;
+    const [{ contextType, enrollmentId, payload }] = api.callGemini.mock.lastCall;
+    expect(contextType).toBe("grade_report");
+    expect(enrollmentId).toBe(11);  // names the saved summary; not part of the AI payload
+    expect(payload).not.toHaveProperty("enrollment_id");
     expect(payload).toMatchObject({ passed_subjects: 1, failed_subjects: 1, total_grades: 8 });
     expect(payload).not.toHaveProperty("passed_period_grades");
   });
@@ -249,7 +253,7 @@ describe("Grades — Summary", () => {
     fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
 
     await waitFor(() => expect(api.callGemini).toHaveBeenCalled());
-    const [, payload] = api.callGemini.mock.lastCall;
+    const [{ payload }] = api.callGemini.mock.lastCall;
     expect(payload).toMatchObject({ passed_period_grades: 2, failed_period_grades: 1 });
     expect(payload).not.toHaveProperty("passed_subjects");
   });
@@ -314,19 +318,24 @@ describe("Grades — dark mode", () => {
     const Q = ["1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter"];
     savedGrades = [7, 8].flatMap((subject) =>
       [90, 91, 92, 93].map((v, i) => ({ grade_id: subject * 10 + i, subject, grading_period: Q[i], numeric_grade: String(v) })));
-    api.callGemini.mockResolvedValueOnce({ interpretation: "**SUMMARY**\n* Strong in every subject", provider: "gemini" });
+    const text = "**SUMMARY**\n* Strong in every subject";
+    api.callGemini.mockResolvedValueOnce({
+      interpretation: text, provider: "gemini",
+      summary: { id: 3, text, ai_text: text, edited: false, provider: "gemini",
+                 generated_at: "2026-10-14T07:20:00Z", stale: false, shared: false, shared_is_current: false },
+    });
     render(dark(page("/grades?student=5&tab=summary&enrollment=11")));
 
     expect(await screen.findByText("Mathematics 10")).toBeTruthy();
     expect(screen.getByText("Outstanding").className).toContain("text-info-500");
-    expect(screen.getByText("No analysis yet")).toBeTruthy();
+    expect(await screen.findByText("No summary yet")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
     expect(await screen.findByText("Strong in every subject")).toBeTruthy();
     expect(screen.getByText("SUMMARY")).toBeTruthy();
 
     api.callGemini.mockRejectedValueOnce(new Error("The AI service is unavailable."));
-    fireEvent.click(screen.getByRole("button", { name: /Re-analyze/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate/ }));
     expect(await screen.findByText("Analysis failed")).toBeTruthy();
     expect(screen.getByText("The AI service is unavailable.")).toBeTruthy();
   });

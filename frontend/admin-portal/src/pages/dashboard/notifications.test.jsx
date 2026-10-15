@@ -33,6 +33,7 @@ vi.mock("../../api/enrollmentApi", () => ({
   getSections: () => Promise.resolve({ count: 0, results: [] }),
   getUnplacedStudents: () => Promise.resolve({ count: 0, results: [] }),
   getCalendarEvents: () => Promise.resolve({ results: [] }),
+  getPersonalEvents: () => Promise.resolve({ results: [] }),
   // A teacher's home: no section, no risk check.
   getMyDay: () => Promise.resolve({ school_year: "2026-2027", no_classes: null, grading_period: null, sections: [] }),
   getRiskAssessmentLatest: () => Promise.reject(Object.assign(new Error("none"), { response: { status: 404 } })),

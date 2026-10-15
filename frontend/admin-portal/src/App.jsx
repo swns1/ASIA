@@ -65,6 +65,7 @@ const MySettingsPage        = lazyRoute(() => import("./pages/MySettingsPage"));
 const GuardianHomePage      = lazyRoute(() => import("./pages/GuardianHomePage"));
 const GuardianChildPage     = lazyRoute(() => import("./pages/GuardianChildPage"));
 const GuardianSettingsPage  = lazyRoute(() => import("./pages/GuardianSettingsPage"));
+const GuardianCalendarPage  = lazyRoute(() => import("./pages/GuardianCalendarPage"));
 const StudentApplicationsPage = lazyRoute(() => import("./pages/StudentApplicationsPage"));
 const ApplicantFormPage       = lazyRoute(() => import("./pages/apply/ApplicantFormPage"));
 
@@ -205,6 +206,7 @@ export default function App() {
           <Route path="/guardian"                     element={<P roles={GUARDIAN}><GuardianHomePage /></P>} />
           <Route path="/guardian/child/:enrollmentId" element={<P roles={GUARDIAN}><GuardianChildPage /></P>} />
           <Route path="/guardian/settings"            element={<P roles={GUARDIAN}><GuardianSettingsPage /></P>} />
+          <Route path="/guardian/calendar"            element={<P roles={GUARDIAN}><GuardianCalendarPage /></P>} />
         </Route>
 
         {/* Catch-all: must stay outside PrivateRoute so a bad URL always

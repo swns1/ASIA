@@ -9,7 +9,8 @@
 //      (the Invoices page's own window), find an invoice.
 //   2. Needs your attention, on the page as well as in the bell, since these
 //      queues are accounting's day: invoices with no payment yet, payments
-//      past due, last year's invoices still owing (./attention.js).
+//      past due, last year's invoices still owing (./attention.js). Beside it,
+//      Coming up: the calendar and accounting's own events (./ComingUp.jsx).
 //   3. Payments: what came in today, by method, and the latest payments with
 //      their receipts (./PaymentsPanels.jsx).
 //   4. Billing: the year's Billing panel. Its eye button hides the amounts on
@@ -37,8 +38,9 @@ import { ALL_YEARS_PARAM } from "../../hooks/useYearFilter";
 import { pageVariants } from "../../utils/motion";
 import { todayISO } from "../../utils/format";
 import { bellItems } from "./attention";
+import ComingUp from "./ComingUp";
 import { TWO_UP, quarterOn, withYear } from "./adminHomeData";
-import { enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
+import { comingUpRequests, enrollmentGlanceRequests, quarterRequests, trendRequests } from "./homeRequests";
 import useHomeData from "./useHomeData";
 
 const requests = (year, currentYear) => {
@@ -53,6 +55,7 @@ const requests = (year, currentYear) => {
     payments:       getPayments({ ordering: "-payment_date,-payment_id", page_size: 5 }),
     ...enrollmentGlanceRequests(year),
     ...trendRequests(year),
+    ...comingUpRequests(),
   };
 };
 
@@ -106,8 +109,14 @@ export default function AccountingHome() {
           />
         </motion.div>
 
-        <motion.div variants={pageVariants.item} className="shrink-0">
+        <motion.div variants={pageVariants.item} className={`${TWO_UP} shrink-0`}>
           <AttentionPanel rows={rows} loading={loading} failed={home.attentionFailed} onGo={navigate} />
+          <ComingUp
+            events={data.calendar?.results ?? data.calendar}
+            personal={data.personal?.results ?? data.personal}
+            loading={loading}
+            onGo={navigate}
+          />
         </motion.div>
 
         <motion.section

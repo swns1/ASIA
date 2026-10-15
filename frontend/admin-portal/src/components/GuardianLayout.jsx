@@ -22,6 +22,7 @@ export default function GuardianLayout({ children }) {
   const user = useCurrentUser();
   const name = user?.name || "Guardian";
   const onHome = pathname === "/guardian";
+  const onCalendar = pathname.startsWith("/guardian/calendar");
 
   return (
     <ThemeArea className="flex min-h-screen flex-col bg-neutral-50">
@@ -43,8 +44,14 @@ export default function GuardianLayout({ children }) {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {!onHome && (
-              <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian">
+              <Button variant="ghost" size="sm" icon="ti-arrow-left" to="/guardian" aria-label="My children">
                 <span className="hidden sm:inline">My children</span>
+              </Button>
+            )}
+
+            {!onCalendar && (
+              <Button variant="ghost" size="sm" icon="ti-calendar-event" to="/guardian/calendar" aria-label="School calendar">
+                <span className="hidden sm:inline">School calendar</span>
               </Button>
             )}
 

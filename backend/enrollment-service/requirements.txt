@@ -41,6 +41,10 @@ scikit-learn==1.8.0
 openpyxl==3.1.5
 Pillow==12.3.0
 
+# ── Saved AI summaries (ai/summary_docx.py) ───────────────────────────────────
+# Writes a saved summary as a Word file. Pulls in lxml.
+python-docx==1.2.0
+
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==9.1.1
 pytest-django==4.12.0

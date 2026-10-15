@@ -19,6 +19,10 @@ vi.mock("../../api/enrollmentApi", () => ({
   createCalendarEvent: vi.fn(),
   updateCalendarEvent: vi.fn(),
   deleteCalendarEvent: vi.fn(),
+  getPersonalEvents: () => Promise.resolve([]),
+  createPersonalEvent: vi.fn(),
+  updatePersonalEvent: vi.fn(),
+  deletePersonalEvent: vi.fn(),
 }));
 vi.mock("../../api/billingApi", () => ({
   getSchoolSettings: () => Promise.resolve({ school_name: "Test School" }),

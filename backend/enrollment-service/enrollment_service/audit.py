@@ -25,6 +25,10 @@ MODULE_LABELS = {
     "installments": "Installments",
     "requirement-types": "Requirements",
     "student-requirement-submissions": "Requirements",
+    "calendar-events": "Academic Calendar",
+    # Only that someone changed one of their own entries is logged: the
+    # audit row holds the method and path, never the title or note.
+    "personal-events": "My Calendar",
 }
 
 RECORD_LABELS = {
@@ -50,6 +54,8 @@ RECORD_LABELS = {
     "payments": "payment",
     "requirement-types": "requirement type",
     "student-requirement-submissions": "student requirement submission",
+    "calendar-events": "calendar event",
+    "personal-events": "personal calendar event",
 }
 
 SPECIAL_ACTIONS = {
