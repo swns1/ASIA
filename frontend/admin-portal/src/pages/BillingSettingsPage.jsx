@@ -336,10 +336,22 @@ function SYProgress({ startDate, endDate }) {
   );
 }
 
-// The header of every DepEd school form (SF1, SF2, SF10). Optional: a form
-// prints the box blank until it is filled in here.
+// The header of the DepEd school forms (SF1, SF2). Optional: a form prints
+// the box blank until it is filled in here.
 const DEPED_IDENTITY_FIELDS = ["deped_school_id", "region", "division", "district", "school_head_name"];
-const EMPTY_DEPED_IDENTITY = Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, ""]));
+// The SF10 permanent record's signature lines: each the name printed over a
+// line, labelled with the title printed under it. Blank prints the line empty.
+const SF10_SIGNATORIES = [
+  { key: "elementary_principal_name", label: "Elementary School Principal" },
+  { key: "jhs_principal_name",        label: "Junior High School Principal" },
+  { key: "shs_principal_name",        label: "Senior High School Principal" },
+  { key: "shs_department_head_name",  label: "Senior High School Department Head" },
+  { key: "records_officer_name",      label: "Records Officer / Registrar" },
+];
+// Every optional text setting the school forms print, the SF10's landline
+// (its letterhead's "Mobile | Landline" line) included.
+const SCHOOL_FORM_FIELDS = [...DEPED_IDENTITY_FIELDS, ...SF10_SIGNATORIES.map(s => s.key), "contact_landline"];
+const EMPTY_SCHOOL_FORM_FIELDS = Object.fromEntries(SCHOOL_FORM_FIELDS.map(k => [k, ""]));
 
 function GeneralSettingsTab() {
   const dark = useTheme() === "dark";
@@ -355,7 +367,7 @@ function GeneralSettingsTab() {
     school_name: "",
     early_bird_days: 7,
     school_address: "", contact_email: "", contact_phone: "",
-    ...EMPTY_DEPED_IDENTITY,
+    ...EMPTY_SCHOOL_FORM_FIELDS,
   });
 
   useEffect(() => {
@@ -368,7 +380,7 @@ function GeneralSettingsTab() {
           school_address:      d.school_address      ?? "",
           contact_email:       d.contact_email       ?? "",
           contact_phone:       d.contact_phone       ?? "",
-          ...Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, d[k] ?? ""])),
+          ...Object.fromEntries(SCHOOL_FORM_FIELDS.map(k => [k, d[k] ?? ""])),
         });
       })
       .catch(() => setError("Failed to load school settings."))
@@ -385,7 +397,7 @@ function GeneralSettingsTab() {
       form.school_address      !== (settings.school_address      ?? "") ||
       form.contact_email       !== (settings.contact_email       ?? "") ||
       form.contact_phone       !== (settings.contact_phone       ?? "") ||
-      DEPED_IDENTITY_FIELDS.some(k => form[k] !== (settings[k] ?? ""))
+      SCHOOL_FORM_FIELDS.some(k => form[k] !== (settings[k] ?? ""))
     );
   }, [form, settings]);
 
@@ -404,7 +416,7 @@ function GeneralSettingsTab() {
         school_address:      form.school_address.trim() || null,
         contact_email:       form.contact_email.trim()  || null,
         contact_phone:       form.contact_phone.trim()  || null,
-        ...Object.fromEntries(DEPED_IDENTITY_FIELDS.map(k => [k, form[k].trim() || null])),
+        ...Object.fromEntries(SCHOOL_FORM_FIELDS.map(k => [k, form[k].trim() || null])),
       });
       setSettings(updated);
       toast.success("Settings saved.");
@@ -537,7 +549,7 @@ function GeneralSettingsTab() {
             )}
           </SectionCard>
 
-          <SectionCard title="DepEd School Forms" subtitle="Printed in the header of SF1, SF2 and SF10" icon="ti-forms" delay={0.07} span>
+          <SectionCard title="School Forms" subtitle="Printed on SF1, SF2 and the SF10 permanent record" icon="ti-forms" delay={0.07} span>
             {loading ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
                 {[1, 2, 3, 4, 5].map(i => <Sk key={i} h={68} />)}
@@ -556,10 +568,25 @@ function GeneralSettingsTab() {
                 <Field label="District">
                   <input className="settings-input" maxLength={100} value={form.district} onChange={e => setF("district", e.target.value)} placeholder="Cabuyao I" style={inputStyle} />
                 </Field>
-                <Field label="School Head" hint="Printed over the signature line">
+                <Field label="School Head" hint="Signs SF1 and SF2">
                   <input className="settings-input" maxLength={150} value={form.school_head_name} onChange={e => setF("school_head_name", e.target.value)} placeholder="Full name" style={inputStyle} />
                 </Field>
               </div>
+            )}
+            {!loading && (
+              <>
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16, marginBottom: 12, fontSize: 12, fontWeight: 700, color: C.text }}>
+                  SF10 signatories
+                  <span style={{ fontWeight: 500, color: C.pale, marginLeft: 8 }}>printed over the certification's signature lines</span>
+                </div>
+                <div className="settings-field-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                  {SF10_SIGNATORIES.map(({ key, label }) => (
+                    <Field key={key} label={label} hint="Name and title, as it should print">
+                      <input className="settings-input" maxLength={150} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder="e.g. Maria Santos, LPT" style={inputStyle} />
+                    </Field>
+                  ))}
+                </div>
+              </>
             )}
           </SectionCard>
 
@@ -576,8 +603,11 @@ function GeneralSettingsTab() {
                 <Field label="Contact Email">
                   <input className="settings-input" type="email" value={form.contact_email} onChange={e => setF("contact_email", e.target.value)} placeholder="admin@southlakes.edu.ph" style={inputStyle} />
                 </Field>
-                <Field label="Contact Phone">
+                <Field label="Mobile">
                   <input className="settings-input" value={form.contact_phone} onChange={e => setF("contact_phone", e.target.value)} placeholder="+63 998 979 1547" style={inputStyle} />
+                </Field>
+                <Field label="Landline">
+                  <input className="settings-input" maxLength={50} value={form.contact_landline} onChange={e => setF("contact_landline", e.target.value)} placeholder="(049) 560-3268" style={inputStyle} />
                 </Field>
               </div>
             )}

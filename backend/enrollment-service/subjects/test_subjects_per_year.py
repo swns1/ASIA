@@ -81,6 +81,39 @@ def test_renaming_a_code_checks_its_own_year_but_not_itself():
     subjects.filter.return_value.exclude.assert_called_with(pk=1)
 
 
+# ── The senior high SF10 group ───────────────────────────────────────────────
+def _validate_group(attrs, instance=None):
+    serializer = SubjectSerializer(instance=instance)
+    with patch.object(SubjectSerializer, "_validate_year_and_code", side_effect=lambda a: a):
+        return serializer.validate(dict(attrs))
+
+
+def test_a_senior_high_subject_keeps_its_group():
+    attrs = _validate_group({"school_level": "senior_highschool", "semester": "1st", "subject_group": "applied"})
+    assert attrs["subject_group"] == "applied"
+
+
+def test_a_blank_group_means_automatic():
+    attrs = _validate_group({"school_level": "senior_highschool", "semester": "1st", "subject_group": ""})
+    assert attrs["subject_group"] is None
+
+
+def test_only_senior_high_subjects_have_a_group():
+    attrs = _validate_group({"school_level": "elementary", "subject_group": "core"})
+    assert attrs["subject_group"] is None
+    moved = Subject(subject_id=1, school_year="2026-2027", school_level="senior_highschool", semester="1st",
+                    subject_group="core")
+    attrs = _validate_group({"school_level": "junior_highschool", "semester": None}, instance=moved)
+    assert attrs["subject_group"] is None
+
+
+def test_a_group_is_one_of_the_three():
+    field = SubjectSerializer().fields["subject_group"]
+    assert field.run_validation("specialized") == "specialized"
+    with pytest.raises(serializers.ValidationError):
+        field.run_validation("elective")
+
+
 # ── Archived years are locked ────────────────────────────────────────────────
 def test_an_archived_years_subjects_cant_be_added():
     view = SubjectViewSet()
@@ -147,10 +180,10 @@ def _year(label, pk):
                       start_date=date(first, 6, 1), end_date=date(first + 1, 3, 31))
 
 
-def _row(code, name, grade="Grade 7", template=3):
+def _row(code, name, grade="Grade 7", template=3, group=None):
     return Subject(subject_code=code, subject_name=name, school_level="junior_highschool",
                    grade_level=grade, strand=None, semester=None, grading_template_id=template,
-                   school_year="2025-2026")
+                   school_year="2025-2026", subject_group=group)
 
 
 def _carry(body, source_subjects=(), target_codes=()):
@@ -194,6 +227,18 @@ def test_carry_over_copies_the_curriculum_and_skips_codes_already_here():
 
     [created] = subjects.bulk_create.call_args.args[0]
     assert (created.school_year, created.subject_code, created.grading_template_id) == ("2026-2027", "SCI-7", 3)
+
+
+def test_carry_over_keeps_the_entry_order_and_each_sf10_group():
+    response, subjects = _carry(
+        {"from": "2025-2026", "parts": ["subjects"]},
+        source_subjects=[_row("RDL-11", "Research in Daily Life 1", group="applied"),
+                         _row("ABC-11", "Applied Biology", group="specialized")],
+    )
+    created = subjects.bulk_create.call_args.args[0]
+    assert [(c.subject_code, c.subject_group) for c in created] == [("RDL-11", "applied"), ("ABC-11", "specialized")]
+    # The preview still reads grade by grade, then by name.
+    assert [r["subject_code"] for r in response.data["subjects"]["copied"]] == ["ABC-11", "RDL-11"]
 
 
 def test_carry_over_dry_run_writes_nothing():

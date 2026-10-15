@@ -15,6 +15,14 @@ class Subject(models.Model):
         ("2nd", "2nd Semester"),
     ]
 
+    # The heading a senior high subject sits under on the school's SF10.
+    # "applied" is DepEd's word; the school's record says "Contextualized".
+    SUBJECT_GROUP_CHOICES = [
+        ("core",        "Core"),
+        ("applied",     "Contextualized"),
+        ("specialized", "Specialization"),
+    ]
+
     subject_id    = models.BigAutoField(primary_key=True)
     # Each year has its own curriculum (subjects/migrations/0002): a code is
     # unique within a year, and a grade only ever uses its enrollment's
@@ -28,6 +36,9 @@ class Subject(models.Model):
     grade_level   = models.CharField(max_length=20)
     strand        = models.CharField(max_length=50, null=True, blank=True)
     semester      = models.CharField(max_length=20, null=True, blank=True, choices=SEMESTER_CHOICES)
+    # Senior high only; empty means automatic, from the name and strand
+    # (school_forms.sf10.subject_group). subjects/migrations/0003.
+    subject_group = models.CharField(max_length=20, null=True, blank=True, choices=SUBJECT_GROUP_CHOICES)
 
     grading_template = models.ForeignKey(
         "grading.GradingTemplate",

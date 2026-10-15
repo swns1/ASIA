@@ -14,6 +14,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from enrollments.fake_orm import FakeQuerySet
 from school_forms import data, views
+from school_forms.records import IssueDetails
 
 factory = APIRequestFactory()
 # Read before the fixture below swaps them out for each test.
@@ -46,10 +47,11 @@ def call(view, path, params, as_user, **kwargs):
     return view.as_view()(request, **kwargs)
 
 
-def built(level="junior_highschool", warnings=()):
+def built(level="junior_highschool", warnings=(), years=()):
     """What a loader and builder return, minus the work."""
     loaded = SimpleNamespace(section=SimpleNamespace(school_level=level),
-                             learner=SimpleNamespace(lrn="109100000005", last_name="Dela Cruz"))
+                             learner=SimpleNamespace(lrn="109100000005", last_name="Dela Cruz"),
+                             years=tuple(years))
     return loaded, (openpyxl.Workbook(), list(warnings))
 
 
@@ -71,8 +73,8 @@ def sf2(params, as_user, advisories=()):
     return response, load
 
 
-def sf10(params, as_user, roster=frozenset()):
-    loaded, result = built()
+def sf10(params, as_user, roster=frozenset(), years=()):
+    loaded, result = built(years=years)
     with patch.object(data, "load_permanent_record", return_value=loaded) as load, \
          patch("school_forms.views.sf10.build", return_value=result), \
          patch("school_forms.views.teacher_student_ids", return_value=set(roster)):
@@ -191,7 +193,33 @@ def test_sf10_names_the_file_by_level_and_learner():
     response, load = sf10({"level": "junior_highschool"}, user("registrar"))
     assert response.status_code == 200
     assert 'filename="SF10-JHS_109100000005_Dela-Cruz.xlsx"' in response["Content-Disposition"]
-    load.assert_called_once_with(student_id=5, level="junior_highschool")
+    # Nothing typed for this copy: a transfer credential, its lines left to fill in.
+    load.assert_called_once_with(student_id=5, level="junior_highschool", issue=IssueDetails())
+
+
+def test_sf10_senior_high_file_names_the_strand():
+    years = [SimpleNamespace(strand="STEM"), SimpleNamespace(strand="HUMSS")]
+    response, _ = sf10({"level": "senior_highschool"}, user("registrar"), years=years)
+    assert 'filename="SF10-SHS-HUMSS_109100000005_Dela-Cruz.xlsx"' in response["Content-Disposition"]
+
+
+def test_sf10_carries_what_the_registrar_typed_for_this_copy():
+    params = {"level": "senior_highschool", "copy_for": " Adamson University ", "purpose": "Scholarship purposes",
+              "graduation_date": "2026-03-31", "special_order": " 051 "}
+    _, load = sf10(params, user("registrar"))
+    assert load.call_args.kwargs["issue"] == IssueDetails(
+        copy_for="Adamson University", purpose="Scholarship purposes",
+        graduation_date=date(2026, 3, 31), special_order="051",
+    )
+
+
+@pytest.mark.parametrize("bad", [
+    {"graduation_date": "March 31"}, {"copy_for": "x" * 151}, {"special_order": "x" * 31},
+])
+def test_sf10_rejects_bad_issue_details(bad):
+    response, load = sf10({"level": "elementary", **bad}, user("admin"))
+    assert response.status_code == 400
+    load.assert_not_called()
 
 
 def test_sf10_teacher_only_for_a_learner_on_their_roster():
@@ -223,4 +251,31 @@ def test_downloads_are_rate_limited_under_their_own_scope():
 
 
 def test_filenames_keep_to_safe_characters():
-    assert views.filename("SF1", "Grade 7", 'Ri"zal/../x', "SY2026-2027") == "SF1_Grade-7_Ri-zal-x_SY2026-2027.xlsx"
+    assert views.filename("SF1", "Grade 7", 'Ri"zal/../x', "SY2026-2027") == "SF1_Grade-7_Ri-zal-x_SY2026-2027"
+
+
+@pytest.mark.parametrize("download, params, name, stretch", [
+    (sf1, SF1_QUERY, "SF1_Grade-7_Rizal_SY2026-2027.pdf", "EXCEL_PRINT"),
+    (sf2, SF2_QUERY, "SF2_Grade-7_Rizal_2026-09.pdf", "EXCEL_PRINT"),
+    # The SF10 is drawn to the school's templates in inches, so it prints as drawn.
+    (sf10, {"level": "junior_highschool"}, "SF10-JHS_109100000005_Dela-Cruz.pdf", "AS_DRAWN"),
+])
+def test_each_form_also_comes_as_a_pdf(download, params, name, stretch):
+    with patch("school_forms.views.pdf.render", wraps=views.pdf.render) as render:
+        response, load = download({**params, "file": "pdf"}, user("registrar"))
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert response["Content-Disposition"] == f'attachment; filename="{name}"'
+    assert response["Cache-Control"] == "no-store"
+    assert response.content.startswith(b"%PDF-")
+    assert render.call_args.kwargs["stretch"] == getattr(views.pdf, stretch)
+    assert "file" not in load.call_args.kwargs                  # the loaders never see it
+
+
+@pytest.mark.parametrize("download, params", [
+    (sf1, SF1_QUERY), (sf2, SF2_QUERY), (sf10, {"level": "junior_highschool"}),
+])
+def test_an_unknown_file_type_is_refused(download, params):
+    response, load = download({**params, "file": "docx"}, user("registrar"))
+    assert response.status_code == 400 and "file" in response.data
+    load.assert_not_called()

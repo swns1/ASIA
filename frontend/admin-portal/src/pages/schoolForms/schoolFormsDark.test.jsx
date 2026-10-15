@@ -75,7 +75,7 @@ describe("SchoolFormsPage in dark mode", () => {
 
   it("points to Settings for the forms' header", () => {
     renderDark();
-    const link = screen.getByRole("link", { name: "Settings › DepEd School Forms" });
+    const link = screen.getByRole("link", { name: "Settings › School Forms" });
     expect(link.getAttribute("href")).toBe("/settings");
   });
 
@@ -106,16 +106,16 @@ describe("SchoolFormsPage in dark mode", () => {
     fireEvent.change(searchBoxes()[1], { target: { value: "Nobody2" } });
     expect((await screen.findByRole("alert")).textContent).toContain("Can't reach the server");
 
-    // Kindergarten only, and a pending Grade 1 row: no SF10 yet.
+    // Nursery only (no SF10 covers it), and a pending Kindergarten row: no SF10 yet.
     getEnrollments.mockResolvedValue([
-      { enrollment_id: 1, school_level: "kindergarten", enrollment_status: "completed" },
-      { enrollment_id: 2, school_level: "elementary", enrollment_status: "pending" },
+      { enrollment_id: 1, school_level: "nursery", enrollment_status: "completed" },
+      { enrollment_id: 2, school_level: "kindergarten", enrollment_status: "pending" },
     ]);
     getStudents.mockResolvedValueOnce([LEARNER]);
     fireEvent.change(searchBoxes()[1], { target: { value: "Cruz" } });
     fireEvent.click(await screen.findByText("Cruz, Ana R."));
-    expect(await screen.findByText("This learner has no Grade 1–12 records here.")).toBeTruthy();
-    expect(screen.queryByText("Download SF10")).toBeNull();
+    expect(await screen.findByText("This learner has no Kinder–Grade 12 records here.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download SF10 (Excel)" })).toBeNull();
   });
 
   it("says when an SF9 learner has no enrollments", async () => {

@@ -23,6 +23,14 @@ class SchoolSetting(models.Model):
     division             = models.CharField(max_length=100, null=True, blank=True)
     district             = models.CharField(max_length=100, null=True, blank=True)
     school_head_name     = models.CharField(max_length=150, null=True, blank=True)
+    # The SF10 permanent record's letterhead and signature lines
+    # (scripts/2026-10-sf10-school-format.sql); read by the same exports.
+    contact_landline          = models.CharField(max_length=50, null=True, blank=True)
+    records_officer_name      = models.CharField(max_length=150, null=True, blank=True)
+    elementary_principal_name = models.CharField(max_length=150, null=True, blank=True)
+    jhs_principal_name        = models.CharField(max_length=150, null=True, blank=True)
+    shs_principal_name        = models.CharField(max_length=150, null=True, blank=True)
+    shs_department_head_name  = models.CharField(max_length=150, null=True, blank=True)
     updated_at           = models.DateTimeField(auto_now=True)
 
     class Meta:

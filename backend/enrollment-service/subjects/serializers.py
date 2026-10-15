@@ -16,6 +16,7 @@ class SubjectSerializer(serializers.ModelSerializer):
             "grade_level",
             "strand",
             "semester",
+            "subject_group",
             "grading_template",
             "grading_template_detail",
         )
@@ -68,6 +69,15 @@ class SubjectSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "semester": f"Semester must be empty for {school_level} subjects."
                 })
+
+        # Only the senior high SF10 groups subjects. "" is "automatic",
+        # stored as NULL, and a subject below Grade 11 never keeps a group.
+        if attrs.get("subject_group") == "":
+            attrs["subject_group"] = None
+        if school_level != "senior_highschool" and (
+            "subject_group" in attrs or getattr(self.instance, "subject_group", None)
+        ):
+            attrs["subject_group"] = None
 
         return attrs
 

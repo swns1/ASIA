@@ -42,25 +42,34 @@ const GRADE_LEVELS = [
 const SENIOR_HIGH = new Set(["Grade 11", "Grade 12"]);
 const SEMESTERS = [{ value: "1st", label: "1st Semester" }, { value: "2nd", label: "2nd Semester" }];
 
-// DepEd keeps one SF10 per level; a learner gets one for each level they
-// attended here. Rows that never became a place (pending, cancelled) don't count.
+// The school keeps one SF10 per level, in its own format; a learner gets one
+// for each level they attended here. Kindergarten goes on the elementary
+// record's first row, so a Kinder learner gets an SF10-ES too. Rows that
+// never became a place (pending, cancelled) don't count.
 const SF10_LEVELS = [
-  { value: "elementary",        label: "Elementary (SF10-ES)" },
-  { value: "junior_highschool", label: "Junior High (SF10-JHS)" },
-  { value: "senior_highschool", label: "Senior High (SF10-SHS)" },
+  { value: "elementary",        label: "Kinder & Elementary (SF10-ES)", from: ["kindergarten", "elementary"] },
+  { value: "junior_highschool", label: "Junior High (SF10-JHS)",        from: ["junior_highschool"] },
+  { value: "senior_highschool", label: "Senior High (SF10-SHS)",        from: ["senior_highschool"] },
 ];
 const ATTENDED_STATUSES = ["enrolled", "completed", "transferred_out"];
+// What the certification says this copy is for, unless the registrar types otherwise.
+const SF10_PURPOSE = "TRANSFER CREDENTIAL PURPOSES";
+// The SF10 card's two downloads: the editable Excel file, and a PDF of it as it prints.
+const SF10_FILES = [
+  { file: "xlsx", label: "Excel", icon: "ti-file-spreadsheet" },
+  { file: "pdf",  label: "PDF",   icon: "ti-file-type-pdf" },
+];
 
 const OTHER_FORMS = [
   {
     code: "SF9", name: "Learner's Report Card",
     desc: "Periodic report card issued to learners at the end of each grading period.",
-    icon: "ti-file-certificate", color: "var(--color-success-500)", bg: "var(--color-success-50)", tile: `bg-success-50 ${CHIP_GLOW.success}`, status: "available", action: "print",
+    icon: "ti-file-certificate", color: "var(--color-success-500)", bg: "var(--color-success-50)", tile: `bg-success-50 ${CHIP_GLOW.success}`, status: "available", buttons: "the print button appears",
   },
   {
     code: "SF10", name: "Learner's Permanent Record",
-    desc: "Cumulative academic record, one per level, as DepEd's own Excel form.",
-    icon: "ti-archive", color: "var(--color-accent-500)", bg: "var(--color-accent-50)", tile: `bg-accent-50 ${CHIP_GLOW.accent}`, status: "available", action: "download",
+    desc: "Cumulative academic record, one per level, in the school's own format, as an Excel file or a PDF.",
+    icon: "ti-archive", color: "var(--color-accent-500)", bg: "var(--color-accent-50)", tile: `bg-accent-50 ${CHIP_GLOW.accent}`, status: "available", buttons: "the Excel and PDF buttons appear",
   },
 ];
 
@@ -97,14 +106,14 @@ function enrollmentLabel(enr) {
 }
 
 // Instructional hint shown above an empty learner search. Without it the card
-// bottoms out in a bare input: nothing states what the input is for, or that a
-// print button only appears once a learner is picked. An unexplained blank
+// bottoms out in a bare input: nothing states what the input is for, or that its
+// buttons only appear once a learner is picked. An unexplained blank
 // input reads as unfinished rather than as waiting for input.
 function SearchHint({ form }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", marginBottom: 8, background: form.bg, border: `1px solid color-mix(in srgb, ${form.color} 14.9%, transparent)`, borderRadius: 8, fontSize: 11.5, fontWeight: 600, color: form.color, lineHeight: 1.45 }}>
       <i className="ti ti-user-search" style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
-      <span>Search a learner to generate their {form.code} — the {form.action} button appears once one is selected.</span>
+      <span>Search a learner to generate their {form.code} — {form.buttons} once one is selected.</span>
     </div>
   );
 }
@@ -157,7 +166,8 @@ function useSectionNames(schoolYear, gradeLevel, advised) {
   return state.key === key ? { ...state, loading: false } : { names: [], loading: true, failed: false };
 }
 
-// The SF10 levels a learner has: those with a row they attended here.
+// The SF10 levels a learner has: those with a row they attended here. The
+// senior high one names its strand(s): the school keeps a record per strand.
 function useLearnerLevels(student) {
   const [state, setState] = useState({ id: null, levels: [], error: "" });
   const id = student?.student_id ?? null;
@@ -167,10 +177,15 @@ function useLearnerLevels(student) {
     getEnrollments({ student: id, page_size: 100 })
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.results ?? [];
-        const attended = new Set(
-          list.filter((e) => ATTENDED_STATUSES.includes(e.enrollment_status)).map((e) => e.school_level),
-        );
-        if (live) setState({ id, levels: SF10_LEVELS.filter((l) => attended.has(l.value)), error: "" });
+        const attended = list.filter((e) => ATTENDED_STATUSES.includes(e.enrollment_status));
+        const levels = SF10_LEVELS
+          .filter((l) => attended.some((e) => l.from.includes(e.school_level)))
+          .map((l) => {
+            if (l.value !== "senior_highschool") return l;
+            const strands = uniqueSorted(attended.filter((e) => e.school_level === l.value && e.strand).map((e) => e.strand));
+            return strands.length ? { ...l, label: `Senior High – ${strands.join(" / ")} (SF10-SHS)` } : l;
+          });
+        if (live) setState({ id, levels, error: "" });
       })
       .catch((err) => { if (live) setState({ id, levels: [], error: downloadErrorMessage(err) }); });
     return () => { live = false; };
@@ -342,7 +357,7 @@ export default function SchoolFormsPage() {
   const [sf1SectionPick, setSf1SectionPick] = useState("");
   const [sf1Semester, setSf1Semester] = useState("1st");
   const [sf1Error,    setSf1Error]    = useState("");
-  const [sf1Busy,     setSf1Busy]     = useState(false);
+  const [sf1Busy,     setSf1Busy]     = useState("");   // the file being prepared, "xlsx" or "pdf"
   const gradeLevel  = pickedOrOnly(sf1GradePick, gradeOptions);
   const sf1Sections = useSectionNames(schoolYear, gradeLevel, advised);
   const section     = pickedOrOnly(sf1SectionPick, sf1Sections.names);
@@ -352,7 +367,7 @@ export default function SchoolFormsPage() {
   const [sf2Month,      setSf2Month]      = useState(() => localISODate(new Date()).slice(0, 7));
   const [sf2Semester,   setSf2Semester]   = useState("1st");
   const [sf2Error,      setSf2Error]      = useState("");
-  const [sf2Busy,       setSf2Busy]       = useState(false);
+  const [sf2Busy,       setSf2Busy]       = useState("");
   const sf2GradeLevel = pickedOrOnly(sf2GradePick, gradeOptions);
   const sf2Sections   = useSectionNames(schoolYear, sf2GradeLevel, advised);
   const sf2Section    = pickedOrOnly(sf2SectionPick, sf2Sections.names);
@@ -368,7 +383,11 @@ export default function SchoolFormsPage() {
   const [sf10Student, setSf10Student] = useState(null);
   const [sf10Pick,    setSf10Pick]    = useState("");
   const [sf10Error,   setSf10Error]   = useState("");
-  const [sf10Busy,    setSf10Busy]    = useState(false);
+  const [sf10Busy,    setSf10Busy]    = useState("");
+  // What this copy is for: the certification's purpose and the school it goes
+  // to, and for senior high the graduation date and Special Order number.
+  // Anything left blank prints as a line to fill in by hand.
+  const [sf10Issue, setSf10Issue] = useState({ copy_for: "", purpose: SF10_PURPOSE, graduation_date: "", special_order: "" });
   const sf10 = useLearnerLevels(sf10Student);
   const sf10Level = sf10.levels.some((l) => l.value === sf10Pick)
     ? sf10Pick
@@ -395,25 +414,28 @@ export default function SchoolFormsPage() {
 
   const isFirstRender = useIsFirstRender();
 
-  // Fetch one form and hand it to the browser. Whatever the file could not
+  // Fetch one form and hand it to the browser: the Excel file, or (file
+  // "pdf") a PDF of the same form as it prints. Whatever the file could not
   // fully say (attendance missing on a class day, more years than DepEd's
   // form has room for) comes back as warnings and stays on screen a while.
-  async function runDownload(path, params, fallbackName, setBusy, setError) {
-    setBusy(true);
+  async function runDownload(path, params, fallbackName, setBusy, setError, file = "xlsx") {
+    setBusy(file);
     setError("");
     try {
-      const { blob, filename, warnings } = await downloadSchoolForm(path, params, fallbackName);
+      const { blob, filename, warnings } = await downloadSchoolForm(
+        path, file === "pdf" ? { ...params, file } : params, `${fallbackName}.${file}`,
+      );
       saveBlob(blob, filename);
       if (warnings.length) toast(`${filename} downloaded. ${warnings.join(" ")}`, { icon: "⚠️", duration: 10000 });
       else toast.success(`${filename} downloaded.`);
     } catch (err) {
       setError(downloadErrorMessage(err));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
 
-  function handleDownloadSF1() {
+  function handleDownloadSF1(file) {
     if (!schoolYear || !gradeLevel || !section) {
       setSf1Error("School Year, Grade Level, and Section are required.");
       return;
@@ -423,10 +445,10 @@ export default function SchoolFormsPage() {
       grade_level: gradeLevel,
       section,
       ...(SENIOR_HIGH.has(gradeLevel) ? { semester: sf1Semester } : {}),
-    }, `SF1_${gradeLevel}_${section}.xlsx`, setSf1Busy, setSf1Error);
+    }, `SF1_${gradeLevel}_${section}`, setSf1Busy, setSf1Error, file);
   }
 
-  function handleDownloadSF2() {
+  function handleDownloadSF2(file) {
     if (!schoolYear || !sf2GradeLevel || !sf2Section || !sf2Month) {
       setSf2Error("School Year, Grade Level, Section, and Month are required.");
       return;
@@ -437,13 +459,25 @@ export default function SchoolFormsPage() {
       section:     sf2Section,
       month:       sf2Month,
       ...(SENIOR_HIGH.has(sf2GradeLevel) ? { semester: sf2Semester } : {}),
-    }, `SF2_${sf2GradeLevel}_${sf2Section}_${sf2Month}.xlsx`, setSf2Busy, setSf2Error);
+    }, `SF2_${sf2GradeLevel}_${sf2Section}_${sf2Month}`, setSf2Busy, setSf2Error, file);
   }
 
-  function handleDownloadSF10() {
+  function handleDownloadSF10(file) {
     if (!sf10Student || !sf10Level) return;
-    runDownload(`sf10/${sf10Student.student_id}`, { level: sf10Level },
-      `SF10_${sf10Student.lrn || sf10Student.student_id}.xlsx`, setSf10Busy, setSf10Error);
+    const typed = Object.entries({
+      copy_for: sf10Issue.copy_for,
+      purpose: sf10Issue.purpose,
+      ...(sf10Level === "senior_highschool"
+        ? { graduation_date: sf10Issue.graduation_date, special_order: sf10Issue.special_order }
+        : {}),
+    }).map(([k, v]) => [k, v.trim()]).filter(([k, v]) => v || k === "purpose");
+    runDownload(`sf10/${sf10Student.student_id}`, { level: sf10Level, ...Object.fromEntries(typed) },
+      `SF10_${sf10Student.lrn || sf10Student.student_id}`, setSf10Busy, setSf10Error, file);
+  }
+
+  function setSf10Field(key, value) {
+    setSf10Issue((issue) => ({ ...issue, [key]: value }));
+    setSf10Error("");
   }
 
   function chooseSf10Student(student) {
@@ -487,11 +521,12 @@ export default function SchoolFormsPage() {
         <motion.div variants={pageVariants.item} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: "var(--color-neutral-600)", lineHeight: 1.5 }}>
           <i className="ti ti-file-spreadsheet" style={{ fontSize: 15, color: "var(--color-success-500)", marginTop: 1 }} aria-hidden="true" />
           <span>
-            SF1, SF2 and SF10 download as DepEd's own Excel forms, filled in from SLIS and still editable.
-            Their header (School ID, Region, Division, District and School Head) comes from{" "}
+            SF1 and SF2 download as DepEd's own Excel forms, and SF10 as the school's own permanent record, all filled
+            in from SLIS and still editable, or each as a PDF of the same form, ready to print. Their header (School
+            ID, Division, School Head) and the SF10's signatories come from{" "}
             {canEditSettings
-              ? <Link to="/settings" style={{ color: C.red, fontWeight: 700 }}>Settings › DepEd School Forms</Link>
-              : <b>Settings › DepEd School Forms</b>}.
+              ? <Link to="/settings" style={{ color: C.red, fontWeight: 700 }}>Settings › School Forms</Link>
+              : <b>Settings › School Forms</b>}.
           </span>
         </motion.div>
 
@@ -530,17 +565,30 @@ export default function SchoolFormsPage() {
                 </div>
               )}
             </div>
-            <motion.button
-              onClick={handleDownloadSF1}
-              disabled={sf1Busy}
-              whileHover={sf1Busy ? {} : { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
-              whileTap={sf1Busy ? {} : { scale: 0.97 }}
-              transition={{ duration: 0.12 }}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf1Busy ? "wait" : "pointer", opacity: sf1Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
-            >
-              {sf1Busy ? busyIcon : <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} />}
-              {sf1Busy ? "Preparing SF1…" : "Download SF1 (Excel)"}
-            </motion.button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <motion.button
+                onClick={() => handleDownloadSF1("xlsx")}
+                disabled={Boolean(sf1Busy)}
+                whileHover={sf1Busy ? {} : { scale: 1.02, boxShadow: "0 6px 20px rgba(224,49,49,0.35)" }}
+                whileTap={sf1Busy ? {} : { scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,var(--color-action),var(--color-action-2))", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf1Busy ? "wait" : "pointer", opacity: sf1Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(224,49,49,0.26)" }}
+              >
+                {sf1Busy === "xlsx" ? busyIcon : <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} />}
+                {sf1Busy === "xlsx" ? "Preparing SF1…" : "Download SF1 (Excel)"}
+              </motion.button>
+              <motion.button
+                onClick={() => handleDownloadSF1("pdf")}
+                disabled={Boolean(sf1Busy)}
+                whileHover={sf1Busy ? {} : { scale: 1.02 }}
+                whileTap={sf1Busy ? {} : { scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--color-surface)", color: C.red, border: "1.5px solid var(--color-brand-300)", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf1Busy ? "wait" : "pointer", opacity: sf1Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif" }}
+              >
+                {sf1Busy === "pdf" ? busyIcon : <i className="ti ti-file-type-pdf" style={{ fontSize: 14 }} />}
+                {sf1Busy === "pdf" ? "Preparing SF1…" : "Download SF1 (PDF)"}
+              </motion.button>
+            </div>
           </div>
         </motion.div>
 
@@ -583,17 +631,30 @@ export default function SchoolFormsPage() {
                 </div>
               )}
             </div>
-            <motion.button
-              onClick={handleDownloadSF2}
-              disabled={sf2Busy}
-              whileHover={sf2Busy ? {} : { scale: 1.02, boxShadow: dark ? DARK_SF2_SHADOW_HOVER : "0 6px 20px rgba(20,85,160,0.30)" }}
-              whileTap={sf2Busy ? {} : { scale: 0.97 }}
-              transition={{ duration: 0.12 }}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: dark ? DARK_SF2_FILL : "linear-gradient(135deg,#1455a0,#0e4080)", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf2Busy ? "wait" : "pointer", opacity: sf2Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", boxShadow: dark ? DARK_SF2_SHADOW : "0 4px 16px rgba(20,85,160,0.24)" }}
-            >
-              {sf2Busy ? busyIcon : <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} />}
-              {sf2Busy ? "Preparing SF2…" : "Download SF2 (Excel)"}
-            </motion.button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <motion.button
+                onClick={() => handleDownloadSF2("xlsx")}
+                disabled={Boolean(sf2Busy)}
+                whileHover={sf2Busy ? {} : { scale: 1.02, boxShadow: dark ? DARK_SF2_SHADOW_HOVER : "0 6px 20px rgba(20,85,160,0.30)" }}
+                whileTap={sf2Busy ? {} : { scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: dark ? DARK_SF2_FILL : "linear-gradient(135deg,#1455a0,#0e4080)", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf2Busy ? "wait" : "pointer", opacity: sf2Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", boxShadow: dark ? DARK_SF2_SHADOW : "0 4px 16px rgba(20,85,160,0.24)" }}
+              >
+                {sf2Busy === "xlsx" ? busyIcon : <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} />}
+                {sf2Busy === "xlsx" ? "Preparing SF2…" : "Download SF2 (Excel)"}
+              </motion.button>
+              <motion.button
+                onClick={() => handleDownloadSF2("pdf")}
+                disabled={Boolean(sf2Busy)}
+                whileHover={sf2Busy ? {} : { scale: 1.02 }}
+                whileTap={sf2Busy ? {} : { scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--color-surface)", color: "var(--color-info-500)", border: "1.5px solid color-mix(in srgb, var(--color-info-500) 35%, transparent)", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 700, cursor: sf2Busy ? "wait" : "pointer", opacity: sf2Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif" }}
+              >
+                {sf2Busy === "pdf" ? busyIcon : <i className="ti ti-file-type-pdf" style={{ fontSize: 14 }} />}
+                {sf2Busy === "pdf" ? "Preparing SF2…" : "Download SF2 (PDF)"}
+              </motion.button>
+            </div>
           </div>
         </motion.div>
         )}
@@ -699,7 +760,7 @@ export default function SchoolFormsPage() {
                         <div className="text-[#aaa] dark:text-neutral-500" style={{ fontSize: 12 }}>Loading records…</div>
                       ) : sf10.levels.length === 0 ? (
                         <div style={{ fontSize: 12, color: "var(--color-brand-600)" }}>
-                          {sf10.error || "This learner has no Grade 1–12 records here."}
+                          {sf10.error || "This learner has no Kinder–Grade 12 records here."}
                         </div>
                       ) : (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -711,17 +772,61 @@ export default function SchoolFormsPage() {
                           >
                             {sf10.levels.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                           </select>
-                          <motion.button
-                            onClick={handleDownloadSF10}
-                            disabled={sf10Busy}
-                            whileHover={sf10Busy ? {} : { scale: 1.02 }}
-                            whileTap={sf10Busy ? {} : { scale: 0.97 }}
-                            transition={{ duration: 0.12 }}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: sf10Busy ? "wait" : "pointer", opacity: sf10Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
-                          >
-                            {sf10Busy ? busyIcon : <i className="ti ti-file-spreadsheet" style={{ fontSize: 12 }} />}
-                            {sf10Busy ? "Preparing…" : "Download SF10"}
-                          </motion.button>
+                          {SF10_FILES.map(({ file, label, icon }) => (
+                            <motion.button
+                              key={file}
+                              onClick={() => handleDownloadSF10(file)}
+                              disabled={Boolean(sf10Busy)}
+                              aria-label={`Download SF10 (${label})`}
+                              whileHover={sf10Busy ? {} : { scale: 1.02 }}
+                              whileTap={sf10Busy ? {} : { scale: 0.97 }}
+                              transition={{ duration: 0.12 }}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 6, background: form.bg, border: `1.5px solid color-mix(in srgb, ${form.color} 25%, transparent)`, color: form.color, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: sf10Busy ? "wait" : "pointer", opacity: sf10Busy ? 0.75 : 1, fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap" }}
+                            >
+                              {sf10Busy === file ? busyIcon : <i className={`ti ${icon}`} style={{ fontSize: 12 }} />}
+                              {sf10Busy === file ? "Preparing…" : label}
+                            </motion.button>
+                          ))}
+                        </div>
+                      )}
+                      {sf10.levels.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                          <input
+                            value={sf10Issue.copy_for}
+                            onChange={(e) => setSf10Field("copy_for", e.target.value)}
+                            maxLength={150}
+                            placeholder="Copy for (receiving school)"
+                            aria-label="SF10 copy for"
+                            style={{ ...inputStyle, height: 34 }}
+                          />
+                          <input
+                            value={sf10Issue.purpose}
+                            onChange={(e) => setSf10Field("purpose", e.target.value)}
+                            maxLength={100}
+                            placeholder="Purpose"
+                            aria-label="SF10 purpose"
+                            style={{ ...inputStyle, height: 34 }}
+                          />
+                          {sf10Level === "senior_highschool" && (
+                            <>
+                              <input
+                                type="date"
+                                value={sf10Issue.graduation_date}
+                                onChange={(e) => setSf10Field("graduation_date", e.target.value)}
+                                aria-label="SF10 date of graduation"
+                                title="Date of graduation, for a Grade 12 graduate"
+                                style={{ ...inputStyle, height: 34 }}
+                              />
+                              <input
+                                value={sf10Issue.special_order}
+                                onChange={(e) => setSf10Field("special_order", e.target.value)}
+                                maxLength={30}
+                                placeholder="Special Order (A) No."
+                                aria-label="SF10 special order number"
+                                style={{ ...inputStyle, height: 34 }}
+                              />
+                            </>
+                          )}
                         </div>
                       )}
                       {sf10Error && sf10.levels.length > 0 && (

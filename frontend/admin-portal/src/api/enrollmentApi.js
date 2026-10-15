@@ -86,12 +86,13 @@ export const carryOverSchoolYear = (label, data) =>
 export const compareSchoolYears = (years) =>
   enrollmentClient.get("/school-years/compare/", { params: { years: years.join(",") } }).then((r) => r.data);
 
-// ── DepEd school forms (Excel) ──────────────────────────────────────────────
+// ── School forms (Excel or PDF) ───────────────────────────────────────────────
 /**
- * One of DepEd's own Excel forms, filled in by the server:
- *   downloadSchoolForm("sf1", { school_year, grade_level, section, semester? })
- *   downloadSchoolForm("sf2", { school_year, grade_level, section, month, semester? })
- *   downloadSchoolForm("sf10/12", { level })
+ * One of the school forms, filled in by the server: its Excel file, or with
+ * { file: "pdf" } a PDF of the same form as it prints:
+ *   downloadSchoolForm("sf1", { school_year, grade_level, section, semester?, file? })
+ *   downloadSchoolForm("sf2", { school_year, grade_level, section, month, semester?, file? })
+ *   downloadSchoolForm("sf10/12", { level, file? })
  * Resolves to { blob, filename, warnings }; `warnings` lists what the file
  * could not fully say. A failure's message is read out of its JSON body.
  */

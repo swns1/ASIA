@@ -1,7 +1,7 @@
 """
 The loaders, over in-memory querysets (enrollments/fake_orm.py): who makes
 it onto each form, the contact number chosen, the class days, and the SF10
-years and eligibility.
+years and the level before them.
 """
 from contextlib import ExitStack
 from datetime import date
@@ -14,15 +14,18 @@ from django.db import DatabaseError
 
 from enrollments.fake_orm import FakeQuerySet
 from school_forms import data
+from school_forms.records import PriorLevel
 
 SY = "2026-2027"
 SY_DATES = (date(2026, 6, 8), date(2027, 4, 8))
 
 
 def student(i, sex="male", status="active", **kw):
-    return NS(pk=i, student_id=i, lrn=f"10910000000{i}", last_name=f"Cruz{i}", first_name="Juan",
-              middle_name="", suffix="", sex=sex, birth_date=date(2013, 1, 1), religion="Catholic",
-              current_address="Brgy. Uno", mobile_number="0900000000" + str(i), status=status, **kw)
+    fields = dict(pk=i, student_id=i, student_number=f"2019-000{i}", lrn=f"10910000000{i}", last_name=f"Cruz{i}",
+                  first_name="Juan", middle_name="", suffix="", sex=sex, birth_date=date(2013, 1, 1),
+                  religion="Catholic", current_address="Brgy. Uno", permanent_address="",
+                  mobile_number="0900000000" + str(i), status=status)
+    return NS(**{**fields, **kw})
 
 
 def enrollment(i, st, status="enrolled", grade="Grade 7", level="junior_highschool", section="Rizal",
@@ -44,6 +47,12 @@ def models(**querysets):
         stack.enter_context(patch(f"school_forms.data.{name}.objects", FakeQuerySet(rows)))
     stack.enter_context(patch("school_forms.data.configured_dates", return_value=SY_DATES))
     return stack
+
+
+def school_row(**kw):
+    """school_settings' single row, every column the forms read."""
+    columns = [c for group in data.SCHOOL_FIELDS for c in group]
+    return NS(setting_id=1, **{**{c: "" for c in columns}, "school_name": "SLIS", **kw})
 
 
 # ── Guardians and the contact number ────────────────────────────────────────
@@ -83,8 +92,8 @@ def test_register_lists_attended_rows_with_transfers_and_advisers():
     with models(Enrollment=rows, EnrollmentTransfer=transfers,
                 SectionAdvisory=[NS(school_year=SY, grade_level="Grade 7", section="Rizal", teacher_user_id=9)],
                 User=[NS(user_id=9, name="Ms. Reyes")],
-                SchoolIdentity=[NS(setting_id=1, school_name="SLIS", school_address="Laguna", deped_school_id="401234",
-                                   region="IV-A", division="Laguna", district="Cabuyao I", school_head_name="Maria")]):
+                SchoolIdentity=[school_row(school_address="Laguna", deped_school_id="401234", region="IV-A",
+                                           division="Laguna", district="Cabuyao I", school_head_name="Maria")]):
         register = data.load_register(school_year=SY, grade_level="Grade 7", section="Rizal")
     assert [l.enrollment_id for l in register.learners] == [1, 2]
     assert register.learners[1].transfer_out.school == "Cabuyao NHS"
@@ -110,22 +119,33 @@ def test_senior_high_register_is_one_semester_and_takes_the_sections_strand():
     assert register.section.strand == "STEM" and register.section.semester == "2nd"
 
 
-def test_school_identity_falls_back_before_the_migration():
+def test_school_identity_falls_back_before_the_migrations():
     class Missing:
-        calls = 0
+        """A database that has had the 2026-10 identity script but not the SF10 one."""
+        asked = []
 
         def order_by(self, *a):
             return self
 
         def values(self, *fields):
-            Missing.calls += 1
-            if "deped_school_id" in fields:
-                raise DatabaseError("column school_settings.deped_school_id does not exist")
-            return [{"school_name": "SLIS", "school_address": "Laguna"}]
+            Missing.asked.append(fields)
+            if "records_officer_name" in fields:
+                raise DatabaseError("column school_settings.records_officer_name does not exist")
+            return [{"school_name": "SLIS", "deped_school_id": "401234", "contact_phone": "0917"}]
 
     with patch("school_forms.data.SchoolIdentity.objects", Missing()):
         school = data.load_school()
-    assert (school.name, school.school_id, Missing.calls) == ("SLIS", "", 2)
+    assert (school.name, school.school_id, school.phone, school.signatories.records_officer) == (
+        "SLIS", "401234", "0917", "")
+    assert len(Missing.asked) == 2
+
+
+def test_school_identity_carries_the_sf10_letterhead_and_signatories():
+    with models(SchoolIdentity=[school_row(contact_landline="(049) 560-3268", contact_email="a@b.ph",
+                                           records_officer_name="Regina", shs_department_head_name="Erwin")]):
+        school = data.load_school()
+    assert (school.landline, school.email) == ("(049) 560-3268", "a@b.ph")
+    assert school.signatories.records_officer == "Regina" and school.signatories.shs_department_head == "Erwin"
 
 
 # ── SF2 ─────────────────────────────────────────────────────────────────────
@@ -173,19 +193,22 @@ def test_a_month_with_no_attendance_at_all_still_lists_the_class():
 
 # ── SF10 ────────────────────────────────────────────────────────────────────
 
+QUARTERS = ("1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter")
+
+
 def grade(enrollment_id, subject_id, name, period, value, strand=None, remarks=None):
     return NS(enrollment_id=enrollment_id, subject_id=subject_id, grading_period=period,
               numeric_grade=Decimal(value), remarks=remarks,
-              subject=NS(subject_name=name, strand=strand))
+              subject=NS(subject_name=name, strand=strand, subject_group=None))
 
 
-def subject_row(sid, name, grade_level, sy, level="elementary", strand=None, semester=None):
+def subject_row(sid, name, grade_level, sy, level="elementary", strand=None, semester=None, group=None):
     return NS(subject_id=sid, subject_name=name, grade_level=grade_level, school_year=sy,
-              school_level=level, strand=strand, semester=semester)
+              school_level=level, strand=strand, semester=semester, subject_group=group)
 
 
-def test_permanent_record_years_eligibility_and_expected_subjects():
-    st = student(1)
+def test_elementary_record_starts_with_kindergarten():
+    st = student(1, permanent_address="Brgy. San Jose, San Pablo City")
     rows = [
         enrollment(10, st, status="completed", grade="Kindergarten", level="kindergarten", sy="2019-2020"),
         enrollment(11, st, status="completed", grade="Grade 1", level="elementary", sy="2020-2021"),
@@ -196,43 +219,66 @@ def test_permanent_record_years_eligibility_and_expected_subjects():
                 subject_row(2, "Filipino", "Grade 1", "2020-2021"),
                 subject_row(3, "Science", "Grade 2", "2021-2022")]
     grades = [grade(11, 1, "Mathematics", "1st_quarter", "88.00")]
-    with models(Student=[st], Enrollment=rows, Subject=subjects, Grade=grades):
+    family = [guardian(1, 1, "father", "Pedro Cruz"), guardian(2, 1, "mother", "Rosa Cruz")]
+    with models(Student=[st], Enrollment=rows, Subject=subjects, Grade=grades, GuardianMirror=family,
+                SchoolIdentity=[school_row()]):
         record = data.load_permanent_record(student_id=1, level="elementary")
-    assert [y.grade_level for y in record.years] == ["Grade 1", "Grade 2"]
+    assert [(y.grade_level, y.completed) for y in record.years] == [("Grade 1", True), ("Grade 2", False)]
     first = record.years[0]
     assert sorted(s.name for s in first.subjects) == ["Filipino", "Mathematics"]   # expected, even ungraded
     maths = next(s for s in first.subjects if s.name == "Mathematics")
-    assert maths.grades == {"1st_quarter": Decimal("88.00")}
-    assert record.eligibility.completed_here is True                             # Kindergarten here
-    assert record.learner.lrn == "109100000001"
+    assert (maths.grades, maths.order, maths.group) == ({"1st_quarter": Decimal("88.00")}, 1, "")
+    assert record.prior == PriorLevel(level="KINDER", school_year="2019-2020", school="SLIS",
+                                      final_rating="-", remarks="Grade 1 Ready")
+    learner = record.learner
+    assert (learner.lrn, learner.student_number, learner.father, learner.mother) == (
+        "109100000001", "2019-0001", "Pedro Cruz", "Rosa Cruz")
+    assert learner.address == "Brgy. San Jose, San Pablo City"           # the permanent address first
 
 
-def test_senior_high_years_are_semesters_and_core_means_no_strand():
+def test_kindergarten_alone_is_enough_for_an_elementary_record():
+    st = student(1)
+    rows = [enrollment(10, st, status="enrolled", grade="Kindergarten", level="kindergarten", sy="2026-2027")]
+    with models(Student=[st], Enrollment=rows):
+        record = data.load_permanent_record(student_id=1, level="elementary")
+    assert record.years == ()
+    assert (record.prior.school_year, record.prior.remarks) == ("2026-2027", "")   # not completed yet
+    assert record.learner.address == "Brgy. Uno"                                   # no permanent address
+
+
+def test_senior_high_subjects_carry_their_group():
     st = student(1)
     rows = [enrollment(20, st, status="completed", grade="Grade 11", level="senior_highschool",
                        sy="2024-2025", semester="1st", strand="STEM")]
+    shs = {"level": "senior_highschool", "semester": "1st"}
     subjects = [
-        subject_row(1, "Oral Communication", "Grade 11", "2024-2025", "senior_highschool", semester="1st"),
-        subject_row(2, "Pre-Calculus", "Grade 11", "2024-2025", "senior_highschool", strand="STEM", semester="1st"),
-        subject_row(3, "Fundamentals of ABM", "Grade 11", "2024-2025", "senior_highschool", strand="ABM", semester="1st"),
-        subject_row(4, "Statistics", "Grade 11", "2024-2025", "senior_highschool", semester="2nd"),
+        subject_row(1, "Oral Communication", "Grade 11", "2024-2025", **shs),
+        subject_row(2, "Pre-Calculus", "Grade 11", "2024-2025", strand="STEM", **shs),
+        subject_row(3, "Fundamentals of ABM", "Grade 11", "2024-2025", strand="ABM", **shs),
+        subject_row(4, "Statistics", "Grade 11", "2024-2025", level="senior_highschool", semester="2nd"),
+        subject_row(5, "Empowerment Technologies", "Grade 11", "2024-2025", **shs),
+        subject_row(6, "General Biology 1", "Grade 11", "2024-2025", group="specialized", **shs),
     ]
     with models(Student=[st], Enrollment=rows, Subject=subjects):
         record = data.load_permanent_record(student_id=1, level="senior_highschool")
     (year,) = record.years
     assert year.periods == ("1st_semester",)
-    assert {s.name: s.core for s in year.subjects} == {"Oral Communication": True, "Pre-Calculus": False}
+    assert {s.name: s.group for s in year.subjects} == {
+        "Oral Communication": "core", "Pre-Calculus": "specialized",
+        "Empowerment Technologies": "applied", "General Biology 1": "specialized",   # the registrar's choice
+    }
+    assert record.prior == PriorLevel(level="GRADE 10")                             # Grade 10 not taken here
 
 
-def test_junior_high_eligibility_carries_the_grade_6_general_average():
+def test_junior_high_starts_with_the_grade_6_general_average():
     st = student(1)
     rows = [enrollment(30, st, status="completed", grade="Grade 6", level="elementary", sy="2021-2022"),
             enrollment(31, st, status="enrolled", grade="Grade 7", level="junior_highschool", sy="2022-2023")]
     subjects = [subject_row(1, "English", "Grade 6", "2021-2022")]
-    grades = [grade(30, 1, "English", p, "90") for p in ("1st_quarter", "2nd_quarter", "3rd_quarter", "4th_quarter")]
+    grades = [grade(30, 1, "English", p, "95") for p in QUARTERS]
     with models(Student=[st], Enrollment=rows, Subject=subjects, Grade=grades):
         record = data.load_permanent_record(student_id=1, level="junior_highschool")
-    assert record.eligibility.completed_here is True and record.eligibility.general_average == 90
+    assert (record.prior.level, record.prior.final_rating, record.prior.remarks) == ("GRADE 6", "95", "PROMOTED")
 
 
 def test_permanent_record_for_a_level_never_attended_here():

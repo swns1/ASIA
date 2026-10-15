@@ -22,11 +22,11 @@ from subjects.models import Subject
 
 from .models import SchoolIdentity
 from .records import (
-    AttendanceData, Eligibility, Learner, PermanentRecordData, RegisterData, School,
-    SectionInfo, SubjectRecord, Transfer, YearRecord,
+    AttendanceData, IssueDetails, Learner, PermanentRecordData, PriorLevel, RegisterData, School,
+    SectionInfo, Signatories, SubjectRecord, Transfer, YearRecord,
 )
 from .sf2 import month_end
-from .sf10 import year_result
+from .sf10 import subject_group, year_result
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +40,54 @@ class NothingToPrint(Exception):
 
 # ─── Shared lookups ─────────────────────────────────────────────────────────
 
+# school_settings' columns in the order they arrived. A database that hasn't
+# had a script yet still gets its forms, with those boxes blank.
+SCHOOL_FIELDS = (
+    ("school_name", "school_address", "contact_email", "contact_phone"),
+    # scripts/2026-10-school-identity.sql
+    ("deped_school_id", "region", "division", "district", "school_head_name"),
+    # scripts/2026-10-sf10-school-format.sql
+    ("contact_landline", "records_officer_name", "elementary_principal_name", "jhs_principal_name",
+     "shs_principal_name", "shs_department_head_name"),
+)
+
+
 def load_school():
-    """The school as the form headers name it. Missing DepEd fields print blank."""
-    fields = (
-        "school_name", "school_address", "deped_school_id", "region", "division",
-        "district", "school_head_name",
-    )
-    try:
-        rows = list(SchoolIdentity.objects.order_by("setting_id").values(*fields)[:1])
-    except DatabaseError:
-        # The DepEd columns come from scripts/2026-10-school-identity.sql; a
-        # database without them still gets its forms, headers half blank.
-        logger.warning("school_settings lacks the DepEd identity columns; run scripts/2026-10-school-identity.sql")
+    """The school as the form headers name it. Missing fields print blank."""
+    rows = []
+    for upto in range(len(SCHOOL_FIELDS), 0, -1):
+        fields = [f for group in SCHOOL_FIELDS[:upto] for f in group]
         try:
-            rows = list(SchoolIdentity.objects.order_by("setting_id").values("school_name", "school_address")[:1])
+            rows = list(SchoolIdentity.objects.order_by("setting_id").values(*fields)[:1])
+            break
         except DatabaseError:
-            rows = []
+            logger.warning(
+                "school_settings lacks columns the school forms print (%s); run the scripts/2026-10-*.sql "
+                "upgrades or migrate billing-service", ", ".join(SCHOOL_FIELDS[upto - 1]),
+            )
     row = rows[0] if rows else {}
+
+    def text(name):
+        return row.get(name) or ""
+
     return School(
-        name=row.get("school_name") or "",
-        address=row.get("school_address") or "",
-        school_id=row.get("deped_school_id") or "",
-        region=row.get("region") or "",
-        division=row.get("division") or "",
-        district=row.get("district") or "",
-        head=row.get("school_head_name") or "",
+        name=text("school_name"),
+        address=text("school_address"),
+        school_id=text("deped_school_id"),
+        region=text("region"),
+        division=text("division"),
+        district=text("district"),
+        head=text("school_head_name"),
+        phone=text("contact_phone"),
+        landline=text("contact_landline"),
+        email=text("contact_email"),
+        signatories=Signatories(
+            records_officer=text("records_officer_name"),
+            elementary_principal=text("elementary_principal_name"),
+            jhs_principal=text("jhs_principal_name"),
+            shs_principal=text("shs_principal_name"),
+            shs_department_head=text("shs_department_head_name"),
+        ),
     )
 
 
@@ -280,11 +303,13 @@ def load_attendance(*, school_year, grade_level, section, month, semester=None):
 
 # ─── SF10 ───────────────────────────────────────────────────────────────────
 
-# The grade a level's eligibility comes from, when it was attended here.
-ELIGIBILITY_GRADE = {
-    "elementary": "Kindergarten",
-    "junior_highschool": "Grade 6",
-    "senior_highschool": "Grade 10",
+# The level before each record's, on the one-row table above its grade
+# tables: the grade it comes from, what the Level column says, and the
+# remark it gets once completed here (the school's wording, per template).
+PRIOR = {
+    "elementary": ("Kindergarten", "KINDER", "Grade 1 Ready"),
+    "junior_highschool": ("Grade 6", "GRADE 6", "PROMOTED"),
+    "senior_highschool": ("Grade 10", "GRADE 10", "PASSED"),
 }
 
 
@@ -303,7 +328,8 @@ def _years(rows):
     subjects = list(Subject.objects.filter(
         school_year__in={r.school_year for r in rows},
         grade_level__in={r.grade_level for r in rows},
-    ).values("subject_id", "subject_name", "school_level", "grade_level", "strand", "semester", "school_year"))
+    ).values("subject_id", "subject_name", "school_level", "grade_level", "strand", "semester", "school_year",
+             "subject_group"))
     by_id = {s["subject_id"]: s for s in subjects}
     advisers = _advisers([(r.school_year, r.grade_level, r.section) for r in rows])
 
@@ -321,7 +347,8 @@ def _years(rows):
         records = []
         for sid in subject_ids:
             info = by_id.get(sid) or next(
-                ({"subject_name": g.subject.subject_name, "strand": g.subject.strand}
+                ({"subject_name": g.subject.subject_name, "strand": g.subject.strand,
+                  "subject_group": getattr(g.subject, "subject_group", None)}
                  for g in mine if g.subject_id == sid), None)
             if not info:
                 continue
@@ -330,18 +357,50 @@ def _years(rows):
                 name=info["subject_name"],
                 grades={g.grading_period: g.numeric_grade for g in own if g.numeric_grade is not None},
                 recorded_remarks=tuple(sorted({g.remarks for g in own if g.remarks})),
-                core=not (info.get("strand") or "").strip(),
+                group=subject_group(info["subject_name"], info.get("strand"), info.get("subject_group")) if shs else "",
+                order=sid,
             ))
         years.append(YearRecord(
             school_year=r.school_year, grade_level=r.grade_level, section=r.section,
             periods=periods, subjects=tuple(records), strand=r.strand or "",
             semester=r.semester or "",
             adviser=", ".join(advisers.get((r.school_year, r.grade_level, r.section), ())),
+            completed=r.enrollment_status == "completed",
         ))
     return years
 
 
-def load_permanent_record(*, student_id, level):
+def _prior_level(level, rows, school):
+    """
+    The previous level's row, from its last year here: Kindergarten prints
+    no rating, Grades 6 and 10 their general average. A level not taken
+    here gets only its label; the registrar fills in the rest.
+    """
+    _, label, remark = PRIOR[level]
+    if level == "elementary":
+        if not rows:
+            return PriorLevel(level=label)
+        last = max(rows, key=lambda r: (r.school_year, r.enrollment_id))
+        return PriorLevel(level=label, school_year=last.school_year, school=school.name, final_rating="-",
+                          remarks=remark if last.enrollment_status == "completed" else "")
+    completed = [r for r in rows if r.enrollment_status == "completed"]
+    if not completed:
+        return PriorLevel(level=label)
+    last = max(completed, key=lambda r: (r.school_year, r.enrollment_id))
+    result = year_result(_years([last])[0])
+    return PriorLevel(
+        level=label, school_year=last.school_year, school=school.name,
+        final_rating="" if result.average is None else str(result.average),
+        remarks=remark if result.passed else "",
+    )
+
+
+def load_permanent_record(*, student_id, level, issue=None):
+    """
+    The learner's SF10 for one level. The elementary record starts with
+    Kindergarten's row, so a learner who has only been in Kindergarten here
+    gets one too.
+    """
     student = Student.objects.filter(pk=student_id).first()
     if not student:
         raise NothingToPrint("Learner not found.")
@@ -349,27 +408,22 @@ def load_permanent_record(*, student_id, level):
         student_id=student_id, enrollment_status__in=ATTENDED_STATUSES,
     ))
     at_level = [r for r in rows if r.school_level == level]
-    if not at_level:
+    before = [r for r in rows if r.grade_level == PRIOR[level][0]]
+    if not at_level and not (level == "elementary" and before):
         raise NothingToPrint("This learner has no records at that level.")
 
-    eligibility = Eligibility()
-    before = [r for r in rows if r.grade_level == ELIGIBILITY_GRADE[level]]
-    if level == "elementary":
-        eligibility = Eligibility(completed_here=bool(before))
-    else:
-        completed = [r for r in before if r.enrollment_status == "completed"]
-        if completed:
-            year = _years([max(completed, key=lambda r: (r.school_year, r.enrollment_id))])[0]
-            _, average, _ = year_result(year)
-            eligibility = Eligibility(completed_here=True, general_average=average)
-
+    school = load_school()
+    family = _guardians({student.student_id}).get(student.student_id, {})
     learner = Learner(
         enrollment_id=0, student_id=student.student_id, lrn=student.lrn or "",
         last_name=student.last_name or "", first_name=student.first_name or "",
         middle_name=student.middle_name or "", suffix=student.suffix or "",
         sex=(student.sex or "").lower(), birth_date=student.birth_date,
+        address=student.permanent_address or student.current_address or "",
+        father=family.get("father", ""), mother=family.get("mother", ""), guardian=family.get("guardian", ""),
+        student_number=student.student_number or "",
     )
     return PermanentRecordData(
-        school=load_school(), level=level, learner=learner,
-        years=tuple(_years(at_level)), eligibility=eligibility,
+        school=school, level=level, learner=learner, years=tuple(_years(at_level)),
+        prior=_prior_level(level, before, school), issue=issue or IssueDetails(),
     )

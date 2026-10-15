@@ -35,11 +35,15 @@ google-genai==2.2.0
 numpy==2.4.4
 scikit-learn==1.8.0
 
-# ── DepEd School Forms (school_forms) ─────────────────────────────────────────
-# openpyxl fills DepEd's own SF1/SF2/SF10 Excel files. It needs Pillow to keep
-# the files' logos when it opens them (same pin as student-service).
+# ── School Forms (school_forms) ───────────────────────────────────────────────
+# openpyxl fills DepEd's own SF1/SF2 Excel files and draws the school's SF10.
+# It needs Pillow to keep the files' logos when it opens them, and to place
+# the SF10's crest (same pin as student-service).
 openpyxl==3.1.5
 Pillow==12.3.0
+# reportlab draws the same forms as PDFs (school_forms/pdf.py), with the
+# PDF's built-in fonts: nothing else to install on the server.
+reportlab==5.0.1
 
 # ── Saved AI summaries (ai/summary_docx.py) ───────────────────────────────────
 # Writes a saved summary as a Word file. Pulls in lxml.

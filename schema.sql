@@ -1460,6 +1460,12 @@ CREATE TABLE public.school_settings (
     division character varying(100),
     district character varying(100),
     school_head_name character varying(150),
+    contact_landline character varying(50),
+    records_officer_name character varying(150),
+    elementary_principal_name character varying(150),
+    jhs_principal_name character varying(150),
+    shs_principal_name character varying(150),
+    shs_department_head_name character varying(150),
     CONSTRAINT ck_school_settings_deped_school_id CHECK (((deped_school_id IS NULL) OR ((deped_school_id)::text ~ '^[0-9]{6}$'::text))),
     CONSTRAINT ck_school_settings_school_year_format CHECK (((current_school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text))
 );
@@ -2049,7 +2055,9 @@ CREATE TABLE public.subjects (
     semester character varying(20),
     grading_template_id bigint,
     school_year character varying(20) NOT NULL,
+    subject_group character varying(20),
     CONSTRAINT ck_subjects_school_year_format CHECK (((school_year)::text ~ '^[0-9]{4}-[0-9]{4}$'::text)),
+    CONSTRAINT ck_subjects_subject_group CHECK (((subject_group IS NULL) OR ((subject_group)::text = ANY ((ARRAY['core'::character varying, 'applied'::character varying, 'specialized'::character varying])::text[])))),
     CONSTRAINT subjects_check CHECK (((((school_level)::text = 'senior_highschool'::text) AND ((semester)::text = ANY ((ARRAY['1st'::character varying, '2nd'::character varying])::text[]))) OR (((school_level)::text <> 'senior_highschool'::text) AND (semester IS NULL)))),
     CONSTRAINT subjects_school_level_check CHECK (((school_level)::text = ANY ((ARRAY['nursery'::character varying, 'kindergarten'::character varying, 'elementary'::character varying, 'junior_highschool'::character varying, 'senior_highschool'::character varying])::text[])))
 );

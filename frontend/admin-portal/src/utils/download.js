@@ -1,6 +1,6 @@
 // download.js — saving a file the API sent back, and reading what it said.
 //
-// The DepEd school forms arrive as .xlsx blobs (api/enrollmentApi.js
+// The school forms arrive as .xlsx or .pdf blobs (api/enrollmentApi.js
 // downloadSchoolForm). A failed request's JSON body arrives as a Blob too, so
 // the usual `err.response.data.detail` is unreadable until it is parsed back.
 

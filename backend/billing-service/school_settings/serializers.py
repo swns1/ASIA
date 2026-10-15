@@ -21,6 +21,12 @@ class SchoolSettingSerializer(serializers.ModelSerializer):
             "division",
             "district",
             "school_head_name",
+            "contact_landline",
+            "records_officer_name",
+            "elementary_principal_name",
+            "jhs_principal_name",
+            "shs_principal_name",
+            "shs_department_head_name",
             "updated_at",
         )
         # The school year and its dates are managed on the School Years page
@@ -60,4 +66,24 @@ class SchoolSettingSerializer(serializers.ModelSerializer):
         return self._optional_text(value)
 
     def validate_school_head_name(self, value):
+        return self._optional_text(value)
+
+    # The SF10's letterhead landline and signature lines: blank prints a
+    # fill-in line, so blank is stored as NULL like the DepEd fields above.
+    def validate_contact_landline(self, value):
+        return self._optional_text(value)
+
+    def validate_records_officer_name(self, value):
+        return self._optional_text(value)
+
+    def validate_elementary_principal_name(self, value):
+        return self._optional_text(value)
+
+    def validate_jhs_principal_name(self, value):
+        return self._optional_text(value)
+
+    def validate_shs_principal_name(self, value):
+        return self._optional_text(value)
+
+    def validate_shs_department_head_name(self, value):
         return self._optional_text(value)

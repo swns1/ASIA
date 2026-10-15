@@ -10,6 +10,16 @@ from datetime import date
 
 
 @dataclass(frozen=True)
+class Signatories:
+    """The names the SF10 certification prints over its signature lines."""
+    records_officer: str = ""
+    elementary_principal: str = ""
+    jhs_principal: str = ""
+    shs_principal: str = ""
+    shs_department_head: str = ""
+
+
+@dataclass(frozen=True)
 class School:
     name: str = ""
     address: str = ""
@@ -18,6 +28,11 @@ class School:
     division: str = ""
     district: str = ""
     head: str = ""
+    # The SF10 letterhead and certification.
+    phone: str = ""
+    landline: str = ""
+    email: str = ""
+    signatories: Signatories = Signatories()
 
 
 @dataclass(frozen=True)
@@ -48,6 +63,7 @@ class Learner:
     student_status: str = "active"  # the student's
     transfer_in: Transfer | None = None
     transfer_out: Transfer | None = None
+    student_number: str = ""
 
 
 @dataclass(frozen=True)
@@ -88,7 +104,8 @@ class SubjectRecord:
     name: str
     grades: dict                    # grading period -> numeric grade
     recorded_remarks: tuple = ()    # the teacher's per-period remarks
-    core: bool = False              # senior high: tied to no strand
+    group: str = ""                 # senior high: core / applied / specialized
+    order: int = 0                  # the order it was entered in (its subject_id)
 
 
 @dataclass(frozen=True)
@@ -102,23 +119,41 @@ class YearRecord:
     strand: str = ""
     semester: str = ""
     adviser: str = ""
+    completed: bool = False         # the enrollment was closed as completed
 
 
 @dataclass(frozen=True)
-class Eligibility:
-    """What got the learner into this level, when it was earned here."""
-    completed_here: bool = False
-    general_average: int | None = None
+class PriorLevel:
+    """
+    The one-row table above the grade tables: the level before this one
+    (Kindergarten for elementary, Grade 6 for junior high, Grade 10 for
+    senior high). Only the level is known when it wasn't taken here.
+    """
+    level: str                      # "KINDER", "GRADE 6", "GRADE 10"
+    school_year: str = ""
+    school: str = ""
+    final_rating: str = ""          # "-" for Kindergarten, else the general average
+    remarks: str = ""
+
+
+@dataclass(frozen=True)
+class IssueDetails:
+    """What the registrar types for one copy of the SF10."""
+    copy_for: str = ""              # the school receiving this copy
+    purpose: str = "TRANSFER CREDENTIAL PURPOSES"
+    graduation_date: date | None = None     # senior high
+    special_order: str = ""                 # senior high: the Special Order (A) number
 
 
 @dataclass(frozen=True)
 class PermanentRecordData:
     """SF10 for one level."""
     school: School
-    level: str                      # elementary / junior_highschool / senior_highschool
+    level: str                      # elementary (with Kindergarten) / junior_highschool / senior_highschool
     learner: Learner
     years: tuple
-    eligibility: Eligibility = Eligibility()
+    prior: PriorLevel | None = None
+    issue: IssueDetails = IssueDetails()
 
 
 # ─── Formatting DepEd's forms share ─────────────────────────────────────────
@@ -170,6 +205,17 @@ def semester_label(semester):
 def short_date(value):
     """mm/dd/yyyy, the format DepEd's forms ask for."""
     return f"{value.month:02d}/{value.day:02d}/{value.year}" if value else ""
+
+
+def long_date(value):
+    """'July 12, 2008'. No %-d: Windows' strftime doesn't have it."""
+    return f"{value:%B} {value.day}, {value.year}" if value else ""
+
+
+def initials(name):
+    """'South Lakes Integrated School' -> 'SLIS', as the school's own forms abbreviate it."""
+    small = {"of", "the", "and", "de", "ng", "sa"}
+    return "".join(w[0].upper() for w in name.split() if w[0].isalpha() and w.lower() not in small)
 
 
 def by_sex_then_name(learner):
