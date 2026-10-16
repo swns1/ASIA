@@ -1,7 +1,7 @@
 """
 The loaders, over in-memory querysets (enrollments/fake_orm.py): who makes
-it onto each form, the contact number chosen, the class days, and the SF10
-years and the level before them.
+it onto each form, the contact number chosen, the class days, the SF10
+years and the level before them, and the SF9's months and class behavior.
 """
 from contextlib import ExitStack
 from datetime import date
@@ -30,7 +30,7 @@ def student(i, sex="male", status="active", **kw):
 
 def enrollment(i, st, status="enrolled", grade="Grade 7", level="junior_highschool", section="Rizal",
                sy=SY, semester=None, strand=None):
-    return NS(enrollment_id=i, student_id=st.student_id, student=st, enrollment_status=status,
+    return NS(enrollment_id=i, pk=i, student_id=st.student_id, student=st, enrollment_status=status,
               grade_level=grade, school_level=level, section=section, school_year=sy,
               semester=semester, strand=strand)
 
@@ -41,6 +41,7 @@ def models(**querysets):
     defaults = dict(
         Enrollment=[], GuardianMirror=[], EnrollmentTransfer=[], SectionAdvisory=[], User=[],
         Section=[], SchoolIdentity=[], CalendarEvent=[], AttendanceRecord=[], Grade=[], Subject=[], Student=[],
+        NarrativeCategory=[], NarrativeReport=[],
     )
     defaults.update(querysets)
     for name, rows in defaults.items():
@@ -288,3 +289,92 @@ def test_permanent_record_for_a_level_never_attended_here():
         data.load_permanent_record(student_id=1, level="senior_highschool")
     with models(), pytest.raises(data.NothingToPrint, match="Learner not found"):
         data.load_permanent_record(student_id=99, level="elementary")
+
+
+# ── SF9 ─────────────────────────────────────────────────────────────────────
+
+AUGUST_15 = date(2026, 8, 15)
+
+
+def mark(enrollment_id, day, status):
+    return NS(enrollment_id=enrollment_id, date=day, status=status)
+
+
+def category(cid, name, order, active=True):
+    return NS(category_id=cid, name=name, description=f"{name}, described.", sort_order=order, is_active=active)
+
+
+def rating(enrollment_id, cid, period, value):
+    return NS(enrollment_id=enrollment_id, category_id=cid, grading_period=period, rating=value)
+
+
+def test_report_card_counts_each_months_class_days_present_and_absent():
+    st = student(1)
+    marks = [mark(1, date(2026, 6, 8), "P"), mark(1, date(2026, 6, 9), "L"), mark(1, date(2026, 6, 10), "A"),
+             mark(1, date(2026, 6, 11), "E"), mark(1, date(2026, 7, 1), "P")]
+    holiday = NS(school_year=SY, event_type="holiday", start_date=date(2026, 7, 6), end_date=date(2026, 7, 6))
+    with models(Enrollment=[enrollment(1, st)], AttendanceRecord=marks, CalendarEvent=[holiday],
+                SchoolIdentity=[school_row()]):
+        card = data.load_report_card(enrollment_id=1, today=AUGUST_15)
+    by_month = {m.month: (m.school_days, m.present, m.absent) for m in card.months}
+    assert list(by_month)[0] == date(2026, 6, 1) and list(by_month)[-1] == date(2027, 4, 1)   # the year's months
+    assert by_month[date(2026, 6, 1)] == (17, 2, 2)          # from the 8th; late is present, excused absent
+    assert by_month[date(2026, 7, 1)] == (22, 1, 0)          # less the holiday
+    assert by_month[date(2026, 8, 1)] == (10, None, None)    # up to today, and no attendance taken
+    assert by_month[date(2026, 9, 1)] == (None, None, None)  # not begun
+    assert card.learner.student_number == "2019-0001" and card.school.name == "SLIS"
+    assert card.section.semester == "" and card.behavior_periods == QUARTERS
+
+
+def test_report_card_months_before_a_transfer_in_are_blank():
+    st = student(1)
+    arrived = NS(transfer_id=1, enrollment_id=1, transfer_type="transfer_in", effective_date=date(2026, 7, 15),
+                 origin_school_name="Y", destination_school_name=None)
+    with models(Enrollment=[enrollment(1, st)], EnrollmentTransfer=[arrived],
+                AttendanceRecord=[mark(1, date(2026, 7, 15), "P")]):
+        card = data.load_report_card(enrollment_id=1, today=AUGUST_15)
+    june, july = card.months[0], card.months[1]
+    assert (june.school_days, june.present) == (None, None)
+    assert (july.school_days, july.present, july.absent) == (13, 1, 0)     # from the 15th
+
+
+def test_report_card_class_behavior_by_area_and_quarter():
+    st = student(1)
+    categories = [category(900, "Attentiveness", 1), category(901, "Listening", 2, active=False),
+                  category(902, "Participation", 3, active=False), category(903, "Task completion", 4)]
+    ratings = [rating(1, 900, "1st_quarter", "AO"), rating(1, 900, "2nd_quarter", "outstanding"),
+               rating(1, 902, "1st_quarter", "needs_improvement"),       # retired, but marked: still printed
+               rating(1, 903, "1st_semester", "SO"),                     # not a period of this card
+               rating(2, 903, "1st_quarter", "NO")]                      # someone else's
+    with models(Enrollment=[enrollment(1, st)], NarrativeCategory=categories, NarrativeReport=ratings):
+        card = data.load_report_card(enrollment_id=1, today=AUGUST_15)
+    assert [(b.name, b.marks) for b in card.behavior] == [
+        ("Attentiveness", {"1st_quarter": "AO", "2nd_quarter": "AO"}),
+        ("Participation", {"1st_quarter": "RO"}),
+        ("Task completion", {}),
+    ]
+    assert card.behavior[0].description == "Attentiveness, described."
+
+
+def test_senior_high_report_card_is_the_years_two_semesters():
+    st = student(1)
+    shs = {"grade": "Grade 11", "level": "senior_highschool", "strand": "STEM"}
+    rows = [enrollment(20, st, status="completed", semester="1st", **shs),
+            enrollment(21, st, status="enrolled", semester="2nd", **shs),
+            enrollment(22, st, status="cancelled", semester="2nd", **shs)]
+    ratings = [rating(20, 900, "1st_semester", "AO"), rating(21, 900, "2nd_semester", "SO")]
+    with models(Enrollment=rows, NarrativeCategory=[category(900, "Attentiveness", 1)], NarrativeReport=ratings,
+                AttendanceRecord=[mark(20, date(2026, 6, 8), "P"), mark(21, date(2026, 6, 9), "A")]):
+        card = data.load_report_card(enrollment_id=21, today=AUGUST_15)
+    assert [(y.semester, y.periods, y.completed) for y in card.years] == [
+        ("1st", ("1st_semester",), True), ("2nd", ("2nd_semester",), False)]
+    assert card.behavior_periods == ("1st_semester", "2nd_semester")
+    assert card.behavior[0].marks == {"1st_semester": "AO", "2nd_semester": "SO"}
+    assert (card.months[0].present, card.months[0].absent) == (1, 1)    # both semesters' rows
+    assert card.learner.status == "enrolled" and card.section.strand == "STEM"
+
+
+def test_report_card_of_an_unknown_enrollment():
+    with models(), pytest.raises(data.NothingToPrint, match="Enrollment not found"):
+        data.load_report_card(enrollment_id=404)
+

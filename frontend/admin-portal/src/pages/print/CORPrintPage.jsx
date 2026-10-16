@@ -1,177 +1,113 @@
-import { useState, useEffect } from "react";
+// CORPrintPage.jsx
+//
+// The Certificate of Registration with the school's Admissions Agreement, as
+// the server draws it (school_forms/cor.py): page 1 is the COR with the
+// learner's subjects, then the agreement for their level on long bond, for
+// the parent to sign at the counter. This page only shows that PDF, so the
+// print matches the client's form exactly; it used to draw the COR itself
+// in HTML and save it through html2pdf as a picture of the page, on A4.
+//
+// "SLIS Copy" is the school's; "Parent's Copy" changes only the label at
+// the foot of each page.
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getEnrollment, getSubjects } from "../../api/enrollmentApi";
-import { getStudent } from "../../api/studentApi";
-import { getSchoolSettings } from "../../api/billingApi";
-import { downloadAsPDF } from "../../utils/pdfExport";
-import { PRINT_COLORS as C } from "../../components/print/theme";
+import { downloadSchoolForm } from "../../api/enrollmentApi";
+import { saveBlob } from "../../utils/download";
+import { PRINT_COLORS as C, PRINT_FONT } from "../../components/print/theme";
 import { PrintToolbar, ToolbarButton } from "../../components/print/PrintToolbar";
-import { PrintShell, PrintLoading, PrintError } from "../../components/print/PrintShell";
-import { PrintLetterhead } from "../../components/print/PrintLetterhead";
-import { InfoGrid, InfoItem } from "../../components/print/InfoGrid";
-import { SignatureRow, SignatureBlock, GeneratedStamp } from "../../components/print/SignatureBlock";
-import { StatusBadge } from "../../components/print/StatusBadge";
-import { ENROLLMENT_STATUS_META } from "../../components/print/statusMeta";
+import { PrintError } from "../../components/print/PrintShell";
+
+const COPIES = [
+  { value: "slis",   label: "SLIS Copy" },
+  { value: "parent", label: "Parent's Copy" },
+];
 
 export default function CORPrintPage() {
   const { enrollmentId } = useParams();
-  const [enrollment,     setEnrollment]     = useState(null);
-  const [student,        setStudent]        = useState(null);
-  const [subjects,       setSubjects]       = useState([]);
-  const [schoolName,     setSchoolName]     = useState("South Lakes Integrated School");
-  const [schoolAddress,  setSchoolAddress]  = useState("");
-  const [loading,        setLoading]        = useState(true);
-  const [error,          setError]          = useState(null);
-  const [downloading,    setDownloading]    = useState(false);
+  const [copy, setCopy] = useState("slis");
+  // What the server sent for a copy, tagged with it: a result for another
+  // copy than the one picked is a load still under way.
+  const [result, setResult] = useState(null);   // { copy, url, blob, filename, warnings } | { copy, error }
+  const frame = useRef(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const enr = await getEnrollment(enrollmentId);
-        setEnrollment(enr);
-        const studentId = enr.student_detail?.student_id ?? enr.student;
-        const [stu, subs, settings] = await Promise.all([
-          getStudent(studentId),
-          // This learner's year and grade only, every subject of it, and for
-          // senior high the core subjects plus their strand's. It asked for the
-          // whole school level on the default page of 20, so a Grade 6
-          // certificate printed Grade 1-3 subjects.
-          getSubjects({
-            school_year: enr.school_year,
-            school_level: enr.school_level,
-            grade_level: enr.grade_level,
-            page_size: 100,
-            ...(enr.strand   ? { for_strand: enr.strand } : {}),
-            // for_semester, not semester: the exact match dropped subjects
-            // with no semester recorded, and a HUMSS or ABM certificate
-            // printed "No subjects on record".
-            ...(enr.semester ? { for_semester: enr.semester } : {}),
-          }),
-          getSchoolSettings().catch(() => null),
-        ]);
-        setStudent(stu);
-        setSubjects(Array.isArray(subs) ? subs : subs.results ?? []);
-        if (settings?.school_name) setSchoolName(settings.school_name);
-        if (settings?.school_address) setSchoolAddress(settings.school_address);
-      } catch (e) {
-        setError(e.message || "Failed to load enrollment data.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [enrollmentId]);
+    let stale = false;
+    let url = null;
+    downloadSchoolForm(`cor/${enrollmentId}`, { copy }, `COR-${enrollmentId}.pdf`)
+      .then(({ blob, filename, warnings }) => {
+        if (stale) return;
+        url = URL.createObjectURL(blob);
+        setResult({ copy, url, blob, filename, warnings });
+      })
+      .catch((err) => { if (!stale) setResult({ copy, error: err.message || "Could not load the COR." }); });
+    return () => {
+      stale = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [enrollmentId, copy]);
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    // try/finally, not a bare await: html2pdf rejects on a failed capture or
-    // save, and without this the rejection propagated out of the handler and
-    // setDownloading(false) never ran -- leaving the button disabled and
-    // reading "Generating..." forever, with nothing shown to say why.
+  const current = result?.copy === copy ? result : null;
+  const file = current?.url ? current : null;
+  const error = current?.error;
+
+  const handlePrint = () => {
+    // The browser's PDF viewer inside the frame prints the PDF itself, at
+    // its own page size; where a browser won't print a framed PDF, the
+    // file opens in a tab of its own to print from there.
     try {
-      await downloadAsPDF("cor-doc", `COR-${enrollmentId}.pdf`);
-    } catch (err) {
-      console.error("PDF export failed", err);
-    } finally {
-      setDownloading(false);
+      frame.current.contentWindow.focus();
+      frame.current.contentWindow.print();
+    } catch {
+      window.open(file.url, "_blank");
     }
   };
 
-  if (loading) return <PrintLoading label="Loading…" />;
-  if (error || !enrollment || !student) return <PrintError message={error || "Enrollment not found."} />;
+  if (error) return <PrintError message={error} />;
 
-  const fullName  = [student.last_name, student.first_name, student.middle_name].filter(Boolean).join(", ");
-  const isSHS     = enrollment.school_level === "senior_highschool";
+  const switcher = (
+    <div role="group" aria-label="Copy" style={{ display: "flex", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, overflow: "hidden" }}>
+      {COPIES.map((c) => (
+        <button key={c.value} type="button" aria-pressed={copy === c.value} onClick={() => setCopy(c.value)}
+          style={{
+            padding: "7px 12px", border: "none", cursor: "pointer", fontSize: 13, fontFamily: PRINT_FONT,
+            background: copy === c.value ? "rgba(255,255,255,0.16)" : "transparent",
+            color: copy === c.value ? "white" : "rgba(255,255,255,0.6)",
+            fontWeight: copy === c.value ? 700 : 500,
+          }}>
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
-    <>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#ececec" }}>
       <PrintToolbar
         onBack={() => window.close()}
-        title={`Certificate of Registration — ${fullName} · SY ${enrollment.school_year}`}
+        title={file?.filename ?? "Certificate of Registration and Admissions Agreement"}
+        middle={switcher}
         actions={
           <>
-            <ToolbarButton onClick={handleDownload} disabled={downloading} icon="download">
-              {downloading ? "Generating…" : "Download PDF"}
+            <ToolbarButton onClick={() => saveBlob(file.blob, file.filename)} disabled={!file} icon="download">
+              Download PDF
             </ToolbarButton>
-            <ToolbarButton onClick={() => window.print()} primary icon="printer">Print</ToolbarButton>
+            <ToolbarButton onClick={handlePrint} disabled={!file} primary icon="printer">Print</ToolbarButton>
           </>
         }
       />
-
-      <PrintShell id="cor-doc" maxWidth={900} orientation="portrait">
-        <PrintLetterhead
-          variant="standard"
-          schoolName={schoolName}
-          schoolAddress={schoolAddress}
-          subtitle={`Certificate of Registration — School Year ${enrollment.school_year}`}
-        />
-
-        <InfoGrid columns={3}>
-          <InfoItem label="Name"          value={fullName}          span />
-          <InfoItem label="LRN"           value={student.lrn} />
-          <InfoItem label="Student No."   value={student.student_number} />
-          <InfoItem label="Sex"           value={student.sex} />
-          <InfoItem label="Date of Birth" value={student.birth_date
-            ? new Date(student.birth_date).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })
-            : null} />
-          <InfoItem label="Grade Level"   value={enrollment.grade_level} />
-          <InfoItem label="Section"       value={enrollment.section} />
-          {enrollment.strand   && <InfoItem label="Strand"   value={enrollment.strand} />}
-          {enrollment.semester && <InfoItem label="Semester" value={enrollment.semester === "1st" ? "1st Semester" : "2nd Semester"} />}
-          <InfoItem label="School Year"   value={enrollment.school_year} />
-          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</span>
-            <StatusBadge status={enrollment.enrollment_status} meta={ENROLLMENT_STATUS_META} defaultKey="enrolled" />
-          </div>
-        </InfoGrid>
-
-        {subjects.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 14 }}>
-            No subjects on record for this enrollment.
-          </div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 24 }}>
-            <thead>
-              <tr style={{ background: C.dark }}>
-                <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 40, borderRadius: "6px 0 0 0" }}>#</th>
-                <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, width: 110 }}>Code</th>
-                <th style={{ textAlign: "left",   padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Subject Name</th>
-                {isSHS && <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12 }}>Strand</th>}
-                {isSHS
-                  ? <th style={{ textAlign: "center", padding: "7px 12px", color: "white", fontWeight: 700, fontSize: 12, borderRadius: "0 6px 0 0" }}>Semester</th>
-                  : <th style={{ borderRadius: "0 6px 0 0", padding: 0, width: 0 }} />}
-              </tr>
-            </thead>
-            <tbody>
-              {subjects.map((s, i) => (
-                <tr key={s.subject_id ?? i} style={{ background: i % 2 === 0 ? "white" : C.bg, borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{i + 1}</td>
-                  <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{s.subject_code}</td>
-                  <td style={{ textAlign: "left",   padding: "6px 12px", color: C.dark, fontWeight: 500 }}>{s.subject_name}</td>
-                  {isSHS && <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{s.strand || "—"}</td>}
-                  {isSHS && <td style={{ textAlign: "center", padding: "6px 12px", color: C.muted, fontSize: 12 }}>{s.semester || "—"}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        <div style={{ padding: "12px 16px", background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`, marginBottom: 18, fontSize: 12, color: C.muted, lineHeight: 1.8, fontStyle: "italic" }}>
-          This certifies that{" "}
-          <strong style={{ color: C.dark }}>
-            {student.first_name} {student.middle_name ? student.middle_name[0] + ". " : ""}{student.last_name}
-          </strong>{" "}
-          is officially enrolled for School Year <strong style={{ color: C.dark }}>{enrollment.school_year}</strong> at{" "}
-          <strong style={{ color: C.dark }}>{schoolName}</strong> under{" "}
-          <strong style={{ color: C.dark }}>{enrollment.grade_level}</strong>
-          {enrollment.section ? `, Section ${enrollment.section}` : ""}.
+      {file?.warnings?.length > 0 && (
+        <ul role="status" style={{ margin: 0, padding: "8px 24px 8px 40px", background: C.amberBg, color: C.amber, fontSize: 13, fontFamily: PRINT_FONT }}>
+          {file.warnings.map((w) => <li key={w}>{w}</li>)}
+        </ul>
+      )}
+      {file ? (
+        <iframe ref={frame} src={file.url} title="Certificate of Registration and Admissions Agreement"
+          style={{ flex: 1, width: "100%", border: 0 }} />
+      ) : (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 15, fontFamily: PRINT_FONT }}>
+          Preparing the COR…
         </div>
-
-        <SignatureRow>
-          <GeneratedStamp />
-          <SignatureBlock role="Registrar's Signature over Printed Name" />
-          <SignatureBlock role="School Principal's Signature" />
-        </SignatureRow>
-      </PrintShell>
-    </>
+      )}
+    </div>
   );
 }

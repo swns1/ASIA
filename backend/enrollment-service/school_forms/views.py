@@ -8,10 +8,18 @@ own files, SF10 in the school's own permanent-record format. Each takes
     /api/school-forms/sf10/<student_id>/?level=elementary|junior_highschool|senior_highschool
         [&copy_for=&purpose=&graduation_date=YYYY-MM-DD&special_order=]
 
-Roles follow what each form shows: SF1 is enrollment data, read today by every
-staff role; SF2 and SF10 are attendance and grades, which accounting can't
-read. A teacher gets only the sections they advise in that school year, and
-only learners on their own roster.
+and two that are PDFs only: the Certificate of Registration with the
+school's Admissions Agreement after it (cor.py), and the SF9 report card in
+DepEd's layout with the school's letterhead (sf9.py).
+
+    /api/school-forms/cor/<enrollment_id>/[?copy=slis|parent]
+    /api/school-forms/sf9/<enrollment_id>/
+
+Roles follow what each form shows: SF1 and the COR are enrollment data, read
+today by every staff role; SF2, SF9 and SF10 are attendance and grades, which
+accounting can't read. A teacher gets only the sections they advise in that
+school year, and only learners on their own roster. The SF9 is also the
+guardian portal's report card, so a guardian gets it for their own child.
 
 Anything the file could not fully say (class days missing attendance, more
 records than DepEd's form has room for) goes back in X-Form-Warnings as a
@@ -26,12 +34,13 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
-from accounts.permissions import GRADE_READ_ROLES, HasRole, teacher_student_ids
+from accounts.permissions import GRADE_READ_ROLES, HasRole, guardian_student_ids, teacher_student_ids
 from enrollments.models import SectionAdvisory
+from enrollments.rules import ATTENDED_STATUSES
 
-from . import data, pdf, sf1, sf2, sf10
+from . import cor, data, pdf, sf1, sf2, sf9, sf10
 from .records import IssueDetails, semester_label
-from .serializers import AttendanceFormQuery, PermanentRecordQuery, SectionFormQuery
+from .serializers import AttendanceFormQuery, PermanentRecordQuery, RegistrationQuery, SectionFormQuery
 from .workbook import XLSX_CONTENT_TYPE, to_bytes
 
 STAFF_READ_ROLES = {"super_admin", "admin", "registrar", "accounting", "teacher"}
@@ -59,8 +68,13 @@ def form_response(workbook, name, warnings, file_type="xlsx", stretch=pdf.EXCEL_
         content_type = pdf.PDF_CONTENT_TYPE
     else:
         body, content_type = to_bytes(workbook), XLSX_CONTENT_TYPE
+    return file_response(body, content_type, f"{name}.{file_type}", warnings)
+
+
+def file_response(body, content_type, filename, warnings):
+    """A download, with what it could not fully say in X-Form-Warnings."""
     response = HttpResponse(body, content_type=content_type)
-    response["Content-Disposition"] = f'attachment; filename="{name}.{file_type}"'
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
     # Learner records: never kept by a browser or a proxy cache.
     response["Cache-Control"] = "no-store"
     if warnings:
@@ -155,3 +169,66 @@ class SF10View(SchoolFormView):
         name = filename(form, record.learner.lrn, record.learner.last_name)
         # Drawn to the school's templates in exact inches, it prints as drawn.
         return form_response(workbook, name, warnings, p["file"], stretch=pdf.AS_DRAWN)
+
+
+class CORView(SchoolFormView):
+    """
+    The Certificate of Registration, then the Admissions Agreement for the
+    learner's level, for the parent to sign at the counter. A pending
+    enrollment prints too (its COR says it is not yet official); a cancelled
+    one has nothing to certify.
+    """
+    required_roles = STAFF_READ_ROLES
+
+    def get(self, request, enrollment_id):
+        query = RegistrationQuery(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        try:
+            registration = data.load_registration(enrollment_id=enrollment_id)
+        except data.NothingToPrint as exc:
+            return Response({"detail": str(exc)}, status=404)
+        learner, section = registration.learner, registration.section
+        user = request.user
+        if getattr(user, "role", None) == "teacher" and learner.student_id not in teacher_student_ids(user):
+            raise PermissionDenied("You can print a COR only for learners in your sections.")
+        if learner.status == "cancelled":
+            return Response({"detail": "This enrollment was cancelled, so there is no registration to certify."},
+                            status=409)
+        body, warnings = cor.build(registration, copy=query.validated_data["copy"])
+        name = filename("COR", learner.lrn or learner.student_number, learner.last_name,
+                        f"SY{section.school_year}", semester_label(section.semester) if section.semester else None)
+        return file_response(body, pdf.PDF_CONTENT_TYPE, f"{name}.pdf", warnings)
+
+
+class SF9View(SchoolFormView):
+    """
+    The SF9, the Learner's Progress Report Card, for one enrollment's school
+    year (both semesters in senior high). It is also the report card the
+    enrollment page and the guardian portal print, so a guardian may read
+    their own child's. An enrollment not yet started, or cancelled, has no
+    card to print.
+    """
+    required_roles = GRADE_READ_ROLES | {"guardian"}
+
+    def get(self, request, enrollment_id):
+        try:
+            card = data.load_report_card(enrollment_id=enrollment_id)
+        except data.NothingToPrint as exc:
+            return Response({"detail": str(exc)}, status=404)
+        learner, section = card.learner, card.section
+        user = request.user
+        role = getattr(user, "role", None)
+        if role == "teacher" and learner.student_id not in teacher_student_ids(user):
+            raise PermissionDenied("You can print a report card only for learners in your sections.")
+        if role == "guardian" and learner.student_id not in guardian_student_ids(user):
+            raise PermissionDenied("You can view report cards only for your own children.")
+        if learner.status not in ATTENDED_STATUSES:
+            reason = ("was cancelled" if learner.status == "cancelled" else "hasn't started yet")
+            return Response({"detail": f"This enrollment {reason}, so there is no report card."}, status=409)
+        body, warnings = sf9.build(card)
+        # What a missing setting leaves blank is the school's to fix; a
+        # guardian can't act on it.
+        if role == "guardian":
+            warnings = []
+        name = filename("SF9", learner.lrn or learner.student_number, learner.last_name, f"SY{section.school_year}")
+        return file_response(body, pdf.PDF_CONTENT_TYPE, f"{name}.pdf", warnings)

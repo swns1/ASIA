@@ -81,7 +81,11 @@ describe("SchoolFormsPage in dark mode", () => {
 
   it("picks an SF9 learner from the dropdown and prints their report card", async () => {
     getStudents.mockResolvedValue([LEARNER]);
-    getEnrollments.mockResolvedValue([{ enrollment_id: 31, school_year: "2026-2027", grade_level: "Grade 7", section: "Rizal" }]);
+    getEnrollments.mockResolvedValue([
+      { enrollment_id: 31, school_year: "2026-2027", grade_level: "Grade 7", section: "Rizal", enrollment_status: "enrolled" },
+      // Cancelled before it started: no report card to print.
+      { enrollment_id: 32, school_year: "2027-2028", grade_level: "Grade 8", section: "Rizal", enrollment_status: "cancelled" },
+    ]);
     renderDark();
 
     fireEvent.change(searchBoxes()[0], { target: { value: "Cruz" } });
@@ -91,6 +95,7 @@ describe("SchoolFormsPage in dark mode", () => {
     fireEvent.click(row);
 
     expect(await screen.findByText("SY 2026-2027 — Grade 7 · Rizal")).toBeTruthy();
+    expect(screen.queryByText("SY 2027-2028 — Grade 8 · Rizal")).toBeNull();
     fireEvent.click(screen.getByText("Print SF9"));
     expect(window.open).toHaveBeenCalledWith("/print/sf9/31", "_blank");
   });

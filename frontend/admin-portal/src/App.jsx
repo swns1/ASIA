@@ -53,7 +53,6 @@ const RequirementsPage      = lazyRoute(() => import("./pages/RequirementsPage")
 const UsersPage             = lazyRoute(() => import("./pages/UsersPage"));
 const AnalyticsPage         = lazyRoute(() => import("./pages/AnalyticsPage"));
 const AcademicCalendarPage  = lazyRoute(() => import("./pages/AcademicCalendarPage"));
-const ReportCardPage        = lazyRoute(() => import("./pages/ReportCardPage"));
 const SchoolFormsPage       = lazyRoute(() => import("./pages/SchoolFormsPage"));
 const TeacherAdvisoriesPage = lazyRoute(() => import("./pages/TeacherAdvisoriesPage"));
 const SchoolYearsPage       = lazyRoute(() => import("./pages/SchoolYearsPage"));
@@ -190,11 +189,12 @@ export default function App() {
             chrome-less routes in this block. */}
         <Route path="/apply/:inviteId" element={<ApplicantFormPage />} />
 
-        {/* Report card is backend-scoped: guardians may open only their own
-            child's (403 otherwise) -- and chrome-less, since it's a printable
-            document. The roles match the server's (grade readers plus the
-            guardian); accounting, which it refuses, got an error page. */}
-        <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><ReportCardPage /></P>} />
+        {/* The report card is the SF9 (school_forms/sf9.py), the same page as
+            /print/sf9 below. It is backend-scoped: guardians may open only
+            their own child's (403 otherwise) -- and chrome-less, since it's a
+            printable document. The roles match the server's (grade readers
+            plus the guardian); accounting, which it refuses, got an error page. */}
+        <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><SF9PrintPage /></P>} />
 
         {/* ── Print / PDF documents (no shell by design) ── */}
         <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />

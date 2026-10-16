@@ -341,6 +341,9 @@ function SYProgress({ startDate, endDate }) {
 const DEPED_IDENTITY_FIELDS = ["deped_school_id", "region", "division", "district", "school_head_name"];
 // The SF10 permanent record's signature lines: each the name printed over a
 // line, labelled with the title printed under it. Blank prints the line empty.
+// The COR uses them too: the records officer certifies its first page, and the
+// level's principal (and in senior high the department head) signs the
+// Admissions Agreement after it.
 const SF10_SIGNATORIES = [
   { key: "elementary_principal_name", label: "Elementary School Principal" },
   { key: "jhs_principal_name",        label: "Junior High School Principal" },
@@ -549,7 +552,7 @@ function GeneralSettingsTab() {
             )}
           </SectionCard>
 
-          <SectionCard title="School Forms" subtitle="Printed on SF1, SF2 and the SF10 permanent record" icon="ti-forms" delay={0.07} span>
+          <SectionCard title="School Forms" subtitle="Printed on SF1, SF2, the SF10 permanent record and the COR" icon="ti-forms" delay={0.07} span>
             {loading ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
                 {[1, 2, 3, 4, 5].map(i => <Sk key={i} h={68} />)}

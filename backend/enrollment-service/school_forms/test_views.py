@@ -279,3 +279,181 @@ def test_an_unknown_file_type_is_refused(download, params):
     response, load = download({**params, "file": "docx"}, user("registrar"))
     assert response.status_code == 400 and "file" in response.data
     load.assert_not_called()
+
+
+# ── COR ──────────────────────────────────────────────────────────────────────
+
+def registration(status="enrolled", semester="", student_id=5):
+    return SimpleNamespace(
+        learner=SimpleNamespace(student_id=student_id, lrn="109100000005", student_number="2026-00005",
+                                last_name="Dela Cruz", status=status),
+        section=SimpleNamespace(school_year="2026-2027", semester=semester),
+    )
+
+
+def cor(params, as_user, roster=frozenset(), warnings=(), **kw):
+    with patch.object(data, "load_registration", return_value=registration(**kw)) as load, \
+         patch("school_forms.views.cor.build", return_value=(b"%PDF-1.4 cor", list(warnings))) as build, \
+         patch("school_forms.views.teacher_student_ids", return_value=set(roster)):
+        response = call(views.CORView, "/api/school-forms/cor/41/", params, as_user, enrollment_id=41)
+    return response, load, build
+
+
+def test_cor_is_a_pdf_named_for_the_learner_and_year():
+    response, load, build = cor({}, user("registrar"), warnings=["No subjects are set up."])
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert response["Content-Disposition"] == 'attachment; filename="COR_109100000005_Dela-Cruz_SY2026-2027.pdf"'
+    assert response["Cache-Control"] == "no-store"
+    assert json.loads(response["X-Form-Warnings"]) == ["No subjects are set up."]
+    assert response.content == b"%PDF-1.4 cor"
+    load.assert_called_once_with(enrollment_id=41)
+    assert build.call_args.kwargs == {"copy": "slis"}
+
+
+def test_cor_senior_high_file_names_the_semester():
+    response, _, _ = cor({}, user("registrar"), semester="2nd")
+    assert 'filename="COR_109100000005_Dela-Cruz_SY2026-2027_2nd-Semester.pdf"' in response["Content-Disposition"]
+
+
+def test_cor_parents_copy():
+    _, _, build = cor({"copy": "parent"}, user("registrar"))
+    assert build.call_args.kwargs == {"copy": "parent"}
+
+
+def test_cor_refuses_an_unknown_copy():
+    response, load, _ = cor({"copy": "teacher"}, user("registrar"))
+    assert response.status_code == 400 and "copy" in response.data
+    load.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["super_admin", "admin", "registrar", "accounting"])
+def test_cor_every_staff_role(role):
+    assert cor({}, user(role))[0].status_code == 200
+
+
+def test_cor_refuses_a_guardian():
+    response, load, _ = cor({}, user("guardian"))
+    assert response.status_code == 403
+    load.assert_not_called()
+
+
+def test_cor_teacher_only_for_a_learner_on_their_roster():
+    response, _, build = cor({}, user("teacher", 7))
+    assert response.status_code == 403
+    build.assert_not_called()
+    assert cor({}, user("teacher", 7), roster={5})[0].status_code == 200
+
+
+@pytest.mark.parametrize("status", ["pending", "enrolled", "completed", "transferred_out"])
+def test_cor_prints_for_any_enrollment_not_cancelled(status):
+    assert cor({}, user("registrar"), status=status)[0].status_code == 200
+
+
+def test_cor_of_a_cancelled_enrollment_is_refused_with_a_reason():
+    response, _, build = cor({}, user("registrar"), status="cancelled")
+    assert response.status_code == 409
+    assert response.data == {"detail": "This enrollment was cancelled, so there is no registration to certify."}
+    build.assert_not_called()
+
+
+def test_cor_of_an_unknown_enrollment_is_a_404():
+    with patch.object(data, "load_registration", side_effect=data.NothingToPrint("Enrollment not found.")):
+        response = call(views.CORView, "/api/school-forms/cor/999/", {}, user("admin"), enrollment_id=999)
+    assert response.status_code == 404 and response.data == {"detail": "Enrollment not found."}
+
+
+def test_cor_end_to_end_is_a_real_pdf():
+    from school_forms.test_cor import registration as full_registration
+
+    with patch.object(data, "load_registration", return_value=full_registration()):
+        response = call(views.CORView, "/api/school-forms/cor/1/", {"copy": "parent"}, user("registrar"),
+                        enrollment_id=1)
+    assert response.status_code == 200 and response.content.startswith(b"%PDF-")
+    assert "X-Form-Warnings" not in response
+
+
+# ── SF9 ──────────────────────────────────────────────────────────────────────
+
+def report_card(status="completed", student_id=5):
+    return SimpleNamespace(
+        learner=SimpleNamespace(student_id=student_id, lrn="109100000005", student_number="2026-00005",
+                                last_name="Dela Cruz", status=status),
+        section=SimpleNamespace(school_year="2026-2027"),
+    )
+
+
+def sf9(as_user, roster=frozenset(), children=frozenset(), warnings=(), **kw):
+    with patch.object(data, "load_report_card", return_value=report_card(**kw)) as load, \
+         patch("school_forms.views.sf9.build", return_value=(b"%PDF-1.4 sf9", list(warnings))) as build, \
+         patch("school_forms.views.teacher_student_ids", return_value=set(roster)), \
+         patch("school_forms.views.guardian_student_ids", return_value=set(children)):
+        response = call(views.SF9View, "/api/school-forms/sf9/41/", {}, as_user, enrollment_id=41)
+    return response, load, build
+
+
+def test_sf9_is_a_pdf_named_for_the_learner_and_year():
+    response, load, _ = sf9(user("registrar"), warnings=["No adviser is assigned."])
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert response["Content-Disposition"] == 'attachment; filename="SF9_109100000005_Dela-Cruz_SY2026-2027.pdf"'
+    assert response["Cache-Control"] == "no-store"
+    assert json.loads(response["X-Form-Warnings"]) == ["No adviser is assigned."]
+    assert response.content == b"%PDF-1.4 sf9"
+    load.assert_called_once_with(enrollment_id=41)
+
+
+@pytest.mark.parametrize("role", ["super_admin", "admin", "registrar"])
+def test_sf9_every_grade_reading_role(role):
+    assert sf9(user(role))[0].status_code == 200
+
+
+def test_sf9_refuses_accounting():
+    response, load, _ = sf9(user("accounting"))
+    assert response.status_code == 403
+    load.assert_not_called()
+
+
+def test_sf9_teacher_only_for_a_learner_on_their_roster():
+    response, _, build = sf9(user("teacher", 7))
+    assert response.status_code == 403
+    build.assert_not_called()
+    assert sf9(user("teacher", 7), roster={5})[0].status_code == 200
+
+
+def test_sf9_guardian_only_for_their_own_child_and_without_the_schools_warnings():
+    response, _, build = sf9(user("guardian", 8), children={6})
+    assert response.status_code == 403
+    build.assert_not_called()
+    response, _, _ = sf9(user("guardian", 8), children={5}, warnings=["No adviser is assigned."])
+    assert response.status_code == 200 and "X-Form-Warnings" not in response
+
+
+@pytest.mark.parametrize("status, reason", [
+    ("pending", "This enrollment hasn't started yet, so there is no report card."),
+    ("cancelled", "This enrollment was cancelled, so there is no report card."),
+])
+def test_sf9_of_an_enrollment_never_attended_is_refused_with_a_reason(status, reason):
+    response, _, build = sf9(user("registrar"), status=status)
+    assert response.status_code == 409 and response.data == {"detail": reason}
+    build.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["enrolled", "completed", "transferred_out"])
+def test_sf9_prints_for_any_attended_enrollment(status):
+    assert sf9(user("registrar"), status=status)[0].status_code == 200
+
+
+def test_sf9_of_an_unknown_enrollment_is_a_404():
+    with patch.object(data, "load_report_card", side_effect=data.NothingToPrint("Enrollment not found.")):
+        response = call(views.SF9View, "/api/school-forms/sf9/999/", {}, user("admin"), enrollment_id=999)
+    assert response.status_code == 404 and response.data == {"detail": "Enrollment not found."}
+
+
+def test_sf9_end_to_end_is_a_real_pdf():
+    from school_forms.test_sf9 import card
+
+    with patch.object(data, "load_report_card", return_value=card()):
+        response = call(views.SF9View, "/api/school-forms/sf9/1/", {}, user("registrar"), enrollment_id=1)
+    assert response.status_code == 200 and response.content.startswith(b"%PDF-")
+    assert response["Content-Disposition"] == 'attachment; filename="SF9_109100000005_Dela-Cruz_SY2024-2025.pdf"'

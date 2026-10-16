@@ -733,6 +733,12 @@ function BillingTab({ ledger, loading, failed, onRetry, schoolYear }) {
   );
 }
 
+// Why an enrollment has no printable report card (the server refuses one).
+const NO_REPORT_CARD = {
+  pending: "The report card is ready once classes begin.",
+  cancelled: "This enrollment was cancelled, so there is no report card.",
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function GuardianChildPage() {
   usePageTitle("Child Records");
@@ -876,12 +882,13 @@ export default function GuardianChildPage() {
                 {student.lrn && <span className="tabular-nums">LRN {student.lrn}</span>}
               </div>
             </div>
-            {/* The printable report card already existed at this route and is
-                already scoped so a guardian can only open their own child's —
-                but nothing in this portal linked to it, so a parent had no way
-                to reach it. Its own toolbar has a Back button (navigate(-1)),
-                so this doesn't strand anyone on a chrome-less page. */}
-            <Button variant="secondary" size="sm" icon="ti-printer" to={`/report-card/${enrollmentId}`} className="w-full sm:w-auto">
+            {/* The printable report card is the school's SF9, scoped so a
+                guardian can only open their own child's. Its own toolbar has a
+                Back button, so this doesn't strand anyone on a chrome-less
+                page. A year not yet started (or cancelled) has no card yet. */}
+            <Button variant="secondary" size="sm" icon="ti-printer" to={`/report-card/${enrollmentId}`} className="w-full sm:w-auto"
+              disabled={!!NO_REPORT_CARD[enrollment?.enrollment_status]}
+              title={NO_REPORT_CARD[enrollment?.enrollment_status]}>
               Printable report card
             </Button>
           </div>

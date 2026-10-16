@@ -123,7 +123,7 @@ export default function InvoicePrintPage() {
       />
 
       <PrintShell id="invoice-doc" maxWidth={900} orientation="portrait" pageMargin="10mm 14mm">
-        <PrintLetterhead variant="standard" schoolName={schoolName} schoolAddress={schoolAddress} />
+        <PrintLetterhead schoolName={schoolName} schoolAddress={schoolAddress} />
 
         <DocTitleRow
           title="Student Invoice"

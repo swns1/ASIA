@@ -76,3 +76,9 @@ class PermanentRecordQuery(serializers.Serializer):
     graduation_date = serializers.DateField(required=False, allow_null=True, default=None)
     special_order = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
     file = serializers.ChoiceField(choices=FILE_TYPES, required=False, default="xlsx")
+
+
+class RegistrationQuery(serializers.Serializer):
+    """The COR: whose copy this print is, printed at its foot."""
+
+    copy = serializers.ChoiceField(choices=("slis", "parent"), required=False, default="slis")

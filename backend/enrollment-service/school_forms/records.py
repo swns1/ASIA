@@ -2,8 +2,8 @@
 The plain data the form builders take, and the formatting DepEd's forms share.
 
 data.py fills these from the database; sf1.py, sf2.py and sf10.py turn them
-into workbooks. Nothing here touches the ORM, so the builders are tested with
-hand-made records.
+into workbooks, cor.py and sf9.py into PDFs. Nothing here touches the ORM, so
+the builders are tested with hand-made records.
 """
 from dataclasses import dataclass, field
 from datetime import date
@@ -154,6 +154,57 @@ class PermanentRecordData:
     years: tuple
     prior: PriorLevel | None = None
     issue: IssueDetails = IssueDetails()
+
+
+@dataclass(frozen=True)
+class SubjectLine:
+    """One row of the COR's subject table."""
+    code: str
+    name: str
+    strand: str = ""
+    semester: str = ""              # "1st" or "2nd", senior high only
+
+
+@dataclass(frozen=True)
+class RegistrationData:
+    """The COR and Admissions Agreement for one enrollment (learner.status is the enrollment's)."""
+    school: School
+    learner: Learner
+    section: SectionInfo
+    subjects: tuple = ()
+
+
+@dataclass(frozen=True)
+class MonthAttendance:
+    """One month of the SF9's Report on Attendance. None prints blank."""
+    month: date                     # the 1st of the month
+    school_days: int | None = None
+    present: int | None = None
+    absent: int | None = None
+
+
+@dataclass(frozen=True)
+class BehaviorRow:
+    """One class-behavior area on the SF9, with its mark (AO / SO / RO / NO) per grading period."""
+    name: str
+    description: str = ""
+    marks: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ReportCardData:
+    """
+    The SF9 for one school year: in senior high both semesters, each its own
+    enrollment. learner.status is the status of the enrollment asked for;
+    section.semester is blank, since the card is the year's.
+    """
+    school: School
+    learner: Learner
+    section: SectionInfo
+    years: tuple                    # YearRecords: the year, or each senior high semester attended
+    months: tuple = ()              # MonthAttendance, the school year's months in order
+    behavior_periods: tuple = ()    # the grading periods class behavior is marked in
+    behavior: tuple = ()            # BehaviorRow
 
 
 # ─── Formatting DepEd's forms share ─────────────────────────────────────────

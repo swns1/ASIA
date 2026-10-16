@@ -4,7 +4,8 @@ builders take. No per-learner queries: a 60-learner SF1 is the same handful
 of queries as a 10-learner one.
 """
 import logging
-from datetime import timedelta
+from dataclasses import replace
+from datetime import date, timedelta
 
 from django.db import DatabaseError
 from django.utils import timezone
@@ -15,17 +16,19 @@ from academic_calendar.models import CalendarEvent
 from attendance.models import AttendanceRecord
 from dashboard.teachers_today import NO_CLASS_EVENT_TYPES, expected_subjects
 from enrollments.models import Enrollment, EnrollmentTransfer, Section, SectionAdvisory, Student
+from enrollments.report_views import senior_high_year_rows
 from enrollments.rules import ATTENDED_STATUSES, GRADE_ORDER, SCHOOL_LEVEL_OF_GRADE
-from grades.models import Grade
+from grades.models import Grade, NarrativeCategory, NarrativeReport
 from shared.school_year import configured_dates
 from subjects.models import Subject
 
 from .models import SchoolIdentity
 from .records import (
-    AttendanceData, IssueDetails, Learner, PermanentRecordData, PriorLevel, RegisterData, School,
-    SectionInfo, Signatories, SubjectRecord, Transfer, YearRecord,
+    AttendanceData, BehaviorRow, IssueDetails, Learner, MonthAttendance, PermanentRecordData, PriorLevel,
+    RegisterData, RegistrationData, ReportCardData, School, SectionInfo, Signatories, SubjectLine, SubjectRecord,
+    Transfer, YearRecord,
 )
-from .sf2 import month_end
+from .sf2 import ABSENT, PRESENT, month_end
 from .sf10 import subject_group, year_result
 
 logger = logging.getLogger(__name__)
@@ -426,4 +429,147 @@ def load_permanent_record(*, student_id, level, issue=None):
     return PermanentRecordData(
         school=school, level=level, learner=learner, years=tuple(_years(at_level)),
         prior=_prior_level(level, before, school), issue=issue or IssueDetails(),
+    )
+
+
+# ─── COR ────────────────────────────────────────────────────────────────────
+
+def load_registration(*, enrollment_id):
+    """
+    One enrollment's Certificate of Registration: the learner, their section,
+    and the subjects of their year and grade -- in senior high only the core
+    subjects and their strand's, of their semester. That is the list the SF10
+    expects a grade in (expected_subjects), and the one the COR page used to
+    ask the subjects API for, in the same order (by name).
+    """
+    row = Enrollment.objects.select_related("student").filter(enrollment_id=enrollment_id).first()
+    if not row:
+        raise NothingToPrint("Enrollment not found.")
+    shs = row.school_level == "senior_highschool"
+    catalogue = list(Subject.objects.filter(
+        school_year=row.school_year, school_level=row.school_level, grade_level=row.grade_level,
+    ).values("subject_id", "subject_code", "subject_name", "school_level", "grade_level", "strand", "semester"))
+    wanted = expected_subjects(
+        row.school_level, row.grade_level, row.strand, catalogue,
+        f"{row.semester}_semester" if shs and row.semester else None,
+    )
+    subjects = sorted(
+        (s for s in catalogue if s["subject_id"] in wanted),
+        key=lambda s: ((s["subject_name"] or "").lower(), s["subject_id"]),
+    )
+    return RegistrationData(
+        school=load_school(),
+        learner=replace(_learner(row, {}, {}), student_number=row.student.student_number or ""),
+        section=SectionInfo(
+            school_year=row.school_year, school_level=row.school_level, grade_level=row.grade_level,
+            section=row.section or "", strand=row.strand or "", semester=row.semester or "",
+        ),
+        subjects=tuple(
+            SubjectLine(code=s["subject_code"] or "", name=s["subject_name"] or "",
+                        strand=s["strand"] or "", semester=s["semester"] or "")
+            for s in subjects
+        ),
+    )
+
+
+# ─── SF9 ────────────────────────────────────────────────────────────────────
+
+SEMESTERS = ("1st_semester", "2nd_semester")
+# Class behavior is marked with DepEd's observed-values marks. Rows saved in
+# the app's first vocabulary read as the mark the entry screens show for
+# them (frontend constants/observedValues.js).
+BEHAVIOR_MARKS = ("AO", "SO", "RO", "NO")
+LEGACY_MARKS = {"outstanding": "AO", "satisfactory": "SO", "needs_improvement": "RO"}
+
+
+def _next_month(month):
+    return (month.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+
+def _attendance(school_year, rows, today):
+    """
+    The school year's months, each with its class days, days present and
+    days absent. Counted as on the SF2: class days only, P and L present, A
+    and E absent. A month not begun, or wholly before the learner came or
+    after they left, prints blank; so do present and absent in a month with
+    class days but no attendance taken.
+    """
+    ids = [r.enrollment_id for r in rows]
+    marks = {
+        day: status for _, day, status in AttendanceRecord.objects.filter(enrollment_id__in=ids)
+        .values_list("enrollment_id", "date", "status")
+    }
+    opening = int(school_year[:4])
+    start, end = configured_dates(school_year) or (date(opening, 6, 1), date(opening + 1, 3, 31))
+    if marks:       # a year not on the registry still shows every month it has attendance for
+        start, end = min(start, min(marks)), max(end, max(marks))
+    transfers = _transfers(ids)
+    arrived = min((t.effective_date for (_, kind), t in transfers.items() if kind == "transfer_in"), default=None)
+    left = max((t.effective_date for (_, kind), t in transfers.items() if kind == "transfer_out"), default=None)
+
+    last_counted = min(end, today)
+    saturdays = {day for day in marks if day.weekday() == SATURDAY}
+    days = class_days(school_year, start, last_counted, saturdays) if start <= last_counted else []
+    days = [d for d in days if (not arrived or d >= arrived) and (not left or d <= left)]
+
+    months, month = [], start.replace(day=1)
+    while month <= end:
+        last = month_end(month)
+        mine = [d for d in days if month <= d <= last]
+        here = month <= today and not (arrived and last < arrived) and not (left and month > left)
+        if not here:
+            months.append(MonthAttendance(month=month))
+        elif not any(d in marks for d in mine):
+            months.append(MonthAttendance(month=month, school_days=len(mine)))
+        else:
+            months.append(MonthAttendance(
+                month=month, school_days=len(mine),
+                present=sum(1 for d in mine if marks.get(d) in PRESENT),
+                absent=sum(1 for d in mine if marks.get(d) in ABSENT),
+            ))
+        month = _next_month(month)
+    return tuple(months)
+
+
+def _behavior(rows, periods):
+    """The class-behavior areas, each with its marks; an inactive area prints only when it was marked."""
+    marks = {}
+    for category_id, period, rating in NarrativeReport.objects.filter(
+        enrollment_id__in=[r.enrollment_id for r in rows],
+    ).values_list("category_id", "grading_period", "rating"):
+        mark = LEGACY_MARKS.get(rating, rating)
+        if period in periods and mark in BEHAVIOR_MARKS:
+            marks.setdefault(category_id, {})[period] = mark
+    categories = NarrativeCategory.objects.order_by("sort_order", "name").values(
+        "category_id", "name", "description", "is_active",
+    )
+    return tuple(
+        BehaviorRow(name=c["name"] or "", description=c["description"] or "", marks=marks.get(c["category_id"], {}))
+        for c in categories if c["is_active"] or c["category_id"] in marks
+    )
+
+
+def load_report_card(*, enrollment_id, today=None):
+    """
+    One enrollment's SF9. In senior high the card is the year's: both
+    semester rows the learner attended (senior_high_year_rows, as the report
+    card endpoint reads them), each with its own grades and attendance.
+    """
+    row = Enrollment.objects.select_related("student").filter(enrollment_id=enrollment_id).first()
+    if not row:
+        raise NothingToPrint("Enrollment not found.")
+    shs = row.school_level == "senior_highschool"
+    rows = senior_high_year_rows(row) if shs else [row]
+    periods = SEMESTERS if shs else QUARTERS
+    return ReportCardData(
+        school=load_school(),
+        learner=replace(_learner(row, {}, {}), student_number=row.student.student_number or ""),
+        section=SectionInfo(
+            school_year=row.school_year, school_level=row.school_level, grade_level=row.grade_level,
+            section=row.section or "", strand=row.strand or "",
+        ),
+        years=tuple(_years(rows)),
+        months=_attendance(row.school_year, rows, today or timezone.localdate()),
+        behavior_periods=periods,
+        behavior=_behavior(rows, periods),
     )

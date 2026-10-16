@@ -1,6 +1,6 @@
 /**
- * Tests for utils/grading.js — the DepEd period and attendance mapping behind
- * every printed report card and permanent record.
+ * Tests for utils/grading.js — the DepEd period mapping behind the grade
+ * screens.
  *
  * The defect these exist for: Nursery and Kindergarten declared a grading
  * period literally named "annual". No such period exists — the backend's
@@ -21,7 +21,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { LEVEL_CONFIG, levelConfig, attIndex, GRADE_ORDER } from "./grading";
+import { LEVEL_CONFIG, levelConfig, GRADE_ORDER } from "./grading";
 
 // backend/enrollment-service/grades/models.py :: Grade.GRADING_PERIOD_CHOICES
 const VALID_PERIODS = [
@@ -84,50 +84,6 @@ describe("LEVEL_CONFIG", () => {
   it("falls back to the quarterly config for an unrecognised level", () => {
     expect(levelConfig("undeclared").periods).toEqual(LEVEL_CONFIG.elementary.periods);
     expect(levelConfig(undefined).periods).toEqual(LEVEL_CONFIG.elementary.periods);
-  });
-});
-
-describe("attIndex", () => {
-  // vitest.config.js pins TZ to Asia/Manila precisely so date-only strings
-  // behave here the way they do for the school.
-  it("puts the opening months of the school year in the first quarter", () => {
-    // The regression: the school year runs June-March, but this mapped Q1 to
-    // Aug-Oct and swept June and July into the FINAL bucket via its default
-    // return — filing the first two months of the year as fourth-quarter
-    // attendance on the permanent record.
-    expect(attIndex("2025-06-15", "quarterly")).toBe(0);
-    expect(attIndex("2025-07-15", "quarterly")).toBe(0);
-  });
-
-  it("maps each quarter to its own three-month block", () => {
-    const cases = [
-      ["2025-06-02", 0], ["2025-08-29", 0],
-      ["2025-09-01", 1], ["2025-11-28", 1],
-      ["2025-12-01", 2], ["2026-01-30", 2],
-      ["2026-02-02", 3], ["2026-03-31", 3],
-    ];
-    for (const [day, expected] of cases) {
-      expect(attIndex(day, "quarterly"), day).toBe(expected);
-    }
-  });
-
-  it("splits a semester year at the same June-March boundary", () => {
-    expect(attIndex("2025-06-15", "semester")).toBe(0);
-    expect(attIndex("2025-10-15", "semester")).toBe(0);
-    expect(attIndex("2025-11-15", "semester")).toBe(1);
-    expect(attIndex("2026-03-15", "semester")).toBe(1);
-  });
-
-  it("returns an index inside the column range for every month", () => {
-    // The guard against another silent fall-through: whatever the month, the
-    // result has to be a real column on the form.
-    for (let month = 1; month <= 12; month += 1) {
-      const day = `2025-${String(month).padStart(2, "0")}-15`;
-      expect(attIndex(day, "quarterly")).toBeGreaterThanOrEqual(0);
-      expect(attIndex(day, "quarterly")).toBeLessThan(4);
-      expect(attIndex(day, "semester")).toBeGreaterThanOrEqual(0);
-      expect(attIndex(day, "semester")).toBeLessThan(2);
-    }
   });
 });
 

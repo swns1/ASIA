@@ -63,7 +63,7 @@ const SF10_FILES = [
 const OTHER_FORMS = [
   {
     code: "SF9", name: "Learner's Report Card",
-    desc: "Periodic report card issued to learners at the end of each grading period.",
+    desc: "DepEd's report card with the school's letterhead, as a PDF to print on long bond and fold.",
     icon: "ti-file-certificate", color: "var(--color-success-500)", bg: "var(--color-success-50)", tile: `bg-success-50 ${CHIP_GLOW.success}`, status: "available", buttons: "the print button appears",
   },
   {
@@ -403,7 +403,9 @@ export default function SchoolFormsPage() {
     setSf9LoadingEnr(true);
     getEnrollments({ student: sf9Student.student_id, page_size: 100 })
       .then(data => {
+        // A pending or cancelled row was never attended, so it has no card.
         const list = (Array.isArray(data) ? data : data.results ?? [])
+          .filter((e) => ATTENDED_STATUSES.includes(e.enrollment_status))
           .sort((a, b) => (b.school_year || "").localeCompare(a.school_year || ""));
         setSf9Enrollments(list);
         setSf9EnrollmentId(list[0]?.enrollment_id ? String(list[0].enrollment_id) : "");
