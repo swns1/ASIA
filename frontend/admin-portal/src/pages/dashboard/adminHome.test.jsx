@@ -577,7 +577,9 @@ describe("AdminHome — school at a glance", () => {
     await screen.findByRole("button", { name: "₱540,666.40" });
     await pickYearFrom("2027-2028");
     await screen.findByText("Collection pace · S.Y. 2027-2028 vs 2026-2027");
-    fireEvent.click(screen.getByRole("button", { name: "Analytics" }));
+    // The new year's summary reloads on its own: Trends shows a skeleton,
+    // without the Analytics link, until it lands.
+    fireEvent.click(await screen.findByRole("button", { name: "Analytics" }));
     expect(screen.getByTestId("location").textContent).toBe("/analytics?school_year=2027-2028");
   });
 

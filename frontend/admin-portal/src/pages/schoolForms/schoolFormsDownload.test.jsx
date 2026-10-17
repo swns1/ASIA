@@ -1,7 +1,7 @@
 /**
- * The School Forms page's Excel downloads: the section picker, the semester
- * for senior high, what goes to the server, what the browser is handed, the
- * server's warnings, and a refused form's reason shown on the card.
+ * The School Forms page's downloads, Excel and PDF: the section picker, the
+ * semester for senior high, what goes to the server, what the browser is
+ * handed, the server's warnings, and a refused form's reason shown on the card.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -71,6 +71,31 @@ describe("SchoolFormsPage downloads", () => {
       "sf1", { school_year: "2026-2027", grade_level: "Grade 7", section: "Rizal" }, "SF1_Grade 7_Rizal.xlsx",
     );
     expect(toast.success).toHaveBeenCalledWith(`${FILE.filename} downloaded.`);
+  });
+
+  it("downloads the same SF1 as a PDF", async () => {
+    downloadSchoolForm.mockResolvedValue({ ...FILE, filename: "SF1_Grade-7_Rizal_SY2026-2027.pdf" });
+    renderPage();
+    await pickSection("SF1", "Grade 7", "Rizal");
+
+    fireEvent.click(screen.getByText("Download SF1 (PDF)"));
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledWith(FILE.blob, "SF1_Grade-7_Rizal_SY2026-2027.pdf"));
+    expect(downloadSchoolForm).toHaveBeenCalledWith(
+      "sf1", { school_year: "2026-2027", grade_level: "Grade 7", section: "Rizal", file: "pdf" }, "SF1_Grade 7_Rizal.pdf",
+    );
+  });
+
+  it("keeps both of a form's buttons still while one file is being prepared", async () => {
+    let finish;
+    downloadSchoolForm.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderPage();
+    await pickSection("SF2", "Grade 7", "Rizal");
+
+    fireEvent.click(screen.getByText("Download SF2 (PDF)"));
+    expect(await screen.findByText("Preparing SF2…")).toBeTruthy();
+    expect(screen.getByText("Download SF2 (Excel)").closest("button").disabled).toBe(true);
+    finish(FILE);
+    await waitFor(() => expect(screen.getByText("Download SF2 (PDF)").closest("button").disabled).toBe(false));
   });
 
   it("asks senior high for a semester and sends it", async () => {
@@ -150,13 +175,68 @@ describe("SchoolFormsPage downloads", () => {
     expect([...level.options].map((o) => o.value)).toEqual(["elementary", "junior_highschool"]);
     expect(level.value).toBe("junior_highschool");
 
-    fireEvent.click(screen.getByText("Download SF10"));
+    fireEvent.click(screen.getByRole("button", { name: "Download SF10 (Excel)" }));
     await waitFor(() => expect(saveBlob).toHaveBeenCalled());
-    expect(downloadSchoolForm).toHaveBeenCalledWith("sf10/5", { level: "junior_highschool" }, "SF10_1005.xlsx");
+    // Nothing typed for this copy: the certification's own purpose, its school left to fill in.
+    expect(downloadSchoolForm).toHaveBeenCalledWith(
+      "sf10/5", { level: "junior_highschool", purpose: "TRANSFER CREDENTIAL PURPOSES" }, "SF10_1005.xlsx",
+    );
 
     fireEvent.change(level, { target: { value: "elementary" } });
-    fireEvent.click(screen.getByText("Download SF10"));
+    fireEvent.change(screen.getByLabelText("SF10 copy for"), { target: { value: "  San Pablo Colleges " } });
+    fireEvent.click(screen.getByRole("button", { name: "Download SF10 (Excel)" }));
     await waitFor(() => expect(downloadSchoolForm).toHaveBeenCalledTimes(2));
-    expect(downloadSchoolForm.mock.calls[1][1]).toEqual({ level: "elementary" });
+    expect(downloadSchoolForm.mock.calls[1][1]).toEqual({
+      level: "elementary", copy_for: "San Pablo Colleges", purpose: "TRANSFER CREDENTIAL PURPOSES",
+    });
+
+    // The same record as a PDF.
+    fireEvent.click(screen.getByRole("button", { name: "Download SF10 (PDF)" }));
+    await waitFor(() => expect(downloadSchoolForm).toHaveBeenCalledTimes(3));
+    expect(downloadSchoolForm.mock.calls[2]).toEqual([
+      "sf10/5",
+      { level: "elementary", copy_for: "San Pablo Colleges", purpose: "TRANSFER CREDENTIAL PURPOSES", file: "pdf" },
+      "SF10_1005.pdf",
+    ]);
+  });
+
+  it("gives a Kindergarten learner the elementary SF10, which starts with Kindergarten", async () => {
+    getStudents.mockResolvedValue([LEARNER]);
+    getEnrollments.mockResolvedValue([
+      { enrollment_id: 1, school_level: "nursery", enrollment_status: "completed" },
+      { enrollment_id: 2, school_level: "kindergarten", enrollment_status: "enrolled" },
+    ]);
+    renderPage();
+
+    fireEvent.change(screen.getAllByLabelText("Search for a learner")[1], { target: { value: "Cruz" } });
+    fireEvent.click(await screen.findByText("Cruz, Ana R."));
+    const level = await screen.findByLabelText("SF10 level");
+    expect([...level.options].map((o) => [o.value, o.text])).toEqual([["elementary", "Kinder & Elementary (SF10-ES)"]]);
+    expect(screen.queryByLabelText("SF10 date of graduation")).toBeNull();
+  });
+
+  it("names the strand on a senior high SF10 and asks for its graduation details", async () => {
+    getStudents.mockResolvedValue([LEARNER]);
+    getEnrollments.mockResolvedValue([
+      { enrollment_id: 1, school_level: "senior_highschool", strand: "STEM", enrollment_status: "completed" },
+      { enrollment_id: 2, school_level: "senior_highschool", strand: "STEM", enrollment_status: "completed" },
+    ]);
+    downloadSchoolForm.mockResolvedValue({ ...FILE, filename: "SF10-SHS-STEM_1005_Cruz.xlsx" });
+    renderPage();
+
+    fireEvent.change(screen.getAllByLabelText("Search for a learner")[1], { target: { value: "Cruz" } });
+    fireEvent.click(await screen.findByText("Cruz, Ana R."));
+    const level = await screen.findByLabelText("SF10 level");
+    expect(level.options[0].text).toBe("Senior High – STEM (SF10-SHS)");
+
+    fireEvent.change(screen.getByLabelText("SF10 copy for"), { target: { value: "Adamson University" } });
+    fireEvent.change(screen.getByLabelText("SF10 date of graduation"), { target: { value: "2026-03-31" } });
+    fireEvent.change(screen.getByLabelText("SF10 special order number"), { target: { value: "051" } });
+    fireEvent.click(screen.getByRole("button", { name: "Download SF10 (Excel)" }));
+    await waitFor(() => expect(saveBlob).toHaveBeenCalled());
+    expect(downloadSchoolForm.mock.calls[0][1]).toEqual({
+      level: "senior_highschool", copy_for: "Adamson University", purpose: "TRANSFER CREDENTIAL PURPOSES",
+      graduation_date: "2026-03-31", special_order: "051",
+    });
   });
 });

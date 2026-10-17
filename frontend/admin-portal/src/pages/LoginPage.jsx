@@ -124,15 +124,15 @@ export default function LoginPage() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 12,
-              marginBottom: 60,
+              gap: 16,
+              marginBottom: 48,
             }}
           >
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
+                width: 120,
+                height: 120,
+                borderRadius: 20,
                 background: "rgba(255,255,255,0.08)",
                 border: "1px solid rgba(255,255,255,0.12)",
                 display: "flex",
@@ -145,13 +145,14 @@ export default function LoginPage() {
               <img
                 src={logo}
                 alt="SLIS"
-                style={{ width: 32, height: 32, objectFit: "contain" }}
+                style={{ width: 104, height: 104, objectFit: "contain" }}
               />
             </div>
             <span
               style={{
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 600,
+                lineHeight: 1.6,
                 // Opacities on this dark panel were raised to meet WCAG AA:
                 // 0.42 measured 3.6:1 against #180c0c.
                 color: "rgba(255,255,255,0.72)",
@@ -159,7 +160,9 @@ export default function LoginPage() {
                 textTransform: "uppercase",
               }}
             >
-              South Lakes IS
+              South Lakes
+              <br />
+              Integrated School
             </span>
           </div>
           <h1

@@ -110,4 +110,35 @@ describe("EnrollmentDetailPage role actions", () => {
     }
     expect(api.getGrades).toHaveBeenCalled();
   });
+
+  it("offers the COR for a pending row but not a cancelled one", async () => {
+    signInAs("registrar");
+    // Pending prints: the parent signs the Admissions Agreement at the counter.
+    api.getEnrollment.mockResolvedValue({ ...ENROLLMENT, enrollment_status: "pending" });
+    const { unmount } = renderPage();
+    await screen.findByText("Ana Cruz");
+    expect(screen.getByRole("button", { name: /Print COR/ }).disabled).toBe(false);
+    unmount();
+
+    api.getEnrollment.mockResolvedValue({ ...ENROLLMENT, enrollment_status: "cancelled" });
+    renderPage();
+    await screen.findByText("Ana Cruz");
+    const button = screen.getByRole("button", { name: /Print COR/ });
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toBe("A cancelled enrollment has no registration to certify.");
+  });
+
+  it.each([
+    ["enrolled", false], ["completed", false], ["transferred_out", false], ["pending", true], ["cancelled", true],
+  ])("offers the report card (SF9) for a %s row: disabled %s", async (status, disabled) => {
+    signInAs("registrar");
+    api.getEnrollment.mockResolvedValue({ ...ENROLLMENT, enrollment_status: status });
+    renderPage();
+    await screen.findByText("Ana Cruz");
+    const button = screen.getByRole("button", { name: /Report Card/ });
+    expect(button.disabled).toBe(disabled);
+    expect(button.getAttribute("title")).toBe(disabled
+      ? "There's no report card until the learner attends this enrollment."
+      : "Learner's Progress Report Card (SF9)");
+  });
 });

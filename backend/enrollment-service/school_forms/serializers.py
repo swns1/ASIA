@@ -9,6 +9,8 @@ from shared.school_year import InvalidSchoolYear, configured_dates, normalize
 from .sf2 import month_end
 
 SEMESTERS = ("1st", "2nd")
+# The form as DepEd's (or the school's) Excel file, or as a PDF of how it prints.
+FILE_TYPES = ("xlsx", "pdf")
 SF10_LEVELS = ("elementary", "junior_highschool", "senior_highschool")
 
 
@@ -19,6 +21,7 @@ class SectionFormQuery(serializers.Serializer):
     grade_level = serializers.ChoiceField(choices=GRADE_ORDER)
     section = serializers.CharField(max_length=50)
     semester = serializers.ChoiceField(choices=SEMESTERS, required=False, allow_blank=True)
+    file = serializers.ChoiceField(choices=FILE_TYPES, required=False, default="xlsx")
 
     def validate_school_year(self, value):
         try:
@@ -61,6 +64,21 @@ class AttendanceFormQuery(SectionFormQuery):
 
 
 class PermanentRecordQuery(serializers.Serializer):
-    """SF10: which level's record."""
+    """
+    SF10: which level's record (elementary includes Kindergarten), and what
+    the registrar types for this copy. Blank prints a fill-in line.
+    """
 
     level = serializers.ChoiceField(choices=SF10_LEVELS)
+    copy_for = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    purpose = serializers.CharField(max_length=100, required=False, allow_blank=True,
+                                    default="TRANSFER CREDENTIAL PURPOSES")
+    graduation_date = serializers.DateField(required=False, allow_null=True, default=None)
+    special_order = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    file = serializers.ChoiceField(choices=FILE_TYPES, required=False, default="xlsx")
+
+
+class RegistrationQuery(serializers.Serializer):
+    """The COR: whose copy this print is, printed at its foot."""
+
+    copy = serializers.ChoiceField(choices=("slis", "parent"), required=False, default="slis")

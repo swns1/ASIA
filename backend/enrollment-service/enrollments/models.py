@@ -32,6 +32,8 @@ class Student(models.Model):
     status = models.CharField(max_length=20, default="active")
 
     current_address = models.TextField()
+    # The SF10 permanent record prints this one (school_forms).
+    permanent_address = models.TextField(blank=True)
 
     # Nullable FK to households, carried as a plain id (this service doesn't
     # model the households table). Students sharing one are siblings -- that is

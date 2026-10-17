@@ -665,6 +665,26 @@ describe("GuardianChildPage — certificate of registration", () => {
     await screen.findByText("Maria Santos Reyes");
 
     expect(screen.queryByRole("link", { name: /Certificate of registration/ })).toBeNull();
-    expect(screen.getByRole("link", { name: /Printable report card/ })).toBeTruthy();
+    // The report card is still offered (disabled before classes begin).
+    expect(screen.getByText(/Printable report card/)).toBeTruthy();
+  });
+});
+
+describe("GuardianChildPage — the printable report card", () => {
+  const withStatus = (status) => ({ ...REPORT_CARD, enrollment: { ...REPORT_CARD.enrollment, enrollment_status: status } });
+
+  it("links to the report card (the SF9) for a year the child attends", async () => {
+    getReportCard.mockResolvedValue(withStatus("enrolled"));
+    renderChildPage();
+    const link = await screen.findByRole("link", { name: /Printable report card/ });
+    expect(link.getAttribute("href")).toBe("/report-card/200");
+  });
+
+  it("has no report card yet for a year that hasn't started", async () => {
+    getReportCard.mockResolvedValue(withStatus("pending"));
+    renderChildPage();
+    const button = await screen.findByRole("button", { name: /Printable report card/ });
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toBe("The report card is ready once classes begin.");
   });
 });

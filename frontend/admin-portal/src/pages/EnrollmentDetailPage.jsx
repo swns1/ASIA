@@ -311,6 +311,10 @@ export default function EnrollmentDetailPage() {
     .filter((p) => Object.values(gradesBySubject).some((s) => s.periods[p]));
 
   const canMarkCompleted = canEditEnrollment && enrollment.enrollment_status === "enrolled";
+  const corRefused = enrollment.enrollment_status === "cancelled";
+  // The report card (SF9) is of a year the learner attended; the server
+  // refuses one for a row still pending or cancelled.
+  const noReportCard = ["pending", "cancelled"].includes(enrollment.enrollment_status);
   // An archived year's enrollment is read-only: printing stays, changes go.
   const readOnly = isArchived(enrollment.school_year);
 
@@ -357,13 +361,20 @@ export default function EnrollmentDetailPage() {
               <StatusBadge status={enrollment.enrollment_status} map={ENROLLMENT_STATUS_MAP} />
               {canViewGrades && (
               <button onClick={() => navigate(`/report-card/${id}`)}
-                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                disabled={noReportCard}
+                title={noReportCard ? "There's no report card until the learner attends this enrollment." : "Learner's Progress Report Card (SF9)"}
+                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: noReportCard ? "not-allowed" : "pointer", opacity: noReportCard ? 0.5 : 1 }}>
                 <i className="ti ti-file-certificate" style={{ fontSize: 11, marginRight: 4 }} />Report Card
               </button>
               )}
+              {/* The COR with the Admissions Agreement after it. A pending row
+                  prints too (its COR says it isn't official yet), so the parent
+                  can sign at the counter; a cancelled one has nothing to certify. */}
               <button
                 onClick={() => window.open(`/print/cor/${id}`, '_blank')}
-                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                disabled={corRefused}
+                title={corRefused ? "A cancelled enrollment has no registration to certify." : "Certificate of Registration and Admissions Agreement"}
+                style={{ background: "transparent", border: "1.5px solid var(--color-brand-300)", color: C.muted, borderRadius: 50, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: corRefused ? "not-allowed" : "pointer", opacity: corRefused ? 0.5 : 1 }}>
                 <i className="ti ti-file-invoice" style={{ fontSize: 11, marginRight: 4 }} />Print COR
               </button>
               {canEditEnrollment && !readOnly && (

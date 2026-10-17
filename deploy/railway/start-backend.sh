@@ -20,8 +20,8 @@ cd "/app/backend/${SLIS_SERVICE}-service"
 # database (IF NOT EXISTS, guarded UPDATEs), with a table they need.
 if [ "$1" = "predeploy" ]; then
     case "$SLIS_SERVICE" in
-        enrollment) app=grades;          table=narrative_categories ;;
-        billing)    app=school_settings; table=school_settings ;;
+        enrollment) apps="grades subjects"; table=narrative_categories ;;
+        billing)    apps=school_settings;   table=school_settings ;;
         *)          echo "predeploy: no database upgrades for ${SLIS_SERVICE}"; exit 0 ;;
     esac
     # A new Railway database stays empty until setup-db.ps1 loads it, and the
@@ -38,7 +38,10 @@ if [ "$1" = "predeploy" ]; then
         exit 0
     fi
     [ "$status" -eq 0 ] || exit "$status"
-    exec python manage.py migrate "$app" --noinput
+    for app in $apps; do
+        python manage.py migrate "$app" --noinput
+    done
+    exit 0
 fi
 
 if [ "$#" -gt 0 ]; then

@@ -126,7 +126,7 @@ export default function ReceiptPrintPage() {
       />
 
       <PrintShell id="receipt-doc" maxWidth={900} orientation="portrait">
-        <PrintLetterhead variant="standard" schoolName={schoolName} schoolAddress={schoolAddress} />
+        <PrintLetterhead schoolName={schoolName} schoolAddress={schoolAddress} />
 
         <DocTitleRow
           title="Official Receipt"

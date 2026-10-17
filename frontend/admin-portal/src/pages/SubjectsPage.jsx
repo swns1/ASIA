@@ -29,6 +29,7 @@ import {
   SHS_STRANDS,
 } from "../constants/schoolLevels";
 import { getCurrentUser, hasAnyRole, ACADEMIC_STAFF, STAFF_ADMIN } from "../utils/auth";
+import { autoSubjectGroup, SF10_GROUP_LABELS } from "../utils/sf10SubjectGroup";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 import {
@@ -122,6 +123,7 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
     grade_level:      subject?.grade_level      ?? "Grade 1",
     strand:           subject?.strand           ?? "",
     semester:         subject?.semester         ?? "",
+    subject_group:    subject?.subject_group    ?? "",
     grading_template: subject?.grading_template ?? "",
   });
   const [saving, setSaving] = useState(false);
@@ -134,7 +136,7 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
     const next = { ...f, [k]: v };
     if (k === "school_level") {
       next.grade_level = (GRADE_LEVELS_BY_LEVEL[v] ?? [])[0] ?? "";
-      if (v !== "senior_highschool") { next.strand = ""; next.semester = ""; }
+      if (v !== "senior_highschool") { next.strand = ""; next.semester = ""; next.subject_group = ""; }
       else if (!next.semester) next.semester = "1st";
     }
     return next;
@@ -155,6 +157,7 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
         grade_level:      form.grade_level,
         strand:           isSHS && form.strand ? form.strand : null,
         semester:         isSHS ? form.semester : null,
+        subject_group:    isSHS && form.subject_group ? form.subject_group : null,
         grading_template: form.grading_template || null,
       };
       await onSave(isEdit ? subject.subject_id : null, payload);
@@ -272,6 +275,17 @@ function SubjectModal({ subject, schoolYear, templates, onSave, onClose }) {
                       </Select>
                     </Field>
                   </div>
+                  {/* The heading it prints under on the school's SF10. */}
+                  <Field label="Group on SF10">
+                    <Select value={form.subject_group} onChange={(e) => setF("subject_group", e.target.value)} aria-label="Group on SF10">
+                      <option value="">
+                        Automatic ({SF10_GROUP_LABELS[autoSubjectGroup(form.subject_name, form.strand)]})
+                      </option>
+                      {Object.entries(SF10_GROUP_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </Select>
+                  </Field>
                 </div>
               </motion.div>
             )}

@@ -53,7 +53,6 @@ const RequirementsPage      = lazyRoute(() => import("./pages/RequirementsPage")
 const UsersPage             = lazyRoute(() => import("./pages/UsersPage"));
 const AnalyticsPage         = lazyRoute(() => import("./pages/AnalyticsPage"));
 const AcademicCalendarPage  = lazyRoute(() => import("./pages/AcademicCalendarPage"));
-const ReportCardPage        = lazyRoute(() => import("./pages/ReportCardPage"));
 const SchoolFormsPage       = lazyRoute(() => import("./pages/SchoolFormsPage"));
 const TeacherAdvisoriesPage = lazyRoute(() => import("./pages/TeacherAdvisoriesPage"));
 const SchoolYearsPage       = lazyRoute(() => import("./pages/SchoolYearsPage"));
@@ -190,15 +189,16 @@ export default function App() {
             chrome-less routes in this block. */}
         <Route path="/apply/:inviteId" element={<ApplicantFormPage />} />
 
-        {/* Report card is backend-scoped: guardians may open only their own
-            child's (403 otherwise) -- and chrome-less, since it's a printable
-            document. The roles match the server's (grade readers plus the
-            guardian); accounting, which it refuses, got an error page. */}
-        <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><ReportCardPage /></P>} />
+        {/* The report card is the SF9 (school_forms/sf9.py), the same page as
+            /print/sf9 below. It is backend-scoped: guardians may open only
+            their own child's (403 otherwise) -- and chrome-less, since it's a
+            printable document. The roles match the server's (grade readers
+            plus the guardian); accounting, which it refuses, got an error page. */}
+        <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><SF9PrintPage /></P>} />
 
         {/* ── Print / PDF documents (no shell by design) ── */}
-        {/* Guardians print their own child's (the server scopes the
-            enrollment and its subjects to them), from the child page. */}
+        {/* Guardians print their own child's parent's copy, from the
+            child page (the server scopes the COR to their children). */}
         <Route path="/print/cor/:enrollmentId"        element={<P roles={[...STAFF_ALL, ...GUARDIAN]}><CORPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />

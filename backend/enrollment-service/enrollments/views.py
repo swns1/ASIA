@@ -1263,7 +1263,9 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             for code in Subject.objects.filter(school_year=target.label).values_list("subject_code", flat=True)
         }
         copied, skipped = [], []
-        for sub in Subject.objects.filter(school_year=source.label).order_by("grade_level", "subject_name"):
+        # Created in the order they were entered, so the new year keeps that
+        # order: the senior high SF10 lists a semester's subjects by it.
+        for sub in Subject.objects.filter(school_year=source.label).order_by("subject_id"):
             row = {
                 "subject_code":        sub.subject_code,
                 "subject_name":        sub.subject_name,
@@ -1271,6 +1273,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 "grade_level":         sub.grade_level,
                 "strand":              sub.strand,
                 "semester":            sub.semester,
+                "subject_group":       sub.subject_group,
                 "grading_template_id": sub.grading_template_id,
             }
             (skipped if sub.subject_code.lower() in existing else copied).append(row)
@@ -1278,6 +1281,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             Subject.objects.bulk_create([Subject(school_year=target.label, **row) for row in copied])
 
         def listed(rows):
+            rows = sorted(rows, key=lambda r: (r["grade_level"], r["subject_name"]))
             return [{k: v for k, v in r.items() if k != "grading_template_id"} for r in rows]
 
         return {"copied": listed(copied), "skipped": listed(skipped)}
@@ -2693,28 +2697,6 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
             .order_by("subject__subject_name", "grading_period")
         )
         return Response(GradeSerializer(qs, many=True).data)
-
-    @action(detail=True, methods=["get"], url_path="subjects")
-    def subjects(self, request, pk=None):
-        """
-        GET /api/enrollments/{id}/subjects/ — the subjects this enrollment
-        takes, for its Certificate of Registration.
-
-        get_object() applies the same access as reading the enrollment itself:
-        a guardian only their own child's, a teacher only their roster. Only
-        what the certificate prints is returned -- not the grading template
-        that /api/subjects/ carries for staff.
-        """
-        from subjects.filters import SubjectFilter, enrollment_subject_params
-        from subjects.models import Subject
-
-        enrollment = self.get_object()
-        qs = SubjectFilter(
-            enrollment_subject_params(enrollment), queryset=Subject.objects.all(),
-        ).qs.order_by("subject_name")
-        return Response(list(qs.values(
-            "subject_id", "subject_code", "subject_name", "strand", "semester",
-        )))
 
     @action(detail=False, methods=["get"], url_path="eligibility")
     def eligibility(self, request):

@@ -108,6 +108,13 @@ beforeEach(() => {
   api.getNarrativeReports.mockResolvedValue({ results: [] });
 });
 
+// Analyze stays disabled until the AI panel has looked up any saved summary,
+// which lands after the grades it summarizes.
+async function clickAnalyze() {
+  await waitFor(() => expect(screen.getByRole("button", { name: /Analyze/ }).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+}
+
 async function openSheet() {
   render(page("/grades/entry?student=5"));
   fireEvent.click(await screen.findByRole("radio", { name: /S\.Y\. 2026-2027/ }));
@@ -233,7 +240,7 @@ describe("Grades — Summary", () => {
 
     expect(await screen.findByText("2 subjects · 1 passed · 1 failed (Science 10)")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+    await clickAnalyze();
 
     await waitFor(() => expect(api.callGemini).toHaveBeenCalled());
     const [{ contextType, enrollmentId, payload }] = api.callGemini.mock.lastCall;
@@ -250,7 +257,7 @@ describe("Grades — Summary", () => {
     render(page("/grades?student=5&tab=summary&enrollment=11"));
     await screen.findByText("Mathematics 10");
 
-    fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+    await clickAnalyze();
 
     await waitFor(() => expect(api.callGemini).toHaveBeenCalled());
     const [{ payload }] = api.callGemini.mock.lastCall;
@@ -330,7 +337,7 @@ describe("Grades — dark mode", () => {
     expect(screen.getByText("Outstanding").className).toContain("text-info-500");
     expect(await screen.findByText("No summary yet")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+    await clickAnalyze();
     expect(await screen.findByText("Strong in every subject")).toBeTruthy();
     expect(screen.getByText("SUMMARY")).toBeTruthy();
 
